@@ -23,7 +23,7 @@ type Status = "idle" | "approving" | "creating" | "success" | "error";
 export function CreateMarketForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { address, isOnArc, walletClient, publicClient, connect, switchToArc } = useWallet();
+  const { address, isOnSupportedChain, walletClient, publicClient, connect, switchChain } = useWallet();
 
   const feed = DEMO_FEED;
   const agent = feed.agents[0]!;
@@ -51,7 +51,7 @@ export function CreateMarketForm() {
   const [tokenBalance, setTokenBalance] = useState<bigint | undefined>();
 
   const tokenAddress: Address =
-    collateral === "USDC" ? CONTRACTS.USDC : CONTRACTS.EURC;
+    collateral === "USDC" ? CONTRACTS.USDC : (CONTRACTS.EURC ?? CONTRACTS.USDC);
   const marketsContract: Address | undefined =
     collateral === "USDC" ? CONTRACTS.Markets : CONTRACTS.MarketsEURC;
 
@@ -88,7 +88,7 @@ export function CreateMarketForm() {
 
   const canSubmit =
     address &&
-    isOnArc &&
+    isOnSupportedChain &&
     threshold > 0 &&
     expiryTs > Math.floor(Date.now() / 1000) &&
     liquidityWei >= 5_000_000n &&
@@ -373,13 +373,13 @@ export function CreateMarketForm() {
           >
             connect wallet to create →
           </button>
-        ) : !isOnArc ? (
+        ) : !isOnSupportedChain ? (
           <button
             type="button"
-            onClick={switchToArc}
+            onClick={() => switchChain()}
             className="w-full py-3 border border-down/60 text-down text-[12.5px] tracking-wide hover:bg-down hover:text-bg transition-colors"
           >
-            switch to Arc testnet
+            switch network
           </button>
         ) : (
           <button

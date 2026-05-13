@@ -1,35 +1,21 @@
-import { defineChain, type Address } from "viem";
-import live from "./live-data.json";
+/**
+ * Single-chain convenience aliases for the default deployment.
+ *
+ * Day-to-day code in components reads `useWallet().currentChain.contracts`
+ * which is multichain-aware. These aliases exist for static contexts
+ * (build-time scripts, demo data files) that aren't inside the React tree
+ * and don't need chain switching.
+ *
+ * NEVER import these from a component that should support chain switching —
+ * always go through `useWallet().currentChain`.
+ */
+import { DEFAULT_CHAIN, txUrl as txUrlFor, addrUrl as addrUrlFor } from "./chains";
 
-export const ARC_TESTNET = defineChain({
-  id: 5042002,
-  name: "Arc Testnet",
-  network: "arc-testnet",
-  nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
-  rpcUrls: {
-    default: { http: ["https://rpc.testnet.arc.network"] },
-    public: { http: ["https://rpc.testnet.arc.network"] },
-  },
-  blockExplorers: {
-    default: { name: "ArcScan", url: "https://testnet.arcscan.app" },
-  },
-  testnet: true,
-});
+export const CONTRACTS = DEFAULT_CHAIN.contracts;
+export const EXPLORER = DEFAULT_CHAIN.explorer.url;
 
-type LiveContracts = typeof live.contracts & { MarketsEURC?: string; EURC?: string };
-const liveContracts = live.contracts as LiveContracts;
+export const txUrl = (hash: string) => txUrlFor(DEFAULT_CHAIN, hash);
+export const addrUrl = (addr: string) => addrUrlFor(DEFAULT_CHAIN, addr);
 
-export const CONTRACTS = {
-  USDC: liveContracts.USDC as Address,
-  EURC: (liveContracts.EURC ?? "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a") as Address,
-  Registry: liveContracts.Registry as Address,
-  Attestation: liveContracts.Attestation as Address,
-  Dispute: liveContracts.Dispute as Address,
-  Markets: liveContracts.Markets as Address,
-  MarketsEURC: liveContracts.MarketsEURC as Address | undefined,
-} as const;
-
-export const EXPLORER = live.explorer;
-
-export const txUrl = (hash: string) => `${EXPLORER}/tx/${hash}`;
-export const addrUrl = (addr: string) => `${EXPLORER}/address/${addr}`;
+// Backward-compat re-export.
+export { ARC_TESTNET } from "./chains";

@@ -4,7 +4,16 @@ import { useWallet } from "./WalletProvider";
 import { shortAddr } from "@/lib/format";
 
 export function WalletButton() {
-  const { address, isConnecting, isOnArc, connect, disconnect, switchToArc, error } = useWallet();
+  const {
+    address,
+    isConnecting,
+    isOnSupportedChain,
+    currentChain,
+    connect,
+    disconnect,
+    switchChain,
+    error,
+  } = useWallet();
 
   if (!address) {
     return (
@@ -19,15 +28,15 @@ export function WalletButton() {
     );
   }
 
-  if (!isOnArc) {
+  if (!isOnSupportedChain) {
     return (
       <button
         type="button"
-        onClick={switchToArc}
+        onClick={() => switchChain()}
         className="px-3 py-1.5 border border-down/50 text-down text-[11px] tracking-[0.16em] uppercase hover:bg-down hover:text-bg transition-colors"
         title={error}
       >
-        switch to arc
+        switch to {currentChain.shortName}
       </button>
     );
   }
@@ -37,7 +46,7 @@ export function WalletButton() {
       type="button"
       onClick={disconnect}
       className="flex items-center gap-2 px-3 py-1.5 border border-line text-fg text-[11px] tracking-[0.12em] hover:border-line-strong transition-colors group"
-      title="click to disconnect"
+      title={`${currentChain.name} · click to disconnect`}
     >
       <span className="w-1.5 h-1.5 rounded-full bg-up dot-pulse" />
       <span className="tnum">{shortAddr(address)}</span>

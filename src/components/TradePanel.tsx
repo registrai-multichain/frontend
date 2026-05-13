@@ -18,7 +18,7 @@ type Status = "idle" | "approving" | "submitting" | "success" | "error";
  * Mirrors Markets.sol math exactly so the quote matches what the tx returns.
  */
 export function TradePanel({ market }: { market: Market }) {
-  const { address, isOnArc, walletClient, publicClient, connect, switchToArc } = useWallet();
+  const { address, isOnSupportedChain, walletClient, publicClient, connect, switchChain } = useWallet();
 
   const [mode, setMode] = useState<Mode>("buy");
   const [side, setSide] = useState<"yes" | "no">("yes");
@@ -281,9 +281,9 @@ export function TradePanel({ market }: { market: Market }) {
         market={market}
         yesShares={yesShares}
         noShares={noShares}
-        canRedeem={!!address && isOnArc}
+        canRedeem={!!address && isOnSupportedChain}
         onConnect={connect}
-        onSwitchChain={switchToArc}
+        onSwitchChain={switchChain}
         onRedeem={onRedeem}
         status={status}
         txHash={txHash}
@@ -309,12 +309,12 @@ export function TradePanel({ market }: { market: Market }) {
           >
             connect wallet to settle →
           </button>
-        ) : !isOnArc ? (
+        ) : !isOnSupportedChain ? (
           <button
-            onClick={switchToArc}
+            onClick={() => switchChain()}
             className="w-full py-3 border border-down/60 text-down text-[12.5px] tracking-wide hover:bg-down hover:text-bg transition-colors"
           >
-            switch to Arc testnet
+            switch network
           </button>
         ) : (
           <button
@@ -402,12 +402,12 @@ export function TradePanel({ market }: { market: Market }) {
         >
           connect wallet to {mode} →
         </button>
-      ) : !isOnArc ? (
+      ) : !isOnSupportedChain ? (
         <button
-          onClick={switchToArc}
+          onClick={() => switchChain()}
           className="w-full py-4 border-2 border-down text-down text-[14px] font-medium tracking-wide hover:bg-down hover:text-bg transition-colors"
         >
-          switch to Arc testnet
+          switch network
         </button>
       ) : mode === "buy" ? (
         <button
@@ -695,7 +695,7 @@ function ResolvedPanel({
           onClick={onSwitchChain}
           className="w-full py-3 border border-down/60 text-down text-[12.5px] tracking-wide hover:bg-down hover:text-bg transition-colors"
         >
-          switch to Arc testnet
+          switch network
         </button>
       ) : (
         <button
