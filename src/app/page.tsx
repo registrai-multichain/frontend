@@ -5,6 +5,8 @@ import { DEMO_MARKETS } from "@/lib/markets-demo";
 import { MarketCard } from "@/components/MarketCard";
 import { Sparkline } from "@/components/Sparkline";
 import { StatusBadge } from "@/components/StatusBadge";
+import { LiveCountdown } from "@/components/LiveCountdown";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { fmtInt, fmtPct, relTime } from "@/lib/format";
 
 export default function Home() {
@@ -19,12 +21,44 @@ export default function Home() {
   return (
     <Shell>
       {/* ─────────────── HERO ─────────────── */}
-      <section className="pt-16 sm:pt-24 pb-16 fade-up">
-        <div className="caption mb-6">v0.1 · arc testnet · live</div>
+      <section className="pt-14 sm:pt-20 pb-12 fade-up">
+        <div className="flex items-center gap-4 mb-6 flex-wrap">
+          <span className="caption">v0.1 · arc testnet</span>
+          <LiveCountdown />
+        </div>
         <h1 className="font-serif text-[42px] sm:text-[68px] leading-[1.02] tracking-tightest max-w-[18ch]">
           An onchain oracle for{" "}
           <span className="italic text-accent">everything else</span>.
         </h1>
+
+        {/* Live proof embedded in hero — the protocol is real, here's the number */}
+        <div className="mt-10 border-t border-b border-line py-6 max-w-[640px]">
+          <div className="flex items-baseline justify-between gap-4 flex-wrap">
+            <div>
+              <div className="caption mb-2">{feed.symbol}</div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-[44px] sm:text-[56px] leading-none tracking-tightest font-medium">
+                  <AnimatedNumber value={latest.value} />
+                </span>
+                <span className="text-fg-mute text-[13px] pb-1.5">{feed.unit}</span>
+              </div>
+              <div className="mt-2 text-2xs text-fg-mute">
+                attested {relTime(latest.timestamp)} ·{" "}
+                <Link
+                  href={`/feed/${feed.id}`}
+                  className="underline decoration-fg-dim underline-offset-4 hover:text-accent"
+                >
+                  view feed →
+                </Link>
+              </div>
+            </div>
+            <div className="text-right text-2xs text-fg-dim">
+              <div>{agent.bond} USDC bonded</div>
+              <div className="mt-1">{history.length} attestation{history.length === 1 ? "" : "s"}</div>
+            </div>
+          </div>
+        </div>
+
         <p className="mt-8 max-w-[62ch] text-fg text-[16px] leading-relaxed">
           The long tail of real-world data — regional real estate, energy spot
           prices, local CPI — has no credible onchain feed. The economics never
@@ -44,10 +78,10 @@ export default function Home() {
             see the live feed →
           </Link>
           <Link
-            href="/docs#read"
+            href="/markets/create/"
             className="px-4 py-2 border border-line text-fg-mute hover:text-fg hover:border-line-strong transition-colors"
           >
-            read in three lines of Solidity
+            create a market
           </Link>
           <Link
             href="/docs#register"

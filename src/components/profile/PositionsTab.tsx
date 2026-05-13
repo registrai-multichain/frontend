@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Address } from "viem";
 import { useWallet } from "../WalletProvider";
+import { Skeleton } from "../Skeleton";
 import { CONTRACTS } from "@/lib/chain";
 import { marketsAbi } from "@/lib/abi";
 import { DEMO_MARKETS } from "@/lib/markets-demo";
@@ -60,7 +61,25 @@ export function PositionsTab({ address }: { address: Address }) {
   }, [address, publicClient]);
 
   if (positions === undefined) {
-    return <div className="caption text-fg-dim py-8">loading positions…</div>;
+    return (
+      <div>
+        <div className="grid grid-cols-3 gap-px bg-line mb-8">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="bg-bg p-5">
+              <Skeleton width="60%" height="0.7em" className="mb-3" />
+              <Skeleton width="40%" height="1.4em" />
+            </div>
+          ))}
+        </div>
+        <div className="border border-line">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="px-4 py-3 border-b border-line/60 last:border-0">
+              <Skeleton width={`${60 + ((i * 17) % 30)}%`} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
   if (positions.length === 0) {
     return (
@@ -147,9 +166,11 @@ export function Row({ head, cells }: { head?: boolean; cells: React.ReactNode[] 
 
 export function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-bg p-5">
+    <div className="bg-bg p-5 group hover:bg-bg-elev/40 transition-colors">
       <div className="caption text-fg-dim mb-2">{label}</div>
-      <div className="text-[22px] tnum tracking-tightest">{value}</div>
+      <div className="text-[22px] tnum tracking-tightest group-hover:text-accent transition-colors">
+        {value}
+      </div>
     </div>
   );
 }

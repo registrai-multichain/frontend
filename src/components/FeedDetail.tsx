@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Feed } from "@/lib/types";
 import { Sparkline } from "./Sparkline";
+import { AnimatedNumber } from "./AnimatedNumber";
+import { LiveCountdown } from "./LiveCountdown";
 import { LIVE_META } from "@/lib/demo";
 import {
   fmtDuration,
@@ -36,17 +38,19 @@ export function FeedDetail({ feed }: { feed: Feed }) {
             {feed.description}
           </p>
         </div>
-        <div className="hidden sm:flex flex-col items-end gap-1 text-2xs caption text-right">
-          <div>finalized {relTime(latest.timestamp + feed.disputeWindowSec)}</div>
-          <div className="text-fg-dim">next 14:00 UTC</div>
+        <div className="hidden sm:flex flex-col items-end gap-1.5 text-right">
+          <div className="text-2xs caption">
+            finalized {relTime(latest.timestamp + feed.disputeWindowSec)}
+          </div>
+          <LiveCountdown />
         </div>
       </div>
 
       {/* Hero value */}
       <section className="border-t border-b border-line py-10 sm:py-14 mb-10">
         <div className="flex items-baseline gap-3 sm:gap-5">
-          <div className="text-[64px] sm:text-[88px] leading-none tracking-tightest tnum font-medium">
-            {fmtInt(latest.value)}
+          <div className="text-[64px] sm:text-[88px] leading-none tracking-tightest font-medium">
+            <AnimatedNumber value={latest.value} duration={1100} />
           </div>
           <div className="text-fg-mute text-[14px] tracking-wide pb-2">{feed.unit}</div>
           <a

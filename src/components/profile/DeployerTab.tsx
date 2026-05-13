@@ -10,6 +10,7 @@ import { DEMO_FEED } from "@/lib/demo";
 import { DEMO_MARKETS } from "@/lib/markets-demo";
 import { fmtDuration, fmtInt, shortHash } from "@/lib/format";
 import { Stat, EmptyState } from "./PositionsTab";
+import { Skeleton } from "../Skeleton";
 
 interface AgentRecord {
   feedId: Hex;
@@ -91,7 +92,22 @@ export function DeployerTab({ address }: { address: Address }) {
   }, [address, publicClient]);
 
   if (agents === undefined) {
-    return <div className="caption text-fg-dim py-8">loading agents…</div>;
+    return (
+      <div>
+        <div className="grid grid-cols-3 gap-px bg-line mb-8">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="bg-bg p-5">
+              <Skeleton width="60%" height="0.7em" className="mb-3" />
+              <Skeleton width="40%" height="1.4em" />
+            </div>
+          ))}
+        </div>
+        <div className="border border-line p-5">
+          <Skeleton width="40%" height="0.7em" className="mb-4" />
+          <Skeleton width="80%" />
+        </div>
+      </div>
+    );
   }
 
   if (agents.length === 0) {

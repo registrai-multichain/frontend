@@ -79,6 +79,26 @@ body {
   animation: draw 1.2s ease-out forwards;
 }
 
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.6; }
+}
+.skeleton-pulse {
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+/* Subtle horizontal scan that crosses big numbers on mount — premium feel
+ * without being distracting. */
+@keyframes scan {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.scan {
+  background: linear-gradient(90deg, transparent 0%, rgba(232, 200, 122, 0.12) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: scan 2.4s ease-out 0.3s 1;
+}
+
 a {
   color: inherit;
 }
