@@ -8,6 +8,7 @@ import { useWallet } from "@/components/WalletProvider";
 import { PositionsTab } from "@/components/profile/PositionsTab";
 import { CreatorTab } from "@/components/profile/CreatorTab";
 import { DeployerTab } from "@/components/profile/DeployerTab";
+import { StatusBadge } from "@/components/StatusBadge";
 import { addrUrl } from "@/lib/chain";
 import { shortAddr } from "@/lib/format";
 
@@ -54,7 +55,10 @@ function ProfilePage() {
       <article className="pt-10 sm:pt-14 fade-up">
         {/* Header */}
         <div className="mb-8">
-          <div className="caption mb-3">profile {isSelf && "· you"}</div>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="caption">profile {isSelf && "· you"}</div>
+            <StatusBadge kind="beta" />
+          </div>
           <h1 className="font-serif text-[28px] sm:text-[36px] tracking-tightest leading-[1.1]">
             {isSelf ? "Your dashboard" : `Profile · ${shortAddr(subjectAddr)}`}
           </h1>

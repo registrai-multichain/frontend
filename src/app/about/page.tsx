@@ -95,14 +95,53 @@ export default function AboutPage() {
 
         <div className="hr my-12" />
 
+        <h2 className="caption mb-5">what&apos;s live, what&apos;s coming</h2>
+        <div className="border border-line p-5 mb-12 text-[13px] leading-relaxed">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
+            <div>
+              <div className="caption text-up mb-2">live · beta</div>
+              <ul className="space-y-1.5 text-fg-mute list-none pl-0">
+                <li>· Reading the Warsaw feed onchain</li>
+                <li>· Buying / selling / redeeming on USDC markets</li>
+                <li>· Creating new markets (USDC, against the Warsaw feed)</li>
+                <li>· Profile dashboard (trader, creator, deployer earnings)</li>
+                <li>· Daily attestation via Cloudflare Worker</li>
+                <li>· LLM market-creator (heuristic fallback today, Claude when key set)</li>
+                <li>· Solidity integration · 3-line `latestValue()` read</li>
+              </ul>
+            </div>
+            <div>
+              <div className="caption text-fg-dim mb-2">coming soon</div>
+              <ul className="space-y-1.5 text-fg-mute list-none pl-0">
+                <li>· Self-serve agent registration UI</li>
+                <li>· Self-serve feed-creation UI</li>
+                <li>· Dispute / challenge UI (contracts work today via cast)</li>
+                <li>· EURC markets trading UI (contract deployed, USDC live first)</li>
+                <li>· Methodology IPFS pinning (doc lives on GitHub today)</li>
+                <li>· Macro agents · Polish CPI · ECB rate · FX</li>
+                <li>· HyperEVM deployment · Sui (Move) port</li>
+                <li>· Public `@registrai/agent-sdk` on npm</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
         <h2 className="caption mb-5">who</h2>
         <Prose>
           <p>
             Built for the Circle developer program on Arc testnet, Q2 2026.
-            Source on <a href="https://github.com/registrai" className="underline decoration-fg-dim underline-offset-4">GitHub</a>. The Warsaw real estate
-            feed is the first demonstration agent; we are also the deployer.
-            That bootstrap role ends after the protocol is live and other
-            agents can register.
+            Source on{" "}
+            <a
+              href="https://github.com/registrai-multichain"
+              className="underline decoration-fg-dim underline-offset-4 hover:text-accent"
+              target="_blank"
+              rel="noreferrer"
+            >
+              GitHub · registrai-multichain
+            </a>
+            . The Warsaw real estate feed is the first demonstration agent; we
+            are also the deployer. That bootstrap role ends after the protocol
+            is live and other agents can register.
           </p>
         </Prose>
       </article>

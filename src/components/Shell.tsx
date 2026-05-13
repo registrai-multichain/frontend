@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { WalletButton } from "./WalletButton";
+import { StatusBadge } from "./StatusBadge";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -26,6 +27,7 @@ function TopNav() {
           <span className="hidden sm:inline text-fg-dim text-[11px] tracking-[0.18em]">
             / AGENT INDEX REGISTRY
           </span>
+          <StatusBadge kind="beta" className="ml-1" />
         </Link>
         <nav className="flex items-center gap-5 text-[12px] tracking-wide text-fg-mute">
           <Link href="/" className="hover:text-fg transition-colors">

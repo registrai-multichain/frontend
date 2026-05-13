@@ -109,7 +109,7 @@ export function FeedDetail({ feed }: { feed: Feed }) {
           label="methodology"
           value={
             <a
-              href={`https://${feed.methodologyCid.replace("ipfs://", "")}.ipfs.dweb.link`}
+              href="https://github.com/registrai-multichain/contracts/blob/main/methodology/warsaw-resi-v1.md"
               target="_blank"
               rel="noreferrer"
               className="hover:text-accent underline decoration-fg-dim underline-offset-4"
@@ -117,6 +117,7 @@ export function FeedDetail({ feed }: { feed: Feed }) {
               view spec ↗
             </a>
           }
+          hint="IPFS pin coming · v1 doc on GitHub"
         />
         <Spec label="min bond" value={`${feed.minBond} USDC`} />
         <Spec label="cadence" value="daily · 14:00 UTC" />

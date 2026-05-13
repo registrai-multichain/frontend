@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Shell } from "@/components/Shell";
 import { MarketCard } from "@/components/MarketCard";
 import { ProposalsPanel } from "@/components/ProposalsPanel";
+import { StatusBadge } from "@/components/StatusBadge";
 import { DEMO_MARKETS } from "@/lib/markets-demo";
 import { fmtInt } from "@/lib/format";
 
@@ -17,7 +18,10 @@ export default function MarketsPage() {
   return (
     <Shell>
       <article className="pt-12 sm:pt-20 fade-up">
-        <div className="caption mb-4">markets</div>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="caption">markets</div>
+          <StatusBadge kind="beta" />
+        </div>
         <h1 className="font-serif text-[40px] sm:text-[54px] leading-[1.02] tracking-tightest mb-6 max-w-[18ch]">
           Markets that{" "}
           <span className="italic text-accent">resolve themselves</span>.

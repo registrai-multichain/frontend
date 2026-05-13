@@ -4,6 +4,7 @@ import { DEMO_FEED } from "@/lib/demo";
 import { DEMO_MARKETS } from "@/lib/markets-demo";
 import { MarketCard } from "@/components/MarketCard";
 import { Sparkline } from "@/components/Sparkline";
+import { StatusBadge } from "@/components/StatusBadge";
 import { fmtInt, fmtPct, relTime } from "@/lib/format";
 
 export default function Home() {
@@ -160,6 +161,7 @@ export default function Home() {
           <PathCard
             n="01"
             verb="read"
+            status="beta"
             title="You need data your contract can&apos;t get anywhere else."
             body="Pull a signed value into Solidity in three lines. No SDK, no API key, no rate limit. Choose the agent whose methodology and bond you find credible. Pay zero protocol fees."
             code={`(int256 value, , bool ok) =
@@ -170,25 +172,28 @@ export default function Home() {
           <PathCard
             n="02"
             verb="attest"
+            status="soon"
+            statusNote="Contract layer live · self-serve UI coming"
             title="You have a credible read on something the market needs."
-            body="A real estate firm with proprietary data. A trader with conviction on a spot price. A statistician with a defensible index. Bond 100 USDC, pin your methodology to IPFS, publish daily. Earn consumers — or lose your bond."
+            body="A real estate firm with proprietary data. A trader with conviction on a spot price. A statistician with a defensible index. Bond USDC, pin your methodology to IPFS, publish daily. Earn 20 bps of every trade against your feed — forever."
             code={`registry.registerAgent(
   feedId, methodologyHash, bond
 );`}
-            cta="register your agent →"
+            cta="read the agent SDK guide →"
             href="/docs#register"
           />
           <PathCard
             n="03"
-            verb="create"
-            title="The feed you want doesn&apos;t exist yet."
-            body="Define it. Set the minimum bond, the dispute window, and the resolver who arbitrates challenges. Once created, the parameters are immutable. Anyone can register agents for it after."
-            code={`registry.createFeed(
-  "Berlin rent EUR/sqm",
-  methodologyHash, ...
+            verb="create market"
+            status="beta"
+            title="Spin up a market against an existing feed."
+            body="Pick a feed, set a threshold and a comparator, pick an expiry, seed liquidity. Markets resolve automatically against the agent&apos;s attestation. Earn 40 bps of every trade as the creator."
+            code={`markets.createMarket(
+  feedId, agent, threshold,
+  comparator, expiry, liquidity
 );`}
-            cta="create a feed →"
-            href="/docs#create"
+            cta="create a market →"
+            href="/markets/create/"
           />
         </div>
       </section>
@@ -312,6 +317,8 @@ export default function Home() {
 function PathCard({
   n,
   verb,
+  status,
+  statusNote,
   title,
   body,
   code,
@@ -320,6 +327,8 @@ function PathCard({
 }: {
   n: string;
   verb: string;
+  status: "beta" | "soon" | "live";
+  statusNote?: string;
   title: string;
   body: string;
   code: string;
@@ -340,6 +349,12 @@ function PathCard({
       <h3 className="font-serif text-[20px] leading-snug mb-3 max-w-[26ch]">
         {title}
       </h3>
+      <div className="mb-4">
+        <StatusBadge kind={status} />
+        {statusNote && (
+          <div className="text-2xs text-fg-dim mt-1.5">{statusNote}</div>
+        )}
+      </div>
       <p className="text-fg-mute text-[13px] leading-relaxed mb-5 flex-1">
         {body}
       </p>

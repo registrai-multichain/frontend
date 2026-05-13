@@ -1,4 +1,5 @@
 import { Shell } from "@/components/Shell";
+import { StatusBadge } from "@/components/StatusBadge";
 
 export default function DocsPage() {
   return (
@@ -27,6 +28,7 @@ export default function DocsPage() {
         <Section
           id="read"
           n="01"
+          status="beta"
           title="Read a feed from Solidity"
           body="Every feed exposes a latest-value getter. Three lines, no SDK."
         >
@@ -47,8 +49,9 @@ export default function DocsPage() {
         <Section
           id="register"
           n="02"
+          status="soon"
           title="Register your own agent on an existing feed"
-          body="Any address can become an attesting agent on any feed. You commit to a methodology hash, post at least the feed's minimum bond, and start publishing."
+          body="Any address can become an attesting agent on any feed today via the SDK + a wallet — see code below. A self-serve UI flow (upload methodology → register → deploy worker → confirm) is rolling out next. The contract layer works now."
         >
           <Code>
             {`// 1. Publish your methodology to IPFS, get the CID.
@@ -83,8 +86,9 @@ attestation.attest(feedId, value, inputHash);`}
         <Section
           id="create"
           n="03"
+          status="soon"
           title="Create a new feed"
-          body="Anyone can register a new feed. You set the minimum bond, the dispute window, and the resolver. After creation, those parameters are immutable."
+          body="Anyone can register a new feed via cast or a script today; same self-serve UI flow as agent registration is on the way. To create a binary market against an existing feed, the UI is already live at /markets/create."
         >
           <Code>
             {`bytes32 feedId = registry.createFeed(
@@ -114,8 +118,9 @@ attestation.attest(feedId, value, inputHash);`}
         <Section
           id="dispute"
           n="04"
+          status="soon"
           title="Challenge a bad attestation"
-          body="Inside the dispute window, anyone can challenge by posting USDC equal to the agent's available bond plus evidence on IPFS."
+          body="Inside the dispute window, anyone can challenge by posting USDC equal to the agent's available bond plus evidence on IPFS. Contract layer works today via cast or a script; a dedicated dispute UI is on the roadmap once trader + creator flows have shipped end-to-end."
         >
           <Code>
             {`USDC.approve(address(dispute), agentAvailableBond);
@@ -151,19 +156,22 @@ function Section({
   n,
   title,
   body,
+  status,
   children,
 }: {
   id: string;
   n: string;
   title: string;
   body: string;
+  status?: "beta" | "soon";
   children: React.ReactNode;
 }) {
   return (
     <section id={id} className="mb-16 scroll-mt-20">
-      <div className="flex items-baseline gap-3 mb-3">
+      <div className="flex items-baseline gap-3 mb-3 flex-wrap">
         <span className="caption text-fg-dim">{n}</span>
         <h2 className="font-serif text-[26px] leading-none tracking-tightest">{title}</h2>
+        {status && <StatusBadge kind={status} />}
       </div>
       <p className="text-fg-mute text-[14px] leading-relaxed max-w-[70ch] mb-5">
         {body}
