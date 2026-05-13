@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Off-black warm palette. Bloomberg-by-way-of-2026, not retro. */
+  --bg: #0b0a08;
+  --bg-elev: #131210;
+  --fg: #e8e4dc;
+  --fg-mute: #8a857c;
+  --fg-dim: #4a4640;
+  --accent: #e8c87a;
+  --up: #84b06a;
+  --down: #d36c5b;
+  --line: #1f1d1a;
+  --line-strong: #2c2924;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-feature-settings: "tnum" 1, "calt" 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  /* Subtle grain + faint vertical guide grid. Quiet, never noisy. */
+  background-image:
+    radial-gradient(rgba(255, 240, 200, 0.012) 1px, transparent 1px),
+    linear-gradient(to right, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
+  background-size:
+    3px 3px,
+    96px 100%;
+  background-position:
+    0 0,
+    0 0;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.hr {
+  height: 1px;
+  background: var(--line);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.dot-pulse {
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up {
+  animation: fade-up 0.5s ease-out backwards;
+}
+
+@keyframes draw {
+  from { stroke-dashoffset: 1000; }
+  to { stroke-dashoffset: 0; }
+}
+.spark-path {
+  stroke-dasharray: 1000;
+  animation: draw 1.2s ease-out forwards;
+}
+
+a {
+  color: inherit;
+}
+a:hover {
+  color: var(--accent);
+}
+
+.caption {
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-mute);
+}

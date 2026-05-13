@@ -1,0 +1,7 @@
+{
+  "_comment": "NBP Warsaw secondary residential transaction anchor. Updated quarterly when NBP publishes. Methodology: /methodology/warsaw-resi-v1.md §3.2",
+  "_source": "https://nbp.pl/publikacje/cykliczne-materialy-analityczne-nbp/rynek-nieruchomosci/informacja-kwartalna/",
+  "period": "2026Q1",
+  "publishedAt": "2026-04-30",
+  "warsawSecondaryAvgPricePerSqm": 17312
+}

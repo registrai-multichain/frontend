@@ -1,0 +1,159 @@
+{
+  "syncedAt": "2026-05-13T20:11:42.230Z",
+  "chainId": 5042002,
+  "explorer": "https://testnet.arcscan.app",
+  "contracts": {
+    "USDC": "0x3600000000000000000000000000000000000000",
+    "EURC": "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
+    "Registry": "0xa7db7FA00193baC5315335899b008A013FAFf384",
+    "Attestation": "0x9F1B338326cfb4389e70AEb5685ed5491E60aBE5",
+    "Dispute": "0x96E46513955ECb09eEECca36ee04A18D79785D11",
+    "Markets": "0xabB8Ad614dacF8F402Ad15EC07B85f300899C8BF",
+    "MarketsEURC": "0x3d2A1B77475aaB7E2e074C4Aa0b51c764831D669"
+  },
+  "feed": {
+    "id": "0x264ba3f6ecc15c546f3d12c5ca428cd85eec37cd3d54747df2dba99a9263caff",
+    "symbol": "WARSAW_RESI_PLN_SQM",
+    "description": "Warsaw average residential price per square meter, secondary sale market",
+    "unit": "PLN/sqm",
+    "methodologyHash": "0xe82ab18fead19b7bf78f93f4d08d6c2fe0f566a9e8f01d4999cb3c2ccba40504",
+    "minBond": "10000000",
+    "disputeWindow": 86400,
+    "resolver": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e",
+    "createdAt": 1778701745
+  },
+  "agent": {
+    "address": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e",
+    "bond": "10000000",
+    "lockedBond": "0",
+    "registeredAt": 1778701748,
+    "lastAttestationAt": 1778701751,
+    "active": true,
+    "slashed": false
+  },
+  "attestations": [
+    {
+      "id": "0xcaee48c615092250c89cf6b109941108831162e453165dd44a7e05b96d774f0b",
+      "value": 17312,
+      "timestamp": 1778701751,
+      "finalizedAt": 1778788151,
+      "inputHash": "0xb586d7ae8956cb0e2fabea187d5654d7582743476d235cd81071d5103ab0d2ac",
+      "status": 0
+    }
+  ],
+  "markets": [
+    {
+      "id": "0x54370ef416a62a56653ec1e657ec572b87b6c00becedf66295d33791bfa97561",
+      "feedId": "0x264ba3f6ecc15c546f3d12c5ca428cd85eec37cd3d54747df2dba99a9263caff",
+      "agent": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e",
+      "threshold": 18000,
+      "comparator": 0,
+      "expiry": 1785613757,
+      "creator": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e",
+      "yesReserve": "8000000",
+      "noReserve": "8000000",
+      "phase": 0,
+      "yesWon": false,
+      "createdAt": 1778701758,
+      "history": [],
+      "fees": {
+        "creator": "0",
+        "agent": "0",
+        "treasury": "0",
+        "grossVolume": "0"
+      }
+    },
+    {
+      "id": "0x0913710c97d2fda317b715d62f471f27d4c1c4a26ecfcb3875cd96f52f7b7382",
+      "feedId": "0x264ba3f6ecc15c546f3d12c5ca428cd85eec37cd3d54747df2dba99a9263caff",
+      "agent": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e",
+      "threshold": 17000,
+      "comparator": 2,
+      "expiry": 1783021757,
+      "creator": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e",
+      "yesReserve": "7818538",
+      "noReserve": "8185676",
+      "phase": 0,
+      "yesWon": false,
+      "createdAt": 1778701760,
+      "history": [
+        {
+          "ts": 1778701906,
+          "yesPrice": 0.5183011223612406,
+          "side": "yes",
+          "collateral": 0.3
+        },
+        {
+          "ts": 1778701918,
+          "yesPrice": 0.5359014255478535,
+          "side": "yes",
+          "collateral": 0.3
+        },
+        {
+          "ts": 1778701929,
+          "yesPrice": 0.5163118952176704,
+          "side": "no",
+          "collateral": 0.3
+        },
+        {
+          "ts": 1778701941,
+          "yesPrice": 0.5339792683890298,
+          "side": "yes",
+          "collateral": 0.3
+        },
+        {
+          "ts": 1778701961,
+          "yesPrice": 0.5509531581011674,
+          "side": "yes",
+          "collateral": 0.3
+        },
+        {
+          "ts": 1778701973,
+          "yesPrice": 0.530864159014064,
+          "side": "no",
+          "collateral": 0.3
+        },
+        {
+          "ts": 1778701981,
+          "yesPrice": 0.5114700415777994,
+          "side": "no",
+          "collateral": 0.3
+        }
+      ],
+      "fees": {
+        "creator": "8400",
+        "agent": "4200",
+        "treasury": "2100",
+        "grossVolume": "2100000"
+      }
+    },
+    {
+      "id": "0x073ffdfd123264e215976dfb8e95799fde741f1ed4afff8394e5026ea8512719",
+      "feedId": "0x264ba3f6ecc15c546f3d12c5ca428cd85eec37cd3d54747df2dba99a9263caff",
+      "agent": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e",
+      "threshold": 17500,
+      "comparator": 1,
+      "expiry": 1790797757,
+      "creator": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e",
+      "yesReserve": "7712795",
+      "noReserve": "8297900",
+      "phase": 0,
+      "yesWon": false,
+      "createdAt": 1778701762,
+      "history": [
+        {
+          "ts": 1778701949,
+          "yesPrice": 0.5182723173478728,
+          "side": "yes",
+          "collateral": 0.3
+        }
+      ],
+      "fees": {
+        "creator": "1200",
+        "agent": "600",
+        "treasury": "300",
+        "grossVolume": "300000"
+      }
+    }
+  ]
+}
