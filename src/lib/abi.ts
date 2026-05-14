@@ -136,6 +136,33 @@ export const marketsAbi = [
     inputs: [{ name: "user", type: "address" }],
     outputs: [{ type: "uint256" }],
   },
+  {
+    type: "function",
+    name: "addLiquidity",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "marketId", type: "bytes32" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "claimLP",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "marketId", type: "bytes32" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "lpShares",
+    stateMutability: "view",
+    inputs: [
+      { name: "marketId", type: "bytes32" },
+      { name: "user", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
 ] as const;
 
 export const registryAbi = [
