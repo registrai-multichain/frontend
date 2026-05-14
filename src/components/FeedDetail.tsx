@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Feed } from "@/lib/types";
 import { Sparkline } from "./Sparkline";
+import { StatusBadge } from "./StatusBadge";
 import { AnimatedNumber } from "./AnimatedNumber";
 import { LiveCountdown } from "./LiveCountdown";
 import { LIVE_META } from "@/lib/demo";
@@ -30,7 +31,10 @@ export function FeedDetail({ feed }: { feed: Feed }) {
       {/* Header strip: symbol + meta */}
       <div className="flex items-end justify-between gap-6 mb-10">
         <div>
-          <div className="caption mb-2">feed · {shortHash(feed.id)}</div>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="caption">feed · {shortHash(feed.id)}</div>
+            <StatusBadge kind="beta" />
+          </div>
           <h1 className="text-[26px] sm:text-[30px] tracking-tightest font-medium leading-none">
             {feed.symbol}
           </h1>
