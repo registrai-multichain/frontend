@@ -32,6 +32,23 @@ export const usdcAbi = [
   },
 ] as const;
 
+export const vaultAbi = [
+  { type: "function", name: "deposit", stateMutability: "nonpayable",
+    inputs: [{ name: "amount", type: "uint256" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "withdraw", stateMutability: "nonpayable",
+    inputs: [{ name: "shares", type: "uint256" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "nav", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "totalShares", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "sharesOf", stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "pricePerShare", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "operator", stateMutability: "view",
+    inputs: [], outputs: [{ type: "address" }] },
+] as const;
+
 export const marketsAbi = [
   {
     type: "function",

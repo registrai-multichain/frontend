@@ -19,6 +19,7 @@ export interface ChainContracts {
   Dispute: Address;
   Markets: Address;
   MarketsEURC?: Address;
+  MarketMakerVault?: Address;
   USDC: Address;
   EURC?: Address;
 }
@@ -76,6 +77,8 @@ export const ARC_TESTNET: ChainEntry = {
     MarketsEURC: (live.contracts as { MarketsEURC?: string }).MarketsEURC as
       | Address
       | undefined,
+    MarketMakerVault: (live.contracts as { MarketMakerVault?: string })
+      .MarketMakerVault as Address | undefined,
   },
   viemChain: ARC_TESTNET_VIEM,
   label: "v1 · 2026-05",

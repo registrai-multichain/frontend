@@ -36,6 +36,9 @@ function TopNav() {
           <Link href="/markets" className="hover:text-fg transition-colors">
             markets
           </Link>
+          <Link href="/vault" className="hover:text-fg transition-colors">
+            vault
+          </Link>
           <Link href="/profile" className="hover:text-fg transition-colors">
             profile
           </Link>
