@@ -146,67 +146,147 @@ const marketsAbi = [
 async function main(): Promise<void> {
   const client = createPublicClient({ chain: arc, transport: http() });
 
-  const feedId = DEPLOYMENT.warsawFeed.feedId as Hex;
-  const agent = DEPLOYMENT.warsawFeed.agent as Address;
+  const agent = DEPLOYMENT.agent as Address;
+  const feedDefs = DEPLOYMENT.feeds as Array<{
+    id: string;
+    symbol: string;
+    name: string;
+    description: string;
+    unit: string;
+    decimals: number;
+    displayDivisor: number;
+    methodologyHashPlaceholder: string;
+    methodologyDoc: string;
+  }>;
 
-  console.log("reading feed…");
-  const feed = await client.readContract({
-    address: DEPLOYMENT.contracts.Registry as Address,
-    abi: registryAbi,
-    functionName: "getFeed",
-    args: [feedId],
-  });
-
-  console.log("reading agent…");
-  const agentInfo = await client.readContract({
-    address: DEPLOYMENT.contracts.Registry as Address,
-    abi: registryAbi,
-    functionName: "getAgent",
-    args: [feedId, agent],
-  });
-
-  console.log("reading attestations…");
-  const historyLen = (await client.readContract({
-    address: DEPLOYMENT.contracts.Attestation as Address,
-    abi: attestationAbi,
-    functionName: "historyLength",
-    args: [feedId, agent],
-  })) as bigint;
-
-  const attestations = [];
-  for (let i = 0n; i < historyLen; i++) {
-    const id = (await client.readContract({
-      address: DEPLOYMENT.contracts.Attestation as Address,
-      abi: attestationAbi,
-      functionName: "historyAt",
-      args: [feedId, agent, i],
-    })) as Hex;
-    const att = (await client.readContract({
-      address: DEPLOYMENT.contracts.Attestation as Address,
-      abi: attestationAbi,
-      functionName: "getAttestation",
-      args: [id],
-    })) as {
-      feedId: Hex;
-      agent: Address;
-      value: bigint;
-      timestamp: bigint;
-      inputHash: Hex;
-      methodologyHash: Hex;
-      status: number;
-      finalizedAt: bigint;
+  console.log(`reading ${feedDefs.length} feed(s) + agents + attestations…`);
+  const feeds: Array<{
+    id: Hex;
+    symbol: string;
+    name: string;
+    description: string;
+    unit: string;
+    decimals: number;
+    displayDivisor: number;
+    methodologyHash: Hex;
+    methodologyDoc: string;
+    minBond: string;
+    disputeWindow: number;
+    resolver: Address;
+    createdAt: number;
+    agent: {
+      address: Address;
+      bond: string;
+      lockedBond: string;
+      registeredAt: number;
+      lastAttestationAt: number;
+      active: boolean;
+      slashed: boolean;
     };
-    attestations.push({
-      id,
-      value: Number(att.value),
-      timestamp: Number(att.timestamp),
-      finalizedAt: Number(att.finalizedAt),
-      inputHash: att.inputHash,
-      status: att.status,
+    attestations: Array<{
+      id: Hex;
+      value: number;
+      timestamp: number;
+      finalizedAt: number;
+      inputHash: Hex;
+      status: number;
+    }>;
+  }> = [];
+
+  for (const def of feedDefs) {
+    const feedId = def.id as Hex;
+    const feedOnChain = (await client.readContract({
+      address: DEPLOYMENT.contracts.Registry as Address,
+      abi: registryAbi,
+      functionName: "getFeed",
+      args: [feedId],
+    })) as {
+      methodologyHash: Hex;
+      minBond: bigint;
+      disputeWindow: bigint;
+      resolver: Address;
+      createdAt: bigint;
+    };
+    const agentInfo = (await client.readContract({
+      address: DEPLOYMENT.contracts.Registry as Address,
+      abi: registryAbi,
+      functionName: "getAgent",
+      args: [feedId, agent],
+    })) as {
+      bond: bigint;
+      lockedBond: bigint;
+      registeredAt: bigint;
+      lastAttestationAt: bigint;
+      active: boolean;
+      slashed: boolean;
+    };
+    const historyLen = (await client.readContract({
+      address: DEPLOYMENT.contracts.Attestation as Address,
+      abi: attestationAbi,
+      functionName: "historyLength",
+      args: [feedId, agent],
+    })) as bigint;
+
+    const attestations = [];
+    for (let i = 0n; i < historyLen; i++) {
+      const id = (await client.readContract({
+        address: DEPLOYMENT.contracts.Attestation as Address,
+        abi: attestationAbi,
+        functionName: "historyAt",
+        args: [feedId, agent, i],
+      })) as Hex;
+      const att = (await client.readContract({
+        address: DEPLOYMENT.contracts.Attestation as Address,
+        abi: attestationAbi,
+        functionName: "getAttestation",
+        args: [id],
+      })) as {
+        value: bigint;
+        timestamp: bigint;
+        inputHash: Hex;
+        status: number;
+        finalizedAt: bigint;
+      };
+      attestations.push({
+        id,
+        value: Number(att.value),
+        timestamp: Number(att.timestamp),
+        finalizedAt: Number(att.finalizedAt),
+        inputHash: att.inputHash,
+        status: att.status,
+      });
+    }
+
+    feeds.push({
+      id: feedId,
+      symbol: def.symbol,
+      name: def.name,
+      description: def.description,
+      unit: def.unit,
+      decimals: def.decimals,
+      displayDivisor: def.displayDivisor,
+      methodologyHash: feedOnChain.methodologyHash,
+      methodologyDoc: def.methodologyDoc,
+      minBond: feedOnChain.minBond.toString(),
+      disputeWindow: Number(feedOnChain.disputeWindow),
+      resolver: feedOnChain.resolver,
+      createdAt: Number(feedOnChain.createdAt),
+      agent: {
+        address: agent,
+        bond: agentInfo.bond.toString(),
+        lockedBond: agentInfo.lockedBond.toString(),
+        registeredAt: Number(agentInfo.registeredAt),
+        lastAttestationAt: Number(agentInfo.lastAttestationAt),
+        active: agentInfo.active,
+        slashed: agentInfo.slashed,
+      },
+      attestations,
     });
+    console.log(`  · ${def.symbol}: ${attestations.length} attestation(s)`);
   }
 
-  console.log(`got ${attestations.length} attestation(s)`);
+  // Default feed (for backwards compat with components reading `live.feed`).
+  const defaultFeed = feeds[0]!;
 
   console.log("reading markets + trade events + fee events…");
   const boughtEvent = {
@@ -378,27 +458,26 @@ async function main(): Promise<void> {
     chainId: DEPLOYMENT.chainId,
     explorer: DEPLOYMENT.explorer,
     contracts: DEPLOYMENT.contracts,
+    // Backwards-compat: the first feed exposes a flat `feed` / `agent` /
+    // `attestations` shape for components that haven't migrated to the
+    // multi-feed `feeds[]` array yet.
     feed: {
-      id: feedId,
-      symbol: "WARSAW_RESI_PLN_SQM",
-      description: feed.description,
-      unit: "PLN/sqm",
-      methodologyHash: feed.methodologyHash,
-      minBond: feed.minBond.toString(),
-      disputeWindow: Number(feed.disputeWindow),
-      resolver: feed.resolver,
-      createdAt: Number(feed.createdAt),
+      id: defaultFeed.id,
+      symbol: defaultFeed.symbol,
+      description: defaultFeed.description,
+      unit: defaultFeed.unit,
+      methodologyHash: defaultFeed.methodologyHash,
+      minBond: defaultFeed.minBond,
+      disputeWindow: defaultFeed.disputeWindow,
+      resolver: defaultFeed.resolver,
+      createdAt: defaultFeed.createdAt,
     },
-    agent: {
-      address: agent,
-      bond: agentInfo.bond.toString(),
-      lockedBond: agentInfo.lockedBond.toString(),
-      registeredAt: Number(agentInfo.registeredAt),
-      lastAttestationAt: Number(agentInfo.lastAttestationAt),
-      active: agentInfo.active,
-      slashed: agentInfo.slashed,
-    },
-    attestations,
+    agent: defaultFeed.agent,
+    attestations: defaultFeed.attestations,
+    // Multi-feed surface — every registered feed with its agent state and
+    // full attestation history. Components targeting more than one feed
+    // read from here.
+    feeds,
     markets,
   };
 

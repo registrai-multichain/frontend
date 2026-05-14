@@ -1,6 +1,16 @@
 import type { Comparator, Market, MarketTrade } from "./types";
 import live from "./live-data.json";
-import { DEMO_FEED } from "./demo";
+
+/** Shape of one feed in live-data.json (multi-feed surface). */
+interface RawFeed {
+  id: string;
+  symbol: string;
+  name: string;
+  description: string;
+  unit: string;
+  decimals: number;
+  displayDivisor: number;
+}
 
 interface RawMarket {
   id: string;
@@ -24,12 +34,9 @@ interface RawMarket {
   };
 }
 
-function decodeComparator(c: number): Comparator {
-  if (c === 0) return ">";
-  if (c === 1) return ">=";
-  if (c === 2) return "<";
-  return "<=";
-}
+const FEEDS_BY_ID = new Map<string, RawFeed>(
+  ((live as unknown as { feeds?: RawFeed[] }).feeds ?? []).map((f) => [f.id, f]),
+);
 
 function comparatorLabel(c: Comparator): string {
   if (c === ">") return "exceed";
@@ -38,8 +45,19 @@ function comparatorLabel(c: Comparator): string {
   return "be at or below";
 }
 
-function fmtThreshold(n: number, unit: string): string {
-  return `${n.toLocaleString("en-US").replace(/,/g, " ")} ${unit}`;
+function decodeComparator(c: number): Comparator {
+  if (c === 0) return ">";
+  if (c === 1) return ">=";
+  if (c === 2) return "<";
+  return "<=";
+}
+
+function fmtThreshold(n: number, feed: RawFeed): string {
+  if (feed.displayDivisor > 1) {
+    const human = n / feed.displayDivisor;
+    return `${human.toFixed(feed.decimals)}%`;
+  }
+  return `${n.toLocaleString("en-US").replace(/,/g, " ")} ${feed.unit}`;
 }
 
 function fmtDate(ts: number): string {
@@ -47,24 +65,54 @@ function fmtDate(ts: number): string {
   return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function buildTitle(threshold: number, comparator: Comparator, expiry: number, unit: string): string {
-  return `Will Warsaw residential price ${comparatorLabel(comparator)} ${fmtThreshold(threshold, unit)} by ${fmtDate(expiry)}?`;
+function feedNounPhrase(feed: RawFeed): string {
+  // Convert "Warsaw residential" → "Warsaw residential price"
+  // "Polish CPI Y/Y" → "Polish CPI YoY"
+  // "ECB main refi rate" → "ECB main refi rate"
+  switch (feed.symbol) {
+    case "WARSAW_RESI_PLN_SQM":
+      return "Warsaw residential price";
+    case "POLAND_CPI_YOY_BPS":
+      return "Polish CPI";
+    case "ECB_MAIN_REFI_BPS":
+      return "ECB main refi rate";
+    default:
+      return feed.name;
+  }
 }
 
-/**
- * Markets read straight from Arc testnet. No trade history yet — markets are
- * day-zero. The history list stays empty until users trade; the chart
- * component handles the empty state cleanly.
- */
+function buildTitle(
+  threshold: number,
+  comparator: Comparator,
+  expiry: number,
+  feed: RawFeed,
+): string {
+  return `Will ${feedNounPhrase(feed)} ${comparatorLabel(comparator)} ${fmtThreshold(threshold, feed)} by ${fmtDate(expiry)}?`;
+}
+
 export const DEMO_MARKETS: Market[] = (live.markets as unknown as RawMarket[]).map((m) => {
   const comparator = decodeComparator(m.comparator);
+  const feed =
+    FEEDS_BY_ID.get(m.feedId) ??
+    // Fallback for markets whose feed metadata isn't in live-data (shouldn't happen)
+    ({
+      id: m.feedId,
+      symbol: "UNKNOWN",
+      name: "Unknown feed",
+      description: "",
+      unit: "",
+      decimals: 0,
+      displayDivisor: 1,
+    } satisfies RawFeed);
+
   const yesReserve = Number(m.yesReserve);
   const noReserve = Number(m.noReserve);
   const liquidity = (yesReserve + noReserve) / 2;
+
   return {
     id: m.id as `0x${string}`,
     feedId: m.feedId as `0x${string}`,
-    feedSymbol: DEMO_FEED.symbol,
+    feedSymbol: feed.symbol,
     agent: m.agent as `0x${string}`,
     threshold: m.threshold,
     comparator,
@@ -80,8 +128,8 @@ export const DEMO_MARKETS: Market[] = (live.markets as unknown as RawMarket[]).m
       side: t.side,
       collateral: t.collateral,
     })),
-    title: buildTitle(m.threshold, comparator, m.expiry, DEMO_FEED.unit),
-    unit: DEMO_FEED.unit,
+    title: buildTitle(m.threshold, comparator, m.expiry, feed),
+    unit: feed.displayDivisor > 1 ? "%" : feed.unit,
     yesWon: m.yesWon,
     fees: m.fees
       ? {
@@ -97,3 +145,11 @@ export const DEMO_MARKETS: Market[] = (live.markets as unknown as RawMarket[]).m
 export function findMarket(id: string): Market | undefined {
   return DEMO_MARKETS.find((m) => m.id === id);
 }
+
+/** Find a feed by its onchain id. Used by feed-detail and related pages. */
+export function findFeed(id: string): RawFeed | undefined {
+  return FEEDS_BY_ID.get(id);
+}
+
+/** Every registered feed — for /feeds index, profile breadcrumbs, etc. */
+export const ALL_FEEDS: RawFeed[] = Array.from(FEEDS_BY_ID.values());

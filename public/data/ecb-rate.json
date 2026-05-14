@@ -1,0 +1,8 @@
+{
+  "_comment": "ECB main refinancing operations rate mirror. Updated within 1h of each Governing Council decision. Methodology: /methodology/ecb-rate-v1.md",
+  "_source": "https://www.ecb.europa.eu/press/pr/date/",
+  "decisionDate": "2026-04-17",
+  "effectiveDate": "2026-04-24",
+  "mainRefiPercent": 2.75,
+  "pressReleaseUrl": "https://www.ecb.europa.eu/press/pr/date/2026/html/ecb.mp260417~example.en.html"
+}
