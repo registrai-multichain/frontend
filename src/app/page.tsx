@@ -232,6 +232,49 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ─────────────── BECOME A CREATOR ─────────────── */}
+      <section
+        className="mt-24 fade-up border border-accent/30 bg-bg-elev/30 p-6 sm:p-8"
+        style={{ animationDelay: "230ms" }}
+      >
+        <div className="caption mb-3 text-accent">early access · creator economy</div>
+        <h2 className="font-serif text-[28px] sm:text-[36px] leading-[1.05] tracking-tightest mb-4 max-w-[28ch]">
+          You have an opinion on a number.{" "}
+          <span className="italic text-accent">Turn it into a market.</span>
+        </h2>
+        <p className="text-fg text-[14.5px] leading-relaxed max-w-[64ch] mb-5">
+          Pick a feed, set a threshold, seed five USDC of liquidity. Every
+          trade against your market pays you{" "}
+          <span className="text-accent tnum">40 bps forever</span>. Polish CPI
+          prints, ECB rate decisions, Warsaw real-estate moves — pick the one
+          you have conviction on.
+        </p>
+        <div className="flex flex-wrap items-center gap-3 text-[12.5px] tracking-wide">
+          <Link
+            href="/markets/create"
+            className="px-4 py-2 border border-accent/60 text-accent hover:bg-accent hover:text-bg transition-colors"
+          >
+            create your first market →
+          </Link>
+          <span className="text-2xs text-fg-dim">
+            ~5 minutes · testnet USDC free from{" "}
+            <a
+              href="https://faucet.circle.com"
+              target="_blank"
+              rel="noreferrer"
+              className="underline decoration-fg-dim underline-offset-4 hover:text-accent"
+            >
+              faucet.circle.com
+            </a>
+          </span>
+        </div>
+        <div className="mt-5 grid grid-cols-3 gap-px bg-line">
+          <CreatorStat label="creator fee" value="40 bps" />
+          <CreatorStat label="agent fee" value="20 bps" />
+          <CreatorStat label="protocol" value="10 bps" />
+        </div>
+      </section>
+
       {/* ─────────────── TRUST GRADIENT ─────────────── */}
       <section
         className="mt-24 fade-up"
@@ -399,6 +442,17 @@ function PathCard({
         {cta}
       </span>
     </Link>
+  );
+}
+
+function CreatorStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-bg p-3 sm:p-4 text-center">
+      <div className="caption text-fg-dim mb-1">{label}</div>
+      <div className="text-[16px] sm:text-[18px] tnum tracking-tightest text-accent">
+        {value}
+      </div>
+    </div>
   );
 }
 

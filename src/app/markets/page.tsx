@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Shell } from "@/components/Shell";
 import { MarketCard } from "@/components/MarketCard";
 import { ProposalsPanel } from "@/components/ProposalsPanel";
+import { FeaturedCreators } from "@/components/FeaturedCreators";
 import { StatusBadge } from "@/components/StatusBadge";
 import { DEMO_MARKETS } from "@/lib/markets-demo";
 import { fmtInt } from "@/lib/format";
@@ -54,6 +55,8 @@ export default function MarketsPage() {
             <MarketCard key={m.id} market={m} />
           ))}
         </div>
+
+        <FeaturedCreators />
 
         <ProposalsPanel />
 
