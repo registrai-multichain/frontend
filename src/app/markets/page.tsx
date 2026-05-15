@@ -3,6 +3,7 @@ import { Shell } from "@/components/Shell";
 import { MarketCard } from "@/components/MarketCard";
 import { ProposalsPanel } from "@/components/ProposalsPanel";
 import { FeaturedCreators } from "@/components/FeaturedCreators";
+import { FaucetHint } from "@/components/FaucetHint";
 import { StatusBadge } from "@/components/StatusBadge";
 import { DEMO_MARKETS } from "@/lib/markets-demo";
 import { fmtInt } from "@/lib/format";
@@ -34,7 +35,9 @@ export default function MarketsPage() {
           onchain attestation, finalized after its dispute window.
         </p>
 
-        <div className="grid grid-cols-3 gap-px bg-line mb-12">
+        <FaucetHint className="mb-6" />
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-line mb-12">
           <Stat label="active markets" value={String(markets.length)} />
           <Stat label="total liquidity" value={`${fmtInt(totalLiquidity)} USDC`} />
           <Stat label="volume · 30d" value={`${fmtInt(totalVolume)} USDC`} />

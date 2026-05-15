@@ -94,6 +94,24 @@ export default function Home() {
 
       <div className="hr mb-12" />
 
+      {/* ─────────────── QUICKSTART ─────────────── */}
+      <section className="fade-up mb-14" style={{ animationDelay: "80ms" }}>
+        <div className="flex items-baseline justify-between mb-5">
+          <h2 className="caption">first sixty seconds</h2>
+          <span className="text-2xs text-fg-dim">
+            new here? do this
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-line">
+          <Step n="1" title="install a wallet" body="MetaMask, Rabby, or any EVM wallet. No app store needed." />
+          <Step n="2" title="add Arc testnet" body="Click the wallet button in the nav — we add the chain for you." />
+          <Step n="3" title="claim test USDC" body="Drop your address at faucet.circle.com, pick Arc Sepolia." cta={{ label: "faucet ↗", href: "https://faucet.circle.com" }} />
+          <Step n="4" title="trade or LP" body="Take a side on any market, or deposit into the vault and earn from being right." cta={{ label: "markets →", href: "/markets" }} />
+        </div>
+      </section>
+
+      <div className="hr mb-12" />
+
       {/* ─────────────── LIVE PROOF ─────────────── */}
       <section className="fade-up" style={{ animationDelay: "120ms" }}>
         <div className="flex items-baseline justify-between mb-5">
@@ -388,6 +406,38 @@ export default function Home() {
         anyone.
       </section>
     </Shell>
+  );
+}
+
+function Step({
+  n, title, body, cta,
+}: {
+  n: string;
+  title: string;
+  body: string;
+  cta?: { label: string; href: string };
+}) {
+  const isExternal = cta?.href.startsWith("http");
+  return (
+    <div className="bg-bg p-5 flex flex-col">
+      <div className="flex items-baseline justify-between mb-3">
+        <span className="caption text-fg-dim tnum">{n}</span>
+      </div>
+      <h3 className="font-serif text-[17px] leading-snug mb-2 max-w-[22ch]">
+        {title}
+      </h3>
+      <p className="text-[12.5px] text-fg-mute leading-relaxed flex-1">{body}</p>
+      {cta && (
+        <a
+          href={cta.href}
+          target={isExternal ? "_blank" : undefined}
+          rel={isExternal ? "noreferrer" : undefined}
+          className="mt-3 text-2xs text-accent hover:underline tnum"
+        >
+          {cta.label}
+        </a>
+      )}
+    </div>
   );
 }
 

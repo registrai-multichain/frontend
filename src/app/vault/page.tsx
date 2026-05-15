@@ -1,5 +1,6 @@
 import { Shell } from "@/components/Shell";
 import { VaultPanel } from "@/components/VaultPanel";
+import { FaucetHint } from "@/components/FaucetHint";
 import { StatusBadge } from "@/components/StatusBadge";
 
 export default function VaultPage() {
@@ -24,9 +25,11 @@ export default function VaultPage() {
           and ECB rate decisions without trading any of them yourself.
         </p>
 
+        <FaucetHint className="mb-6" />
+
         <VaultPanel />
 
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-px bg-line">
+        <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-px bg-line">
           <Card title="how shares price"
             body="On deposit, shares mint pro-rata to the vault's USDC balance. v1 NAV is conservative — open outcome positions are not marked-to-market. Withdrawers leave unrealized PnL behind for the cohort remaining; depositors entering during open positions pay no premium for it." />
           <Card title="how trades route"
