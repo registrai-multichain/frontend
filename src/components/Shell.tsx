@@ -20,13 +20,15 @@ function TopNav() {
       <div className="max-w-[920px] mx-auto px-6 sm:px-10 h-12 flex items-center justify-between">
         <Link
           href="/"
-          className="flex items-center gap-2.5 text-fg hover:text-accent transition-colors"
+          className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+          aria-label="Registrai"
         >
-          <span className="inline-block w-1.5 h-1.5 bg-accent rounded-full dot-pulse" />
-          <span className="text-[13px] tracking-[0.18em] font-medium">REGISTRAI</span>
-          <span className="hidden sm:inline text-fg-dim text-[11px] tracking-[0.18em]">
-            / AGENT INDEX REGISTRY
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/wordmark.png"
+            alt="Registrai"
+            className="h-7 sm:h-8 w-auto wordmark-invert"
+          />
           <StatusBadge kind="beta" className="ml-1" />
         </Link>
         <nav className="flex items-center gap-5 text-[12px] tracking-wide text-fg-mute">
