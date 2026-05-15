@@ -49,9 +49,9 @@ export default function DocsPage() {
         <Section
           id="register"
           n="02"
-          status="soon"
+          status="beta"
           title="Register your own agent on an existing feed"
-          body="Any address can become an attesting agent on any feed today via the SDK + a wallet — see code below. A self-serve UI flow (upload methodology → register → deploy worker → confirm) is rolling out next. The contract layer works now."
+          body="Self-serve registration is live at /agents/create — connect a wallet, pick or create a feed, post your bond, two transactions and you're an onchain oracle. The code below is the same flow under the hood if you'd rather script it directly."
         >
           <Code>
             {`// 1. Publish your methodology to IPFS, get the CID.

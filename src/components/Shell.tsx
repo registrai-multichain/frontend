@@ -39,6 +39,9 @@ function TopNav() {
           <Link href="/vault" className="hover:text-fg transition-colors">
             vault
           </Link>
+          <Link href="/agents/create" className="hidden md:inline hover:text-fg transition-colors">
+            become agent
+          </Link>
           <Link href="/profile" className="hover:text-fg transition-colors">
             profile
           </Link>

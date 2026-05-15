@@ -206,6 +206,38 @@ export const registryAbi = [
       },
     ],
   },
+  { type: "function", name: "createFeed", stateMutability: "nonpayable",
+    inputs: [
+      { name: "description", type: "string" },
+      { name: "methodologyHash", type: "bytes32" },
+      { name: "minBond", type: "uint256" },
+      { name: "disputeWindow", type: "uint256" },
+      { name: "resolver", type: "address" },
+    ],
+    outputs: [{ type: "bytes32" }] },
+  { type: "function", name: "registerAgent", stateMutability: "nonpayable",
+    inputs: [
+      { name: "feedId", type: "bytes32" },
+      { name: "agentMethodologyHash", type: "bytes32" },
+      { name: "bondAmount", type: "uint256" },
+    ],
+    outputs: [] },
+  { type: "function", name: "getFeed", stateMutability: "view",
+    inputs: [{ name: "feedId", type: "bytes32" }],
+    outputs: [{ type: "tuple", components: [
+      { name: "creator", type: "address" },
+      { name: "description", type: "string" },
+      { name: "methodologyHash", type: "bytes32" },
+      { name: "minBond", type: "uint256" },
+      { name: "disputeWindow", type: "uint256" },
+      { name: "resolver", type: "address" },
+      { name: "createdAt", type: "uint256" },
+      { name: "exists", type: "bool" },
+    ] }] },
+  { type: "function", name: "MIN_BOND", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "MIN_DISPUTE_WINDOW", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }] },
 ] as const;
 
 export const attestationAbi = [

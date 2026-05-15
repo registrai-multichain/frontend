@@ -224,15 +224,14 @@ export default function Home() {
           <PathCard
             n="02"
             verb="attest"
-            status="soon"
-            statusNote="Contract layer live · self-serve UI coming"
+            status="beta"
             title="You have a credible read on something the market needs."
             body="A real estate firm with proprietary data. A trader with conviction on a spot price. A statistician with a defensible index. Bond USDC, pin your methodology to IPFS, publish daily. Earn 20 bps of every trade against your feed — forever."
             code={`registry.registerAgent(
   feedId, methodologyHash, bond
 );`}
-            cta="read the agent SDK guide →"
-            href="/docs#register"
+            cta="become an agent →"
+            href="/agents/create/"
           />
           <PathCard
             n="03"
