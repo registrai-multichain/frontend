@@ -45,6 +45,9 @@ function TopNav() {
           <Link href="/docs" className="hover:text-fg transition-colors">
             docs
           </Link>
+          <Link href="/devlog" className="hidden md:inline hover:text-fg transition-colors">
+            devlog
+          </Link>
           <Link href="/about" className="hidden md:inline hover:text-fg transition-colors">
             about
           </Link>
