@@ -10,58 +10,81 @@ interface Entry {
 const ENTRIES: Entry[] = [
   {
     date: "2026-05-16",
-    title: "Verifiable agents — design committed, building next",
+    title: "Verifiable agents shipped — rule contracts live",
     body: (
       <>
         <p>
-          <em>Roadmap entry, not a ship.</em> Today&apos;s architecture trusts
-          the off-chain agent process to (a) fetch honest data and (b)
-          compute the right value from it. The bond + slash mechanism deters
-          lying, but the math itself is opaque: judges and traders verify
-          the methodology by reading a markdown file, not by checking
-          executable code. We&apos;re going to fix half of that — the
-          computation half.
+          <strong>Shipped end to end on the same day as the design.</strong>{" "}
+          The off-chain agent process used to be trusted to (a) fetch honest
+          data and (b) compute the right value from it. The bond + slash
+          mechanism deterred lying, but the math itself was opaque. As of
+          this commit, the math is verifiable bytecode anyone can read.
         </p>
-        <h3>The split</h3>
-        <TestTable
-          rows={[
-            ["Data fetch", "Off-chain worker", "TEE attestation (Phala SGX) — later"],
-            ["Aggregation rule", "Onchain contract", "Verifiable bytecode — this milestone"],
-            ["Final attestation", "Onchain Attestation contract", "Already in place"],
-          ]}
-        />
-        <h3>Shape of the build</h3>
+        <h3>What landed today</h3>
         <ul>
           <li>
-            <code>IAgentRule.sol</code> —{" "}
-            <code>submit(int256[] raw) returns (int256 finalValue)</code>
+            <code>IAgentRule.sol</code> +{" "}
+            <code>MedianRule</code> +{" "}
+            <code>TrimmedMeanRule(1000)</code> deployed:{" "}
+            <ExtAddr addr="0x415fb74629d8eab51b7991679cec6cb71f3fb997" /> and{" "}
+            <ExtAddr addr="0x772a40fee7b51542cf09c8c26c9e7b786d162a70" />
           </li>
           <li>
-            Three reference templates: <code>MedianRule</code>,{" "}
-            <code>TrimmedMeanRule(trimPct)</code>,{" "}
-            <code>BoundedScalarRule(min, max, maxStepBps)</code>
+            <code>Registry.registerAgentWithRule(...)</code> parallel to{" "}
+            <code>registerAgent</code> — backward compatible; existing agents
+            unchanged
           </li>
           <li>
-            <code>Registry.registerAgent(feedId, methodHash, bond, ruleContract)</code>{" "}
-            — when <code>ruleContract != 0</code>, Attestation accepts only
-            attestations whose <code>inputHash == keccak256(rawInputs)</code>{" "}
-            and value matches <code>ruleContract.submit(rawInputs)</code>.
-            The methodology hash <em>becomes</em> the rule bytecode hash.
+            <code>Attestation.attestWithRule(feedId, int256[] rawInputs)</code>{" "}
+            reads the agent&apos;s bound rule, computes the value via{" "}
+            <code>rule.submit(rawInputs)</code>, stores the result, and
+            emits an <code>Attested</code> event with{" "}
+            <code>inputHash = keccak256(abi.encode(rawInputs))</code> —
+            anyone watching the chain can re-derive the input vector and
+            re-call the rule to confirm
           </li>
           <li>
-            SDK extension: <code>defineAgent({"{"} rule: &apos;0x…&apos; {"}"})</code>{" "}
-            switches the submission shape from <code>(value, inputHash)</code>{" "}
-            to <code>(rawInputs)</code>.
+            25 new contract tests (including a 256-run fuzz over MedianRule).
+            Full suite <strong>86/86 green</strong>
+          </li>
+          <li>
+            <code>@registrai/agent-sdk@0.2.0</code> adds the rule-bound
+            path. <code>defineAgent({"{"} rule: &apos;0x…&apos; {"}"})</code>{" "}
+            switches <code>run()</code>&apos;s return shape from{" "}
+            <code>{"{ value, inputHash }"}</code> to{" "}
+            <code>{"{ rawInputs }"}</code>; SDK calls{" "}
+            <code>attestWithRule</code> under the hood and never computes
+            the final value off-chain
+          </li>
+          <li>
+            <code>/agents/create</code> gained a rule picker — none / Median
+            / Trimmed Mean 10% / Custom address. Success panel hands back a
+            pre-filled SDK snippet for the chosen rule
           </li>
         </ul>
         <p>
-          <strong>Why it matters for Registrai:</strong> every other oracle
-          protocol treats aggregation as a trusted black box. Making it
-          onchain bytecode flips the pitch from &quot;permissionless registry
-          of agents&quot; to &quot;permissionless registry of{" "}
-          <em>verifiable</em> agents&quot; — a real product moat, not just a
-          brand claim. ~3-4 days of work, lands in v0.2.
+          <strong>The invariant the protocol now guarantees</strong> for
+          any rule-bound agent: pull <code>inputHash</code> from the{" "}
+          <code>Attested</code> event → reconstruct{" "}
+          <code>rawInputs</code> from the attest tx calldata → re-call{" "}
+          <code>rule.submit(rawInputs)</code> yourself → confirm the stored{" "}
+          <code>value</code> matches. Aggregation math is no longer
+          trust-by-markdown.
         </p>
+        <h3>Next on this milestone</h3>
+        <ul>
+          <li>
+            <code>BoundedScalarRule</code> (range guards + max-step-bps)
+          </li>
+          <li>
+            Migrate one first-party agent (Warsaw resi or Polish CPI) to
+            the rule path, so a live feed shows the &quot;verifiable&quot; badge
+          </li>
+          <li>
+            Phala TEE attestation for the data-fetch half — closes the
+            trust loop end to end
+          </li>
+        </ul>
       </>
     ),
   },
