@@ -1,13 +1,24 @@
+"use client";
+
 import Link from "next/link";
 import type { Market } from "@/lib/types";
 import { fmtPct, fmtInt } from "@/lib/format";
+import { useLiveMarket } from "@/lib/hooks/useLiveMarket";
+import { LivePulse } from "./LivePulse";
 
 export function MarketCard({ market }: { market: Market }) {
-  const yesPrice = market.noReserve / (market.yesReserve + market.noReserve);
+  const { data: live, freshAt } = useLiveMarket(market.id);
+
+  // Default to seeded reserves until first chain read returns.
+  const yesReserve = live?.yesReserve ?? BigInt(market.yesReserve);
+  const noReserve = live?.noReserve ?? BigInt(market.noReserve);
+  const yesPrice = live?.yesPrice ?? market.noReserve / (market.yesReserve + market.noReserve);
   const noPrice = 1 - yesPrice;
+
   const days = Math.max(0, Math.ceil((market.expiry - Date.now() / 1000) / 86_400));
   const recentTrades = market.history.length;
   const volume = market.history.reduce((s, t) => s + t.collateral, 0);
+  const liveLiquidity = Number(yesReserve + noReserve) / 1e6;
 
   return (
     <Link
@@ -16,7 +27,10 @@ export function MarketCard({ market }: { market: Market }) {
     >
       <div className="flex items-baseline justify-between mb-3">
         <span className="caption text-fg-dim">resolves against</span>
-        <span className="caption text-fg-dim">{days}d to expiry</span>
+        <div className="flex items-center gap-2">
+          <LivePulse freshAt={freshAt} />
+          <span className="caption text-fg-dim">{days}d to expiry</span>
+        </div>
       </div>
       <div className="caption text-accent mb-3">{market.feedSymbol}</div>
       <h3 className="font-serif text-[19px] sm:text-[20px] leading-snug mb-5 max-w-[40ch]">
@@ -29,7 +43,7 @@ export function MarketCard({ market }: { market: Market }) {
       <div className="flex items-center justify-between text-2xs text-fg-dim">
         <span>
           {recentTrades === 0
-            ? `newly created · ${fmtInt(market.liquidity / 1e6)} USDC seed`
+            ? `${fmtInt(liveLiquidity)} USDC pool`
             : `${recentTrades} trades · ${fmtInt(volume)} USDC vol`}
         </span>
         <span className="hover:text-accent transition-colors">trade →</span>
