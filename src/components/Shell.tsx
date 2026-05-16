@@ -27,7 +27,7 @@ function TopNav() {
           <img
             src="/wordmark.png"
             alt="Registrai"
-            className="h-7 sm:h-8 w-auto wordmark-invert"
+            className="h-8 sm:h-10 w-auto wordmark-invert"
           />
           <StatusBadge kind="beta" className="ml-1" />
         </Link>
