@@ -16,6 +16,8 @@ type Status =
   | "success"
   | "error";
 
+type RuleChoice = "none" | "median" | "trim10" | "custom";
+
 const MIN_BOND_USDC = 10;
 const MIN_DISPUTE_WINDOW_HOURS = 1;
 
@@ -41,6 +43,21 @@ export function CreateAgentForm() {
 
   // Bond
   const [bondUsdcStr, setBondUsdcStr] = useState(String(MIN_BOND_USDC));
+
+  // Rule choice
+  const [ruleChoice, setRuleChoice] = useState<RuleChoice>("none");
+  const [customRuleAddr, setCustomRuleAddr] = useState("");
+  const ruleAddress = useMemo<`0x${string}` | undefined>(() => {
+    if (ruleChoice === "median") return CONTRACTS.MedianRule;
+    if (ruleChoice === "trim10") return CONTRACTS.TrimmedMeanRule10;
+    if (ruleChoice === "custom") {
+      if (customRuleAddr.length === 42 && customRuleAddr.startsWith("0x")) {
+        return customRuleAddr as `0x${string}`;
+      }
+      return undefined;
+    }
+    return undefined;
+  }, [ruleChoice, customRuleAddr]);
 
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | undefined>();
@@ -79,11 +96,13 @@ export function CreateAgentForm() {
       .catch(() => setUsdcBalance(0n));
   }, [address, publicClient, status]);
 
+  const ruleValid = ruleChoice === "none" || !!ruleAddress;
   const canSubmit =
     address &&
     isOnSupportedChain &&
     bondWei > 0n &&
     usdcBalance >= bondWei &&
+    ruleValid &&
     (mode === "new-feed"
       ? feedDescription.trim().length > 5 &&
         methodologyCid.trim().length > 0 &&
@@ -148,16 +167,25 @@ export function CreateAgentForm() {
         setFeedId(resolvedFeedId);
       }
 
-      // 3. Register as agent.
+      // 3. Register as agent — rule-bound path if a rule was picked.
       setStatus("registering");
-      const regHash = await walletClient.writeContract({
-        address: CONTRACTS.Registry,
-        abi: registryAbi,
-        functionName: "registerAgent",
-        args: [resolvedFeedId, methodologyHash, bondWei],
-        chain: walletClient.chain,
-        account: walletClient.account!,
-      });
+      const regHash = ruleAddress
+        ? await walletClient.writeContract({
+            address: CONTRACTS.Registry,
+            abi: registryAbi,
+            functionName: "registerAgentWithRule",
+            args: [resolvedFeedId, methodologyHash, bondWei, ruleAddress],
+            chain: walletClient.chain,
+            account: walletClient.account!,
+          })
+        : await walletClient.writeContract({
+            address: CONTRACTS.Registry,
+            abi: registryAbi,
+            functionName: "registerAgent",
+            args: [resolvedFeedId, methodologyHash, bondWei],
+            chain: walletClient.chain,
+            account: walletClient.account!,
+          });
       await publicClient.waitForTransactionReceipt({ hash: regHash });
       setRegisterTx(regHash);
       setStatus("success");
@@ -168,7 +196,14 @@ export function CreateAgentForm() {
   };
 
   if (status === "success") {
-    return <SuccessPanel feedId={feedId!} agent={address!} tx={registerTx!} />;
+    return (
+      <SuccessPanel
+        feedId={feedId!}
+        agent={address!}
+        tx={registerTx!}
+        rule={ruleAddress}
+      />
+    );
   }
 
   return (
@@ -286,6 +321,57 @@ export function CreateAgentForm() {
           </div>
         )}
 
+        {/* Rule — onchain verifiability tier */}
+        <div>
+          <label className="caption mb-2 block">aggregation rule</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-line">
+            <RuleOption
+              active={ruleChoice === "none"}
+              onClick={() => setRuleChoice("none")}
+              title="none"
+              tagline="trust the agent's posted value"
+              hint="Existing flow. Off-chain code computes the value, agent EOA posts it. Slashable via dispute if wrong."
+            />
+            <RuleOption
+              active={ruleChoice === "median"}
+              onClick={() => setRuleChoice("median")}
+              title="Median"
+              tagline="verifiable · stateless"
+              hint="Agent submits raw int256[] inputs; contract returns the median. Methodology = bytecode."
+              disabled={!CONTRACTS.MedianRule}
+            />
+            <RuleOption
+              active={ruleChoice === "trim10"}
+              onClick={() => setRuleChoice("trim10")}
+              title="Trimmed Mean 10%"
+              tagline="verifiable · robust"
+              hint="Sorts inputs, drops 10% from each tail, returns the mean of the middle. Resistant to single-point outliers."
+              disabled={!CONTRACTS.TrimmedMeanRule10}
+            />
+            <RuleOption
+              active={ruleChoice === "custom"}
+              onClick={() => setRuleChoice("custom")}
+              title="Custom rule"
+              tagline="advanced · BYO contract"
+              hint="Paste any address implementing IAgentRule.submit(int256[]) returns (int256)."
+            />
+          </div>
+          {ruleChoice === "custom" && (
+            <input
+              type="text"
+              value={customRuleAddr}
+              onChange={(e) => setCustomRuleAddr(e.target.value)}
+              placeholder="0x… IAgentRule contract address"
+              className="w-full mt-3 bg-bg border border-line px-3 py-2 text-[13px] tnum focus:outline-none focus:border-accent break-all"
+            />
+          )}
+          {ruleAddress && ruleChoice !== "none" && (
+            <div className="text-2xs text-fg-dim mt-2 tnum break-all">
+              binds to · {ruleAddress}
+            </div>
+          )}
+        </div>
+
         {/* Bond */}
         <Field
           label="bond · USDC"
@@ -381,6 +467,38 @@ export function CreateAgentForm() {
   );
 }
 
+function RuleOption({
+  title,
+  tagline,
+  hint,
+  active,
+  disabled,
+  onClick,
+}: {
+  title: string;
+  tagline: string;
+  hint: string;
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`text-left p-4 transition-colors ${
+        active ? "bg-bg-elev/60 ring-1 ring-accent" : "bg-bg-elev/30 hover:bg-bg-elev/50"
+      } disabled:opacity-40 disabled:cursor-not-allowed`}
+    >
+      <div className="flex items-baseline justify-between mb-1">
+        <span className="caption text-fg">{title}</span>
+        <span className="text-2xs caption text-fg-dim">{tagline}</span>
+      </div>
+      <p className="text-2xs text-fg-mute leading-relaxed">{hint}</p>
+    </button>
+  );
+}
+
 function Field({
   label,
   hint,
@@ -418,21 +536,50 @@ function SuccessPanel({
   feedId,
   agent,
   tx,
+  rule,
 }: {
   feedId: Hex;
   agent: string;
   tx: Hex;
+  rule?: `0x${string}`;
 }) {
-  const snippet = `import { defineAgent } from "@registrai/agent-sdk";
+  // Snippet shape depends on whether the agent is rule-bound. Plain agents
+  // return { value, inputHash } from run(); rule-bound agents return the
+  // raw input vector and let the onchain rule contract compute the value.
+  const snippet = rule
+    ? `import { defineAgent } from "@registrai/agent-sdk";
 
 const agent = defineAgent({
+  name: "my-agent",
+  schedule: "0 14 * * *",
   feedId: "${feedId}",
   registryAddress: "${CONTRACTS.Registry}",
   attestationAddress: "${CONTRACTS.Attestation}",
   methodologyCid: "ipfs://your-methodology-cid",
-  collect: async () => {
-    // Fetch your data. Return raw records + a single number.
-    return { records: [], value: 0 };
+  rule: "${rule}", // verifiable bytecode
+  run: async () => {
+    // Fetch your data. Return ONLY the raw int256[] vector.
+    // The onchain rule contract computes the final value.
+    return { rawInputs: [/* your int256 values */] };
+  },
+});
+
+await agent.attest({
+  privateKey: process.env.PRIVATE_KEY as \`0x\${string}\`,
+  rpcUrl: process.env.RPC_URL!,
+});`
+    : `import { defineAgent } from "@registrai/agent-sdk";
+
+const agent = defineAgent({
+  name: "my-agent",
+  schedule: "0 14 * * *",
+  feedId: "${feedId}",
+  registryAddress: "${CONTRACTS.Registry}",
+  attestationAddress: "${CONTRACTS.Attestation}",
+  methodologyCid: "ipfs://your-methodology-cid",
+  run: async () => {
+    // Fetch your data. Compute the final value off-chain.
+    return { value: 0n, inputHash: "0x..." };
   },
 });
 
@@ -450,6 +597,7 @@ await agent.attest({
         </h2>
         <Row label="feed id" value={feedId} />
         <Row label="your agent" value={agent} />
+        {rule && <Row label="rule contract" value={rule} />}
         <a
           href={txUrl(tx)}
           target="_blank"

@@ -20,6 +20,8 @@ export interface ChainContracts {
   Markets: Address;
   MarketsEURC?: Address;
   MarketMakerVault?: Address;
+  MedianRule?: Address;
+  TrimmedMeanRule10?: Address;
   USDC: Address;
   EURC?: Address;
 }
@@ -79,6 +81,10 @@ export const ARC_TESTNET: ChainEntry = {
       | undefined,
     MarketMakerVault: (live.contracts as { MarketMakerVault?: string })
       .MarketMakerVault as Address | undefined,
+    MedianRule: (live.contracts as { MedianRule?: string })
+      .MedianRule as Address | undefined,
+    TrimmedMeanRule10: (live.contracts as { TrimmedMeanRule10?: string })
+      .TrimmedMeanRule10 as Address | undefined,
   },
   viemChain: ARC_TESTNET_VIEM,
   label: "v1 · 2026-05",

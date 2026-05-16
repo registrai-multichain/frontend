@@ -222,6 +222,20 @@ export const registryAbi = [
       { name: "bondAmount", type: "uint256" },
     ],
     outputs: [] },
+  { type: "function", name: "registerAgentWithRule", stateMutability: "nonpayable",
+    inputs: [
+      { name: "feedId", type: "bytes32" },
+      { name: "agentMethodologyHash", type: "bytes32" },
+      { name: "bondAmount", type: "uint256" },
+      { name: "ruleContract", type: "address" },
+    ],
+    outputs: [] },
+  { type: "function", name: "ruleOf", stateMutability: "view",
+    inputs: [
+      { name: "feedId", type: "bytes32" },
+      { name: "agent", type: "address" },
+    ],
+    outputs: [{ type: "address" }] },
   { type: "function", name: "getFeed", stateMutability: "view",
     inputs: [{ name: "feedId", type: "bytes32" }],
     outputs: [{ type: "tuple", components: [
