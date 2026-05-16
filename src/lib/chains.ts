@@ -22,6 +22,11 @@ export interface ChainContracts {
   MarketMakerVault?: Address;
   MedianRule?: Address;
   TrimmedMeanRule10?: Address;
+  /** v1.1 Registry — required for rule-bound agent registration. v1.0
+   *  Registry has no rule support and reverts on registerAgentWithRule. */
+  RegistryV11?: Address;
+  AttestationV11?: Address;
+  DisputeV11?: Address;
   USDC: Address;
   EURC?: Address;
 }
@@ -85,6 +90,12 @@ export const ARC_TESTNET: ChainEntry = {
       .MedianRule as Address | undefined,
     TrimmedMeanRule10: (live.contracts as { TrimmedMeanRule10?: string })
       .TrimmedMeanRule10 as Address | undefined,
+    RegistryV11: (live.contracts as { Registry_v1_1?: string })
+      .Registry_v1_1 as Address | undefined,
+    AttestationV11: (live.contracts as { Attestation_v1_1?: string })
+      .Attestation_v1_1 as Address | undefined,
+    DisputeV11: (live.contracts as { Dispute_v1_1?: string })
+      .Dispute_v1_1 as Address | undefined,
   },
   viemChain: ARC_TESTNET_VIEM,
   label: "v1 · 2026-05",

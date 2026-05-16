@@ -113,20 +113,30 @@ export function CreateAgentForm() {
     if (!walletClient || !address || !canSubmit) return;
     setError(undefined);
     try {
-      // 1. Approve bond to Registry.
+      // Rule-bound registrations target v1.1 Registry (which has
+      // registerAgentWithRule). v1.0 stays for plain registrations.
+      const targetRegistry =
+        ruleAddress && CONTRACTS.RegistryV11
+          ? CONTRACTS.RegistryV11
+          : CONTRACTS.Registry;
+      if (ruleAddress && !CONTRACTS.RegistryV11) {
+        throw new Error("Rule-bound registration requires Registry v1.1, not configured on this chain.");
+      }
+
+      // 1. Approve bond to whichever Registry will pull it.
       setStatus("approving");
       const allowance = (await publicClient.readContract({
         address: CONTRACTS.USDC,
         abi: usdcAbi,
         functionName: "allowance",
-        args: [address, CONTRACTS.Registry],
+        args: [address, targetRegistry],
       })) as bigint;
       if (allowance < bondWei) {
         const approveHash = await walletClient.writeContract({
           address: CONTRACTS.USDC,
           abi: usdcAbi,
           functionName: "approve",
-          args: [CONTRACTS.Registry, bondWei],
+          args: [targetRegistry, bondWei],
           chain: walletClient.chain,
           account: walletClient.account!,
         });
@@ -138,7 +148,7 @@ export function CreateAgentForm() {
       if (mode === "new-feed") {
         setStatus("creating-feed");
         const createHash = await walletClient.writeContract({
-          address: CONTRACTS.Registry,
+          address: targetRegistry,
           abi: registryAbi,
           functionName: "createFeed",
           args: [
@@ -156,8 +166,7 @@ export function CreateAgentForm() {
         });
         // FeedCreated(bytes32 indexed feedId, ...) — pick the Registry-emitted log.
         const log = r.logs.find(
-          (l) =>
-            l.address.toLowerCase() === CONTRACTS.Registry.toLowerCase(),
+          (l) => l.address.toLowerCase() === targetRegistry.toLowerCase(),
         );
         if (!log) throw new Error("FeedCreated event not found");
         resolvedFeedId = log.topics[1]! as Hex;
@@ -171,7 +180,7 @@ export function CreateAgentForm() {
       setStatus("registering");
       const regHash = ruleAddress
         ? await walletClient.writeContract({
-            address: CONTRACTS.Registry,
+            address: targetRegistry,
             abi: registryAbi,
             functionName: "registerAgentWithRule",
             args: [resolvedFeedId, methodologyHash, bondWei, ruleAddress],
@@ -179,7 +188,7 @@ export function CreateAgentForm() {
             account: walletClient.account!,
           })
         : await walletClient.writeContract({
-            address: CONTRACTS.Registry,
+            address: targetRegistry,
             abi: registryAbi,
             functionName: "registerAgent",
             args: [resolvedFeedId, methodologyHash, bondWei],
@@ -553,8 +562,8 @@ const agent = defineAgent({
   name: "my-agent",
   schedule: "0 14 * * *",
   feedId: "${feedId}",
-  registryAddress: "${CONTRACTS.Registry}",
-  attestationAddress: "${CONTRACTS.Attestation}",
+  registryAddress: "${CONTRACTS.RegistryV11 ?? CONTRACTS.Registry}",      // v1.1
+  attestationAddress: "${CONTRACTS.AttestationV11 ?? CONTRACTS.Attestation}", // v1.1
   methodologyCid: "ipfs://your-methodology-cid",
   rule: "${rule}", // verifiable bytecode
   run: async () => {

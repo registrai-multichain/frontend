@@ -10,7 +10,7 @@ interface Entry {
 const ENTRIES: Entry[] = [
   {
     date: "2026-05-16",
-    title: "Verifiable agents shipped — rule contracts live",
+    title: "Verifiable agents end-to-end live — first rule-bound attestation onchain",
     body: (
       <>
         <p>
@@ -71,14 +71,51 @@ const ENTRIES: Entry[] = [
           <code>value</code> matches. Aggregation math is no longer
           trust-by-markdown.
         </p>
-        <h3>Next on this milestone</h3>
+        <h3>Then deployed v1.1 + migrated Warsaw</h3>
+        <p>
+          Registry/Attestation/Dispute v1.1 deployed alongside v1.0 to host
+          rule-bound agents — Registry v1.1 at{" "}
+          <ExtAddr addr="0x4e074806ce7b8bcee27c14fd446d924179aa919e" />,
+          Attestation v1.1 at{" "}
+          <ExtAddr addr="0xf0caf69125bd17717c4804edce61bbdacd52ac60" />. v1.0
+          keeps running for the existing agents/markets/vault; Markets v1.0
+          can&apos;t resolve against v1.1 feeds (immutable coupling), so
+          Markets v1.1 is the next milestone.
+        </p>
+        <p>
+          A new feed{" "}
+          <strong>WARSAW_RESI_MEDIAN_VERIFIABLE</strong> went live on v1.1
+          with MedianRule bound. The Warsaw agent worker now runs both a
+          plain attestation (v1.0, government-anchored) and a verifiable one
+          (v1.1, raw market median onchain). First live{" "}
+          <code>attestWithRule</code> call:
+        </p>
         <ul>
           <li>
-            <code>BoundedScalarRule</code> (range guards + max-step-bps)
+            tx{" "}
+            <ExtTx hash="0xce87ee21b461cf40f452d6a0cce63ebaca04c87d2558ed6367a7ee83cbb487b4" />
+          </li>
+          <li>148 Otodom listings fetched → 134 retained after 5% trim → 128 inputs to MedianRule</li>
+          <li>
+            onchain median: <strong>17,371 PLN/sqm</strong>
           </li>
           <li>
-            Migrate one first-party agent (Warsaw resi or Polish CPI) to
-            the rule path, so a live feed shows the &quot;verifiable&quot; badge
+            inputHash committed — anyone can re-derive <code>rawInputs</code> from the attest calldata and re-call{" "}
+            <code>MedianRule.submit</code> to reproduce 17,371 byte-for-byte
+          </li>
+        </ul>
+        <p>
+          The verifiable feed <em>intentionally drops</em> the NBP-anchor
+          calibration the v1.0 feed used — v1.0 anchored to a Polish-
+          government figure, which moved the trust off-chain. v1.1 trusts
+          the market median itself, computed deterministically onchain
+          from raw listings. Different methodology, both live.
+        </p>
+        <h3>Next on this milestone</h3>
+        <ul>
+          <li>Markets v1.1 — so markets can resolve against verifiable feeds</li>
+          <li>
+            <code>BoundedScalarRule</code> (range guards + max-step-bps)
           </li>
           <li>
             Phala TEE attestation for the data-fetch half — closes the
