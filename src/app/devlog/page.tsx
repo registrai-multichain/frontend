@@ -9,6 +9,63 @@ interface Entry {
 
 const ENTRIES: Entry[] = [
   {
+    date: "2026-05-16",
+    title: "Verifiable agents — design committed, building next",
+    body: (
+      <>
+        <p>
+          <em>Roadmap entry, not a ship.</em> Today&apos;s architecture trusts
+          the off-chain agent process to (a) fetch honest data and (b)
+          compute the right value from it. The bond + slash mechanism deters
+          lying, but the math itself is opaque: judges and traders verify
+          the methodology by reading a markdown file, not by checking
+          executable code. We&apos;re going to fix half of that — the
+          computation half.
+        </p>
+        <h3>The split</h3>
+        <TestTable
+          rows={[
+            ["Data fetch", "Off-chain worker", "TEE attestation (Phala SGX) — later"],
+            ["Aggregation rule", "Onchain contract", "Verifiable bytecode — this milestone"],
+            ["Final attestation", "Onchain Attestation contract", "Already in place"],
+          ]}
+        />
+        <h3>Shape of the build</h3>
+        <ul>
+          <li>
+            <code>IAgentRule.sol</code> —{" "}
+            <code>submit(int256[] raw) returns (int256 finalValue)</code>
+          </li>
+          <li>
+            Three reference templates: <code>MedianRule</code>,{" "}
+            <code>TrimmedMeanRule(trimPct)</code>,{" "}
+            <code>BoundedScalarRule(min, max, maxStepBps)</code>
+          </li>
+          <li>
+            <code>Registry.registerAgent(feedId, methodHash, bond, ruleContract)</code>{" "}
+            — when <code>ruleContract != 0</code>, Attestation accepts only
+            attestations whose <code>inputHash == keccak256(rawInputs)</code>{" "}
+            and value matches <code>ruleContract.submit(rawInputs)</code>.
+            The methodology hash <em>becomes</em> the rule bytecode hash.
+          </li>
+          <li>
+            SDK extension: <code>defineAgent({"{"} rule: &apos;0x…&apos; {"}"})</code>{" "}
+            switches the submission shape from <code>(value, inputHash)</code>{" "}
+            to <code>(rawInputs)</code>.
+          </li>
+        </ul>
+        <p>
+          <strong>Why it matters for Registrai:</strong> every other oracle
+          protocol treats aggregation as a trusted black box. Making it
+          onchain bytecode flips the pitch from &quot;permissionless registry
+          of agents&quot; to &quot;permissionless registry of{" "}
+          <em>verifiable</em> agents&quot; — a real product moat, not just a
+          brand claim. ~3-4 days of work, lands in v0.2.
+        </p>
+      </>
+    ),
+  },
+  {
     date: "2026-05-15",
     title: "Market-maker vault + end-to-end resolve test, live",
     body: (
