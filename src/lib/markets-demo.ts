@@ -25,6 +25,8 @@ interface RawMarket {
   phase: number;
   yesWon: boolean;
   createdAt: number;
+  verifiable?: boolean;
+  marketsVersion?: string;
   history?: MarketTrade[];
   fees?: {
     creator: string;
@@ -33,6 +35,16 @@ interface RawMarket {
     grossVolume: string;
   };
 }
+
+interface RawFeedWithRule extends RawFeed {
+  rule?: string;
+}
+
+const RULE_BY_FEED = new Map<string, string>(
+  ((live as unknown as { feeds?: RawFeedWithRule[] }).feeds ?? [])
+    .filter((f) => f.rule)
+    .map((f) => [f.id, f.rule!]),
+);
 
 const FEEDS_BY_ID = new Map<string, RawFeed>(
   ((live as unknown as { feeds?: RawFeed[] }).feeds ?? []).map((f) => [f.id, f]),
@@ -139,6 +151,9 @@ export const DEMO_MARKETS: Market[] = (live.markets as unknown as RawMarket[]).m
           grossVolume: Number(m.fees.grossVolume),
         }
       : undefined,
+    verifiable: m.verifiable === true,
+    rule: RULE_BY_FEED.get(m.feedId) as `0x${string}` | undefined,
+    marketsVersion: m.marketsVersion,
   };
 });
 

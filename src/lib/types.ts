@@ -9,6 +9,8 @@ export interface Feed {
   resolver: `0x${string}`;
   resolverLabel: string;
   agents: Agent[];
+  /** Bound onchain rule contract — present iff feed is verifiable. */
+  rule?: `0x${string}`;
 }
 
 export interface Agent {
@@ -54,6 +56,13 @@ export interface Market {
   unit: string;
   /** Lifetime fee totals for this market, in collateral micro-units. */
   fees?: MarketFees;
+  /** True if this market resolves against a feed bound to an onchain
+   *  rule contract — the methodology is bytecode anyone can re-execute. */
+  verifiable?: boolean;
+  /** Bound rule contract address for verifiable markets (informational). */
+  rule?: `0x${string}`;
+  /** Which Markets contract this market lives on ("1.0" | "1.1"). */
+  marketsVersion?: string;
 }
 
 export interface MarketFees {

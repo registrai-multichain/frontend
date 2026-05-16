@@ -9,6 +9,58 @@ interface Entry {
 
 const ENTRIES: Entry[] = [
   {
+    date: "2026-05-17",
+    title: "Markets v1.1 · verifiable markets live · Circle-product roadmap",
+    body: (
+      <>
+        <p>
+          Yesterday&apos;s v1.1 trio hosted the verifiable Warsaw feed but
+          had no markets layer — Markets v1.0 is immutable-coupled to
+          Attestation v1.0, so trades against the verifiable feed
+          weren&apos;t possible. Today&apos;s Markets v1.1 closes that.
+        </p>
+        <ul>
+          <li>
+            <code>Markets_v1_1</code>:{" "}
+            <ExtAddr addr="0xec70ce17aa4b0da6898ced47621655c4c31b1136" />
+          </li>
+          <li>Same bytecode as v1.0, pointing at Attestation v1.1.</li>
+          <li>
+            Three demo markets seeded against the verifiable Warsaw feed:{" "}
+            <em>{">"}17,000</em>, <em>{">"}17,500</em>, and{" "}
+            <em>{"<"}18,000 PLN/sqm by expiry</em>. Each visible on the{" "}
+            <code>/markets</code> grid with a <strong>verifiable</strong>{" "}
+            badge that clicks through to the rule bytecode on ArcScan.
+          </li>
+        </ul>
+        <p>
+          The verifiable demo loop is now complete end-to-end: agent
+          fetches Otodom listings → submits raw int256s via{" "}
+          <code>attestWithRule</code> → MedianRule computes 17,371
+          onchain → markets resolve against that value at expiry →
+          traders redeem at $1 per winning share. Every step is bytecode
+          anyone can verify.
+        </p>
+        <h3>Roadmap commitments for the Circle Developer Grant</h3>
+        <TestTable
+          rows={[
+            ["v0.3 · Programmable Wallets", "external agents onboard via Circle hosted wallets", "Circle Programmable Wallets"],
+            ["v0.4 · CCTP", "bring USDC from Ethereum/Base to attest on Arc", "Circle CCTP"],
+            ["v0.5 · BoundedScalarRule", "range guards + max-step-bps for slow feeds", "—"],
+            ["v0.6 · Phala TEE attestation", "TEE-attested data-fetch closes the trust loop", "—"],
+          ]}
+        />
+        <p>
+          Verifiable-agents (rule contracts) plus this roadmap is a
+          complete moat story: aggregation as bytecode, data-fetch as
+          TEE-attested execution, identity as Circle Programmable Wallets,
+          capital as CCTP-bridged USDC. Each piece slots into a Circle/
+          Arc-native primitive.
+        </p>
+      </>
+    ),
+  },
+  {
     date: "2026-05-16",
     title: "Verifiable agents end-to-end live — first rule-bound attestation onchain",
     body: (

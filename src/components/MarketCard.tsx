@@ -5,6 +5,7 @@ import type { Market } from "@/lib/types";
 import { fmtPct, fmtInt } from "@/lib/format";
 import { useLiveMarket } from "@/lib/hooks/useLiveMarket";
 import { LivePulse } from "./LivePulse";
+import { VerifiableBadge } from "./VerifiableBadge";
 
 export function MarketCard({ market }: { market: Market }) {
   const { data: live, freshAt } = useLiveMarket(market.id);
@@ -32,7 +33,10 @@ export function MarketCard({ market }: { market: Market }) {
           <span className="caption text-fg-dim">{days}d to expiry</span>
         </div>
       </div>
-      <div className="caption text-accent mb-3">{market.feedSymbol}</div>
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <span className="caption text-accent">{market.feedSymbol}</span>
+        {market.verifiable && <VerifiableBadge rule={market.rule} />}
+      </div>
       <h3 className="font-serif text-[19px] sm:text-[20px] leading-snug mb-5 max-w-[40ch]">
         {market.title}
       </h3>

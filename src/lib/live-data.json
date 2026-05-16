@@ -15,7 +15,8 @@
     "Attestation": "0x04227E2e53041165CB38D5C0aFadCC95096ae5f4",
     "Dispute": "0x113200D3515758C70ea75fE636e579cCed4066A5",
     "Markets": "0xcaB9aB405F89AC701c3CAcCF110bF94f3A10cD86",
-    "MarketsEURC": "0x3e456845aa2747a617EBe91Cd04e74752D890833"
+    "MarketsEURC": "0x3e456845aa2747a617EBe91Cd04e74752D890833",
+    "Markets_v1_1": "0xec70ce17aa4b0da6898ced47621655c4c31b1136"
   },
   "feed": {
     "id": "0xf4968db834c4e03f9c2e10bb883fe74f84c850cfacac058a1b520a8d8fa37c0b",
@@ -165,6 +166,19 @@
           "status": 0
         }
       ]
+    },
+    {
+      "id": "0x89453b87d3965a0f8132a29414ad3ed0b1950ee743cfcf6d85cfea8038d8ac5a",
+      "symbol": "WARSAW_RESI_MEDIAN_VERIFIABLE",
+      "name": "Warsaw resi \u00b7 verifiable",
+      "description": "Median of recent Otodom listings, computed onchain via MedianRule",
+      "unit": "PLN/sqm",
+      "decimals": 0,
+      "displayDivisor": 1,
+      "registryVersion": "1.1",
+      "rule": "0x415fb74629d8eab51b7991679cec6cb71f3fb997",
+      "methodologyHashPlaceholder": "0xe33a128296c8d0016557b6b2be4d51b690d85153ce547c9520f24c3ed345d8c9",
+      "methodologyDoc": "/methodology/warsaw-resi-median-v1.md"
     }
   ],
   "markets": [
@@ -346,6 +360,75 @@
       "phase": 0,
       "yesWon": false,
       "createdAt": 1778769371,
+      "history": [],
+      "fees": {
+        "creator": "0",
+        "agent": "0",
+        "treasury": "0",
+        "grossVolume": "0"
+      }
+    },
+    {
+      "id": "0x2b86b315ba7503948963b3d6927a883e6a2c5f6e660720bcdff68f1d831dc486",
+      "feedId": "0x89453b87d3965a0f8132a29414ad3ed0b1950ee743cfcf6d85cfea8038d8ac5a",
+      "agent": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e",
+      "threshold": 17000,
+      "comparator": 0,
+      "expiry": 1784156543,
+      "creator": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e",
+      "yesReserve": "5000000",
+      "noReserve": "5000000",
+      "phase": 0,
+      "yesWon": false,
+      "createdAt": 1778972543,
+      "verifiable": true,
+      "marketsVersion": "1.1",
+      "history": [],
+      "fees": {
+        "creator": "0",
+        "agent": "0",
+        "treasury": "0",
+        "grossVolume": "0"
+      }
+    },
+    {
+      "id": "0xa0ac98055e595585ec8eccfdb9ec80b1db0c3111435fc048768d3cd8770100d2",
+      "feedId": "0x89453b87d3965a0f8132a29414ad3ed0b1950ee743cfcf6d85cfea8038d8ac5a",
+      "agent": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e",
+      "threshold": 17500,
+      "comparator": 0,
+      "expiry": 1784156543,
+      "creator": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e",
+      "yesReserve": "5000000",
+      "noReserve": "5000000",
+      "phase": 0,
+      "yesWon": false,
+      "createdAt": 1778972543,
+      "verifiable": true,
+      "marketsVersion": "1.1",
+      "history": [],
+      "fees": {
+        "creator": "0",
+        "agent": "0",
+        "treasury": "0",
+        "grossVolume": "0"
+      }
+    },
+    {
+      "id": "0xd82bc80c3f5171a07030152cc99ab9233f052c935dcf12d7195e15ba8366e0a0",
+      "feedId": "0x89453b87d3965a0f8132a29414ad3ed0b1950ee743cfcf6d85cfea8038d8ac5a",
+      "agent": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e",
+      "threshold": 18000,
+      "comparator": 2,
+      "expiry": 1784156543,
+      "creator": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e",
+      "yesReserve": "5000000",
+      "noReserve": "5000000",
+      "phase": 0,
+      "yesWon": false,
+      "createdAt": 1778972543,
+      "verifiable": true,
+      "marketsVersion": "1.1",
       "history": [],
       "fees": {
         "creator": "0",

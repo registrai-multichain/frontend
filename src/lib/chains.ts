@@ -27,6 +27,7 @@ export interface ChainContracts {
   RegistryV11?: Address;
   AttestationV11?: Address;
   DisputeV11?: Address;
+  MarketsV11?: Address;
   USDC: Address;
   EURC?: Address;
 }
@@ -96,6 +97,8 @@ export const ARC_TESTNET: ChainEntry = {
       .Attestation_v1_1 as Address | undefined,
     DisputeV11: (live.contracts as { Dispute_v1_1?: string })
       .Dispute_v1_1 as Address | undefined,
+    MarketsV11: (live.contracts as { Markets_v1_1?: string })
+      .Markets_v1_1 as Address | undefined,
   },
   viemChain: ARC_TESTNET_VIEM,
   label: "v1 · 2026-05",
