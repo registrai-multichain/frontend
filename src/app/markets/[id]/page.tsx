@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Shell } from "@/components/Shell";
 import { PriceChart } from "@/components/PriceChart";
 import { TradePanel } from "@/components/TradePanel";
+import { VerifiableBadge } from "@/components/VerifiableBadge";
 import { DEMO_MARKETS, findMarket } from "@/lib/markets-demo";
 import { fmtInt, isoDate, isoDateTime, shortAddr, shortHash } from "@/lib/format";
 
@@ -32,7 +33,10 @@ export default function MarketPage({ params }: { params: { id: string } }) {
         </Link>
 
         <div className="mt-4 mb-6">
-          <div className="caption mb-3">market · {shortHash(market.id)}</div>
+          <div className="flex items-center gap-3 mb-3 flex-wrap">
+            <div className="caption">market · {shortHash(market.id)}</div>
+            {market.verifiable && <VerifiableBadge rule={market.rule} />}
+          </div>
           <h1 className="font-serif text-[26px] sm:text-[32px] tracking-tightest leading-[1.1] max-w-[42ch]">
             {market.title}
           </h1>
@@ -93,6 +97,25 @@ export default function MarketPage({ params }: { params: { id: string } }) {
               comparator, and settles. If the agent never attested at or before
               expiry, the market sits unresolved until one does.
             </p>
+            {market.verifiable && market.rule && (
+              <p className="text-[12.5px] leading-relaxed text-fg-mute mt-4 max-w-[68ch] border-t border-line pt-4">
+                <span className="text-up">Verifiable feed.</span> The attested
+                value was not computed off-chain — the agent submitted the raw
+                input vector to{" "}
+                <a
+                  href={`https://testnet.arcscan.app/address/${market.rule}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-accent hover:underline tnum"
+                >
+                  {market.rule.slice(0, 10)}…{market.rule.slice(-6)}
+                </a>
+                , which deterministically computed the median onchain. Anyone
+                can pull the inputHash from the attestation, recover the
+                rawInputs from the tx calldata, re-call the rule, and confirm
+                the value byte-for-byte.
+              </p>
+            )}
           </div>
         </section>
 

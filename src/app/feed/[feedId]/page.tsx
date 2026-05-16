@@ -1,22 +1,20 @@
+import { notFound } from "next/navigation";
 import { Shell } from "@/components/Shell";
 import { FeedDetail } from "@/components/FeedDetail";
-import { DEMO_FEED } from "@/lib/demo";
+import { ALL_FEEDS } from "@/lib/demo";
 
-// Pre-render the demo feed id at build time. When real feeds are deployed,
-// extend this list (or fetch from chain at build time) so each feed has a
-// static page on Cloudflare Pages.
 export function generateStaticParams() {
-  return [{ feedId: DEMO_FEED.id }];
+  return ALL_FEEDS.map((f) => ({ feedId: f.id }));
 }
 
 export const dynamicParams = false;
 
-export default function FeedPage() {
-  // V1: one demo feed regardless of the param. When contracts are wired in,
-  // this becomes a chain read keyed on params.feedId.
+export default function FeedPage({ params }: { params: { feedId: string } }) {
+  const feed = ALL_FEEDS.find((f) => f.id.toLowerCase() === params.feedId.toLowerCase());
+  if (!feed) notFound();
   return (
     <Shell>
-      <FeedDetail feed={DEMO_FEED} />
+      <FeedDetail feed={feed} />
     </Shell>
   );
 }
