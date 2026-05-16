@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { WalletButton } from "./WalletButton";
 import { StatusBadge } from "./StatusBadge";
+import { NavMenu } from "./NavMenu";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -32,38 +33,13 @@ function TopNav() {
           <StatusBadge kind="beta" className="ml-1" />
         </Link>
         <nav className="flex items-center gap-5 text-[12px] tracking-wide text-fg-mute">
-          <Link href="/" className="hover:text-fg transition-colors">
-            feeds
-          </Link>
           <Link href="/markets" className="hover:text-fg transition-colors">
             markets
           </Link>
           <Link href="/vault" className="hover:text-fg transition-colors">
             vault
           </Link>
-          <Link href="/agents/create" className="hidden md:inline hover:text-fg transition-colors">
-            become agent
-          </Link>
-          <Link href="/profile" className="hover:text-fg transition-colors">
-            profile
-          </Link>
-          <Link href="/docs" className="hover:text-fg transition-colors">
-            docs
-          </Link>
-          <Link href="/devlog" className="hidden md:inline hover:text-fg transition-colors">
-            devlog
-          </Link>
-          <Link href="/about" className="hidden md:inline hover:text-fg transition-colors">
-            about
-          </Link>
-          <a
-            href="https://github.com/registrai"
-            target="_blank"
-            rel="noreferrer"
-            className="hidden sm:inline hover:text-fg transition-colors"
-          >
-            github ↗
-          </a>
+          <NavMenu />
           <WalletButton />
         </nav>
       </div>
