@@ -6,6 +6,7 @@ import { fmtPct, fmtInt } from "@/lib/format";
 import { useLiveMarket } from "@/lib/hooks/useLiveMarket";
 import { LivePulse } from "./LivePulse";
 import { VerifiableBadge } from "./VerifiableBadge";
+import { FEED_EXPLAINERS } from "@/lib/market-context";
 
 export function MarketCard({ market }: { market: Market }) {
   const { data: live, freshAt } = useLiveMarket(market.id);
@@ -37,9 +38,14 @@ export function MarketCard({ market }: { market: Market }) {
         <span className="caption text-accent">{market.feedSymbol}</span>
         {market.verifiable && <VerifiableBadge rule={market.rule} />}
       </div>
-      <h3 className="font-serif text-[19px] sm:text-[20px] leading-snug mb-5 max-w-[40ch]">
+      <h3 className="font-serif text-[19px] sm:text-[20px] leading-snug mb-2 max-w-[40ch]">
         {market.title}
       </h3>
+      {FEED_EXPLAINERS[market.feedSymbol]?.headline && (
+        <p className="text-2xs text-fg-dim leading-relaxed mb-4 max-w-[44ch]">
+          {FEED_EXPLAINERS[market.feedSymbol]!.headline}
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-3 mb-4">
         <PriceCell label="YES" price={yesPrice} accent />
         <PriceCell label="NO" price={noPrice} />

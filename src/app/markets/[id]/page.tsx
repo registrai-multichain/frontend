@@ -5,6 +5,7 @@ import { PriceChart } from "@/components/PriceChart";
 import { TradePanel } from "@/components/TradePanel";
 import { VerifiableBadge } from "@/components/VerifiableBadge";
 import { DEMO_MARKETS, findMarket } from "@/lib/markets-demo";
+import { FEED_EXPLAINERS, MARKET_HOOKS } from "@/lib/market-context";
 import { fmtInt, isoDate, isoDateTime, shortAddr, shortHash } from "@/lib/format";
 
 export function generateStaticParams() {
@@ -78,6 +79,39 @@ export default function MarketPage({ params }: { params: { id: string } }) {
             <TradePanel market={market} />
           </div>
         </section>
+
+        {/* Background · plain-English context */}
+        {(() => {
+          const explainer = FEED_EXPLAINERS[market.feedSymbol];
+          const hook = MARKET_HOOKS[market.id];
+          if (!explainer && !hook) return null;
+          return (
+            <section className="mb-10">
+              <div className="caption mb-3">background</div>
+              <div className="border border-line bg-bg-elev/30 p-5 space-y-4">
+                {explainer && (
+                  <>
+                    <p className="text-[14.5px] leading-snug text-fg font-serif italic max-w-[68ch]">
+                      {explainer.headline}
+                    </p>
+                    <p className="text-[13px] leading-relaxed text-fg-mute max-w-[68ch]">
+                      {explainer.body}
+                    </p>
+                    <p className="text-2xs text-fg-dim leading-relaxed max-w-[68ch]">
+                      Source · {explainer.source}
+                    </p>
+                  </>
+                )}
+                {hook && (
+                  <p className="text-[13px] leading-relaxed text-fg border-t border-line/60 pt-4 max-w-[68ch]">
+                    <span className="caption text-accent mr-2">this market</span>
+                    {hook}
+                  </p>
+                )}
+              </div>
+            </section>
+          );
+        })()}
 
         {/* Resolution rule */}
         <section className="mb-10">
