@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { postMarketDescription } from "@/lib/hooks/useMarketDescription";
 import { useRouter, useSearchParams } from "next/navigation";
 import { decodeEventLog, parseUnits, type Address, type Hex } from "viem";
 import { useWallet } from "./WalletProvider";
@@ -45,6 +46,7 @@ export function CreateMarketForm() {
   const [expiryDate, setExpiryDate] = useState<string>(defaultExpiry);
   const [liquidityStr, setLiquidityStr] = useState<string>("10");
   const [collateral, setCollateral] = useState<Collateral>("USDC");
+  const [description, setDescription] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | undefined>();
   const [txHash, setTxHash] = useState<Hex | undefined>();
@@ -186,6 +188,22 @@ export function CreateMarketForm() {
       }
 
       setStatus("success");
+
+      // Best-effort: persist the creator's description to the Worker KV.
+      // Signature-gated — Worker verifies signer is the market creator
+      // by reading getMarket(marketId) on chain. Failure to save the
+      // description doesn't undo the market creation; we just log.
+      if (newMarketId && description.trim().length > 0 && walletClient && walletClient.account) {
+        const account = walletClient.account;
+        postMarketDescription({
+          marketId: newMarketId,
+          description: description.trim(),
+          signMessage: (message) => walletClient.signMessage({ account, message }),
+        }).then((r) => {
+          if (!r.ok) console.warn("market description not persisted:", r.error);
+        });
+      }
+
       if (newMarketId) {
         // Give the success state a beat to render, then redirect.
         setTimeout(() => router.push(`/markets/${newMarketId}/`), 1200);
@@ -348,6 +366,25 @@ export function CreateMarketForm() {
                 {v} {collateral}
               </button>
             ))}
+          </div>
+        </Field>
+
+        <Field
+          label="07 · description"
+          hint="Plain-English context for visitors who don't know what this market is about. Why is the threshold interesting? What would push it up or down? Persists onchain-attested (signed by your wallet, stored off-chain in KV). Optional but strongly recommended."
+        >
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={4}
+            maxLength={2000}
+            placeholder="e.g. 'Razor-line on the next ECB meeting — current rate is exactly 2.75%. YES wins if the ECB cuts at the next decision; NO if they hold or hike.'"
+            className="w-full bg-bg border border-line px-4 py-3 text-[13.5px] leading-relaxed focus:outline-none focus:border-accent resize-y"
+          />
+          <div className="text-2xs text-fg-dim mt-1.5 tnum">
+            {description.length}/2000 · {description.length > 0 && walletClient
+              ? "you'll be asked to sign a message after the market tx confirms"
+              : "skip if you want — visitors will only see the auto-generated feed explainer"}
           </div>
         </Field>
       </div>

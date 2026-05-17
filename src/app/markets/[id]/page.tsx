@@ -6,6 +6,7 @@ import { TradePanel } from "@/components/TradePanel";
 import { VerifiableBadge } from "@/components/VerifiableBadge";
 import { DEMO_MARKETS, findMarket } from "@/lib/markets-demo";
 import { FEED_EXPLAINERS, MARKET_HOOKS } from "@/lib/market-context";
+import { MarketDescriptionLive } from "@/components/MarketDescriptionLive";
 import { fmtInt, isoDate, isoDateTime, shortAddr, shortHash } from "@/lib/format";
 
 export function generateStaticParams() {
@@ -102,12 +103,8 @@ export default function MarketPage({ params }: { params: { id: string } }) {
                     </p>
                   </>
                 )}
-                {hook && (
-                  <p className="text-[13px] leading-relaxed text-fg border-t border-line/60 pt-4 max-w-[68ch]">
-                    <span className="caption text-accent mr-2">this market</span>
-                    {hook}
-                  </p>
-                )}
+                {/* Live creator-supplied description (overrides MARKET_HOOKS when present) */}
+                <MarketDescriptionLive marketId={market.id} fallback={hook} />
               </div>
             </section>
           );
