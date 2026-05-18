@@ -19,20 +19,20 @@ export function VerifiableBadge({
         href={addrUrl(rule)}
         target="_blank"
         rel="noreferrer"
-        title={`Verifiable · resolves through onchain rule ${rule}`}
+        title={`Aggregation is computed onchain by rule contract ${rule} — anyone can re-execute it from the attestation inputs.`}
         className={`inline-flex items-center gap-1 caption text-[10px] text-up border border-up/40 px-1.5 py-0.5 hover:bg-up/10 transition-colors ${className}`}
       >
-        <span>verifiable</span>
+        <span>verifiable · onchain rule</span>
         <span className="text-up/70">↗</span>
       </a>
     );
   }
   return (
     <span
-      title="Verifiable · resolves through an onchain rule contract"
+      title="Aggregation is computed onchain by a rule contract — anyone can re-execute it from the attestation inputs."
       className={`inline-flex items-center caption text-[10px] text-up border border-up/40 px-1.5 py-0.5 ${className}`}
     >
-      verifiable
+      verifiable · onchain rule
     </span>
   );
 }

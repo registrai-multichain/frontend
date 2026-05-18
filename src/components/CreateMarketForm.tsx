@@ -8,6 +8,7 @@ import { useWallet } from "./WalletProvider";
 import { CREATABLE_FEEDS, type CreatableFeed } from "@/lib/demo";
 import { CONTRACTS, txUrl } from "@/lib/chain";
 import { marketsAbi, usdcAbi } from "@/lib/abi";
+import { humanizeError } from "@/lib/humanize-error";
 import { fmtInt } from "@/lib/format";
 
 type Collateral = "USDC" | "EURC";
@@ -247,7 +248,7 @@ export function CreateMarketForm() {
         setTimeout(() => router.push(`/markets/${newMarketId}/`), 1200);
       }
     } catch (e) {
-      setError((e as Error).message);
+      setError(humanizeError(e));
       setStatus("error");
     }
   }

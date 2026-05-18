@@ -5,6 +5,7 @@ import { parseUnits } from "viem";
 import { useWallet } from "./WalletProvider";
 import { CONTRACTS, addrUrl, txUrl } from "@/lib/chain";
 import { usdcAbi, vaultAbi } from "@/lib/abi";
+import { humanizeError } from "@/lib/humanize-error";
 
 type Mode = "deposit" | "withdraw";
 type Status = "idle" | "approving" | "submitting" | "success" | "error";
@@ -112,7 +113,7 @@ export function VaultPanel() {
       await refresh();
     } catch (e) {
       setStatus("error");
-      setError((e as Error).message);
+      setError(humanizeError(e));
     }
   };
 

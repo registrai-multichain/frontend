@@ -7,16 +7,41 @@ interface Item {
   label: string;
   href: string;
   external?: boolean;
+  /** "go"-section items show on mobile only (desktop has them in top nav). */
+  mobileOnly?: boolean;
 }
 
-const ITEMS: Item[] = [
-  { label: "agents", href: "/agents" },
-  { label: "become agent", href: "/agents/create" },
-  { label: "profile", href: "/profile" },
-  { label: "docs", href: "/docs" },
-  { label: "devlog", href: "/devlog" },
-  { label: "about", href: "/about" },
-  { label: "github ↗", href: "https://github.com/registrai-multichain", external: true },
+interface MenuSection {
+  label: string;
+  items: Item[];
+}
+
+const SECTIONS: MenuSection[] = [
+  {
+    label: "go",
+    items: [
+      { label: "markets", href: "/markets", mobileOnly: true },
+      { label: "agents", href: "/agents", mobileOnly: true },
+      { label: "vault", href: "/vault", mobileOnly: true },
+    ],
+  },
+  {
+    label: "do",
+    items: [
+      { label: "create market", href: "/markets/create" },
+      { label: "become agent", href: "/agents/create" },
+    ],
+  },
+  {
+    label: "read",
+    items: [
+      { label: "docs", href: "/docs" },
+      { label: "devlog", href: "/devlog" },
+      { label: "about", href: "/about" },
+      { label: "profile", href: "/profile" },
+      { label: "github ↗", href: "https://github.com/registrai-multichain", external: true },
+    ],
+  },
 ];
 
 export function NavMenu() {
@@ -59,33 +84,48 @@ export function NavMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full mt-2 min-w-[160px] border border-line bg-bg-elev/95 backdrop-blur-md z-20"
+          className="absolute right-0 top-full mt-2 min-w-[200px] border border-line bg-bg-elev z-20 shadow-2xl"
         >
-          {ITEMS.map((it) =>
-            it.external ? (
-              <a
-                key={it.href}
-                href={it.href}
-                target="_blank"
-                rel="noreferrer"
-                role="menuitem"
-                onClick={() => setOpen(false)}
-                className="block px-4 py-2.5 text-[12px] tracking-wide text-fg-mute hover:text-accent hover:bg-bg/60 transition-colors border-b border-line/60 last:border-0"
-              >
-                {it.label}
-              </a>
-            ) : (
-              <Link
-                key={it.href}
-                href={it.href}
-                role="menuitem"
-                onClick={() => setOpen(false)}
-                className="block px-4 py-2.5 text-[12px] tracking-wide text-fg-mute hover:text-accent hover:bg-bg/60 transition-colors border-b border-line/60 last:border-0"
-              >
-                {it.label}
-              </Link>
-            ),
-          )}
+          {SECTIONS.map((section, i) => {
+            const allMobileOnly = section.items.every((it) => it.mobileOnly);
+            return (
+              <div key={section.label} className={allMobileOnly ? "sm:hidden" : ""}>
+                {i > 0 && <div className="border-t border-line/60" />}
+                <div className="px-4 pt-3 pb-1.5 caption text-fg-dim text-[10px]">
+                  {section.label}
+                </div>
+                {section.items.map((it) =>
+                  it.external ? (
+                    <a
+                      key={it.href}
+                      href={it.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      role="menuitem"
+                      onClick={() => setOpen(false)}
+                      className={`block px-4 py-2 text-[12.5px] tracking-wide text-fg-mute hover:text-accent hover:bg-bg/60 transition-colors ${
+                        it.mobileOnly ? "sm:hidden" : ""
+                      }`}
+                    >
+                      {it.label}
+                    </a>
+                  ) : (
+                    <Link
+                      key={it.href}
+                      href={it.href}
+                      role="menuitem"
+                      onClick={() => setOpen(false)}
+                      className={`block px-4 py-2 text-[12.5px] tracking-wide text-fg-mute hover:text-accent hover:bg-bg/60 transition-colors ${
+                        it.mobileOnly ? "sm:hidden" : ""
+                      }`}
+                    >
+                      {it.label}
+                    </Link>
+                  ),
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

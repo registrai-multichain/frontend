@@ -6,6 +6,7 @@ import type { Market } from "@/lib/types";
 import { useWallet } from "./WalletProvider";
 import { CONTRACTS, txUrl } from "@/lib/chain";
 import { marketsAbi, usdcAbi } from "@/lib/abi";
+import { humanizeError } from "@/lib/humanize-error";
 
 type Mode = "buy" | "sell";
 type Status = "idle" | "approving" | "submitting" | "success" | "error";
@@ -188,7 +189,7 @@ export function TradePanel({ market }: { market: Market }) {
       setStatus("success");
       await refreshLive();
     } catch (e) {
-      setError((e as Error).message);
+      setError(humanizeError(e));
       setStatus("error");
     }
   }
@@ -216,7 +217,7 @@ export function TradePanel({ market }: { market: Market }) {
       setStatus("success");
       await refreshLive();
     } catch (e) {
-      setError((e as Error).message);
+      setError(humanizeError(e));
       setStatus("error");
     }
   }
@@ -241,7 +242,7 @@ export function TradePanel({ market }: { market: Market }) {
       if (r.status !== "success") throw new Error("resolve reverted");
       setStatus("success");
     } catch (e) {
-      setError((e as Error).message);
+      setError(humanizeError(e));
       setStatus("error");
     }
   }
@@ -267,7 +268,7 @@ export function TradePanel({ market }: { market: Market }) {
       setStatus("success");
       await refreshLive();
     } catch (e) {
-      setError((e as Error).message);
+      setError(humanizeError(e));
       setStatus("error");
     }
   }

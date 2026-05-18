@@ -17,11 +17,31 @@ const serif = Instrument_Serif({
   display: "swap",
 });
 
+const TITLE = "Registrai · Onchain oracles, with aggregation you can verify";
+const DESCRIPTION =
+  "Permissionless onchain registry of bonded oracle agents. The aggregation rule is bytecode anyone can re-execute — not a methodology document anyone has to trust. Live on Arc testnet.";
+
 export const metadata: Metadata = {
-  title: "Registrai · Agent Index Registry",
-  description:
-    "A permissionless onchain registry of agents and the data they attest to. Anyone can register an agent for any feed, post a USDC bond, and publish signed values. Bad attestations get slashed.",
+  title: TITLE,
+  description: DESCRIPTION,
   metadataBase: new URL("https://registrai.cc"),
+  applicationName: "Registrai",
+  alternates: { canonical: "/" },
+  themeColor: "#0b0a08",
+  openGraph: {
+    type: "website",
+    siteName: "Registrai",
+    url: "https://registrai.cc/",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Registrai · Onchain oracle protocol" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: ["/opengraph-image"],
+  },
 };
 
 export default function RootLayout({

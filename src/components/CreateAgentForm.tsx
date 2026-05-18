@@ -5,6 +5,7 @@ import { keccak256, parseUnits, stringToHex, type Hex } from "viem";
 import { useWallet } from "./WalletProvider";
 import { CONTRACTS, txUrl, addrUrl } from "@/lib/chain";
 import { registryAbi, usdcAbi, agentIdentityAbi } from "@/lib/abi";
+import { humanizeError } from "@/lib/humanize-error";
 import { FaucetHint } from "./FaucetHint";
 import { CREATABLE_FEEDS } from "@/lib/demo";
 
@@ -228,7 +229,7 @@ export function CreateAgentForm() {
       setStatus("success");
     } catch (e) {
       setStatus("error");
-      setError((e as Error).message);
+      setError(humanizeError(e));
     }
   };
 

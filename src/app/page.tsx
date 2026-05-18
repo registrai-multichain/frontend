@@ -21,20 +21,20 @@ export default function Home() {
   return (
     <Shell>
       {/* ─────────────── HERO ─────────────── */}
-      <section className="pt-14 sm:pt-20 pb-12 fade-up">
-        <div className="flex items-center gap-4 mb-6 flex-wrap">
-          <span className="caption">v0.1 · arc testnet</span>
-          <LiveCountdown />
-        </div>
-        <h1 className="font-serif text-[42px] sm:text-[68px] leading-[1.02] tracking-tightest max-w-[18ch]">
+      <section className="pt-12 sm:pt-20 pb-12 fade-up">
+        <h1 className="font-serif text-[40px] sm:text-[68px] leading-[1.02] tracking-tightest max-w-[18ch]">
           An onchain oracle for{" "}
           <span className="italic text-accent">everything else</span>.
         </h1>
-        <p className="mt-6 font-serif italic text-fg-mute text-[18px] sm:text-[22px] leading-snug max-w-[40ch]">
+        <p className="mt-6 font-serif italic text-fg-mute text-[18px] sm:text-[22px] leading-snug max-w-[42ch]">
           With aggregation that&apos;s{" "}
-          <span className="text-up not-italic font-medium">bytecode anyone can re-execute</span>{" "}
+          <span className="text-fg not-italic font-medium">bytecode anyone can re-execute</span>{" "}
           — not a methodology document anyone has to trust.
         </p>
+        <div className="flex items-center gap-4 mt-6 flex-wrap text-[11px]">
+          <span className="caption text-fg-dim">v0.1 · arc testnet</span>
+          <LiveCountdown />
+        </div>
 
         {/* Live proof embedded in hero — the protocol is real, here's the number */}
         <div className="mt-10 border-t border-b border-line py-6 max-w-[640px]">
@@ -81,21 +81,21 @@ export default function Home() {
         <div className="mt-10 flex flex-wrap items-center gap-3 text-[12.5px] tracking-wide">
           <Link
             href="/feed/0x89453b87d3965a0f8132a29414ad3ed0b1950ee743cfcf6d85cfea8038d8ac5a/"
-            className="px-4 py-2 bg-up text-bg font-medium hover:bg-up/90 transition-colors"
+            className="px-5 py-2.5 bg-accent text-bg font-medium hover:bg-accent/90 transition-colors"
           >
             see a verifiable feed →
           </Link>
           <Link
-            href="/markets/create/"
-            className="px-4 py-2 border border-accent/60 text-accent hover:bg-accent hover:text-bg transition-colors"
+            href="/markets/"
+            className="px-4 py-2 border border-line-strong text-fg hover:border-accent hover:text-accent transition-colors"
           >
-            create a market
+            browse markets
           </Link>
           <Link
             href="/agents/create/"
-            className="px-4 py-2 border border-line text-fg-mute hover:text-fg hover:border-line-strong transition-colors"
+            className="px-4 py-2 text-fg-dim hover:text-fg transition-colors"
           >
-            become an agent
+            become an agent ↗
           </Link>
         </div>
       </section>
@@ -114,7 +114,7 @@ export default function Home() {
           <Step n="1" title="install a wallet" body="MetaMask, Rabby, or any EVM wallet. No app store needed." />
           <Step n="2" title="add Arc testnet" body="Click the wallet button in the nav — we add the chain for you." />
           <Step n="3" title="claim test USDC" body="Drop your address at faucet.circle.com, pick Arc Sepolia." cta={{ label: "faucet ↗", href: "https://faucet.circle.com" }} />
-          <Step n="4" title="trade or LP" body="Take a side on any market, or deposit into the vault and earn from being right." cta={{ label: "markets →", href: "/markets" }} />
+          <Step n="4" title="trade or LP" body="Take a side on any market, or deposit into the vault and earn pro-rata from operator trades." cta={{ label: "vault →", href: "/vault" }} />
         </div>
       </section>
 

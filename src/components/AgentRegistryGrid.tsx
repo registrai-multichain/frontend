@@ -55,13 +55,15 @@ export function AgentRegistryGrid() {
 
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [discoveryDone, setDiscoveryDone] = useState(false);
   const [error, setError] = useState<string | undefined>();
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        // Seed with first-party registrations from the static manifest.
+        // Seed with first-party registrations from the static manifest —
+        // render these immediately so the page is never empty.
         const seeded: Row[] = CREATABLE_FEEDS.map((f) => ({
           feedId: f.id,
           feedSymbol: f.symbol,
@@ -71,6 +73,10 @@ export function AgentRegistryGrid() {
           registryVersion: f.registryVersion,
           isFirstParty: true,
         }));
+        if (!cancelled) {
+          setRows(seeded);
+          setLoading(false);
+        }
 
         // Scan AgentRegistered events from both Registry v1.0 and v1.1.
         const latest = await client.getBlockNumber();
@@ -170,49 +176,48 @@ export function AgentRegistryGrid() {
 
         if (!cancelled) {
           setRows(hydrated.sort((a, b) => {
-            // First-party first, then by bond desc.
             if (a.isFirstParty !== b.isFirstParty) return a.isFirstParty ? -1 : 1;
             return Number((b.bond ?? 0n) - (a.bond ?? 0n));
           }));
-          setLoading(false);
+          setDiscoveryDone(true);
         }
       } catch (e) {
         if (!cancelled) {
           setError((e as Error).message);
-          setLoading(false);
+          setDiscoveryDone(true);
         }
       }
     })();
     return () => { cancelled = true; };
   }, [client]);
 
-  if (loading) {
+  if (loading && rows.length === 0) {
     return (
       <div className="border border-dashed border-line/60 p-8 text-center">
-        <p className="caption text-fg-dim">scanning registry events…</p>
+        <p className="caption text-fg-dim">loading agents…</p>
       </div>
     );
   }
-  if (error) {
+  if (error && rows.length === 0) {
     return (
       <div className="border border-dashed border-down/40 p-8 text-2xs text-down">
         Could not load registry: {error}
       </div>
     );
   }
-  if (rows.length === 0) {
-    return (
-      <div className="border border-dashed border-line/60 p-8 text-center">
-        <p className="caption text-fg-dim">no registered agents yet</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-line">
-      {rows.map((r) => (
-        <AgentCard key={`${r.feedId}:${r.agent}`} row={r} />
-      ))}
+    <div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-line">
+        {rows.map((r) => (
+          <AgentCard key={`${r.feedId}:${r.agent}`} row={r} />
+        ))}
+      </div>
+      {!discoveryDone && (
+        <div className="mt-3 text-2xs text-fg-dim flex items-center gap-2">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent dot-pulse" />
+          discovering community agents from chain events…
+        </div>
+      )}
     </div>
   );
 }

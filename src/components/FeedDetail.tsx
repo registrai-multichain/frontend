@@ -149,7 +149,8 @@ export function FeedDetail({ feed }: { feed: Feed }) {
             showing {Math.min(12, history.length)} of {history.length}
           </span>
         </div>
-        <div className="border border-line">
+        <div className="border border-line overflow-x-auto">
+          <div className="min-w-[640px]">
           <Row
             head
             cells={["date", "value", "Δ", "status", "tx"]}
@@ -190,6 +191,7 @@ export function FeedDetail({ feed }: { feed: Feed }) {
                 />
               );
             })}
+          </div>
         </div>
         <div className="mt-3 text-2xs text-fg-dim text-right">
           full history on{" "}

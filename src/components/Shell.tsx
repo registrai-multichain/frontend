@@ -17,26 +17,29 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
 function TopNav() {
   return (
-    <header className="w-full border-b border-line/80 sticky top-0 z-10 backdrop-blur-md bg-bg/70">
-      <div className="max-w-[920px] mx-auto px-6 sm:px-10 h-14 sm:h-16 flex items-center justify-between">
+    <header className="w-full border-b border-line/80 sticky top-0 z-10 bg-bg">
+      <div className="max-w-[920px] mx-auto px-5 sm:px-10 h-14 sm:h-16 flex items-center justify-between gap-3">
         <Link
           href="/"
-          className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+          className="flex items-center gap-2.5 sm:gap-3 hover:opacity-80 transition-opacity min-w-0"
           aria-label="Registrai"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/wordmark.png"
             alt="Registrai"
-            className="h-10 sm:h-12 w-auto wordmark-invert"
+            className="h-7 sm:h-12 w-auto wordmark-invert shrink-0"
           />
-          <StatusBadge kind="beta" className="ml-1" />
+          <StatusBadge kind="beta" className="hidden sm:inline-flex ml-1" />
         </Link>
-        <nav className="flex items-center gap-5 text-[12px] tracking-wide text-fg-mute">
-          <Link href="/markets" className="hover:text-fg transition-colors">
+        <nav className="flex items-center gap-3 sm:gap-5 text-[12px] tracking-wide text-fg-mute shrink-0">
+          <Link href="/markets" className="hidden sm:inline hover:text-fg transition-colors">
             markets
           </Link>
-          <Link href="/vault" className="hover:text-fg transition-colors">
+          <Link href="/agents" className="hidden sm:inline hover:text-fg transition-colors">
+            agents
+          </Link>
+          <Link href="/vault" className="hidden sm:inline hover:text-fg transition-colors">
             vault
           </Link>
           <NavMenu />

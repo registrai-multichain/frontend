@@ -4,6 +4,7 @@ import { Shell } from "@/components/Shell";
 import { PriceChart } from "@/components/PriceChart";
 import { TradePanel } from "@/components/TradePanel";
 import { VerifiableBadge } from "@/components/VerifiableBadge";
+import { FaucetHint } from "@/components/FaucetHint";
 import { DEMO_MARKETS, findMarket } from "@/lib/markets-demo";
 import { FEED_EXPLAINERS, MARKET_HOOKS } from "@/lib/market-context";
 import { MarketDescriptionLive } from "@/components/MarketDescriptionLive";
@@ -54,6 +55,8 @@ export default function MarketPage({ params }: { params: { id: string } }) {
             <span>{daysToExpiry}d to expiry · {isoDate(market.expiry)}</span>
           </div>
         </div>
+
+        <FaucetHint className="mb-6" />
 
         <section className="border-t border-b border-line py-8 mb-8">
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8">
@@ -171,12 +174,13 @@ export default function MarketPage({ params }: { params: { id: string } }) {
                 Market just opened — awaiting first trade.
               </p>
               <p className="text-2xs text-fg-dim mt-3">
-                Connect a wallet above to take the first position. Initial odds
+                Connect a wallet in the trade panel above to take the first position. Initial odds
                 are 50/50 by construction; the next trade moves the curve.
               </p>
             </div>
           ) : (
-          <div className="border border-line">
+          <div className="border border-line overflow-x-auto">
+            <div className="min-w-[520px]">
             <Row head cells={["time", "side", "price", "size"]} />
             {[...market.history]
               .slice(-12)
@@ -203,6 +207,7 @@ export default function MarketPage({ params }: { params: { id: string } }) {
                   ]}
                 />
               ))}
+            </div>
           </div>
           )}
         </section>
