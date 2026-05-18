@@ -32,6 +32,31 @@ export const usdcAbi = [
   },
 ] as const;
 
+export const agentIdentityAbi = [
+  { type: "function", name: "setProfile", stateMutability: "nonpayable",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "description", type: "string" },
+      { name: "url", type: "string" },
+      { name: "contact", type: "string" },
+    ],
+    outputs: [] },
+  { type: "function", name: "getProfile", stateMutability: "view",
+    inputs: [{ name: "agent", type: "address" }],
+    outputs: [{ type: "tuple", components: [
+      { name: "name", type: "string" },
+      { name: "description", type: "string" },
+      { name: "url", type: "string" },
+      { name: "contact", type: "string" },
+      { name: "registeredAt", type: "uint64" },
+      { name: "updatedAt", type: "uint64" },
+      { name: "exists", type: "bool" },
+    ] }] },
+  { type: "function", name: "hasProfile", stateMutability: "view",
+    inputs: [{ name: "agent", type: "address" }],
+    outputs: [{ type: "bool" }] },
+] as const;
+
 export const vaultAbi = [
   { type: "function", name: "deposit", stateMutability: "nonpayable",
     inputs: [{ name: "amount", type: "uint256" }], outputs: [{ type: "uint256" }] },

@@ -5,7 +5,7 @@ import { createPublicClient, http, type Hex } from "viem";
 import { DEFAULT_CHAIN } from "@/lib/chains";
 import { CONTRACTS, addrUrl } from "@/lib/chain";
 import { CREATABLE_FEEDS } from "@/lib/demo";
-import { registryAbi } from "@/lib/abi";
+import { registryAbi, agentIdentityAbi } from "@/lib/abi";
 import { VerifiableBadge } from "./VerifiableBadge";
 
 interface Row {
@@ -21,6 +21,11 @@ interface Row {
   rule?: `0x${string}`;
   registryVersion?: string;
   isFirstParty: boolean;
+  // From AgentIdentity (optional — many agents won't have one yet)
+  profileName?: string;
+  profileDescription?: string;
+  profileUrl?: string;
+  profileContact?: string;
 }
 
 const CHUNK = 100_000n;
@@ -111,30 +116,55 @@ export function AgentRegistryGrid() {
           }
         }
 
-        // Hydrate live state per (feedId, agent) via Registry.getAgent.
+        // Hydrate live state per (feedId, agent) via Registry.getAgent +
+        // optional AgentIdentity profile.
+        const profileCache = new Map<string, {
+          name: string; description: string; url: string; contact: string; exists: boolean;
+        }>();
+        async function loadProfile(agentAddr: Hex) {
+          const key = agentAddr.toLowerCase();
+          if (profileCache.has(key)) return profileCache.get(key);
+          if (!CONTRACTS.AgentIdentity) return undefined;
+          try {
+            const p = (await client.readContract({
+              address: CONTRACTS.AgentIdentity, abi: agentIdentityAbi,
+              functionName: "getProfile", args: [agentAddr],
+            })) as { name: string; description: string; url: string; contact: string; exists: boolean };
+            profileCache.set(key, p);
+            return p;
+          } catch {
+            return undefined;
+          }
+        }
+
         const hydrated = await Promise.all(
           Array.from(discovered.values()).map(async (r) => {
             const registryAddr =
               r.registryVersion === "1.1" && CONTRACTS.RegistryV11
                 ? CONTRACTS.RegistryV11
                 : CONTRACTS.Registry;
-            try {
-              const a = (await client.readContract({
+            const [agentState, profile] = await Promise.all([
+              client.readContract({
                 address: registryAddr, abi: registryAbi, functionName: "getAgent",
                 args: [r.feedId, r.agent],
-              })) as {
+              }).then((a) => a as {
                 bond: bigint; lockedBond: bigint; lastAttestationAt: bigint;
                 active: boolean; slashed: boolean;
-              };
-              return {
-                ...r,
-                bond: a.bond, lockedBond: a.lockedBond,
-                lastAttestationAt: a.lastAttestationAt,
-                active: a.active, slashed: a.slashed,
-              };
-            } catch {
-              return r;
-            }
+              }).catch(() => undefined),
+              loadProfile(r.agent),
+            ]);
+            return {
+              ...r,
+              bond: agentState?.bond,
+              lockedBond: agentState?.lockedBond,
+              lastAttestationAt: agentState?.lastAttestationAt,
+              active: agentState?.active,
+              slashed: agentState?.slashed,
+              profileName: profile?.exists ? profile.name : undefined,
+              profileDescription: profile?.exists ? profile.description : undefined,
+              profileUrl: profile?.exists ? profile.url : undefined,
+              profileContact: profile?.exists ? profile.contact : undefined,
+            };
           }),
         );
 
@@ -210,9 +240,38 @@ function AgentCard({ row }: { row: Row }) {
         </span>
       </div>
 
-      <h3 className="font-serif text-[17px] leading-snug max-w-[34ch]">
-        {row.feedName}
-      </h3>
+      <div>
+        {row.profileName && (
+          <div className="font-serif italic text-[16px] text-fg mb-1">
+            {row.profileName}
+          </div>
+        )}
+        <h3 className="font-serif text-[17px] leading-snug max-w-[34ch]">
+          {row.feedName}
+        </h3>
+        {row.profileDescription && (
+          <p className="text-2xs text-fg-mute leading-relaxed mt-2 max-w-[44ch]">
+            {row.profileDescription}
+          </p>
+        )}
+        {(row.profileUrl || row.profileContact) && (
+          <div className="flex flex-wrap gap-3 mt-2 text-2xs">
+            {row.profileUrl && (
+              <a
+                href={row.profileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-accent hover:underline"
+              >
+                {row.profileUrl.replace(/^https?:\/\//, "").slice(0, 36)} ↗
+              </a>
+            )}
+            {row.profileContact && (
+              <span className="text-fg-dim">{row.profileContact}</span>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[12.5px] mt-1">
         <Cell label="agent">

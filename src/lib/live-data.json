@@ -16,7 +16,8 @@
     "Dispute": "0x113200D3515758C70ea75fE636e579cCed4066A5",
     "Markets": "0xcaB9aB405F89AC701c3CAcCF110bF94f3A10cD86",
     "MarketsEURC": "0x3e456845aa2747a617EBe91Cd04e74752D890833",
-    "Markets_v1_1": "0xec70ce17aa4b0da6898ced47621655c4c31b1136"
+    "Markets_v1_1": "0xec70ce17aa4b0da6898ced47621655c4c31b1136",
+    "AgentIdentity": "0xd53922ed7f6fac01d4abb52288b45e26683cf92d"
   },
   "feed": {
     "id": "0xf4968db834c4e03f9c2e10bb883fe74f84c850cfacac058a1b520a8d8fa37c0b",

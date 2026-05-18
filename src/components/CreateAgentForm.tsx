@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { keccak256, parseUnits, stringToHex, type Hex } from "viem";
 import { useWallet } from "./WalletProvider";
 import { CONTRACTS, txUrl, addrUrl } from "@/lib/chain";
-import { registryAbi, usdcAbi } from "@/lib/abi";
+import { registryAbi, usdcAbi, agentIdentityAbi } from "@/lib/abi";
 import { FaucetHint } from "./FaucetHint";
 import { CREATABLE_FEEDS } from "@/lib/demo";
 
@@ -44,6 +44,12 @@ export function CreateAgentForm() {
 
   // Bond
   const [bondUsdcStr, setBondUsdcStr] = useState(String(MIN_BOND_USDC));
+
+  // Identity (optional global profile, written to AgentIdentity contract).
+  const [identityName, setIdentityName] = useState("");
+  const [identityDesc, setIdentityDesc] = useState("");
+  const [identityUrl, setIdentityUrl] = useState("");
+  const [identityContact, setIdentityContact] = useState("");
 
   // Rule choice
   const [ruleChoice, setRuleChoice] = useState<RuleChoice>("none");
@@ -198,6 +204,27 @@ export function CreateAgentForm() {
           });
       await publicClient.waitForTransactionReceipt({ hash: regHash });
       setRegisterTx(regHash);
+
+      // Best-effort: if the user filled in an identity profile and
+      // AgentIdentity is deployed on this chain, write it. Skipped silently
+      // if the user cancels the signature — agent registration is the
+      // critical step, identity is enhancement.
+      if (identityName.trim().length > 0 && CONTRACTS.AgentIdentity) {
+        try {
+          const idHash = await walletClient.writeContract({
+            address: CONTRACTS.AgentIdentity,
+            abi: agentIdentityAbi,
+            functionName: "setProfile",
+            args: [identityName.trim(), identityDesc.trim(), identityUrl.trim(), identityContact.trim()],
+            chain: walletClient.chain,
+            account: walletClient.account!,
+          });
+          await publicClient.waitForTransactionReceipt({ hash: idHash });
+        } catch (e) {
+          console.warn("AgentIdentity.setProfile failed (non-fatal):", e);
+        }
+      }
+
       setStatus("success");
     } catch (e) {
       setStatus("error");
@@ -438,6 +465,77 @@ export function CreateAgentForm() {
             </div>
           )}
         </Field>
+
+        {/* Identity — optional global profile (AgentIdentity contract) */}
+        {CONTRACTS.AgentIdentity && (
+          <div className="border-t border-line pt-6 space-y-5">
+            <div>
+              <label className="caption mb-2 block">identity · optional</label>
+              <p className="text-2xs text-fg-dim leading-relaxed max-w-[58ch]">
+                A public profile, written to the global{" "}
+                <a
+                  href={`https://testnet.arcscan.app/address/${CONTRACTS.AgentIdentity}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-accent hover:underline tnum"
+                >
+                  AgentIdentity
+                </a>{" "}
+                contract — keyed by your address, mutable by you. Browsable on{" "}
+                <a href="/agents" className="text-accent hover:underline">/agents</a>.
+                Skip if you want; you can set it any time later.
+              </p>
+            </div>
+            <Field label="display name" hint="Shown next to your address everywhere on the site. Max 64 chars.">
+              <input
+                type="text"
+                value={identityName}
+                onChange={(e) => setIdentityName(e.target.value)}
+                maxLength={64}
+                placeholder="e.g. London Resi Watcher"
+                className="w-full bg-bg border border-line px-3 py-2 text-[14px] focus:outline-none focus:border-accent"
+              />
+            </Field>
+            <Field
+              label="short description"
+              hint="One sentence describing what you attest and why anyone should trust you. Max 512 chars."
+            >
+              <textarea
+                value={identityDesc}
+                onChange={(e) => setIdentityDesc(e.target.value)}
+                maxLength={512}
+                rows={2}
+                placeholder="e.g. Scrapes Zoopla + Rightmove daily and posts a trimmed median for inner-London zone 1-2 rentals."
+                className="w-full bg-bg border border-line px-3 py-2 text-[13.5px] focus:outline-none focus:border-accent resize-y"
+              />
+            </Field>
+            <Field label="url · optional" hint="Methodology doc, agent code, website, or GitHub.">
+              <input
+                type="text"
+                value={identityUrl}
+                onChange={(e) => setIdentityUrl(e.target.value)}
+                maxLength={512}
+                placeholder="https://…"
+                className="w-full bg-bg border border-line px-3 py-2 text-[14px] focus:outline-none focus:border-accent"
+              />
+            </Field>
+            <Field label="contact · optional" hint="X handle, telegram, email — for traders / market creators to reach you.">
+              <input
+                type="text"
+                value={identityContact}
+                onChange={(e) => setIdentityContact(e.target.value)}
+                maxLength={512}
+                placeholder="@handle"
+                className="w-full bg-bg border border-line px-3 py-2 text-[14px] focus:outline-none focus:border-accent"
+              />
+            </Field>
+            <div className="text-2xs text-fg-dim">
+              {identityName.trim().length > 0
+                ? "an extra wallet signature will be requested after the agent-register tx confirms"
+                : "skip if blank — you can set this anytime later from /agents/create"}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* RIGHT — sticky submit */}
