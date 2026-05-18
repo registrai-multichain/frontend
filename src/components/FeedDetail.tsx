@@ -5,7 +5,9 @@ import { StatusBadge } from "./StatusBadge";
 import { VerifiableBadge } from "./VerifiableBadge";
 import { AnimatedNumber } from "./AnimatedNumber";
 import { LiveCountdown } from "./LiveCountdown";
+import { MarketCard } from "./MarketCard";
 import { LIVE_META } from "@/lib/demo";
+import { DEMO_MARKETS } from "@/lib/markets-demo";
 import {
   fmtDuration,
   fmtInt,
@@ -200,6 +202,40 @@ export function FeedDetail({ feed }: { feed: Feed }) {
           </a>
         </div>
       </section>
+
+      {/* Markets resolving against this feed */}
+      {(() => {
+        const feedMarkets = DEMO_MARKETS.filter(
+          (m) => m.feedId.toLowerCase() === feed.id.toLowerCase(),
+        );
+        if (feedMarkets.length === 0) return null;
+        return (
+          <section className="mt-16">
+            <div className="flex items-baseline justify-between mb-5 flex-wrap gap-2">
+              <h2 className="caption">markets resolving against this feed</h2>
+              <Link
+                href="/markets/create/"
+                className="text-2xs text-fg-mute hover:text-accent transition-colors"
+              >
+                create one →
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {feedMarkets.slice(0, 4).map((m) => (
+                <MarketCard key={m.id} market={m} />
+              ))}
+            </div>
+            {feedMarkets.length > 4 && (
+              <div className="mt-4 text-2xs text-fg-dim text-right">
+                + {feedMarkets.length - 4} more on{" "}
+                <Link href="/markets/" className="text-accent hover:underline">
+                  /markets ↗
+                </Link>
+              </div>
+            )}
+          </section>
+        );
+      })()}
 
       {/* Integration */}
       <section className="mt-16">

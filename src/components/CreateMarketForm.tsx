@@ -334,7 +334,7 @@ export function CreateMarketForm() {
         </Field>
 
         <Field label="03 · comparator" hint="How the attested value is compared.">
-          <div className="grid grid-cols-4 gap-px bg-line">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-line">
             {COMPARATORS.map((c) => (
               <button
                 key={c.value}

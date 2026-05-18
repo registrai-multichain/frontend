@@ -61,17 +61,19 @@ export default function MarketPage({ params }: { params: { id: string } }) {
         <section className="border-t border-b border-line py-8 mb-8">
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8">
             <div>
-              <div className="flex items-baseline gap-6 mb-4">
+              <div className="flex items-baseline gap-8 mb-4 flex-wrap">
                 <div>
                   <div className="caption text-up mb-1">YES · resolves true</div>
-                  <div className="text-[44px] sm:text-[56px] leading-none tracking-tightest tnum">
-                    {(yesPrice * 100).toFixed(1)}<span className="text-fg-mute text-[20px]">¢</span>
+                  <div className="text-[40px] sm:text-[52px] leading-none tracking-tightest tnum">
+                    {(yesPrice * 100).toFixed(1)}
+                    <span className="text-fg-mute text-[18px]">¢</span>
                   </div>
                 </div>
                 <div>
                   <div className="caption text-down mb-1">NO · resolves false</div>
-                  <div className="text-[36px] sm:text-[44px] leading-none tracking-tightest tnum text-fg-mute">
-                    {(noPrice * 100).toFixed(1)}<span className="text-[18px]">¢</span>
+                  <div className="text-[40px] sm:text-[52px] leading-none tracking-tightest tnum">
+                    {(noPrice * 100).toFixed(1)}
+                    <span className="text-fg-mute text-[18px]">¢</span>
                   </div>
                 </div>
               </div>

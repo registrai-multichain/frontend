@@ -25,7 +25,7 @@ export function MarketCard({ market }: { market: Market }) {
   return (
     <Link
       href={`/markets/${market.id}`}
-      className="block border border-line hover:border-line-strong hover:bg-bg-elev/40 transition-all p-5 sm:p-6"
+      className="block border border-line hover:border-line-strong transition-colors p-5 sm:p-6"
     >
       <div className="flex items-baseline justify-between mb-3">
         <span className="caption text-fg-dim">resolves against</span>

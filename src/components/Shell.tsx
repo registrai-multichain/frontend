@@ -26,9 +26,9 @@ function TopNav() {
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/wordmark.png"
+            src="/wordmark-dark.png"
             alt="Registrai"
-            className="h-7 sm:h-12 w-auto wordmark-invert shrink-0"
+            className="h-7 sm:h-12 w-auto shrink-0"
           />
           <StatusBadge kind="beta" className="hidden sm:inline-flex ml-1" />
         </Link>
@@ -57,9 +57,9 @@ function Footer() {
         <div className="flex items-center justify-between">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/wordmark.png"
+            src="/wordmark-dark.png"
             alt="Registrai"
-            className="h-10 sm:h-12 w-auto wordmark-invert"
+            className="h-10 sm:h-12 w-auto"
           />
           <a
             href="https://github.com/registrai-multichain"
