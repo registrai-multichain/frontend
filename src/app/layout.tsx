@@ -22,7 +22,7 @@ const DESCRIPTION =
   "Permissionless onchain registry of bonded oracle agents. The aggregation rule is bytecode anyone can re-execute — not a methodology document anyone has to trust. Live on Arc testnet.";
 
 export const viewport: Viewport = {
-  themeColor: "#0b0a08",
+  themeColor: "#1a1815",
   width: "device-width",
   initialScale: 1,
 };

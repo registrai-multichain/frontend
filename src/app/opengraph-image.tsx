@@ -25,7 +25,7 @@ export default async function og() {
           height: "100%",
           display: "flex",
           flexDirection: "column",
-          background: "#0b0a08",
+          background: "#1a1815",
           color: "#e8e4dc",
           padding: "72px 80px",
           fontFamily: "system-ui",

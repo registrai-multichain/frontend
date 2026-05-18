@@ -3,17 +3,19 @@
 @tailwind utilities;
 
 :root {
-  /* Off-black warm palette. Bloomberg-by-way-of-2026, not retro. */
-  --bg: #0b0a08;
-  --bg-elev: #131210;
+  /* Warm-paper-at-night palette. Each dark token lifted +15/channel from
+     the previous trading-desk-dark variant so contrast ratios are
+     preserved while the page reads less harsh. */
+  --bg: #1a1815;
+  --bg-elev: #22201d;
   --fg: #e8e4dc;
   --fg-mute: #8a857c;
   --fg-dim: #4a4640;
   --accent: #e8c87a;
   --up: #84b06a;
   --down: #d36c5b;
-  --line: #1f1d1a;
-  --line-strong: #2c2924;
+  --line: #2e2c29;
+  --line-strong: #3b3833;
 }
 
 html,
