@@ -10,6 +10,7 @@ interface Item {
 }
 
 const ITEMS: Item[] = [
+  { label: "agents", href: "/agents" },
   { label: "become agent", href: "/agents/create" },
   { label: "profile", href: "/profile" },
   { label: "docs", href: "/docs" },
