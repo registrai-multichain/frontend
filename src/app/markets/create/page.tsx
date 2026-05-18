@@ -29,19 +29,6 @@ export default function CreateMarketPage() {
             market is live. Resolution is automatic against the agent&apos;s
             attestation at expiry — no human in the loop.
           </p>
-          <p className="text-2xs text-fg-dim mt-3 max-w-[60ch] leading-relaxed">
-            USDC markets are live today. EURC markets share the same contract
-            code — you&apos;ll need to claim test EURC from{" "}
-            <a
-              className="underline decoration-fg-dim underline-offset-4 hover:text-accent"
-              href="https://faucet.circle.com"
-              target="_blank"
-              rel="noreferrer"
-            >
-              faucet.circle.com
-            </a>
-            ; full trading UI for EURC markets is rolling out in the next pass.
-          </p>
         </div>
 
         <div className="border-t border-line pt-10">

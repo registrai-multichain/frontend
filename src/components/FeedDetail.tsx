@@ -146,7 +146,7 @@ export function FeedDetail({ feed }: { feed: Feed }) {
         <div className="flex items-baseline justify-between mb-4">
           <h2 className="caption">attestation history</h2>
           <span className="text-2xs text-fg-dim">
-            showing 12 of {history.length}
+            showing {Math.min(12, history.length)} of {history.length}
           </span>
         </div>
         <div className="border border-line">

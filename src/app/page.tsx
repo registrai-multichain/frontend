@@ -81,7 +81,7 @@ export default function Home() {
         <div className="mt-10 flex flex-wrap items-center gap-3 text-[12.5px] tracking-wide">
           <Link
             href="/feed/0x89453b87d3965a0f8132a29414ad3ed0b1950ee743cfcf6d85cfea8038d8ac5a/"
-            className="px-4 py-2 border border-up/60 text-up hover:bg-up hover:text-bg transition-colors"
+            className="px-4 py-2 bg-up text-bg font-medium hover:bg-up/90 transition-colors"
           >
             see a verifiable feed →
           </Link>
