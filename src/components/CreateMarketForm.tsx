@@ -36,11 +36,22 @@ export function CreateMarketForm() {
   const [selectedFeedId, setSelectedFeedId] = useState<string>(
     qFeed ?? (CREATABLE_FEEDS[0]?.id ?? ""),
   );
+  // Free-form paste for custom feeds (e.g. one you just created via
+  // /agents/create that isn't in the static manifest yet).
+  const [customFeedMode, setCustomFeedMode] = useState(false);
+  const [customFeedId, setCustomFeedId] = useState("");
+  const [customFeedIsVerifiable, setCustomFeedIsVerifiable] = useState(true);
+
   const feed: CreatableFeed | undefined = useMemo(
     () => CREATABLE_FEEDS.find((f) => f.id.toLowerCase() === selectedFeedId.toLowerCase()),
     [selectedFeedId],
   );
-  const isVerifiableFeed = !!feed?.rule;
+  // Effective feed metadata for the rest of the form: from the manifest,
+  // or synthesised when the user pastes a custom feedId.
+  const isVerifiableFeed = customFeedMode ? customFeedIsVerifiable : !!feed?.rule;
+  const effectiveDisplayDivisor = customFeedMode ? 1 : (feed?.displayDivisor ?? 1);
+  const effectiveUnit = customFeedMode ? "feed units" : (feed?.unit ?? "");
+  const effectiveDecimals = customFeedMode ? 0 : (feed?.decimals ?? 0);
 
   const defaultExpiry = useMemo(() => {
     const days = qDays ? Number(qDays) : 30;
@@ -60,11 +71,11 @@ export function CreateMarketForm() {
 
   // Default threshold suggestion when a feed is picked but threshold is blank
   useEffect(() => {
-    if (!feed || thresholdStr.length > 0) return;
+    if (customFeedMode || !feed || thresholdStr.length > 0) return;
     // Reasonable defaults: PLN/sqm → 17,500, bps → 400 (4.00%)
     setThresholdStr(feed.displayDivisor > 1 ? "4.00" : "17500");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feed?.id]);
+  }, [feed?.id, customFeedMode]);
 
   const tokenAddress: Address =
     collateral === "USDC" ? CONTRACTS.USDC : (CONTRACTS.EURC ?? CONTRACTS.USDC);
@@ -109,12 +120,13 @@ export function CreateMarketForm() {
   const threshold = useMemo(() => {
     const v = Number(thresholdStr);
     if (!Number.isFinite(v)) return 0;
-    const divisor = feed?.displayDivisor ?? 1;
-    return Math.round(v * divisor);
-  }, [thresholdStr, feed?.displayDivisor]);
+    return Math.round(v * effectiveDisplayDivisor);
+  }, [thresholdStr, effectiveDisplayDivisor]);
 
+  const customFeedIdValid =
+    customFeedId.length === 66 && customFeedId.startsWith("0x");
   const canSubmit =
-    !!feed &&
+    (customFeedMode ? customFeedIdValid : !!feed) &&
     address &&
     isOnSupportedChain &&
     threshold > 0 &&
@@ -125,26 +137,29 @@ export function CreateMarketForm() {
     status !== "creating";
 
   const summary = useMemo(() => {
-    if (!feed) return "";
+    if (!customFeedMode && !feed) return "";
     const cmp = COMPARATORS[comparator]!;
     const dateStr = new Date(expiryTs * 1000).toLocaleString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
     });
-    const subject = feed.symbol.includes("WARSAW")
+    if (customFeedMode) {
+      return `Will the feed value ${cmp.label} ${fmtInt(threshold)} (raw) by ${dateStr}?`;
+    }
+    const subject = feed!.symbol.includes("WARSAW")
       ? "Warsaw residential price"
-      : feed.symbol.includes("CPI")
+      : feed!.symbol.includes("CPI")
         ? "Polish CPI Y/Y"
-        : feed.symbol.includes("ECB")
+        : feed!.symbol.includes("ECB")
           ? "the ECB main refi rate"
-          : feed.name;
+          : feed!.name;
     const valStr =
-      feed.displayDivisor > 1
-        ? `${Number(thresholdStr || "0").toFixed(feed.decimals)}%`
-        : `${fmtInt(threshold)} ${feed.unit}`;
+      effectiveDisplayDivisor > 1
+        ? `${Number(thresholdStr || "0").toFixed(effectiveDecimals)}%`
+        : `${fmtInt(threshold)} ${effectiveUnit}`;
     return `Will ${subject} ${cmp.label} ${valStr} by ${dateStr}?`;
-  }, [feed, comparator, expiryTs, threshold, thresholdStr]);
+  }, [feed, customFeedMode, comparator, expiryTs, threshold, thresholdStr, effectiveDisplayDivisor, effectiveDecimals, effectiveUnit]);
 
   async function onSubmit() {
     if (!address || !walletClient || !marketsContract) {
@@ -183,7 +198,11 @@ export function CreateMarketForm() {
         address: marketsContract,
         abi: marketsAbi,
         functionName: "createMarket",
-        args: [feed!.id, feed!.agent, BigInt(threshold), comparator, BigInt(expiryTs), liquidityWei],
+        args: [
+          (customFeedMode ? customFeedId : feed!.id) as `0x${string}`,
+          (customFeedMode ? address : feed!.agent) as `0x${string}`,
+          BigInt(threshold), comparator, BigInt(expiryTs), liquidityWei,
+        ],
         chain: walletClient.chain,
         account: address,
       });
@@ -259,16 +278,17 @@ export function CreateMarketForm() {
       <div className="space-y-8">
         <Field
           label="01 · feed"
-          hint="Pick the data feed this market will resolve against. Verifiable feeds use an onchain rule contract for aggregation."
+          hint="Pick the data feed this market will resolve against. Verifiable feeds use an onchain rule contract for aggregation. Or paste any feedId you just created on /agents/create."
         >
           <div className="space-y-2">
             {CREATABLE_FEEDS.map((f) => {
-              const active = f.id === selectedFeedId;
+              const active = !customFeedMode && f.id === selectedFeedId;
               return (
                 <button
                   key={f.id}
                   type="button"
                   onClick={() => {
+                    setCustomFeedMode(false);
                     setSelectedFeedId(f.id);
                     setThresholdStr(""); // reset to feed-appropriate default
                   }}
@@ -302,15 +322,66 @@ export function CreateMarketForm() {
                 </button>
               );
             })}
+            <button
+              type="button"
+              onClick={() => {
+                setCustomFeedMode(true);
+                setThresholdStr("");
+              }}
+              className={`w-full text-left p-3 transition-colors border ${
+                customFeedMode
+                  ? "bg-bg-elev/60 border-accent"
+                  : "bg-bg-elev/20 border-line border-dashed hover:border-line-strong"
+              }`}
+            >
+              <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                <span className="caption text-fg">paste a custom feedId</span>
+                <span className="text-2xs text-fg-dim">advanced · BYO feed</span>
+              </div>
+              <p className="text-2xs text-fg-mute leading-snug mt-1.5 max-w-[58ch]">
+                Use this for a feed you just created on /agents/create, or any
+                feedId that isn&apos;t in the picker yet.
+              </p>
+            </button>
+            {customFeedMode && (
+              <div className="space-y-3 p-3 border border-line bg-bg-elev/30">
+                <input
+                  type="text"
+                  value={customFeedId}
+                  onChange={(e) => setCustomFeedId(e.target.value.trim())}
+                  placeholder="0x… (64 hex chars)"
+                  className="w-full bg-bg border border-line px-3 py-2 text-[13px] tnum focus:outline-none focus:border-accent break-all"
+                />
+                <label className="flex items-start gap-2 text-2xs text-fg-mute leading-relaxed cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={customFeedIsVerifiable}
+                    onChange={(e) => setCustomFeedIsVerifiable(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    feed lives on Registry v1.1 (rule-bound / verifiable). Uncheck
+                    if it&apos;s on the v1.0 plain-trust Registry.
+                  </span>
+                </label>
+                <div className="text-2xs text-fg-dim leading-relaxed">
+                  Threshold is entered as the raw int256 value the rule contract
+                  outputs (e.g. for a PLN/USD feed in 4-decimal bps, enter{" "}
+                  <code className="text-fg-mute">39500</code> for 3.95).
+                </div>
+              </div>
+            )}
           </div>
         </Field>
 
         <Field
           label="02 · threshold"
           hint={
-            feed?.displayDivisor && feed.displayDivisor > 1
-              ? `Value to compare against at expiry, in ${feed.unit}. Enter in human units (e.g. "4.00" for 4.00%).`
-              : "Value to compare against at expiry, in feed-native units."
+            customFeedMode
+              ? "Raw int256 value the rule contract outputs. No display conversion — enter exactly what gets compared on chain."
+              : feed?.displayDivisor && feed.displayDivisor > 1
+                ? `Value to compare against at expiry, in ${feed.unit}. Enter in human units (e.g. "4.00" for 4.00%).`
+                : "Value to compare against at expiry, in feed-native units."
           }
         >
           <div className="border border-line bg-bg flex items-baseline">
@@ -318,17 +389,21 @@ export function CreateMarketForm() {
               type="number"
               value={thresholdStr}
               onChange={(e) => setThresholdStr(e.target.value)}
-              step={feed && feed.displayDivisor > 1 ? "0.01" : "1"}
+              step={!customFeedMode && effectiveDisplayDivisor > 1 ? "0.01" : "1"}
               className="flex-1 bg-transparent px-4 py-3 text-[19px] tnum tracking-tightest outline-none focus:border-accent"
-              placeholder={feed && feed.displayDivisor > 1 ? "4.00" : "17500"}
+              placeholder={customFeedMode ? "39500" : effectiveDisplayDivisor > 1 ? "4.00" : "17500"}
             />
             <span className="text-fg-dim text-[11px] px-3">
-              {feed && feed.displayDivisor > 1 ? "%" : feed?.unit}
+              {customFeedMode
+                ? "int256"
+                : effectiveDisplayDivisor > 1
+                  ? "%"
+                  : effectiveUnit}
             </span>
           </div>
-          {feed && feed.displayDivisor > 1 && thresholdStr && (
+          {!customFeedMode && effectiveDisplayDivisor > 1 && thresholdStr && (
             <div className="text-2xs text-fg-dim mt-1.5 tnum">
-              onchain · {threshold} {feed.unit}
+              onchain · {threshold} {effectiveUnit}
             </div>
           )}
         </Field>
