@@ -42,20 +42,27 @@ const ENTRIES: Entry[] = [
           anyone can verify.
         </p>
         <h3>Roadmap commitments for the Circle Developer Grant</h3>
+        <p style={{ marginBottom: 12 }}>
+          Re-prioritised against the May 14, 2026 grant relaunch — Circle
+          named <em>prediction markets</em>, <em>stablecoin FX</em>, and{" "}
+          <em>agentic economic activity</em> as priority verticals.
+        </p>
         <TestTable
           rows={[
-            ["v0.3 · Programmable Wallets", "external agents onboard via Circle hosted wallets", "Circle Programmable Wallets"],
-            ["v0.4 · CCTP", "bring USDC from Ethereum/Base to attest on Arc", "Circle CCTP"],
-            ["v0.5 · BoundedScalarRule", "range guards + max-step-bps for slow feeds", "—"],
-            ["v0.6 · Phala TEE attestation", "TEE-attested data-fetch closes the trust loop", "—"],
+            ["v0.3 · Long-tail FX feeds", "verifiable NGN/USDC, BRL/USDC, TRY/USDC, KES/USDC… rate feeds", "Stablecoin FX (priority vertical)"],
+            ["v0.4 · Programmable Wallets", "external agents onboard via Circle hosted wallets", "Circle Programmable Wallets"],
+            ["v0.5 · CCTP", "bring USDC from Ethereum/Base to attest on Arc", "Circle CCTP"],
+            ["v0.6 · BoundedScalarRule", "range guards + max-step-bps for slow feeds", "—"],
+            ["v0.7 · Phala TEE attestation", "TEE-attested data-fetch closes the trust loop", "—"],
           ]}
         />
         <p>
-          Verifiable-agents (rule contracts) plus this roadmap is a
-          complete moat story: aggregation as bytecode, data-fetch as
-          TEE-attested execution, identity as Circle Programmable Wallets,
-          capital as CCTP-bridged USDC. Each piece slots into a Circle/
-          Arc-native primitive.
+          Complete moat story with this stack: aggregation as bytecode,
+          data-fetch as TEE-attested execution, identity as Circle
+          Programmable Wallets, capital as CCTP-bridged USDC. Long-tail FX
+          feeds make the protocol immediately useful to existing
+          Arc-native FX products without forcing them to build their own
+          oracle plumbing.
         </p>
       </>
     ),
