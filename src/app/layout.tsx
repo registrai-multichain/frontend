@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono, Instrument_Serif } from "next/font/google";
 import { Providers } from "@/components/Providers";
 import "./globals.css";
@@ -21,13 +21,18 @@ const TITLE = "Registrai · Onchain oracles, with aggregation you can verify";
 const DESCRIPTION =
   "Permissionless onchain registry of bonded oracle agents. The aggregation rule is bytecode anyone can re-execute — not a methodology document anyone has to trust. Live on Arc testnet.";
 
+export const viewport: Viewport = {
+  themeColor: "#0b0a08",
+  width: "device-width",
+  initialScale: 1,
+};
+
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   metadataBase: new URL("https://registrai.cc"),
   applicationName: "Registrai",
   alternates: { canonical: "/" },
-  themeColor: "#0b0a08",
   openGraph: {
     type: "website",
     siteName: "Registrai",
