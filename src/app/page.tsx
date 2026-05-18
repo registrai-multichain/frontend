@@ -30,6 +30,11 @@ export default function Home() {
           An onchain oracle for{" "}
           <span className="italic text-accent">everything else</span>.
         </h1>
+        <p className="mt-6 font-serif italic text-fg-mute text-[18px] sm:text-[22px] leading-snug max-w-[40ch]">
+          With aggregation that&apos;s{" "}
+          <span className="text-up not-italic font-medium">bytecode anyone can re-execute</span>{" "}
+          — not a methodology document anyone has to trust.
+        </p>
 
         {/* Live proof embedded in hero — the protocol is real, here's the number */}
         <div className="mt-10 border-t border-b border-line py-6 max-w-[640px]">
@@ -60,34 +65,37 @@ export default function Home() {
         </div>
 
         <p className="mt-8 max-w-[62ch] text-fg text-[16px] leading-relaxed">
-          The long tail of real-world data — regional real estate, energy spot
-          prices, local CPI — has no credible onchain feed. The economics never
-          worked for committee-based oracles.
+          The long tail of real-world data — regional real estate, local CPI,
+          central-bank rate decisions — has no credible onchain feed. The
+          economics never worked for committee-based oracles, and every
+          existing alternative treats the aggregation step as a trusted black box.
         </p>
         <p className="mt-4 max-w-[62ch] text-fg-mute text-[15px] leading-relaxed">
-          So we built different rails. Anyone registers an agent for any data
-          feed, posts USDC as bond, and publishes signed values onchain. Bad
-          attestations get slashed. Read whichever agent you trust — or become
-          one yourself.
+          We built different rails. Anyone registers an agent for any feed,
+          posts USDC as bond, optionally binds to an{" "}
+          <span className="text-up">onchain rule contract</span> that computes the
+          aggregation deterministically, and publishes signed values. Bad
+          attestations get slashed. The math is verifiable bytecode — anyone can
+          pull the inputs from chain and reproduce the value.
         </p>
         <div className="mt-10 flex flex-wrap items-center gap-3 text-[12.5px] tracking-wide">
           <Link
-            href={`/feed/${feed.id}`}
-            className="px-4 py-2 border border-accent/60 text-accent hover:bg-accent hover:text-bg transition-colors"
+            href="/feed/0x89453b87d3965a0f8132a29414ad3ed0b1950ee743cfcf6d85cfea8038d8ac5a/"
+            className="px-4 py-2 border border-up/60 text-up hover:bg-up hover:text-bg transition-colors"
           >
-            see the live feed →
+            see a verifiable feed →
           </Link>
           <Link
             href="/markets/create/"
-            className="px-4 py-2 border border-line text-fg-mute hover:text-fg hover:border-line-strong transition-colors"
+            className="px-4 py-2 border border-accent/60 text-accent hover:bg-accent hover:text-bg transition-colors"
           >
             create a market
           </Link>
           <Link
-            href="/docs#register"
-            className="px-4 py-2 text-fg-dim hover:text-fg transition-colors"
+            href="/agents/create/"
+            className="px-4 py-2 border border-line text-fg-mute hover:text-fg hover:border-line-strong transition-colors"
           >
-            or become an agent ↗
+            become an agent
           </Link>
         </div>
       </section>
