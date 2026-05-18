@@ -5,7 +5,7 @@ import { postMarketDescription } from "@/lib/hooks/useMarketDescription";
 import { useRouter, useSearchParams } from "next/navigation";
 import { decodeEventLog, parseUnits, type Address, type Hex } from "viem";
 import { useWallet } from "./WalletProvider";
-import { DEMO_FEED } from "@/lib/demo";
+import { CREATABLE_FEEDS, type CreatableFeed } from "@/lib/demo";
 import { CONTRACTS, txUrl } from "@/lib/chain";
 import { marketsAbi, usdcAbi } from "@/lib/abi";
 import { fmtInt } from "@/lib/format";
@@ -26,22 +26,27 @@ export function CreateMarketForm() {
   const searchParams = useSearchParams();
   const { address, isOnSupportedChain, walletClient, publicClient, connect, switchChain } = useWallet();
 
-  const feed = DEMO_FEED;
-  const agent = feed.agents[0]!;
-
   // Pre-fill from query string (proposed-market deploy links).
+  const qFeed = searchParams?.get("feedId");
   const qThreshold = searchParams?.get("threshold");
   const qComparator = searchParams?.get("comparator");
   const qDays = searchParams?.get("days");
+
+  const [selectedFeedId, setSelectedFeedId] = useState<string>(
+    qFeed ?? (CREATABLE_FEEDS[0]?.id ?? ""),
+  );
+  const feed: CreatableFeed | undefined = useMemo(
+    () => CREATABLE_FEEDS.find((f) => f.id.toLowerCase() === selectedFeedId.toLowerCase()),
+    [selectedFeedId],
+  );
+  const isVerifiableFeed = !!feed?.rule;
 
   const defaultExpiry = useMemo(() => {
     const days = qDays ? Number(qDays) : 30;
     return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
   }, [qDays]);
 
-  const [thresholdStr, setThresholdStr] = useState<string>(
-    qThreshold ?? String(Math.round(agent.attestations[0]?.value ?? 17300)),
-  );
+  const [thresholdStr, setThresholdStr] = useState<string>(qThreshold ?? "");
   const [comparator, setComparator] = useState<number>(qComparator ? Number(qComparator) : 0);
   const [expiryDate, setExpiryDate] = useState<string>(defaultExpiry);
   const [liquidityStr, setLiquidityStr] = useState<string>("10");
@@ -52,10 +57,24 @@ export function CreateMarketForm() {
   const [txHash, setTxHash] = useState<Hex | undefined>();
   const [tokenBalance, setTokenBalance] = useState<bigint | undefined>();
 
+  // Default threshold suggestion when a feed is picked but threshold is blank
+  useEffect(() => {
+    if (!feed || thresholdStr.length > 0) return;
+    // Reasonable defaults: PLN/sqm → 17,500, bps → 400 (4.00%)
+    setThresholdStr(feed.displayDivisor > 1 ? "4.00" : "17500");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feed?.id]);
+
   const tokenAddress: Address =
     collateral === "USDC" ? CONTRACTS.USDC : (CONTRACTS.EURC ?? CONTRACTS.USDC);
-  const marketsContract: Address | undefined =
-    collateral === "USDC" ? CONTRACTS.Markets : CONTRACTS.MarketsEURC;
+
+  // Verifiable (rule-bound) feeds live on Markets v1.1. Plain feeds use
+  // v1.0. EURC pathway unchanged.
+  const marketsContract: Address | undefined = useMemo(() => {
+    if (collateral === "EURC") return CONTRACTS.MarketsEURC;
+    if (isVerifiableFeed) return CONTRACTS.MarketsV11 ?? CONTRACTS.Markets;
+    return CONTRACTS.Markets;
+  }, [collateral, isVerifiableFeed]);
 
   // Pull live token balance for UX.
   useEffect(() => {
@@ -83,29 +102,48 @@ export function CreateMarketForm() {
     return parseUnits(liquidityStr || "0", 6);
   }, [liquidityStr]);
 
+  // The number the contract stores. Form input is human units (e.g.
+  // "4.00" for CPI %), contract wants `int256` in feed-native units
+  // (basis points for CPI/ECB, integer PLN/sqm for Warsaw).
   const threshold = useMemo(() => {
     const v = Number(thresholdStr);
-    return Number.isFinite(v) ? Math.round(v) : 0;
-  }, [thresholdStr]);
+    if (!Number.isFinite(v)) return 0;
+    const divisor = feed?.displayDivisor ?? 1;
+    return Math.round(v * divisor);
+  }, [thresholdStr, feed?.displayDivisor]);
 
   const canSubmit =
+    !!feed &&
     address &&
     isOnSupportedChain &&
     threshold > 0 &&
     expiryTs > Math.floor(Date.now() / 1000) &&
     liquidityWei >= 5_000_000n &&
+    !!marketsContract &&
     status !== "approving" &&
     status !== "creating";
 
   const summary = useMemo(() => {
+    if (!feed) return "";
     const cmp = COMPARATORS[comparator]!;
     const dateStr = new Date(expiryTs * 1000).toLocaleString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
     });
-    return `Will Warsaw residential price ${cmp.label} ${fmtInt(threshold)} ${feed.unit} by ${dateStr}?`;
-  }, [comparator, expiryTs, threshold, feed.unit]);
+    const subject = feed.symbol.includes("WARSAW")
+      ? "Warsaw residential price"
+      : feed.symbol.includes("CPI")
+        ? "Polish CPI Y/Y"
+        : feed.symbol.includes("ECB")
+          ? "the ECB main refi rate"
+          : feed.name;
+    const valStr =
+      feed.displayDivisor > 1
+        ? `${Number(thresholdStr || "0").toFixed(feed.decimals)}%`
+        : `${fmtInt(threshold)} ${feed.unit}`;
+    return `Will ${subject} ${cmp.label} ${valStr} by ${dateStr}?`;
+  }, [feed, comparator, expiryTs, threshold, thresholdStr]);
 
   async function onSubmit() {
     if (!address || !walletClient || !marketsContract) {
@@ -144,7 +182,7 @@ export function CreateMarketForm() {
         address: marketsContract,
         abi: marketsAbi,
         functionName: "createMarket",
-        args: [feed.id, agent.address, BigInt(threshold), comparator, BigInt(expiryTs), liquidityWei],
+        args: [feed!.id, feed!.agent, BigInt(threshold), comparator, BigInt(expiryTs), liquidityWei],
         chain: walletClient.chain,
         account: address,
       });
@@ -218,50 +256,80 @@ export function CreateMarketForm() {
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-10">
       {/* Form */}
       <div className="space-y-8">
-        <Field label="01 · feed" hint="Currently one feed registered — more coming.">
-          <div className="border border-line bg-bg-elev/30 p-4 flex items-center justify-between">
-            <div>
-              <div className="caption text-accent">{feed.symbol}</div>
-              <div className="text-2xs text-fg-mute mt-0.5">{feed.unit}</div>
-            </div>
-            <div className="text-2xs text-fg-dim">
-              attested daily 14:00 UTC
-            </div>
+        <Field
+          label="01 · feed"
+          hint="Pick the data feed this market will resolve against. Verifiable feeds use an onchain rule contract for aggregation."
+        >
+          <div className="space-y-2">
+            {CREATABLE_FEEDS.map((f) => {
+              const active = f.id === selectedFeedId;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedFeedId(f.id);
+                    setThresholdStr(""); // reset to feed-appropriate default
+                  }}
+                  className={`w-full text-left p-3 transition-colors border ${
+                    active
+                      ? "bg-bg-elev/60 border-accent"
+                      : "bg-bg-elev/20 border-line hover:border-line-strong"
+                  }`}
+                >
+                  <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="caption text-accent">{f.symbol}</span>
+                      {f.rule && (
+                        <span className="caption text-[10px] text-up border border-up/40 px-1.5 py-0.5">
+                          verifiable
+                        </span>
+                      )}
+                      {f.registryVersion && (
+                        <span className="caption text-[10px] text-fg-dim">
+                          v{f.registryVersion}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-2xs text-fg-mute">
+                      {f.displayDivisor > 1 ? "%" : f.unit}
+                    </span>
+                  </div>
+                  <p className="text-2xs text-fg-mute leading-snug mt-1.5 max-w-[58ch]">
+                    {f.description}
+                  </p>
+                </button>
+              );
+            })}
           </div>
         </Field>
 
-        <Field label="02 · threshold" hint="The value to compare against at expiry.">
+        <Field
+          label="02 · threshold"
+          hint={
+            feed?.displayDivisor && feed.displayDivisor > 1
+              ? `Value to compare against at expiry, in ${feed.unit}. Enter in human units (e.g. "4.00" for 4.00%).`
+              : "Value to compare against at expiry, in feed-native units."
+          }
+        >
           <div className="border border-line bg-bg flex items-baseline">
             <input
               type="number"
               value={thresholdStr}
               onChange={(e) => setThresholdStr(e.target.value)}
+              step={feed && feed.displayDivisor > 1 ? "0.01" : "1"}
               className="flex-1 bg-transparent px-4 py-3 text-[19px] tnum tracking-tightest outline-none focus:border-accent"
-              placeholder="17500"
+              placeholder={feed && feed.displayDivisor > 1 ? "4.00" : "17500"}
             />
-            <span className="text-fg-dim text-[11px] px-3">{feed.unit}</span>
+            <span className="text-fg-dim text-[11px] px-3">
+              {feed && feed.displayDivisor > 1 ? "%" : feed?.unit}
+            </span>
           </div>
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {(() => {
-              const v = agent.attestations[0]?.value ?? 17300;
-              return [
-                { label: "current", val: v },
-                { label: "+5%", val: Math.round(v * 1.05 / 50) * 50 },
-                { label: "+10%", val: Math.round(v * 1.10 / 50) * 50 },
-                { label: "-5%", val: Math.round(v * 0.95 / 50) * 50 },
-                { label: "-10%", val: Math.round(v * 0.90 / 50) * 50 },
-              ].map((c) => (
-                <button
-                  key={c.label}
-                  type="button"
-                  onClick={() => setThresholdStr(String(c.val))}
-                  className="px-2.5 py-1 border border-line text-[11px] tnum text-fg-mute hover:border-accent hover:text-accent transition-colors"
-                >
-                  {c.label} · {c.val.toLocaleString("en-US").replace(/,/g, " ")}
-                </button>
-              ));
-            })()}
-          </div>
+          {feed && feed.displayDivisor > 1 && thresholdStr && (
+            <div className="text-2xs text-fg-dim mt-1.5 tnum">
+              onchain · {threshold} {feed.unit}
+            </div>
+          )}
         </Field>
 
         <Field label="03 · comparator" hint="How the attested value is compared.">

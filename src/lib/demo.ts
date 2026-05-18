@@ -87,6 +87,54 @@ export const VERIFIABLE_FEED: Feed | undefined = verifiableFeedMeta
 
 export const ALL_FEEDS: Feed[] = [DEMO_FEED, ...(VERIFIABLE_FEED ? [VERIFIABLE_FEED] : [])];
 
+/**
+ * All feeds you can create a market against. Includes the macro feeds
+ * (CPI, ECB rate) that aren't full Feed objects with agent/history but
+ * are perfectly creatable. Used by /markets/create's feed picker.
+ */
+export interface CreatableFeed {
+  id: `0x${string}`;
+  symbol: string;
+  name: string;
+  description: string;
+  unit: string;
+  decimals: number;
+  displayDivisor: number;
+  /** Bound onchain rule contract — present iff feed is verifiable. */
+  rule?: `0x${string}`;
+  /** Registry/Attestation/Markets version this feed lives on. */
+  registryVersion?: string;
+  /** Onchain agent address (currently always the deployer for first-party feeds). */
+  agent: `0x${string}`;
+}
+
+export const CREATABLE_FEEDS: CreatableFeed[] = (
+  ((live as unknown as {
+    feeds?: Array<{
+      id: string;
+      symbol: string;
+      name?: string;
+      description: string;
+      unit: string;
+      decimals: number;
+      displayDivisor: number;
+      rule?: string;
+      registryVersion?: string;
+    }>;
+  }).feeds ?? [])
+).map((f) => ({
+  id: f.id as `0x${string}`,
+  symbol: f.symbol,
+  name: f.name ?? f.symbol,
+  description: f.description,
+  unit: f.unit,
+  decimals: f.decimals,
+  displayDivisor: f.displayDivisor,
+  rule: f.rule as `0x${string}` | undefined,
+  registryVersion: f.registryVersion,
+  agent: live.agent.address as `0x${string}`,
+}));
+
 export const LIVE_META = {
   syncedAt: live.syncedAt,
   chainId: live.chainId,

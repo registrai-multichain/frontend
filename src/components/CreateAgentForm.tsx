@@ -6,6 +6,7 @@ import { useWallet } from "./WalletProvider";
 import { CONTRACTS, txUrl, addrUrl } from "@/lib/chain";
 import { registryAbi, usdcAbi } from "@/lib/abi";
 import { FaucetHint } from "./FaucetHint";
+import { CREATABLE_FEEDS } from "@/lib/demo";
 
 type Mode = "new-feed" | "existing-feed";
 type Status =
@@ -304,16 +305,53 @@ export function CreateAgentForm() {
         ) : (
           <div className="space-y-5">
             <Field
-              label="feed id · bytes32"
-              hint="Find on the markets page, or from someone running an existing feed."
+              label="pick a feed"
+              hint="Existing feeds you can register as an agent against. Custom feed id can still be pasted below."
             >
-              <input
-                type="text"
-                value={existingFeedId}
-                onChange={(e) => setExistingFeedId(e.target.value)}
-                placeholder="0x…"
-                className="w-full bg-bg border border-line px-3 py-2 text-[13px] tnum focus:outline-none focus:border-accent break-all"
-              />
+              <div className="space-y-2 mb-3">
+                {CREATABLE_FEEDS.map((f) => {
+                  const active = f.id.toLowerCase() === existingFeedId.toLowerCase();
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setExistingFeedId(f.id)}
+                      className={`w-full text-left p-3 transition-colors border ${
+                        active
+                          ? "bg-bg-elev/60 border-accent"
+                          : "bg-bg-elev/20 border-line hover:border-line-strong"
+                      }`}
+                    >
+                      <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <span className="caption text-accent">{f.symbol}</span>
+                          {f.rule && (
+                            <span className="caption text-[10px] text-up border border-up/40 px-1.5 py-0.5">
+                              verifiable
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-2xs text-fg-mute">{f.unit}</span>
+                      </div>
+                      <p className="text-2xs text-fg-mute leading-snug mt-1.5 max-w-[58ch]">
+                        {f.description}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+              <details>
+                <summary className="text-2xs text-fg-dim cursor-pointer hover:text-fg-mute">
+                  or paste a custom feed id
+                </summary>
+                <input
+                  type="text"
+                  value={existingFeedId}
+                  onChange={(e) => setExistingFeedId(e.target.value)}
+                  placeholder="0x…"
+                  className="w-full mt-2 bg-bg border border-line px-3 py-2 text-[13px] tnum focus:outline-none focus:border-accent break-all"
+                />
+              </details>
             </Field>
             <Field
               label="your methodology · IPFS CID or URL"
