@@ -9,6 +9,79 @@ interface Entry {
 
 const ENTRIES: Entry[] = [
   {
+    date: "2026-05-25",
+    title: "Audit pass · CirqueLending + AttestedBTCOracle redeployed · admin escape hatch removed",
+    body: (
+      <>
+        <p>
+          Pre-submission audit pass surfaced one critical + one high-priority
+          finding worth fixing before the hackathon submission window closed.
+          Both shipped as a coordinated redeploy.
+        </p>
+        <h3>C1 · adminWithdrawUSDC removed</h3>
+        <p>
+          The previous CirqueLending exposed an owner-only{" "}
+          <code>adminWithdrawUSDC(amount)</code> with no balance check,
+          documented as an "alpha-only escape hatch." Real exposure is small
+          (10 USDC TVL) but it's a hard centralization vector: compromise of
+          the owner key would drain the entire pool including supplier funds
+          and locked collateral USDC. Removed entirely. The treasury supplies
+          via the same <code>supplyUSDC()</code> as any LP and withdraws
+          via the same <code>withdrawUSDC()</code>. No special privilege.
+        </p>
+        <h3>H1 · AttestedBTCOracle MAX_LOOKBACK bumped 16 → 100</h3>
+        <p>
+          If 16 consecutive most-recent attestations were all in{" "}
+          <code>DisputeStatus.Pending</code>, the adapter reverted —
+          theoretical DoS vector. Each dispute requires a counter-bond
+          (economically expensive), but the lookback ceiling provides cheap
+          extra headroom. 100 attestations is comfortable; gas cost stays
+          bounded.
+        </p>
+        <h3>F4 · methodology textarea locked during submission</h3>
+        <p>
+          The <code>/agents/create</code> form's methodology textarea is now
+          disabled while a registration tx is in flight. Previously, a user
+          could edit the text after the methodologyHash had been computed
+          for the createFeed call but before the tx mined — the worker's
+          signature-gated methodology-save would then reject the edited
+          text with a hash mismatch.
+        </p>
+        <h3>Redeploy addresses</h3>
+        <ul>
+          <li>
+            <code>AttestedBTCOracle</code>:{" "}
+            <ExtAddr addr="0x83f3e3d6e9cc18579de577d92df1e23cc27057a1" />
+          </li>
+          <li>
+            <code>CirqueLending</code>:{" "}
+            <ExtAddr addr="0x1045edf68502091ef751ade2f1dc0d12cdc059dc" />
+          </li>
+        </ul>
+        <p>
+          Old contracts (<code>0x1acc24d0…</code> oracle, <code>0x8384690d…</code> lending)
+          are now orphaned but still on-chain. Deployer's 10 USDC was withdrawn
+          from the old pool and re-seeded into the new one before cutover.
+          Worker keeper secret <code>CIRQUE_LENDING_ADDR</code> updated +
+          worker redeployed; cron continues firing every 30 min.
+        </p>
+        <h3>Findings deferred to v0.5 beta</h3>
+        <ul>
+          <li>
+            <strong>F5</strong> · social-oracle KV consistency race — narrow
+            window (~5s), low real risk on testnet; would require Cloudflare
+            Durable Objects refactor to truly fix
+          </li>
+          <li>
+            <strong>F6</strong> · withdraw interest-distribution rounding —
+            analysis showed the math self-corrects on borrower repay, no fund
+            loss; cosmetic accounting drift only
+          </li>
+        </ul>
+      </>
+    ),
+  },
+  {
     date: "2026-05-23",
     title: "CirqueLending two-sided · USDC suppliers earn yield · live & verified",
     body: (

@@ -371,7 +371,12 @@ export function CreateAgentForm() {
               value={methodologyText}
               onChange={(e) => setMethodologyText(e.target.value)}
               rows={9}
-              className="w-full bg-bg border border-line px-3 py-2 text-[13px] leading-relaxed focus:outline-none focus:border-accent font-mono resize-y"
+              // Lock during tx submission so the user can't edit the text
+              // mid-flight — the onchain hash is already computed from the
+              // text at submit time, and edits would cause the worker's
+              // methodology-save signature check to mismatch.
+              disabled={status !== "idle" && status !== "error"}
+              className="w-full bg-bg border border-line px-3 py-2 text-[13px] leading-relaxed focus:outline-none focus:border-accent font-mono resize-y disabled:opacity-60 disabled:cursor-not-allowed"
             />
             {methodologyText.trim() === METHODOLOGY_TEMPLATE.trim() && (
               <p className="text-2xs text-down mt-1.5">
