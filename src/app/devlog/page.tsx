@@ -40,7 +40,7 @@ const ENTRIES: Entry[] = [
         </p>
         <h3>F4 · methodology textarea locked during submission</h3>
         <p>
-          The <code>/agents/create</code> form's methodology textarea is now
+          The <code>/agents/create</code> form&apos;s methodology textarea is now
           disabled while a registration tx is in flight. Previously, a user
           could edit the text after the methodologyHash had been computed
           for the createFeed call but before the tx mined — the worker&apos;s
