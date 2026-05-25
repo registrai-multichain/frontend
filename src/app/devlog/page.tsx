@@ -43,7 +43,7 @@ const ENTRIES: Entry[] = [
           The <code>/agents/create</code> form's methodology textarea is now
           disabled while a registration tx is in flight. Previously, a user
           could edit the text after the methodologyHash had been computed
-          for the createFeed call but before the tx mined — the worker's
+          for the createFeed call but before the tx mined — the worker&apos;s
           signature-gated methodology-save would then reject the edited
           text with a hash mismatch.
         </p>
@@ -60,7 +60,7 @@ const ENTRIES: Entry[] = [
         </ul>
         <p>
           Old contracts (<code>0x1acc24d0…</code> oracle, <code>0x8384690d…</code> lending)
-          are now orphaned but still on-chain. Deployer's 10 USDC was withdrawn
+          are now orphaned but still on-chain. Deployer&apos;s 10 USDC was withdrawn
           from the old pool and re-seeded into the new one before cutover.
           Worker keeper secret <code>CIRQUE_LENDING_ADDR</code> updated +
           worker redeployed; cron continues firing every 30 min.
