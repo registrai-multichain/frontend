@@ -300,7 +300,8 @@ export function LendingPanel() {
         args: [], chain: walletClient.chain, account: walletClient.account!,
       });
       setTxHash(hash);
-      await publicClient.waitForTransactionReceipt({ hash });
+      const r = await publicClient.waitForTransactionReceipt({ hash });
+      if (r.status !== "success") throw new Error("transaction reverted");
       setStatus("success");
       await refresh();
     } catch (e) {
