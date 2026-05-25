@@ -21,6 +21,7 @@ interface AgentRecord {
   slashed: boolean;
   attestations: bigint;
   lastAttestationAt: bigint;
+  registryVersion: "1.0" | "1.1" | "2.0";
 }
 
 export function DeployerTab({ address }: { address: Address }) {
@@ -44,47 +45,93 @@ export function DeployerTab({ address }: { address: Address }) {
   useEffect(() => {
     let cancelled = false;
 
-    // For now we know one feed by construction. As more agents register,
-    // sync.ts can emit a list of (feedId, agent) tuples for this query.
-    const feeds = [{ feedId: DEMO_FEED.id, symbol: DEMO_FEED.symbol }];
-    Promise.all(
-      feeds.map(async (f) => {
-        const agent = (await publicClient.readContract({
-          address: CONTRACTS.Registry,
-          abi: registryAbi,
-          functionName: "getAgent",
-          args: [f.feedId, address],
-        })) as {
-          agentMethodologyHash: Hex;
-          bond: bigint;
-          lockedBond: bigint;
-          registeredAt: bigint;
-          lastAttestationAt: bigint;
-          active: boolean;
-          slashed: boolean;
-        };
-        if (agent.bond === 0n && !agent.active && !agent.slashed) return undefined;
-        const attestations = (await publicClient.readContract({
-          address: CONTRACTS.Attestation,
-          abi: attestationAbi,
-          functionName: "historyLength",
-          args: [f.feedId, address],
-        })) as bigint;
-        return {
-          feedId: f.feedId,
-          feedSymbol: f.symbol,
-          bond: agent.bond,
-          lockedBond: agent.lockedBond,
-          active: agent.active,
-          slashed: agent.slashed,
-          attestations,
-          lastAttestationAt: agent.lastAttestationAt,
-        } satisfies AgentRecord;
-      }),
-    ).then((rows) => {
-      if (cancelled) return;
-      setAgents(rows.filter((r): r is AgentRecord => !!r));
-    });
+    // Discover every (feedId, registry) where this wallet has an AgentRegistered
+    // event. Querying v1.0, v1.1, and v2 unions all eras of the protocol so
+    // a wallet that registered on v2 (post-launch) AND on v1.x (legacy demo)
+    // both show up.
+    const targets: Array<{
+      registry: Address;
+      attestation: Address;
+      version: AgentRecord["registryVersion"];
+    }> = [
+      ...(CONTRACTS.RegistryV2 && CONTRACTS.AttestationV2
+        ? [{ registry: CONTRACTS.RegistryV2, attestation: CONTRACTS.AttestationV2, version: "2.0" as const }]
+        : []),
+      ...(CONTRACTS.RegistryV11 && CONTRACTS.AttestationV11
+        ? [{ registry: CONTRACTS.RegistryV11, attestation: CONTRACTS.AttestationV11, version: "1.1" as const }]
+        : []),
+      { registry: CONTRACTS.Registry, attestation: CONTRACTS.Attestation, version: "1.0" as const },
+    ];
+
+    (async () => {
+      const allAgents: AgentRecord[] = [];
+      // Arc RPC caps eth_getLogs at 100k blocks; older ranges are pruned.
+      const tip = await publicClient.getBlockNumber();
+      const fromBlock = tip > 99_000n ? tip - 99_000n : 0n;
+      for (const t of targets) {
+        try {
+          const logs = await publicClient.getLogs({
+            address: t.registry,
+            event: {
+              type: "event",
+              name: "AgentRegistered",
+              inputs: [
+                { name: "feedId", type: "bytes32", indexed: true },
+                { name: "agent", type: "address", indexed: true },
+                { name: "methodologyHash", type: "bytes32", indexed: false },
+                { name: "bond", type: "uint256", indexed: false },
+              ],
+            },
+            args: { agent: address },
+            fromBlock,
+            toBlock: "latest",
+            strict: false,
+          });
+          // Pull live state for each discovered feedId.
+          for (const ll of logs) {
+            const feedId = (ll.topics[1] ?? ll.args?.feedId) as Hex | undefined;
+            if (!feedId) continue;
+            const agent = (await publicClient.readContract({
+              address: t.registry,
+              abi: registryAbi,
+              functionName: "getAgent",
+              args: [feedId, address],
+            })) as {
+              agentMethodologyHash: Hex;
+              bond: bigint;
+              lockedBond: bigint;
+              registeredAt: bigint;
+              lastAttestationAt: bigint;
+              active: boolean;
+              slashed: boolean;
+            };
+            const attestations = (await publicClient.readContract({
+              address: t.attestation,
+              abi: attestationAbi,
+              functionName: "historyLength",
+              args: [feedId, address],
+            })) as bigint;
+            // For known feeds use their nice symbol; fall back to shortHash for ad-hoc feeds.
+            const known = feedId === DEMO_FEED.id ? DEMO_FEED.symbol : shortHash(feedId);
+            allAgents.push({
+              feedId,
+              feedSymbol: known,
+              bond: agent.bond,
+              lockedBond: agent.lockedBond,
+              active: agent.active,
+              slashed: agent.slashed,
+              attestations,
+              lastAttestationAt: agent.lastAttestationAt,
+              registryVersion: t.version,
+            });
+          }
+        } catch {
+          // Skip this registry; partial results are fine.
+        }
+        // Silently skip — chain may have transient issues; partial data is fine.
+      }
+      if (!cancelled) setAgents(allAgents);
+    })();
 
     return () => {
       cancelled = true;
@@ -189,7 +236,7 @@ export function DeployerTab({ address }: { address: Address }) {
         with creator-attractive economics, this turns Layer 1 into a real dev
         revenue stream. See the{" "}
         <a
-          href={addrUrl(CONTRACTS.Markets)}
+          href={addrUrl(CONTRACTS.MarketsV2 ?? CONTRACTS.Markets)}
           className="underline decoration-fg-dim underline-offset-4 hover:text-accent"
           target="_blank"
           rel="noreferrer"

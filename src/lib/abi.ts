@@ -291,3 +291,171 @@ export const attestationAbi = [
     outputs: [{ type: "uint256" }],
   },
 ] as const;
+
+// ───────────────── v0.5 alpha: CirqueLending + AttestedBTCOracle ─────────────
+
+export const cirqueLendingAbi = [
+  // Supply side
+  {
+    type: "function", name: "supplyUSDC", stateMutability: "nonpayable",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [{ name: "sharesMinted", type: "uint256" }],
+  },
+  {
+    type: "function", name: "withdrawUSDC", stateMutability: "nonpayable",
+    inputs: [{ name: "shareAmount", type: "uint256" }],
+    outputs: [{ name: "usdcOut", type: "uint256" }],
+  },
+  // Borrow side
+  {
+    type: "function", name: "borrow", stateMutability: "nonpayable",
+    inputs: [
+      { name: "collateralAmount", type: "uint256" },
+      { name: "usdcAmount", type: "uint256" },
+    ],
+    outputs: [{ name: "openingHealthBps", type: "uint256" }],
+  },
+  {
+    type: "function", name: "repay", stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: "function", name: "liquidate", stateMutability: "nonpayable",
+    inputs: [{ name: "borrower", type: "address" }],
+    outputs: [],
+  },
+  // Views
+  {
+    type: "function", name: "shares", stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "totalShares", stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "totalBorrowedPrincipal", stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "balanceOfUSDC", stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "totalPoolValueUSDC", stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "availableUSDC", stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "loans", stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [
+      { name: "collateral", type: "uint256" },
+      { name: "principal", type: "uint256" },
+      { name: "borrowedAt", type: "uint256" },
+      { name: "active", type: "bool" },
+    ],
+  },
+  {
+    type: "function", name: "healthBps", stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "interestOwed", stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "maxBorrow", stateMutability: "view",
+    inputs: [{ name: "cirBTCAmount", type: "uint256" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "MAX_LTV_BPS", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "LIQ_LTV_BPS", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "INTEREST_BPS_PER_YEAR", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "MAX_COLLATERAL_PER_USER", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "MAX_USDC_SUPPLY_PER_USER", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+] as const;
+
+export const attestedBtcOracleAbi = [
+  {
+    type: "function", name: "getBTCPrice", stateMutability: "view",
+    inputs: [],
+    outputs: [
+      { name: "priceUSDC18", type: "uint256" },
+      { name: "updatedAt", type: "uint256" },
+    ],
+  },
+] as const;
+
+/// Minimal cirBTC ERC-20 + Circle-specific guards used in integrity probe.
+export const cirBtcAbi = [
+  {
+    type: "function", name: "balanceOf", stateMutability: "view",
+    inputs: [{ name: "owner", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "decimals", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint8" }],
+  },
+  {
+    type: "function", name: "approve", stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function", name: "allowance", stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "paused", stateMutability: "view",
+    inputs: [], outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function", name: "owner", stateMutability: "view",
+    inputs: [], outputs: [{ type: "address" }],
+  },
+  {
+    type: "function", name: "totalSupply", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "isBlacklisted", stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ type: "bool" }],
+  },
+] as const;

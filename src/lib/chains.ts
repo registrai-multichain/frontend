@@ -7,9 +7,8 @@ import live from "./live-data.json";
  * addresses, stablecoin tokens, native currency). Add a new chain by adding
  * an entry here and pointing the wallet provider at it.
  *
- * Today we live on Arc testnet. HyperEVM testnet entry is stubbed and ready
- * to fill in when contracts deploy there. Sui will need a separate non-EVM
- * surface (different signing, different ABIs); not in this registry.
+ * Today we live on Arc testnet. Other EVM chains can be added by appending
+ * an entry here once contracts deploy there.
  */
 export type Family = "evm";
 
@@ -22,16 +21,29 @@ export interface ChainContracts {
   MarketMakerVault?: Address;
   MedianRule?: Address;
   TrimmedMeanRule10?: Address;
-  /** v1.1 Registry — required for rule-bound agent registration. v1.0
-   *  Registry has no rule support and reverts on registerAgentWithRule. */
+  /** v1.1 Registry — kept for reading legacy markets/feeds. New agent
+   *  registrations go through v2. */
   RegistryV11?: Address;
   AttestationV11?: Address;
   DisputeV11?: Address;
   MarketsV11?: Address;
+  /** v2 stack — current write target for createFeed / registerAgent /
+   *  createMarket. Includes rule, points, audit fixes. */
+  RegistryV2?: Address;
+  AttestationV2?: Address;
+  DisputeV2?: Address;
+  MarketsV2?: Address;
+  MarketMakerVaultV2?: Address;
+  /** Soulbound credit system. Awards points on register/attest/trade/resolve. */
+  RegistraiPoints?: Address;
   /** Global agent identity registry (name/description/url/contact per address). */
   AgentIdentity?: Address;
   USDC: Address;
   EURC?: Address;
+  /** v0.5 alpha cirque lending — cirBTC × USDC two-sided pool. */
+  cirBTC?: Address;
+  CirqueLending?: Address;
+  AttestedBTCOracle?: Address;
 }
 
 export interface ChainEntry {
@@ -101,11 +113,27 @@ export const ARC_TESTNET: ChainEntry = {
       .Dispute_v1_1 as Address | undefined,
     MarketsV11: (live.contracts as { Markets_v1_1?: string })
       .Markets_v1_1 as Address | undefined,
+    RegistryV2: (live.contracts as { Registry_v2?: string })
+      .Registry_v2 as Address | undefined,
+    AttestationV2: (live.contracts as { Attestation_v2?: string })
+      .Attestation_v2 as Address | undefined,
+    DisputeV2: (live.contracts as { Dispute_v2?: string })
+      .Dispute_v2 as Address | undefined,
+    MarketsV2: (live.contracts as { Markets_v2?: string })
+      .Markets_v2 as Address | undefined,
+    MarketMakerVaultV2: (live.contracts as { MarketMakerVault_v2?: string })
+      .MarketMakerVault_v2 as Address | undefined,
+    RegistraiPoints: (live.contracts as { RegistraiPoints?: string })
+      .RegistraiPoints as Address | undefined,
     AgentIdentity: (live.contracts as { AgentIdentity?: string })
       .AgentIdentity as Address | undefined,
+    // v0.5 alpha cirque lending (cirBTC × USDC).
+    cirBTC: "0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF" as Address,
+    CirqueLending: "0x8384690d25b8cc61b84e9f91de9e61d85e1e6adc" as Address,
+    AttestedBTCOracle: "0x1acc24d074c4d0f8683c643f36c4a03dc6b0637a" as Address,
   },
   viemChain: ARC_TESTNET_VIEM,
-  label: "v1 · 2026-05",
+  label: "v2 · 2026-05",
 };
 
 // ─────────────────────── HyperEVM (planned) ───────────────────────
