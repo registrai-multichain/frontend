@@ -32,7 +32,10 @@ export default function Home() {
           — not a methodology document anyone has to trust.
         </p>
         <div className="flex items-center gap-4 mt-6 flex-wrap text-[11px]">
-          <span className="caption text-fg-dim">v0.1 · arc testnet</span>
+          <span className="caption text-fg-dim">v2 · arc testnet</span>
+          <span className="caption text-accent border border-accent/40 px-2 py-1">
+            onchain credits live
+          </span>
           <LiveCountdown />
         </div>
 
@@ -115,6 +118,66 @@ export default function Home() {
           <Step n="2" title="add Arc testnet" body="Click the wallet button in the nav — we add the chain for you." />
           <Step n="3" title="claim test USDC" body="Drop your address at faucet.circle.com, pick Arc Sepolia." cta={{ label: "faucet ↗", href: "https://faucet.circle.com" }} />
           <Step n="4" title="trade or LP" body="Take a side on any market, or deposit into the vault and earn pro-rata from operator trades." cta={{ label: "vault →", href: "/vault" }} />
+        </div>
+      </section>
+
+      <div className="hr mb-12" />
+
+      {/* ─────────────── CREDITS / TRACTION HOOK ─────────────── */}
+      <section className="fade-up mb-14" style={{ animationDelay: "100ms" }}>
+        <div className="flex items-baseline justify-between mb-5">
+          <h2 className="caption">onchain credits · just shipped</h2>
+          <Link
+            href="/profile/"
+            className="text-2xs text-accent hover:underline"
+          >
+            view your balance →
+          </Link>
+        </div>
+        <div className="border border-accent/30 bg-bg-elev/30 p-6">
+          <p className="font-serif italic text-fg text-[16px] leading-snug max-w-[60ch] mb-5">
+            Every protocol action earns soulbound credit points — read directly
+            from the chain, can&apos;t be transferred, can&apos;t be bought.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-line">
+            <CreditTile label="register agent" pts="1000 pts" emphasize />
+            <CreditTile label="create market" pts="200 pts" />
+            <CreditTile label="attest data" pts="50 pts" />
+            <CreditTile label="trade" pts="10 pts / USDC" />
+          </div>
+          <div className="flex flex-wrap items-center gap-4 mt-5 text-2xs">
+            <Link
+              href="/agents/create/"
+              className="px-3 py-1.5 border border-accent/60 text-accent hover:bg-accent hover:text-bg transition-colors"
+            >
+              start earning →
+            </Link>
+            <span className="text-fg-dim">
+              500 pts / day soft cap on trade earnings · resets at 00:00 UTC
+            </span>
+          </div>
+
+          {/* Forward hint — cirque lending live on testnet. */}
+          <div className="mt-6 pt-5 border-t border-line/40">
+            <div className="flex items-baseline gap-2 mb-1.5 flex-wrap">
+              <span className="caption text-accent">v0.5 alpha · live</span>
+              <span className="caption text-fg-dim text-[10px]">
+                cirBTC × prediction markets
+              </span>
+            </div>
+            <p className="text-2xs text-fg-mute leading-relaxed max-w-[64ch]">
+              Lever <code className="text-fg">cirBTC</code> into prediction
+              markets. Lock cirBTC as collateral, borrow USDC, bet on
+              Registrai — no selling your BTC, no taxable event. Suppliers
+              earn yield from borrower interest.{" "}
+              <Link
+                href="/lending/"
+                className="text-accent hover:underline"
+              >
+                try it on testnet →
+              </Link>
+            </p>
+          </div>
         </div>
       </section>
 
@@ -444,6 +507,29 @@ function Step({
           {cta.label}
         </a>
       )}
+    </div>
+  );
+}
+
+function CreditTile({
+  label,
+  pts,
+  emphasize,
+}: {
+  label: string;
+  pts: string;
+  emphasize?: boolean;
+}) {
+  return (
+    <div className="bg-bg p-4">
+      <div className="caption text-fg-dim mb-1.5">{label}</div>
+      <div
+        className={`tnum text-[15px] ${
+          emphasize ? "text-accent font-medium" : "text-fg"
+        }`}
+      >
+        {pts}
+      </div>
     </div>
   );
 }

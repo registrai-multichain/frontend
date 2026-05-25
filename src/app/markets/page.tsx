@@ -3,6 +3,7 @@ import { Shell } from "@/components/Shell";
 import { MarketCard } from "@/components/MarketCard";
 import { ProposalsPanel } from "@/components/ProposalsPanel";
 import { FeaturedCreators } from "@/components/FeaturedCreators";
+import { ChainMarketsSection } from "@/components/ChainMarketsSection";
 import { FaucetHint } from "@/components/FaucetHint";
 import { StatusBadge } from "@/components/StatusBadge";
 import { DEMO_MARKETS } from "@/lib/markets-demo";
@@ -58,6 +59,8 @@ export default function MarketsPage() {
             <MarketCard key={m.id} market={m} />
           ))}
         </div>
+
+        <ChainMarketsSection />
 
         <FeaturedCreators />
 

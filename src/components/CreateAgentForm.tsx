@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { keccak256, parseUnits, stringToHex, type Hex } from "viem";
+import { keccak256, maxUint256, parseUnits, stringToHex, type Hex } from "viem";
 import { useWallet } from "./WalletProvider";
 import { CONTRACTS, txUrl, addrUrl } from "@/lib/chain";
 import { registryAbi, usdcAbi, agentIdentityAbi } from "@/lib/abi";
 import { humanizeError } from "@/lib/humanize-error";
+import {
+  methodologyLocalKey,
+  postFeedMethodology,
+} from "@/lib/hooks/useFeedMethodology";
 import { FaucetHint } from "./FaucetHint";
-import { CREATABLE_FEEDS } from "@/lib/demo";
+import { MethodologyLive } from "./MethodologyLive";
 
-type Mode = "new-feed" | "existing-feed";
 type Status =
   | "idle"
   | "approving"
@@ -23,6 +26,21 @@ type RuleChoice = "none" | "median" | "trim10" | "custom";
 const MIN_BOND_USDC = 10;
 const MIN_DISPUTE_WINDOW_HOURS = 1;
 
+// Starter scaffold shown in the methodology textarea. We refuse submission
+// if the user hits register without editing it — otherwise the feed would
+// be registered with literal placeholder text as its committed methodology.
+const METHODOLOGY_TEMPLATE = `Sources
+  - [list each public source you aggregate]
+
+Aggregation
+  - [median / trimmed mean / custom — how you derive the value]
+
+Cadence
+  - [how often you attest, e.g., daily at 14:00 UTC]
+
+Quality controls
+  - [outlier handling, fallback rules, anything that prevents bad attestations]`;
+
 export function CreateAgentForm() {
   const {
     address,
@@ -33,15 +51,18 @@ export function CreateAgentForm() {
     switchChain,
   } = useWallet();
 
-  const [mode, setMode] = useState<Mode>("new-feed");
-
-  // Feed-creation inputs
+  // v2: feed creator and agent are the same wallet. One flow only — define a
+  // feed and register as its agent in the same session. The old "join an
+  // existing feed" mode is gone; the v2 Registry would revert anyway.
   const [feedDescription, setFeedDescription] = useState("");
-  const [methodologyCid, setMethodologyCid] = useState("");
+  // Starter template — users overwrite each section instead of pinning a
+  // markdown doc to IPFS just to claim a hash. The full text is hashed into
+  // the feed identity and (separately, post-register) persisted to the
+  // worker KV so anyone can read it from the feed page.
+  const [methodologyText, setMethodologyText] = useState(
+    METHODOLOGY_TEMPLATE,
+  );
   const [disputeHours, setDisputeHours] = useState("24");
-
-  // Existing-feed inputs
-  const [existingFeedId, setExistingFeedId] = useState("");
 
   // Bond
   const [bondUsdcStr, setBondUsdcStr] = useState(String(MIN_BOND_USDC));
@@ -86,8 +107,8 @@ export function CreateAgentForm() {
   }, [disputeHours]);
 
   const methodologyHash = useMemo(
-    () => keccak256(stringToHex(methodologyCid || "")),
-    [methodologyCid],
+    () => keccak256(stringToHex(methodologyText || "")),
+    [methodologyText],
   );
 
   // Refresh USDC balance.
@@ -111,24 +132,25 @@ export function CreateAgentForm() {
     bondWei > 0n &&
     usdcBalance >= bondWei &&
     ruleValid &&
-    (mode === "new-feed"
-      ? feedDescription.trim().length > 5 &&
-        methodologyCid.trim().length > 0 &&
-        disputeWindowSec > 0n
-      : existingFeedId.length === 66 && existingFeedId.startsWith("0x"));
+    feedDescription.trim().length > 5 &&
+    methodologyText.trim().length > 20 &&
+    methodologyText.trim() !== METHODOLOGY_TEMPLATE.trim() &&
+    disputeWindowSec > 0n;
 
   const submit = async () => {
     if (!walletClient || !address || !canSubmit) return;
     setError(undefined);
     try {
-      // Rule-bound registrations target v1.1 Registry (which has
-      // registerAgentWithRule). v1.0 stays for plain registrations.
+      // v2 is the current write target — enforces feed-creator-must-be-agent
+      // and awards points on registration. Falls back to v1.1 (rule-bound)
+      // or v1.0 (plain) only if v2 isn't configured on this chain.
       const targetRegistry =
-        ruleAddress && CONTRACTS.RegistryV11
+        CONTRACTS.RegistryV2 ??
+        (ruleAddress && CONTRACTS.RegistryV11
           ? CONTRACTS.RegistryV11
-          : CONTRACTS.Registry;
-      if (ruleAddress && !CONTRACTS.RegistryV11) {
-        throw new Error("Rule-bound registration requires Registry v1.1, not configured on this chain.");
+          : CONTRACTS.Registry);
+      if (ruleAddress && !CONTRACTS.RegistryV2 && !CONTRACTS.RegistryV11) {
+        throw new Error("Rule-bound registration requires Registry v2 or v1.1, not configured on this chain.");
       }
 
       // 1. Approve bond to whichever Registry will pull it.
@@ -140,49 +162,49 @@ export function CreateAgentForm() {
         args: [address, targetRegistry],
       })) as bigint;
       if (allowance < bondWei) {
+        // Approve max so subsequent feed/agent creations don't require a
+        // fresh approve popup. Standard DeFi pattern (Uniswap / Polymarket).
         const approveHash = await walletClient.writeContract({
           address: CONTRACTS.USDC,
           abi: usdcAbi,
           functionName: "approve",
-          args: [targetRegistry, bondWei],
+          args: [targetRegistry, maxUint256],
           chain: walletClient.chain,
           account: walletClient.account!,
         });
         await publicClient.waitForTransactionReceipt({ hash: approveHash });
       }
 
-      // 2. If creating new feed, do that first.
-      let resolvedFeedId: Hex;
-      if (mode === "new-feed") {
-        setStatus("creating-feed");
-        const createHash = await walletClient.writeContract({
-          address: targetRegistry,
-          abi: registryAbi,
-          functionName: "createFeed",
-          args: [
-            feedDescription,
-            methodologyHash,
-            bondWei,
-            disputeWindowSec,
-            address,
-          ],
-          chain: walletClient.chain,
-          account: walletClient.account!,
-        });
-        const r = await publicClient.waitForTransactionReceipt({
-          hash: createHash,
-        });
-        // FeedCreated(bytes32 indexed feedId, ...) — pick the Registry-emitted log.
-        const log = r.logs.find(
-          (l) => l.address.toLowerCase() === targetRegistry.toLowerCase(),
-        );
-        if (!log) throw new Error("FeedCreated event not found");
-        resolvedFeedId = log.topics[1]! as Hex;
-        setFeedId(resolvedFeedId);
-      } else {
-        resolvedFeedId = existingFeedId as Hex;
-        setFeedId(resolvedFeedId);
-      }
+      // 2. Create the feed. Same wallet will register as agent in step 3.
+      // Explicit gas: Arc's USDC blocklist precompile breaks local simulation,
+      // so wallet estimates can under-budget the points sub-call. 500k is a
+      // safe upper bound for createFeed (real cost ~200k).
+      setStatus("creating-feed");
+      const createHash = await walletClient.writeContract({
+        address: targetRegistry,
+        abi: registryAbi,
+        functionName: "createFeed",
+        args: [
+          feedDescription,
+          methodologyHash,
+          bondWei,
+          disputeWindowSec,
+          address,
+        ],
+        chain: walletClient.chain,
+        account: walletClient.account!,
+        gas: 500_000n,
+      });
+      const r = await publicClient.waitForTransactionReceipt({
+        hash: createHash,
+      });
+      // FeedCreated(bytes32 indexed feedId, ...) — pick the Registry-emitted log.
+      const log = r.logs.find(
+        (l) => l.address.toLowerCase() === targetRegistry.toLowerCase(),
+      );
+      if (!log) throw new Error("FeedCreated event not found");
+      const resolvedFeedId = log.topics[1]! as Hex;
+      setFeedId(resolvedFeedId);
 
       // 3. Register as agent — rule-bound path if a rule was picked.
       setStatus("registering");
@@ -194,6 +216,7 @@ export function CreateAgentForm() {
             args: [resolvedFeedId, methodologyHash, bondWei, ruleAddress],
             chain: walletClient.chain,
             account: walletClient.account!,
+            gas: 500_000n,
           })
         : await walletClient.writeContract({
             address: targetRegistry,
@@ -202,9 +225,55 @@ export function CreateAgentForm() {
             args: [resolvedFeedId, methodologyHash, bondWei],
             chain: walletClient.chain,
             account: walletClient.account!,
+            gas: 500_000n,
           });
       await publicClient.waitForTransactionReceipt({ hash: regHash });
       setRegisterTx(regHash);
+
+      // Save the methodology text locally before attempting the worker
+      // upload. If the signature is rejected, worker is down, or the user
+      // closes the tab, the next visit to /feed/{feedId} can detect the
+      // unsaved text (via localStorage) and offer a "publish methodology"
+      // retry button. Cleared once the worker write confirms.
+      try {
+        localStorage.setItem(
+          methodologyLocalKey(resolvedFeedId),
+          methodologyText,
+        );
+      } catch {
+        /* private mode / quota — non-fatal */
+      }
+
+      // Persist the methodology text to the Worker so anyone can read the
+      // spec from /feed/{feedId}. Signature-gated by the feed creator;
+      // failure here doesn't undo the registration (the hash is already
+      // on chain). Awaited so its signature popup resolves BEFORE the
+      // optional identity tx popup — otherwise the two pop in arbitrary
+      // order and confuse the user.
+      if (walletClient.account) {
+        const account = walletClient.account;
+        try {
+          const r = await postFeedMethodology({
+            feedId: resolvedFeedId,
+            methodology: methodologyText,
+            signMessage: (message) => walletClient.signMessage({ account, message }),
+          });
+          if (r.ok) {
+            // Worker has it — clean up the local retry copy.
+            try {
+              localStorage.removeItem(methodologyLocalKey(resolvedFeedId));
+            } catch {
+              /* ignore */
+            }
+          } else {
+            console.warn("methodology not persisted:", r.error);
+          }
+        } catch (e) {
+          // Signature rejected or worker unreachable — local retry copy
+          // remains so /feed/{feedId} can offer a publish button.
+          console.warn("methodology save threw:", (e as Error).message);
+        }
+      }
 
       // Best-effort: if the user filled in an identity profile and
       // AgentIdentity is deployed on this chain, write it. Skipped silently
@@ -226,6 +295,23 @@ export function CreateAgentForm() {
         }
       }
 
+      // Hand off the freshly-registered feed to /markets/create so the user
+      // doesn't have to dig around for "paste custom feedId" — the form
+      // auto-selects this feed if it sees a fresh entry in localStorage.
+      try {
+        localStorage.setItem(
+          "registrai:last-feed",
+          JSON.stringify({
+            feedId: resolvedFeedId,
+            ruleAddress: ruleAddress ?? null,
+            description: feedDescription,
+            createdAt: Date.now(),
+          }),
+        );
+      } catch {
+        /* ignore quota / private-mode errors */
+      }
+
       setStatus("success");
     } catch (e) {
       setStatus("error");
@@ -240,6 +326,7 @@ export function CreateAgentForm() {
         agent={address!}
         tx={registerTx!}
         rule={ruleAddress}
+        methodologyText={methodologyText}
       />
     );
   }
@@ -250,151 +337,69 @@ export function CreateAgentForm() {
       <div className="space-y-8">
         <FaucetHint />
 
-        {/* Mode toggle */}
+        {/* Intro */}
         <div>
-          <label className="caption mb-3 block">how to register</label>
-          <div className="flex gap-px bg-line">
-            <button
-              onClick={() => setMode("new-feed")}
-              className={`flex-1 caption py-2 transition-colors ${
-                mode === "new-feed"
-                  ? "bg-bg text-accent"
-                  : "bg-bg-elev text-fg-mute"
-              }`}
-            >
-              create a new feed
-            </button>
-            <button
-              onClick={() => setMode("existing-feed")}
-              className={`flex-1 caption py-2 transition-colors ${
-                mode === "existing-feed"
-                  ? "bg-bg text-accent"
-                  : "bg-bg-elev text-fg-mute"
-              }`}
-            >
-              join an existing feed
-            </button>
-          </div>
-          <p className="text-2xs text-fg-dim mt-2 leading-relaxed">
-            {mode === "new-feed"
-              ? "You define a new data feed (e.g. London rents, OPEC output, your local CPI). Anyone — including you — can then register as an agent and attest values."
-              : "You attest values for an already-existing feed. Multiple agents on one feed bid for trust; markets pick which agent's attestation to resolve against."}
+          <label className="caption mb-3 block">define your oracle</label>
+          <p className="text-2xs text-fg-dim leading-relaxed max-w-[60ch]">
+            You define a new data feed (London rents, OPEC output, your local CPI)
+            and register as its agent in the same session. Feed creator and agent
+            are the same wallet — one accountable party owns the spec and the
+            data.
           </p>
         </div>
 
         {/* Feed inputs */}
-        {mode === "new-feed" ? (
-          <div className="space-y-5">
-            <Field
-              label="feed description"
-              hint="One line. Becomes the public name (e.g. 'London average residential price per sqm, monthly')."
-            >
-              <input
-                type="text"
-                value={feedDescription}
-                onChange={(e) => setFeedDescription(e.target.value)}
-                placeholder="…"
-                className="w-full bg-bg border border-line px-3 py-2 text-[14px] focus:outline-none focus:border-accent"
-              />
-            </Field>
+        <div className="space-y-5">
+          <Field
+            label="feed description"
+            hint="One line. Becomes the public name (e.g. 'London average residential price per sqm, monthly')."
+          >
+            <input
+              type="text"
+              value={feedDescription}
+              onChange={(e) => setFeedDescription(e.target.value)}
+              placeholder="e.g. PLN per USD reference rate, daily NBP fix"
+              className="w-full bg-bg border border-line px-3 py-2 text-[14px] focus:outline-none focus:border-accent"
+            />
+          </Field>
 
-            <Field
-              label="methodology · IPFS CID or URL"
-              hint="Hashed into the feed identity. Pin a markdown doc explaining your data sources, sampling, processing. Use a real CID for production; any string works for testnet."
-            >
-              <input
-                type="text"
-                value={methodologyCid}
-                onChange={(e) => setMethodologyCid(e.target.value)}
-                placeholder="ipfs://… or https://…"
-                className="w-full bg-bg border border-line px-3 py-2 text-[14px] focus:outline-none focus:border-accent"
-              />
-              {methodologyCid && (
-                <div className="text-2xs text-fg-dim mt-1.5 tnum break-all">
-                  hash · {methodologyHash}
-                </div>
-              )}
-            </Field>
+          <Field
+            label="methodology"
+            hint="Sources, math, cadence, controls. Hashed into the feed identity onchain and saved verbatim to the worker so anyone can read it from your feed page. The starter template is a guide — overwrite each section with your specifics."
+          >
+            <textarea
+              value={methodologyText}
+              onChange={(e) => setMethodologyText(e.target.value)}
+              rows={9}
+              className="w-full bg-bg border border-line px-3 py-2 text-[13px] leading-relaxed focus:outline-none focus:border-accent font-mono resize-y"
+            />
+            {methodologyText.trim() === METHODOLOGY_TEMPLATE.trim() && (
+              <p className="text-2xs text-down mt-1.5">
+                ⚠ replace each <code className="text-fg-mute">[…]</code> placeholder
+                with your actual sources, math, cadence, and controls — these
+                will be hashed onchain and shown on your feed page.
+              </p>
+            )}
+            <div className="text-2xs text-fg-dim mt-1.5 flex justify-between gap-3 flex-wrap">
+              <span className="tnum break-all">hash · {methodologyHash}</span>
+              <span>{methodologyText.length} chars</span>
+            </div>
+          </Field>
 
-            <Field
-              label="dispute window · hours"
-              hint="Time after each attestation before it finalizes onchain. Longer = safer for traders, slower for resolution. Min 1h."
-            >
-              <input
-                type="number"
-                min={MIN_DISPUTE_WINDOW_HOURS}
-                step={1}
-                value={disputeHours}
-                onChange={(e) => setDisputeHours(e.target.value)}
-                className="w-full bg-bg border border-line px-3 py-2 text-[14px] tnum focus:outline-none focus:border-accent"
-              />
-            </Field>
-          </div>
-        ) : (
-          <div className="space-y-5">
-            <Field
-              label="pick a feed"
-              hint="Existing feeds you can register as an agent against. Custom feed id can still be pasted below."
-            >
-              <div className="space-y-2 mb-3">
-                {CREATABLE_FEEDS.map((f) => {
-                  const active = f.id.toLowerCase() === existingFeedId.toLowerCase();
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => setExistingFeedId(f.id)}
-                      className={`w-full text-left p-3 transition-colors border ${
-                        active
-                          ? "bg-bg-elev/60 border-accent"
-                          : "bg-bg-elev/20 border-line hover:border-line-strong"
-                      }`}
-                    >
-                      <div className="flex items-baseline justify-between gap-2 flex-wrap">
-                        <div className="flex items-baseline gap-2 flex-wrap">
-                          <span className="caption text-accent">{f.symbol}</span>
-                          {f.rule && (
-                            <span className="caption text-[10px] text-up border border-up/40 px-1.5 py-0.5">
-                              verifiable
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-2xs text-fg-mute">{f.unit}</span>
-                      </div>
-                      <p className="text-2xs text-fg-mute leading-snug mt-1.5 max-w-[58ch]">
-                        {f.description}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-              <details>
-                <summary className="text-2xs text-fg-dim cursor-pointer hover:text-fg-mute">
-                  or paste a custom feed id
-                </summary>
-                <input
-                  type="text"
-                  value={existingFeedId}
-                  onChange={(e) => setExistingFeedId(e.target.value)}
-                  placeholder="0x…"
-                  className="w-full mt-2 bg-bg border border-line px-3 py-2 text-[13px] tnum focus:outline-none focus:border-accent break-all"
-                />
-              </details>
-            </Field>
-            <Field
-              label="your methodology · IPFS CID or URL"
-              hint="What's your data source and processing approach? Hashed into your agent record."
-            >
-              <input
-                type="text"
-                value={methodologyCid}
-                onChange={(e) => setMethodologyCid(e.target.value)}
-                placeholder="ipfs://… or https://…"
-                className="w-full bg-bg border border-line px-3 py-2 text-[14px] focus:outline-none focus:border-accent"
-              />
-            </Field>
-          </div>
-        )}
+          <Field
+            label="dispute window · hours"
+            hint="Time after each attestation before it finalizes onchain. Longer = safer for traders, slower for resolution. Min 1h."
+          >
+            <input
+              type="number"
+              min={MIN_DISPUTE_WINDOW_HOURS}
+              step={1}
+              value={disputeHours}
+              onChange={(e) => setDisputeHours(e.target.value)}
+              className="w-full bg-bg border border-line px-3 py-2 text-[14px] tnum focus:outline-none focus:border-accent"
+            />
+          </Field>
+        </div>
 
         {/* Rule — onchain verifiability tier */}
         <div>
@@ -540,7 +545,7 @@ export function CreateAgentForm() {
       </div>
 
       {/* RIGHT — sticky submit */}
-      <aside className="lg:sticky lg:top-6 h-fit border border-line p-5 bg-bg-elev/40">
+      <aside className="lg:sticky lg:top-24 h-fit border border-line p-5 bg-bg-elev/40">
         <div className="caption text-fg-dim mb-4">register</div>
 
         <Row label="role" value="onchain oracle agent" />
@@ -548,19 +553,13 @@ export function CreateAgentForm() {
         <Row
           label="feed"
           value={
-            mode === "new-feed"
-              ? feedDescription.length > 0
-                ? `“${feedDescription.slice(0, 24)}${feedDescription.length > 24 ? "…" : ""}”`
-                : "(your new feed)"
-              : existingFeedId
-                ? `${existingFeedId.slice(0, 10)}…${existingFeedId.slice(-6)}`
-                : "(pick one)"
+            feedDescription.length > 0
+              ? `“${feedDescription.slice(0, 24)}${feedDescription.length > 24 ? "…" : ""}”`
+              : "(your new feed)"
           }
         />
-        <Row
-          label="txs"
-          value={mode === "new-feed" ? "≈3 (approve, create, register)" : "≈2"}
-        />
+        <Row label="signatures" value="approve · createFeed · register" />
+        <Row label="reward" value="+1000 pts on register" />
 
         <div className="mt-5">
           {!address ? (
@@ -683,25 +682,30 @@ function SuccessPanel({
   agent,
   tx,
   rule,
+  methodologyText,
 }: {
   feedId: Hex;
   agent: string;
   tx: Hex;
   rule?: `0x${string}`;
+  methodologyText: string;
 }) {
-  // Snippet shape depends on whether the agent is rule-bound. Plain agents
-  // return { value, inputHash } from run(); rule-bound agents return the
-  // raw input vector and let the onchain rule contract compute the value.
+  // The SDK's preflight checks `keccak256(methodologyCid)` against the
+  // onchain methodologyHash, so this string must match the text you just
+  // registered. We inject it directly into the snippet via a template
+  // literal so copy/paste works without surprises.
   const snippet = rule
     ? `import { defineAgent } from "@registrai/agent-sdk";
+
+const METHODOLOGY = \`${methodologyText.replace(/`/g, "\\`").replace(/\$\{/g, "\\${")}\`;
 
 const agent = defineAgent({
   name: "my-agent",
   schedule: "0 14 * * *",
   feedId: "${feedId}",
-  registryAddress: "${CONTRACTS.RegistryV11 ?? CONTRACTS.Registry}",      // v1.1
-  attestationAddress: "${CONTRACTS.AttestationV11 ?? CONTRACTS.Attestation}", // v1.1
-  methodologyCid: "ipfs://your-methodology-cid",
+  registryAddress: "${CONTRACTS.RegistryV2 ?? CONTRACTS.RegistryV11 ?? CONTRACTS.Registry}",      // v2
+  attestationAddress: "${CONTRACTS.AttestationV2 ?? CONTRACTS.AttestationV11 ?? CONTRACTS.Attestation}", // v2
+  methodologyCid: METHODOLOGY, // exact text hashed at registration
   rule: "${rule}", // verifiable bytecode
   run: async () => {
     // Fetch your data. Return ONLY the raw int256[] vector.
@@ -716,13 +720,15 @@ await agent.attest({
 });`
     : `import { defineAgent } from "@registrai/agent-sdk";
 
+const METHODOLOGY = \`${methodologyText.replace(/`/g, "\\`").replace(/\$\{/g, "\\${")}\`;
+
 const agent = defineAgent({
   name: "my-agent",
   schedule: "0 14 * * *",
   feedId: "${feedId}",
-  registryAddress: "${CONTRACTS.Registry}",
-  attestationAddress: "${CONTRACTS.Attestation}",
-  methodologyCid: "ipfs://your-methodology-cid",
+  registryAddress: "${CONTRACTS.RegistryV2 ?? CONTRACTS.RegistryV11 ?? CONTRACTS.Registry}",      // v2
+  attestationAddress: "${CONTRACTS.AttestationV2 ?? CONTRACTS.AttestationV11 ?? CONTRACTS.Attestation}", // v2
+  methodologyCid: METHODOLOGY, // exact text hashed at registration
   run: async () => {
     // Fetch your data. Compute the final value off-chain.
     return { value: 0n, inputHash: "0x..." };
@@ -752,6 +758,14 @@ await agent.attest({
         >
           confirmation tx ↗
         </a>
+      </div>
+
+      {/* Methodology — confirms the worker has the published text. If the
+          signature was skipped, renders a "publish methodology" retry
+          button (reads localStorage). */}
+      <div>
+        <h3 className="caption mb-3">your published methodology</h3>
+        <MethodologyLive feedId={feedId} creator={agent} />
       </div>
 
       <div>

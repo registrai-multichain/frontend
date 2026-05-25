@@ -8,17 +8,19 @@ import { useWallet } from "@/components/WalletProvider";
 import { PositionsTab } from "@/components/profile/PositionsTab";
 import { CreatorTab } from "@/components/profile/CreatorTab";
 import { DeployerTab } from "@/components/profile/DeployerTab";
+import { QuestsTab } from "@/components/profile/QuestsTab";
+import { CreditsBanner } from "@/components/CreditsBanner";
 import { StatusBadge } from "@/components/StatusBadge";
 import { addrUrl } from "@/lib/chain";
 import { shortAddr } from "@/lib/format";
 
-type Tab = "trader" | "creator" | "deployer";
+type Tab = "quests" | "trader" | "creator" | "deployer";
 
 function ProfilePage() {
   const params = useSearchParams();
   const overrideAddr = params?.get("addr");
   const { address: connected, connect } = useWallet();
-  const [tab, setTab] = useState<Tab>("trader");
+  const [tab, setTab] = useState<Tab>("quests");
 
   const subjectAddr: Address | undefined =
     overrideAddr && isAddress(overrideAddr)
@@ -79,8 +81,18 @@ function ProfilePage() {
           </div>
         </div>
 
+        {/* Credits banner (v2 onchain points). Hidden gracefully if the
+            chain doesn't have RegistraiPoints configured. */}
+        <CreditsBanner address={subjectAddr} />
+
         {/* Tabs */}
-        <div className="grid grid-cols-3 gap-px bg-line mb-10">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-line mb-10">
+          <TabButton
+            label="quests"
+            description="earn credits"
+            active={tab === "quests"}
+            onClick={() => setTab("quests")}
+          />
           <TabButton
             label="trader"
             description="positions"
@@ -101,6 +113,7 @@ function ProfilePage() {
           />
         </div>
 
+        {tab === "quests" && <QuestsTab address={subjectAddr} />}
         {tab === "trader" && <PositionsTab address={subjectAddr} />}
         {tab === "creator" && <CreatorTab address={subjectAddr} />}
         {tab === "deployer" && <DeployerTab address={subjectAddr} />}

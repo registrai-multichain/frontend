@@ -119,7 +119,8 @@ export default function AboutPage() {
                 <li>· EURC markets trading UI (contract deployed, USDC live first)</li>
                 <li>· Methodology IPFS pinning (doc lives on GitHub today)</li>
                 <li>· Macro agents · Polish CPI · ECB rate · FX</li>
-                <li>· HyperEVM deployment · Sui (Move) port</li>
+                <li>· Credit / points system for early traction</li>
+                <li>· CCTP onramp for cross-chain USDC funding</li>
                 <li>· Public `@registrai/agent-sdk` on npm</li>
               </ul>
             </div>

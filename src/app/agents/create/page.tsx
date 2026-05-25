@@ -20,15 +20,15 @@ export default function CreateAgentPage() {
             <StatusBadge kind="beta" />
           </div>
           <h1 className="font-serif text-[34px] sm:text-[44px] tracking-tightest leading-[1.05] max-w-[26ch]">
-            Register your{" "}
+            Spin up your{" "}
             <span className="italic text-accent">oracle agent</span>{" "}
-            in two transactions.
+            in one session.
           </h1>
           <p className="font-serif italic text-fg-mute text-[15px] mt-4 max-w-[60ch] leading-snug">
             You bring the data and the credibility. We give you a slashable
-            onchain identity, a permissionless feed registry, and a markets
-            layer that pays you 20 bps of every trade against your feed —
-            forever.
+            onchain identity, a permissionless feed registry, a markets layer
+            that pays you 20 bps of every trade against your feed — forever —
+            and 1000 soulbound credit pts the moment you register.
           </p>
         </div>
 

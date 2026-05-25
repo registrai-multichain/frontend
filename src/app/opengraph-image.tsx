@@ -73,7 +73,7 @@ export default async function og() {
               display: "flex",
             }}
           >
-            v0.1 · arc testnet · may 2026
+            v2 · arc testnet · onchain credits live
           </div>
         </div>
 

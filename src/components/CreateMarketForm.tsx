@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { postMarketDescription } from "@/lib/hooks/useMarketDescription";
-import { useRouter, useSearchParams } from "next/navigation";
-import { decodeEventLog, parseUnits, type Address, type Hex } from "viem";
+import { useSearchParams } from "next/navigation";
+import { decodeEventLog, maxUint256, parseUnits, type Address, type Hex } from "viem";
 import { useWallet } from "./WalletProvider";
 import { CREATABLE_FEEDS, type CreatableFeed } from "@/lib/demo";
 import { CONTRACTS, txUrl } from "@/lib/chain";
@@ -23,7 +23,6 @@ const COMPARATORS = [
 type Status = "idle" | "approving" | "creating" | "success" | "error";
 
 export function CreateMarketForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { address, isOnSupportedChain, walletClient, publicClient, connect, switchChain } = useWallet();
 
@@ -67,6 +66,10 @@ export function CreateMarketForm() {
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | undefined>();
   const [txHash, setTxHash] = useState<Hex | undefined>();
+  const [createdMarketId, setCreatedMarketId] = useState<Hex | undefined>();
+  const [handoffFromAgentCreate, setHandoffFromAgentCreate] = useState<
+    string | undefined
+  >();
   const [tokenBalance, setTokenBalance] = useState<bigint | undefined>();
 
   // Default threshold suggestion when a feed is picked but threshold is blank
@@ -77,13 +80,40 @@ export function CreateMarketForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feed?.id, customFeedMode]);
 
+  // Hand-off from /agents/create: if the user just registered a feed and is
+  // now creating a market against it, auto-select that feed instead of making
+  // them dig for "paste custom feedId". Entries older than 24h are ignored.
+  useEffect(() => {
+    if (qFeed) return; // explicit ?feedId= wins
+    try {
+      const raw = localStorage.getItem("registrai:last-feed");
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        feedId?: string;
+        ruleAddress?: string | null;
+        createdAt?: number;
+      };
+      if (!parsed.feedId) return;
+      if (parsed.createdAt && Date.now() - parsed.createdAt > 86_400_000) return;
+      setCustomFeedMode(true);
+      setCustomFeedId(parsed.feedId);
+      setCustomFeedIsVerifiable(!!parsed.ruleAddress);
+      setHandoffFromAgentCreate(parsed.feedId);
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const tokenAddress: Address =
     collateral === "USDC" ? CONTRACTS.USDC : (CONTRACTS.EURC ?? CONTRACTS.USDC);
 
-  // Verifiable (rule-bound) feeds live on Markets v1.1. Plain feeds use
-  // v1.0. EURC pathway unchanged.
+  // New markets go on Markets v2 (audit-fixed, points-enabled). v1.1 and
+  // v1.0 stay as fallbacks for chains that haven't shipped v2 yet, plus
+  // EURC stays on its own dedicated Markets instance.
   const marketsContract: Address | undefined = useMemo(() => {
     if (collateral === "EURC") return CONTRACTS.MarketsEURC;
+    if (CONTRACTS.MarketsV2) return CONTRACTS.MarketsV2;
     if (isVerifiableFeed) return CONTRACTS.MarketsV11 ?? CONTRACTS.Markets;
     return CONTRACTS.Markets;
   }, [collateral, isVerifiableFeed]);
@@ -185,14 +215,16 @@ export function CreateMarketForm() {
           address: tokenAddress,
           abi: usdcAbi,
           functionName: "approve",
-          args: [marketsContract, liquidityWei],
+          // Approve max — subsequent market creations don't repeat this popup.
+          args: [marketsContract, maxUint256],
           chain: walletClient.chain,
           account: address,
         });
         await publicClient.waitForTransactionReceipt({ hash: approveHash });
       }
 
-      // 2. createMarket.
+      // 2. createMarket. Explicit gas: Arc's USDC blocklist precompile breaks
+      // wallet simulation; safe upper bound for createMarket with points (~250k actual).
       setStatus("creating");
       const hash = await walletClient.writeContract({
         address: marketsContract,
@@ -205,6 +237,7 @@ export function CreateMarketForm() {
         ],
         chain: walletClient.chain,
         account: address,
+        gas: 600_000n,
       });
       setTxHash(hash);
 
@@ -245,6 +278,7 @@ export function CreateMarketForm() {
         }
       }
 
+      if (newMarketId) setCreatedMarketId(newMarketId);
       setStatus("success");
 
       // Best-effort: persist the creator's description to the Worker KV.
@@ -262,10 +296,9 @@ export function CreateMarketForm() {
         });
       }
 
-      if (newMarketId) {
-        // Give the success state a beat to render, then redirect.
-        setTimeout(() => router.push(`/markets/${newMarketId}/`), 1200);
-      }
+      // No redirect — the success panel below renders inline. Static export
+      // can't serve a dynamic /markets/{id} page until the manifest is rebuilt,
+      // so we surface ArcScan + "view markets index" links instead.
     } catch (e) {
       setError(humanizeError(e));
       setStatus("error");
@@ -280,6 +313,25 @@ export function CreateMarketForm() {
           label="01 · feed"
           hint="Pick the data feed this market will resolve against. Verifiable feeds use an onchain rule contract for aggregation. Or paste any feedId you just created on /agents/create."
         >
+          {handoffFromAgentCreate && (
+            <div className="mb-3 border border-accent/40 bg-bg-elev/40 p-3 text-2xs leading-relaxed">
+              <span className="text-accent caption mr-2">✓ using your fresh feed</span>
+              <span className="text-fg-mute tnum break-all">
+                {handoffFromAgentCreate.slice(0, 10)}…{handoffFromAgentCreate.slice(-8)}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setHandoffFromAgentCreate(undefined);
+                  setCustomFeedMode(false);
+                  setCustomFeedId("");
+                }}
+                className="ml-3 text-fg-dim hover:text-fg underline decoration-fg-dim underline-offset-4"
+              >
+                use a different feed instead
+              </button>
+            </div>
+          )}
           <div className="space-y-2">
             {CREATABLE_FEEDS.map((f) => {
               const active = !customFeedMode && f.id === selectedFeedId;
@@ -574,7 +626,7 @@ export function CreateMarketForm() {
               : status === "creating"
                 ? "creating market…"
                 : status === "success"
-                  ? "✓ created — redirecting…"
+                  ? "✓ market created · earn 200 credit pts"
                   : "create market →"}
           </button>
         )}
@@ -582,6 +634,38 @@ export function CreateMarketForm() {
         {error && (
           <div className="border border-down/40 bg-bg-elev/30 p-4 text-2xs text-down leading-relaxed">
             {error.length > 200 ? `${error.slice(0, 200)}…` : error}
+          </div>
+        )}
+
+        {status === "success" && (
+          <div className="border border-accent/50 bg-bg-elev/40 p-4 space-y-2">
+            <div className="caption text-accent">market created ✓ · +200 pts</div>
+            <p className="text-2xs text-fg-mute leading-relaxed">
+              Onchain credits added to your wallet. Soulbound — earned, not
+              bought.
+            </p>
+            <div className="flex gap-3 flex-wrap pt-1">
+              {createdMarketId && (
+                <a
+                  href={`/markets/view/?id=${createdMarketId}`}
+                  className="text-2xs text-accent hover:underline"
+                >
+                  view your market →
+                </a>
+              )}
+              <a
+                href="/profile/"
+                className="text-2xs text-accent hover:underline"
+              >
+                view your credits →
+              </a>
+              <a
+                href="/markets/"
+                className="text-2xs text-fg-dim hover:text-accent transition-colors"
+              >
+                all markets →
+              </a>
+            </div>
           </div>
         )}
 

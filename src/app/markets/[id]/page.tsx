@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Shell } from "@/components/Shell";
-import { PriceChart } from "@/components/PriceChart";
 import { TradePanel } from "@/components/TradePanel";
 import { VerifiableBadge } from "@/components/VerifiableBadge";
 import { FaucetHint } from "@/components/FaucetHint";
@@ -20,9 +19,6 @@ export default function MarketPage({ params }: { params: { id: string } }) {
   const market = findMarket(params.id);
   if (!market) notFound();
 
-  const yesPrice = market.noReserve / (market.yesReserve + market.noReserve);
-  const noPrice = 1 - yesPrice;
-  const totalVolume = market.history.reduce((s, t) => s + t.collateral, 0);
   const daysToExpiry = Math.max(0, Math.ceil((market.expiry - Date.now() / 1000) / 86_400));
 
   return (
@@ -56,163 +52,99 @@ export default function MarketPage({ params }: { params: { id: string } }) {
           </div>
         </div>
 
-        <FaucetHint className="mb-6" />
+        <FaucetHint className="mb-8" />
 
-        <section className="border-t border-b border-line py-8 mb-8">
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8">
-            <div>
-              <div className="flex items-baseline gap-8 mb-4 flex-wrap">
-                <div>
-                  <div className="caption text-up mb-1">YES · resolves true</div>
-                  <div className="text-[40px] sm:text-[52px] leading-none tracking-tightest tnum">
-                    {(yesPrice * 100).toFixed(1)}
-                    <span className="text-fg-mute text-[18px]">¢</span>
+        {/* Two-column: context on the left (scrolls), trade panel sticky on right */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-10 mb-12">
+          {/* LEFT — what is this market */}
+          <div className="space-y-8 min-w-0">
+            {(() => {
+              const explainer = FEED_EXPLAINERS[market.feedSymbol];
+              const hook = MARKET_HOOKS[market.id];
+              return (
+                <section>
+                  <div className="caption mb-3">about</div>
+                  <div className="border border-line bg-bg-elev/30 p-5 space-y-4">
+                    {explainer && (
+                      <>
+                        <p className="text-[14.5px] leading-snug text-fg font-serif italic">
+                          {explainer.headline}
+                        </p>
+                        <p className="text-[13px] leading-relaxed text-fg-mute">
+                          {explainer.body}
+                        </p>
+                        <p className="text-2xs text-fg-dim leading-relaxed">
+                          Source · {explainer.source}
+                        </p>
+                      </>
+                    )}
+                    <MarketDescriptionLive marketId={market.id} fallback={hook} />
                   </div>
-                </div>
-                <div>
-                  <div className="caption text-down mb-1">NO · resolves false</div>
-                  <div className="text-[40px] sm:text-[52px] leading-none tracking-tightest tnum">
-                    {(noPrice * 100).toFixed(1)}
-                    <span className="text-fg-mute text-[18px]">¢</span>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-6">
-                <PriceChart trades={market.history} />
-              </div>
-            </div>
+                </section>
+              );
+            })()}
 
-            <TradePanel market={market} />
-          </div>
-        </section>
-
-        {/* Background · plain-English context */}
-        {(() => {
-          const explainer = FEED_EXPLAINERS[market.feedSymbol];
-          const hook = MARKET_HOOKS[market.id];
-          if (!explainer && !hook) return null;
-          return (
-            <section className="mb-10">
-              <div className="caption mb-3">background</div>
-              <div className="border border-line bg-bg-elev/30 p-5 space-y-4">
-                {explainer && (
-                  <>
-                    <p className="text-[14.5px] leading-snug text-fg font-serif italic max-w-[68ch]">
-                      {explainer.headline}
-                    </p>
-                    <p className="text-[13px] leading-relaxed text-fg-mute max-w-[68ch]">
-                      {explainer.body}
-                    </p>
-                    <p className="text-2xs text-fg-dim leading-relaxed max-w-[68ch]">
-                      Source · {explainer.source}
-                    </p>
-                  </>
+            {/* Resolution rule */}
+            <section>
+              <div className="caption mb-3">resolution rule</div>
+              <div className="border border-line bg-bg-elev/40 p-5">
+                <p className="text-[13.5px] leading-relaxed text-fg">
+                  At <span className="text-accent tnum">{isoDateTime(market.expiry)}</span>{" "}
+                  UTC, the market reads{" "}
+                  <code className="text-fg-mute break-all">
+                    Attestation.valueAt({shortHash(market.feedId)},{" "}
+                    {shortAddr(market.agent)}, {market.expiry})
+                  </code>
+                  . If the returned value{" "}
+                  <span className="text-accent">{market.comparator}</span>{" "}
+                  <span className="text-accent tnum">{fmtInt(market.threshold)}</span>{" "}
+                  {market.unit}, <span className="text-up">YES wins</span>. Otherwise{" "}
+                  <span className="text-down">NO wins</span>.
+                </p>
+                <p className="text-[12.5px] leading-relaxed text-fg-mute mt-4">
+                  No human resolves this. The contract reads the value, applies the
+                  comparator, settles. If the agent never attested at or before
+                  expiry, the market sits unresolved until one does.
+                </p>
+                {market.verifiable && market.rule && (
+                  <p className="text-[12.5px] leading-relaxed text-fg-mute mt-4 border-t border-line pt-4">
+                    <span className="text-up">Verifiable feed.</span> The attested
+                    value was not computed off-chain — the agent submitted the raw
+                    input vector to{" "}
+                    <a
+                      href={`https://testnet.arcscan.app/address/${market.rule}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-accent hover:underline tnum"
+                    >
+                      {market.rule.slice(0, 10)}…{market.rule.slice(-6)}
+                    </a>
+                    , which deterministically computed the median onchain. Anyone
+                    can pull the inputHash from the attestation, recover the
+                    rawInputs from the tx calldata, re-call the rule, and confirm
+                    the value byte-for-byte.
+                  </p>
                 )}
-                {/* Live creator-supplied description (overrides MARKET_HOOKS when present) */}
-                <MarketDescriptionLive marketId={market.id} fallback={hook} />
               </div>
             </section>
-          );
-        })()}
 
-        {/* Resolution rule */}
-        <section className="mb-10">
-          <div className="caption mb-3">resolution rule</div>
-          <div className="border border-line bg-bg-elev/40 p-5">
-            <p className="text-[13.5px] leading-relaxed text-fg max-w-[68ch]">
-              At <span className="text-accent tnum">{isoDateTime(market.expiry)}</span>{" "}
-              UTC, the market reads <code className="text-fg-mute">Attestation.valueAt({shortHash(market.feedId)}, {shortAddr(market.agent)}, {market.expiry})</code>.
-              If the returned value <span className="text-accent">{market.comparator}</span>{" "}
-              <span className="text-accent tnum">{fmtInt(market.threshold)}</span>{" "}
-              {market.unit}, <span className="text-up">YES wins</span>. Otherwise{" "}
-              <span className="text-down">NO wins</span>. The attestation must be
-              finalized (past its dispute window) for resolution to succeed.
-            </p>
-            <p className="text-[12.5px] leading-relaxed text-fg-mute mt-4 max-w-[68ch]">
-              No human resolves this. The contract reads the value, applies the
-              comparator, and settles. If the agent never attested at or before
-              expiry, the market sits unresolved until one does.
-            </p>
-            {market.verifiable && market.rule && (
-              <p className="text-[12.5px] leading-relaxed text-fg-mute mt-4 max-w-[68ch] border-t border-line pt-4">
-                <span className="text-up">Verifiable feed.</span> The attested
-                value was not computed off-chain — the agent submitted the raw
-                input vector to{" "}
-                <a
-                  href={`https://testnet.arcscan.app/address/${market.rule}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-accent hover:underline tnum"
-                >
-                  {market.rule.slice(0, 10)}…{market.rule.slice(-6)}
-                </a>
-                , which deterministically computed the median onchain. Anyone
-                can pull the inputHash from the attestation, recover the
-                rawInputs from the tx calldata, re-call the rule, and confirm
-                the value byte-for-byte.
-              </p>
-            )}
+            {/* Spec strip */}
+            <section className="grid grid-cols-2 sm:grid-cols-3 gap-y-5 gap-x-6 text-[12.5px]">
+              <Spec label="feed" value={shortHash(market.feedId)} />
+              <Spec label="agent" value={shortAddr(market.agent)} />
+              <Spec label="threshold" value={`${fmtInt(market.threshold)} ${market.unit}`} />
+              <Spec label="comparator" value={market.comparator} />
+              <Spec label="expiry" value={isoDate(market.expiry)} />
+              <Spec label="initial liquidity" value={`${fmtInt(market.liquidity / 1e6)} USDC`} />
+            </section>
           </div>
-        </section>
 
-        {/* Spec strip */}
-        <section className="grid grid-cols-2 sm:grid-cols-4 gap-y-6 gap-x-8 mb-12 text-[13px]">
-          <Spec label="feed" value={shortHash(market.feedId)} />
-          <Spec label="agent" value={shortAddr(market.agent)} />
-          <Spec label="threshold" value={`${fmtInt(market.threshold)} ${market.unit}`} />
-          <Spec label="comparator" value={market.comparator} />
-          <Spec label="expiry" value={isoDate(market.expiry)} />
-          <Spec label="initial liquidity" value={`${fmtInt(market.liquidity / 1e6)} USDC`} />
-          <Spec label="volume" value={`${fmtInt(totalVolume)} USDC`} />
-          <Spec label="trades" value={String(market.history.length)} />
-        </section>
+          {/* RIGHT — trade */}
+          <aside className="lg:sticky lg:top-24 h-fit">
+            <TradePanel market={market} />
+          </aside>
+        </div>
 
-        {/* History */}
-        <section>
-          <div className="caption mb-3">recent trades</div>
-          {market.history.length === 0 ? (
-            <div className="border border-dashed border-line/60 p-8 text-center">
-              <p className="font-serif italic text-fg-mute text-[15px] leading-snug max-w-[42ch] mx-auto">
-                Market just opened — awaiting first trade.
-              </p>
-              <p className="text-2xs text-fg-dim mt-3">
-                Connect a wallet in the trade panel above to take the first position. Initial odds
-                are 50/50 by construction; the next trade moves the curve.
-              </p>
-            </div>
-          ) : (
-          <div className="border border-line overflow-x-auto">
-            <div className="min-w-[520px]">
-            <Row head cells={["time", "side", "price", "size"]} />
-            {[...market.history]
-              .slice(-12)
-              .reverse()
-              .map((t, i) => (
-                <Row
-                  key={i}
-                  cells={[
-                    <span className="text-fg-mute" key="t">
-                      {isoDateTime(t.ts)}
-                    </span>,
-                    <span
-                      className={t.side === "yes" ? "text-up caption" : "text-down caption"}
-                      key="s"
-                    >
-                      {t.side === "yes" ? "● YES" : "● NO"}
-                    </span>,
-                    <span className="tnum" key="p">
-                      {(t.yesPrice * 100).toFixed(1)}¢
-                    </span>,
-                    <span className="tnum text-fg-mute" key="sz">
-                      {fmtInt(t.collateral)} USDC
-                    </span>,
-                  ]}
-                />
-              ))}
-            </div>
-          </div>
-          )}
-        </section>
       </article>
     </Shell>
   );
@@ -227,16 +159,3 @@ function Spec({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function Row({ head, cells }: { head?: boolean; cells: React.ReactNode[] }) {
-  return (
-    <div
-      className={`grid grid-cols-[1.4fr_0.8fr_0.8fr_1fr] gap-2 px-4 py-2.5 items-center ${
-        head ? "caption border-b border-line bg-bg-elev/40" : "border-b border-line/60 last:border-0 hover:bg-bg-elev/40 transition-colors"
-      } text-[12.5px]`}
-    >
-      {cells.map((c, i) => (
-        <div key={i}>{c}</div>
-      ))}
-    </div>
-  );
-}

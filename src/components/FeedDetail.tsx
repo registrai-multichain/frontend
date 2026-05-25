@@ -6,8 +6,10 @@ import { VerifiableBadge } from "./VerifiableBadge";
 import { AnimatedNumber } from "./AnimatedNumber";
 import { LiveCountdown } from "./LiveCountdown";
 import { MarketCard } from "./MarketCard";
+import { MethodologyLive } from "./MethodologyLive";
 import { LIVE_META } from "@/lib/demo";
 import { DEMO_MARKETS } from "@/lib/markets-demo";
+import liveData from "@/lib/live-data.json";
 import {
   fmtDuration,
   fmtInt,
@@ -117,20 +119,6 @@ export function FeedDetail({ feed }: { feed: Feed }) {
         <Spec label="bond" value={`${agent.bond} USDC`} />
         <Spec label="window" value={fmtDuration(feed.disputeWindowSec)} />
         <Spec label="resolver" value={feed.resolverLabel} hint={shortAddr(feed.resolver)} />
-        <Spec
-          label="methodology"
-          value={
-            <a
-              href="https://github.com/registrai-multichain/contracts/blob/main/methodology/warsaw-resi-v1.md"
-              target="_blank"
-              rel="noreferrer"
-              className="hover:text-accent underline decoration-fg-dim underline-offset-4"
-            >
-              view spec ↗
-            </a>
-          }
-          hint="IPFS pin coming · v1 doc on GitHub"
-        />
         <Spec label="min bond" value={`${feed.minBond} USDC`} />
         <Spec label="cadence" value="daily · 14:00 UTC" />
         <Spec
@@ -142,6 +130,31 @@ export function FeedDetail({ feed }: { feed: Feed }) {
           }
         />
       </section>
+
+      {/* Methodology — creator-supplied prose, hashed onchain.
+          Resolution order in MethodologyLive: worker KV (new feeds) →
+          retry button (if creator viewing their own unsaved one) →
+          legacy GitHub fallback (seed feeds, per-feedId lookup). */}
+      {(() => {
+        const manifestFeed = (
+          liveData as { feeds?: Array<{ id: string; methodologyDoc?: string }> }
+        ).feeds?.find((f) => f.id.toLowerCase() === feed.id.toLowerCase());
+        const fallbackUrl = manifestFeed?.methodologyDoc
+          ? manifestFeed.methodologyDoc.startsWith("/")
+            ? `https://github.com/registrai-multichain/contracts/blob/main${manifestFeed.methodologyDoc}`
+            : manifestFeed.methodologyDoc
+          : undefined;
+        return (
+          <section className="mb-12">
+            <div className="caption mb-3">methodology</div>
+            <MethodologyLive
+              feedId={feed.id}
+              creator={agent.address}
+              fallbackUrl={fallbackUrl}
+            />
+          </section>
+        );
+      })()}
 
       {/* History */}
       <section>
