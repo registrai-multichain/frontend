@@ -22,8 +22,8 @@ const ENTRIES: Entry[] = [
         <p>
           The previous CirqueLending exposed an owner-only{" "}
           <code>adminWithdrawUSDC(amount)</code> with no balance check,
-          documented as an "alpha-only escape hatch." Real exposure is small
-          (10 USDC TVL) but it's a hard centralization vector: compromise of
+          documented as an &quot;alpha-only escape hatch.&quot; Real exposure is small
+          (10 USDC TVL) but it&apos;s a hard centralization vector: compromise of
           the owner key would drain the entire pool including supplier funds
           and locked collateral USDC. Removed entirely. The treasury supplies
           via the same <code>supplyUSDC()</code> as any LP and withdraws
