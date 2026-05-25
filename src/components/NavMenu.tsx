@@ -23,6 +23,7 @@ const SECTIONS: MenuSection[] = [
       { label: "markets", href: "/markets", mobileOnly: true },
       { label: "agents", href: "/agents", mobileOnly: true },
       { label: "vault", href: "/vault", mobileOnly: true },
+      { label: "lending", href: "/lending", mobileOnly: true },
     ],
   },
   {

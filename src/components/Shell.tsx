@@ -42,6 +42,9 @@ function TopNav() {
           <Link href="/vault" className="hidden sm:inline hover:text-fg transition-colors">
             vault
           </Link>
+          <Link href="/lending" className="hidden sm:inline hover:text-fg transition-colors">
+            lending
+          </Link>
           <NavMenu />
           <WalletButton />
         </nav>
@@ -72,14 +75,14 @@ function Footer() {
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] tracking-wide text-fg-dim border-t border-line/60 pt-4">
           <div className="flex items-center gap-2">
-            <span>registrai // arc testnet // v0.1</span>
+            <span>registrai // arc testnet // v2 · onchain credits live</span>
             <a
-              href="https://testnet.arcscan.app/address/0xBB6F4B18776Fd20Bb53a1205375273373DD1E5bA"
+              href="https://testnet.arcscan.app/address/0xF5897349819B16f4431A61Ad61293C1b31bD3381"
               target="_blank"
               rel="noreferrer"
               className="text-fg-mute hover:text-accent transition-colors"
             >
-              ↗ contracts
+              ↗ points contract
             </a>
           </div>
           <div className="flex items-center gap-4">

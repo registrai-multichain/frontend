@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { parseUnits, type Hex } from "viem";
+import { maxUint256, parseUnits, type Hex } from "viem";
 import type { Market } from "@/lib/types";
 import { useWallet } from "./WalletProvider";
-import { CONTRACTS, txUrl } from "@/lib/chain";
+import { CONTRACTS, marketsAddressFor, txUrl } from "@/lib/chain";
 import { marketsAbi, usdcAbi } from "@/lib/abi";
 import { humanizeError } from "@/lib/humanize-error";
 
@@ -21,6 +21,11 @@ type Status = "idle" | "approving" | "submitting" | "success" | "error";
 export function TradePanel({ market }: { market: Market }) {
   const { address, isOnSupportedChain, walletClient, publicClient, connect, switchChain } = useWallet();
 
+  // Route to the correct Markets contract based on the market's version.
+  // v2 markets earn points and have audit fixes; v1.1 verifiable markets keep
+  // their original contract; v1.0 legacy markets keep theirs.
+  const marketsAddress = marketsAddressFor(market.marketsVersion);
+
   const [mode, setMode] = useState<Mode>("buy");
   const [side, setSide] = useState<"yes" | "no">("yes");
   const [collateral, setCollateral] = useState<string>("1");
@@ -31,51 +36,70 @@ export function TradePanel({ market }: { market: Market }) {
   const [balance, setBalance] = useState<bigint | undefined>();
   const [yesShares, setYesShares] = useState<bigint | undefined>();
   const [noShares, setNoShares] = useState<bigint | undefined>();
+  // Live reserves — props are only an initial hint; the chain is the source
+  // of truth. Without this, a second buy quotes against pre-trade reserves
+  // and reverts with SlippageExceeded.
+  const [liveYes, setLiveYes] = useState<bigint | undefined>();
+  const [liveNo, setLiveNo] = useState<bigint | undefined>();
 
   const expired = market.expiry * 1000 <= Date.now();
   const resolved = market.phase === "resolved";
 
-  // Load balances + shares.
+  // Load balances + shares + market reserves.
   useEffect(() => {
-    if (!address) {
+    const calls: Array<Promise<unknown>> = [
+      publicClient.readContract({
+        address: marketsAddress,
+        abi: marketsAbi,
+        functionName: "getMarket",
+        args: [market.id],
+      }) as Promise<{ yesReserve: bigint; noReserve: bigint }>,
+    ];
+    if (address) {
+      calls.push(
+        publicClient.readContract({
+          address: CONTRACTS.USDC,
+          abi: usdcAbi,
+          functionName: "balanceOf",
+          args: [address],
+        }) as Promise<bigint>,
+        publicClient.readContract({
+          address: marketsAddress,
+          abi: marketsAbi,
+          functionName: "yesBalance",
+          args: [market.id, address],
+        }) as Promise<bigint>,
+        publicClient.readContract({
+          address: marketsAddress,
+          abi: marketsAbi,
+          functionName: "noBalance",
+          args: [market.id, address],
+        }) as Promise<bigint>,
+      );
+    } else {
       setBalance(undefined);
       setYesShares(undefined);
       setNoShares(undefined);
-      return;
     }
-    Promise.all([
-      publicClient.readContract({
-        address: CONTRACTS.USDC,
-        abi: usdcAbi,
-        functionName: "balanceOf",
-        args: [address],
-      }) as Promise<bigint>,
-      publicClient.readContract({
-        address: CONTRACTS.Markets,
-        abi: marketsAbi,
-        functionName: "yesBalance",
-        args: [market.id, address],
-      }) as Promise<bigint>,
-      publicClient.readContract({
-        address: CONTRACTS.Markets,
-        abi: marketsAbi,
-        functionName: "noBalance",
-        args: [market.id, address],
-      }) as Promise<bigint>,
-    ])
-      .then(([bal, ys, ns]) => {
-        setBalance(bal);
-        setYesShares(ys);
-        setNoShares(ns);
+    Promise.all(calls)
+      .then((res) => {
+        const m = res[0] as { yesReserve: bigint; noReserve: bigint };
+        setLiveYes(m.yesReserve);
+        setLiveNo(m.noReserve);
+        if (address) {
+          setBalance(res[1] as bigint);
+          setYesShares(res[2] as bigint);
+          setNoShares(res[3] as bigint);
+        }
       })
       .catch(() => undefined);
-  }, [address, publicClient, market.id]);
+  }, [address, publicClient, market.id, marketsAddress]);
 
-  // Quote math, in float space — same as the contract's integer math at scale.
+  // Quote math uses live reserves (chain) if loaded, otherwise the prop hint.
   const dx = Number(collateral) || 0;
   const dy = Number(sharesIn) || 0;
-  const yes = market.yesReserve / 1e6;
-  const no = market.noReserve / 1e6;
+  const yes = Number(liveYes ?? BigInt(market.yesReserve)) / 1e6;
+  const no = Number(liveNo ?? BigInt(market.noReserve)) / 1e6;
   const totalPool = yes + no;
   const yesPriceNow = totalPool > 0 ? no / totalPool : 0.5;
   const noPriceNow = totalPool > 0 ? yes / totalPool : 0.5;
@@ -123,7 +147,16 @@ export function TradePanel({ market }: { market: Market }) {
 
   async function refreshLive(): Promise<void> {
     if (!address) return;
-    const [bal, ys, ns] = await Promise.all([
+    // Refresh both market reserves AND user state so the next quote uses
+    // post-trade state. Without the reserves refresh, a second buy quote is
+    // computed against stale reserves and reverts with SlippageExceeded.
+    const [m, bal, ys, ns] = await Promise.all([
+      publicClient.readContract({
+        address: marketsAddress,
+        abi: marketsAbi,
+        functionName: "getMarket",
+        args: [market.id],
+      }) as Promise<{ yesReserve: bigint; noReserve: bigint }>,
       publicClient.readContract({
         address: CONTRACTS.USDC,
         abi: usdcAbi,
@@ -131,18 +164,20 @@ export function TradePanel({ market }: { market: Market }) {
         args: [address],
       }) as Promise<bigint>,
       publicClient.readContract({
-        address: CONTRACTS.Markets,
+        address: marketsAddress,
         abi: marketsAbi,
         functionName: "yesBalance",
         args: [market.id, address],
       }) as Promise<bigint>,
       publicClient.readContract({
-        address: CONTRACTS.Markets,
+        address: marketsAddress,
         abi: marketsAbi,
         functionName: "noBalance",
         args: [market.id, address],
       }) as Promise<bigint>,
     ]);
+    setLiveYes(m.yesReserve);
+    setLiveNo(m.noReserve);
     setBalance(bal);
     setYesShares(ys);
     setNoShares(ns);
@@ -158,15 +193,16 @@ export function TradePanel({ market }: { market: Market }) {
         address: CONTRACTS.USDC,
         abi: usdcAbi,
         functionName: "allowance",
-        args: [address, CONTRACTS.Markets],
+        args: [address, marketsAddress],
       })) as bigint;
       if (allowance < collateralWei) {
         setStatus("approving");
+        // Approve max — every subsequent buy on this market skips the approve popup.
         const h = await walletClient.writeContract({
           address: CONTRACTS.USDC,
           abi: usdcAbi,
           functionName: "approve",
-          args: [CONTRACTS.Markets, collateralWei],
+          args: [marketsAddress, maxUint256],
           chain: walletClient.chain,
           account: address,
         });
@@ -176,12 +212,13 @@ export function TradePanel({ market }: { market: Market }) {
       const minShares = BigInt(Math.floor(buySharesOut * 1e6 * 0.99));
       const outcome = side === "yes" ? 0 : 1;
       const hash = await walletClient.writeContract({
-        address: CONTRACTS.Markets,
+        address: marketsAddress,
         abi: marketsAbi,
         functionName: "buy",
         args: [market.id, outcome, collateralWei, minShares],
         chain: walletClient.chain,
         account: address,
+        gas: 500_000n,
       });
       setTxHash(hash);
       const r = await publicClient.waitForTransactionReceipt({ hash });
@@ -204,12 +241,13 @@ export function TradePanel({ market }: { market: Market }) {
       const minOut = BigInt(Math.floor(sellCollateralOut * 1e6 * 0.99));
       const outcome = side === "yes" ? 0 : 1;
       const hash = await walletClient.writeContract({
-        address: CONTRACTS.Markets,
+        address: marketsAddress,
         abi: marketsAbi,
         functionName: "sell",
         args: [market.id, outcome, sharesInWei, minOut],
         chain: walletClient.chain,
         account: address,
+        gas: 500_000n,
       });
       setTxHash(hash);
       const r = await publicClient.waitForTransactionReceipt({ hash });
@@ -230,12 +268,13 @@ export function TradePanel({ market }: { market: Market }) {
     try {
       setStatus("submitting");
       const hash = await walletClient.writeContract({
-        address: CONTRACTS.Markets,
+        address: marketsAddress,
         abi: marketsAbi,
         functionName: "resolve",
         args: [market.id],
         chain: walletClient.chain,
         account: address,
+        gas: 400_000n,
       });
       setTxHash(hash);
       const r = await publicClient.waitForTransactionReceipt({ hash });
@@ -255,7 +294,7 @@ export function TradePanel({ market }: { market: Market }) {
     try {
       setStatus("submitting");
       const hash = await walletClient.writeContract({
-        address: CONTRACTS.Markets,
+        address: marketsAddress,
         abi: marketsAbi,
         functionName: "redeem",
         args: [market.id],
@@ -337,6 +376,27 @@ export function TradePanel({ market }: { market: Market }) {
 
   return (
     <div className="border border-line bg-bg-elev/30 p-5 sm:p-6">
+      {/* Live odds — single source of truth, reads from chain reserves. */}
+      <div className="flex items-baseline justify-between gap-3 pb-4 mb-4 border-b border-line/60">
+        <div className="flex items-baseline gap-4">
+          <div>
+            <div className="text-2xs text-up caption mb-0.5">yes</div>
+            <div className="text-[22px] tnum leading-none">
+              {(yesPriceNow * 100).toFixed(1)}
+              <span className="text-fg-mute text-[12px] ml-0.5">¢</span>
+            </div>
+          </div>
+          <div>
+            <div className="text-2xs text-down caption mb-0.5">no</div>
+            <div className="text-[22px] tnum leading-none">
+              {(noPriceNow * 100).toFixed(1)}
+              <span className="text-fg-mute text-[12px] ml-0.5">¢</span>
+            </div>
+          </div>
+        </div>
+        <div className="text-2xs text-fg-dim">live</div>
+      </div>
+
       {/* Mode toggle */}
       <div className="grid grid-cols-2 gap-px bg-line mb-4">
         <button

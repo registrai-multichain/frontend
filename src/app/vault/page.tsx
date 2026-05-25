@@ -38,7 +38,40 @@ export default function VaultPage() {
             body="The vault pays the standard 70 bps trading fee on every buy. For markets where the operator is also the agent and creator, those fees flow back to the same wallet — fee-neutral. Net PnL = winning shares redeemed at $1 each + LP residuals at resolution, minus losing positions." />
         </div>
 
-        <div className="mt-12 border border-dashed border-line/60 p-6 text-[13px] text-fg-mute">
+        {/* Forward hint — v0.5 cirBTC × USDC lending pool with atomic
+            bet integration. Two-sided market: cirBTC suppliers earn yield,
+            bettors borrow USDC against cirBTC to lever into Registrai
+            markets in one transaction. */}
+        <div className="mt-12 border border-accent/40 bg-bg-elev/40 p-6">
+          <div className="flex items-baseline gap-3 mb-3 flex-wrap">
+            <span className="caption text-accent">coming · v0.5</span>
+            <span className="caption text-fg-dim text-[10px]">
+              cirBTC × USDC lending
+            </span>
+          </div>
+          <h3 className="font-serif text-[20px] leading-snug mb-3 max-w-[40ch]">
+            Borrow USDC against cirBTC, lever into Registrai markets.
+          </h3>
+          <p className="text-[13px] text-fg-mute leading-relaxed max-w-[64ch] mb-4">
+            Lock <code className="text-fg">cirBTC</code> as collateral,
+            borrow USDC at 5% APY, use it to bet on Registrai markets.
+            No selling BTC, no taxable event, just leverage. 50% max
+            LTV at origination, force-liquidated at 65% with a 5%
+            liquidator bonus and the rest of the collateral refunded
+            to the borrower.
+          </p>
+          <p className="text-[12.5px] text-fg-dim leading-relaxed max-w-[64ch]">
+            v0.5 alpha funds the USDC borrow side from the treasury.
+            v0.6 opens a two-sided supply pool — USDC lenders earn yield
+            from borrower interest, sized by utilization. The atomic
+            borrow-and-bet flow (bundle the loan and the market buy in
+            one transaction) lands in v0.5 beta — something Aave
+            structurally can&apos;t do because they don&apos;t own the
+            markets contract.
+          </p>
+        </div>
+
+        <div className="mt-8 border border-dashed border-line/60 p-6 text-[13px] text-fg-mute">
           <span className="font-serif italic">v1 vault, conservative NAV.</span>{" "}
           Performance fees, mark-to-market NAV, and a fully permissionless
           operator role (anyone bonds + competes for the slot) are on the
