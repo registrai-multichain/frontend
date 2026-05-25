@@ -9,6 +9,541 @@ interface Entry {
 
 const ENTRIES: Entry[] = [
   {
+    date: "2026-05-23",
+    title: "CirqueLending two-sided · USDC suppliers earn yield · live & verified",
+    body: (
+      <>
+        <p>
+          v0.5 alpha now fully two-sided. Anyone can supply USDC and earn
+          yield from cirBTC-collateralised borrowers. Interest accrues to
+          suppliers via share-price appreciation — no claim step needed.
+          Re-deployed:
+        </p>
+        <ul>
+          <li>
+            <code>CirqueLending</code> (two-sided):{" "}
+            <ExtAddr addr="0x8384690d25b8cc61b84e9f91de9e61d85e1e6adc" />
+          </li>
+          <li>
+            <code>AttestedBTCOracle</code>:{" "}
+            <ExtAddr addr="0x1acc24d074c4d0f8683c643f36c4a03dc6b0637a" />
+          </li>
+        </ul>
+        <h3>Both sides of the lending mechanism</h3>
+        <p>
+          <strong>Supply side</strong>: <code>supplyUSDC(amount)</code>{" "}
+          pulls USDC into the pool and mints proportional shares.
+          <code>withdrawUSDC(shares)</code> burns shares and returns USDC
+          at the current per-share value (principal + accrued interest).
+          Withdrawals respect utilisation — if the pool&apos;s idle USDC
+          is currently lent out, withdraw queues until borrowers repay.
+        </p>
+        <p>
+          <strong>Borrow side</strong>: <code>borrow(cirBTC, USDC)</code>{" "}
+          locks cirBTC as collateral and draws USDC at 5% APY flat.
+          <code>repay()</code> returns principal + interest in USDC and
+          unlocks the collateral. Interest flows back into the pool as
+          accrued value — every supplier&apos;s shares appreciate
+          proportionally.
+        </p>
+        <h3>Live verification</h3>
+        <p>
+          End-to-end supply cycle verified on Arc testnet:
+        </p>
+        <ul>
+          <li>
+            Deployer supplied 20 USDC →{" "}
+            <code>shares = 20e6</code>, <code>balanceOfUSDC = 20e6</code> ✓
+          </li>
+          <li>
+            Deployer withdrew 10 shares →{" "}
+            <code>USDC out = 10e6</code> (1:1 since no borrows yet) ✓
+          </li>
+          <li>
+            Pool state correctly reflects the partial withdraw:{" "}
+            <code>totalShares = 10e6</code>, half remains as supplier
+            position ✓
+          </li>
+        </ul>
+        <p>
+          Borrow side verified in 18 contract unit tests (full repo: 119
+          pass, 0 fail). Live borrow requires cirBTC from{" "}
+          <code>faucet.circle.com</code> — interactive faucet step is up
+          to the user.
+        </p>
+        <h3>Accounting model</h3>
+        <p>
+          Standard Compound/Aave-style share accounting:
+        </p>
+        <ul>
+          <li>
+            Pool value = <code>idle_USDC + outstanding_principal +
+            accrued_unrealized_interest</code>
+          </li>
+          <li>
+            Share price = <code>pool_value / total_shares</code>
+          </li>
+          <li>
+            On every supply / withdraw / borrow / repay / liquidate,{" "}
+            <code>_rollAccrual()</code> rolls interest forward
+            proportional to elapsed time and outstanding principal — so
+            share value reflects real-time yield without iterating loans.
+          </li>
+          <li>
+            Per-user caps for alpha: 1 cirBTC collateral, 1,000 USDC
+            supply. Lifted in v0.5 beta after audit.
+          </li>
+        </ul>
+        <h3>What changed vs the earlier v0.5 alpha</h3>
+        <p>
+          Original v0.5 alpha had only the borrow side (USDC pool seeded
+          by treasury, no public supply). Today&apos;s deploy adds the
+          full lender side properly — with share accounting that avoids
+          the double-counting bug surfaced during the previous self-audit.
+          The old <code>seedUSDC</code> admin path is gone; treasury (and
+          everyone else) supplies via <code>supplyUSDC</code>, holds the
+          same shares as any other LP, and earns the same yield. Interest
+          no longer routes to a treasury wallet — it stays in the pool to
+          compound for suppliers.
+        </p>
+      </>
+    ),
+  },
+  {
+    date: "2026-05-23",
+    title: "CirqueLending v0.5 alpha live on Arc testnet · dogfooded oracle",
+    body: (
+      <>
+        <p>
+          v0.5 alpha is deployed. The lending contract reads BTC prices
+          from Registrai&apos;s own bonded-agent attestation layer — we
+          eat our own dogfood instead of trusting an external keeper key.
+        </p>
+        <h3>Addresses</h3>
+        <ul>
+          <li>
+            <code>AttestedBTCOracle</code>:{" "}
+            <ExtAddr addr="0xf21506b430085ff851cc3fe0f210cde1d1dd6de8" />
+          </li>
+          <li>
+            <code>CirqueLending</code>:{" "}
+            <ExtAddr addr="0x5fa1dfeacbd0ed1ac35b217743efd829923ff384" />
+          </li>
+          <li>
+            BTC/USD feed:{" "}
+            <code>0x23a85cd7…aafe64c</code> on Registry v2 — bonded by
+            keeper <ExtAddr addr="0x580a7791DBF10578ce1DBF7A7A438B16Ee9CAAfd" short />
+            {" "}with 25 USDC slashable.
+          </li>
+        </ul>
+        <h3>Why dogfooded</h3>
+        <p>
+          Original plan: owner-set oracle, Cloudflare Worker pushes prices
+          every 5 minutes. Simple, but: hot key in production, single
+          point of failure, no slash-on-bad-data property. Replaced with
+          a bonded oracle agent on Registry v2 — same trust model as
+          every other Registrai feed, just used internally by the lending
+          product. If we attest a bad BTC price, anyone with 25 USDC can
+          dispute and slash us. We hold ourselves to the same standard
+          as our public-facing oracles.
+        </p>
+        <h3>cirBTC integrity probes — defense against Circle-side compromise</h3>
+        <p>
+          Using cirBTC means inheriting Circle&apos;s security. We
+          don&apos;t blindly trust it — before every attestation the
+          keeper runs four onchain probes:
+        </p>
+        <ul>
+          <li>
+            <code>cirBTC.paused()</code> must be <code>false</code> —
+            Circle hasn&apos;t halted transfers.
+          </li>
+          <li>
+            <code>cirBTC.owner()</code> must match the expected admin —
+            no covert admin rotation.
+          </li>
+          <li>
+            <code>cirBTC.totalSupply()</code> growth ≤ 50% per 30-min
+            cycle — abnormal mint = potential exploit.
+          </li>
+          <li>
+            <code>cirBTC.isBlacklisted(CirqueLending)</code> must be{" "}
+            <code>false</code> — Circle hasn&apos;t frozen our pool.
+          </li>
+        </ul>
+        <p>
+          Any failure halts attestation. After 1 hour of no fresh price
+          (MAX_ORACLE_STALENESS), the lending contract refuses new
+          borrows and liquidations until integrity restored. Repays still
+          work — borrowers are never trapped.
+        </p>
+        <h3>What&apos;s seeded, what&apos;s next</h3>
+        <p>
+          Pool seeded with 100 USDC from the treasury (small for testnet
+          alpha; bounds blast radius if anything goes wrong). cirBTC
+          collateral must come from <code>faucet.circle.com</code> — that
+          step is up to the user. UI surface comes in Phase 3 (supply /
+          borrow / repay / health). External audit gates mainnet (Q4 2026).
+        </p>
+        <h3>What we&apos;re NOT claiming yet</h3>
+        <ul>
+          <li>This is testnet alpha. <strong>Do not deposit real funds.</strong></li>
+          <li>
+            No public marketing tweet until the UI ships AND we have
+            integrity probe data showing the keeper is reliable across a
+            multi-day window.
+          </li>
+          <li>
+            The atomic borrow-and-bet flow (v0.5 beta) is still deferred
+            until per-user share custody is designed correctly.
+          </li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    date: "2026-05-22",
+    title: "CirqueLending v0.5 alpha · self-audited pre-deployment · 3 findings, 3 fixes",
+    body: (
+      <>
+        <p>
+          Wrote the first version of <code>CirqueLending.sol</code> — the
+          v0.5 lending primitive that lets users borrow USDC against
+          cirBTC collateral and use the proceeds to bet on Registrai
+          markets. Before pushing anywhere near a testnet, ran an internal
+          audit pass against the freshly-written code. Three findings, all
+          fixed before this entry shipped:
+        </p>
+        <h3>C1 · supply() drained borrower collateral (critical)</h3>
+        <p>
+          A <code>_totalCollateral()</code> placeholder returning 0 meant{" "}
+          <code>withdraw()</code> treated the entire contract balance as
+          free supply. A cirBTC supplier could withdraw funds that other
+          users had posted as borrow collateral — borrowers later failed
+          to <code>repay()</code> because the contract had no cirBTC to
+          return. <strong>Fix:</strong> removed the supply / withdraw
+          surface entirely. v0.5 alpha is a pure collateral-locking
+          product. The proper two-sided supply pool (USDC lenders earning
+          yield from borrower interest) ships in v0.6 with the running
+          collateral counter done right.
+        </p>
+        <h3>C2 · supply yield was advertised but had no source (critical)</h3>
+        <p>
+          The website said &quot;supply cirBTC, earn yield from leveraged
+          bettors.&quot; The contract had no mechanism connecting cirBTC
+          deposits to any income stream — USDC borrowers paid USDC
+          interest to the treasury, never to cirBTC suppliers. False
+          advertising, even on testnet, is corrosive to trust.{" "}
+          <strong>Fix:</strong> dropped the supply framing from the
+          homepage, vault page, and roadmap. v0.5 leads with the
+          borrower-side value (lever cirBTC into bets); v0.6 introduces
+          two-sided yield with the supplier side actually wired up.
+        </p>
+        <h3>H1 · liquidation seized the entire collateral (high)</h3>
+        <p>
+          At the 65% LTV liquidation trigger, a $22k debt was backed by
+          ~$34k of cirBTC. The first pass handed{" "}
+          <em>all $34k</em> to the liquidator for paying $22k — a 54%
+          profit on the transaction, with the borrower losing everything.
+          <strong> Fix:</strong> liquidator now receives only{" "}
+          <code>(debt + interest) × (1 + 5% bonus)</code> worth of cirBTC
+          at the oracle price; the remainder refunds to the borrower.
+          If BTC has crashed below the debt value, the liquidator takes
+          all collateral and the protocol absorbs the shortfall as bad
+          debt — properly accounted, no surprise to the borrower.
+        </p>
+        <h3>H2 · oracle had no staleness check (high)</h3>
+        <p>
+          The v0.5 alpha BTC oracle is owner-set — a centralized keeper
+          calls <code>setPrice</code> on a cadence. If the keeper crashes
+          for 24 hours, the stored price stays stuck while real BTC moves
+          30%. Underwater loans would look healthy on paper; liquidators
+          can&apos;t act. <strong>Fix:</strong> the oracle interface now
+          returns <code>(price, updatedAt)</code>; the lending contract
+          refuses to borrow or liquidate when{" "}
+          <code>block.timestamp − updatedAt &gt; 1 hour</code>. Repays
+          deliberately skip the staleness check — borrowers can always
+          close a position regardless of oracle health.
+        </p>
+        <h3>Verification</h3>
+        <p>
+          17 contract tests written against the corrected logic. Full repo:
+          114 tests pass, 0 fail. The contract is{" "}
+          <strong>still not deployed</strong> — Phase 2 (liquidator bot +
+          deploy script) ships next; Phase 5 (third-party audit) gates
+          mainnet. Disclosing internal findings publicly because the same
+          process scales to v0.6 / v0.7: write, audit own work, document
+          before any external review.
+        </p>
+      </>
+    ),
+  },
+  {
+    date: "2026-05-22",
+    title: "Methodology · paste-not-link · MethodologyLive on every feed page",
+    body: (
+      <>
+        <p>
+          The agent-creation form used to ask for an{" "}
+          <code>ipfs://…</code> CID or URL — meaning new agent deployers had
+          to host a markdown doc somewhere just to claim a methodology hash.
+          Today the field is a <strong>9-row textarea</strong> with a
+          starter scaffold the user overwrites in place. Sources, math,
+          cadence, controls — all four sections required, all four hashed
+          onchain. Validation refuses to submit if the template is
+          unedited.
+        </p>
+        <p>
+          On successful registration, the text is signature-gated and
+          POSTed to a new Worker endpoint{" "}
+          <code>/feed-methodology</code>. The Worker double-verifies:
+          (1) signer recovers to <code>Registry.getFeed(feedId).creator</code>
+          across v2 → v1.1 → v1.0, and (2){" "}
+          <code>keccak256(text) === onchain methodologyHash</code>. The KV
+          can never drift from chain — a forged or modified text submission
+          is rejected with a 400 explaining the hash mismatch.
+        </p>
+        <h3>MethodologyLive — three render branches</h3>
+        <p>
+          A new client component <code>&lt;MethodologyLive /&gt;</code>{" "}
+          resolves the methodology in this order, on both the{" "}
+          <code>/feed/[feedId]</code> page and the post-registration
+          success panel:
+        </p>
+        <ol>
+          <li>
+            <strong>Worker has the text</strong> → render the prose in a
+            monospace block with caption{" "}
+            <em>creator-supplied · onchain hash · signed by feed creator</em>.
+          </li>
+          <li>
+            <strong>Connected wallet === feed creator AND localStorage has
+            an unsaved methodology</strong> → render a{" "}
+            <code>publish methodology</code> retry button. Signs the same
+            EIP-191 message, POSTs, refetches, clears localStorage on
+            success.
+          </li>
+          <li>
+            <strong>Per-feed fallback URL</strong> (legacy seeded feeds —
+            Warsaw/CPI/ECB each have a <code>methodologyDoc</code> field in{" "}
+            <code>live-data.json</code>) → render the GitHub link.
+          </li>
+        </ol>
+        <h3>Retry safety net</h3>
+        <p>
+          The methodology is written to <code>localStorage</code>{" "}
+          <em>before</em> the Worker POST is attempted. If the user cancels
+          the signature, the Worker is unreachable, or the tab crashes, the
+          text survives. Next visit to <code>/feed/{"{feedId}"}</code>{" "}
+          surfaces the retry button. Worker writes succeed → localStorage
+          cleared automatically.
+        </p>
+        <h3>Next on the roadmap</h3>
+        <p>
+          v0.3 — long-tail FX feeds (NGN/USDC, TRY/USDC, ARS/USDC) for
+          emerging-market currency markets. v0.5 — borrow USDC against
+          cirBTC collateral, lever into Registrai markets. No BTC sell,
+          no taxable event, no exit from the asset. v0.5 beta adds the
+          atomic borrow-and-bet bundling (one transaction, one signature)
+          — something Aave can&apos;t replicate because they don&apos;t
+          own the markets contract. v0.6 opens the two-sided pool with
+          USDC suppliers earning yield from borrower interest.
+          Engineering starts now; mainnet launch gated on audit (Q4 2026).
+        </p>
+      </>
+    ),
+  },
+  {
+    date: "2026-05-21",
+    title: "Social Signal Oracle live · Twitter quests · paste-first UX",
+    body: (
+      <>
+        <p>
+          The credit system needed a way to mint for off-chain proofs
+          (Twitter ownership, etc.) without breaking the &quot;all credits
+          are minted by bonded oracle agents&quot; story. Today: a new
+          first-party Registrai agent at{" "}
+          <ExtAddr addr="0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263" short />{" "}
+          — bonded with <strong>10 USDC slashable</strong>, registered on
+          Registry v2 against a new feed{" "}
+          <em>&quot;Registrai social engagement signals&quot;</em>. Same
+          trust model as Warsaw, CPI, ECB.
+        </p>
+        <h3>Quests live</h3>
+        <ul>
+          <li>
+            <strong>Connect Twitter (+50 pts)</strong> — user posts a
+            wallet-bound challenge tweet. Worker fetches it via Twitter&apos;s
+            public oEmbed endpoint (no API key, no auth, no rate-limit
+            cost), extracts the author handle from <code>author_url</code>,
+            parses the first <code>&lt;p&gt;</code> of the rendered html to
+            stop quote-tweet replays, and binds handle ↔ wallet one-to-one
+            in KV.
+          </li>
+          <li>
+            <strong>Tweet about your agent (+150 pts)</strong> — same oEmbed
+            verification, plus a chain check via topic-filtered{" "}
+            <code>eth_getLogs</code> that the wallet has at least one{" "}
+            <code>AgentRegistered</code> event across v1.0 / v1.1 / v2.
+            Returns 503 with retry on RPC failure (never a silent
+            false-negative). Three rotating templates so the same quest
+            doesn&apos;t produce identical-looking tweets at scale.
+          </li>
+        </ul>
+        <h3>Key separation</h3>
+        <p>
+          The dedicated <strong>MINTER wallet</strong>{" "}
+          <ExtAddr addr="0xaE1A21Be03a9099971aaFc1dFDc9544c3b07F0AF" short />{" "}
+          is the only authorized minter on{" "}
+          <code>RegistraiPoints</code>. The bonded social-oracle wallet had
+          its minter role revoked. Compromise of the mint key = unlimited
+          credit mint, bounded only by the per-call cap; compromise of the
+          bond key = nothing (the mint key is what carries authority). Two
+          keys, two failure modes, both bounded.
+        </p>
+        <h3>Worker-side hardening</h3>
+        <ul>
+          <li>
+            Per-nonce KV keying (<code>nonce:wallet:nonce</code>) — two
+            tabs each get their own valid pending nonce; the second{" "}
+            <code>/start</code> no longer invalidates the first.
+          </li>
+          <li>
+            Sliding-window rate limit: 5 verify attempts per wallet per
+            10 minutes.
+          </li>
+          <li>
+            <code>AbortController</code> + 30s timeout on every quest
+            fetch, matching Cloudflare&apos;s own server cap.
+          </li>
+          <li>
+            Per-wallet-address reset on the frontend — switching MetaMask
+            account wipes flow state so a stale nonce/template can&apos;t
+            follow you to a different wallet.
+          </li>
+        </ul>
+        <h3>Paste-first UX</h3>
+        <p>
+          Quest panels auto-fetch templates on mount (no &quot;start&quot;
+          button). The paste-URL input is the primary action; templates
+          live in a collapsed{" "}
+          <em>&quot;need a tweet? show me a suggestion ↓&quot;</em>{" "}
+          disclosure with copy-to-clipboard, intent-URL composer, and a
+          shuffle button to cycle through variants. End-to-end:{" "}
+          <strong>two interactions per quest</strong> — paste, verify.
+        </p>
+      </>
+    ),
+  },
+  {
+    date: "2026-05-20",
+    title: "v2 stack shipped · onchain soulbound credits · audit fixes",
+    body: (
+      <>
+        <p>
+          Six new contracts, deployed and source-verified on ArcScan in a
+          single migration. Old v1.0 + v1.1 stay running unchanged; v2 is
+          the write target for every new agent registration, market, and
+          trade.
+        </p>
+        <ul>
+          <li>
+            <code>RegistraiPoints</code>:{" "}
+            <ExtAddr addr="0xF5897349819B16f4431A61Ad61293C1b31bD3381" />
+          </li>
+          <li>
+            <code>Registry v2</code>:{" "}
+            <ExtAddr addr="0x0529730A961f50997de63ac0aD07f1aEa2dEC0C0" />
+          </li>
+          <li>
+            <code>Attestation v2</code>:{" "}
+            <ExtAddr addr="0x060C61Cc315d9e8Baf2a58719f80C01163Bd6F48" />
+          </li>
+          <li>
+            <code>Dispute v2</code>:{" "}
+            <ExtAddr addr="0x1F78e08f5DdF5dD3fDD0e27097FE5398999Aa738" />
+          </li>
+          <li>
+            <code>Markets v2</code>:{" "}
+            <ExtAddr addr="0xb653c065E4805F4b2558af7AE01e9622D61Ff394" />
+          </li>
+          <li>
+            <code>MarketMakerVault v2</code>:{" "}
+            <ExtAddr addr="0x13c7069F7f1526b160E885e201087caD6c67Ed47" />
+          </li>
+        </ul>
+        <h3>Onchain credits, live</h3>
+        <p>
+          A soulbound credit layer that mints on every protocol action.
+          Non-transferable, read directly from chain via{" "}
+          <code>RegistraiPoints.points(address)</code>. No backend, no API,
+          no off-chain ledger.
+        </p>
+        <TestTable
+          rows={[
+            ["register an oracle agent", "+1,000 pts", "one-time per feed"],
+            ["create a prediction market", "+200 pts", "per market"],
+            ["attest a data point", "+50 pts", "per attestation, dispute-free"],
+            ["trade", "+10 pts / USDC", "capped 500 pts / day / wallet"],
+            ["resolve a market", "+25 pts → agent", "rewards the oracle, not the keeper"],
+            ["slashed attestation", "−300 pts", "deducted on ResolvedInvalid"],
+          ]}
+        />
+        <h3>Audit fixes baked into v2</h3>
+        <ul>
+          <li>
+            <code>ReentrancyGuard</code> on every fund-moving function in
+            Markets (<code>buy</code>, <code>sell</code>,{" "}
+            <code>resolve</code>, <code>redeem</code>,{" "}
+            <code>claimLP</code>, <code>createMarket</code>,{" "}
+            <code>addLiquidity</code>) — the points sub-call is an external
+            call to an arbitrary minter contract; reentrancy guard closes
+            the obvious vector.
+          </li>
+          <li>
+            Strict state machine on{" "}
+            <code>Attestation.setStatus</code> — only{" "}
+            <code>Pending → ResolvedValid|ResolvedInvalid</code> permitted;
+            slash idempotent (only debits when the prior state was{" "}
+            <code>Pending</code>).
+          </li>
+          <li>
+            <strong>Feed-creator-must-be-agent rule</strong> baked into{" "}
+            <code>Registry._register</code> — couples spec authorship and
+            data quality to one accountable bonded wallet. No more Case-B
+            where someone else attests against your feed.
+          </li>
+          <li>
+            <code>awardFlat</code> per-call cap (<code>10_000</code> pts) so
+            a compromised minter can&apos;t mint unlimited credits in a
+            single tx.
+          </li>
+          <li>
+            Buy uses <code>effectiveIn</code> (post-fee), sell uses{" "}
+            <code>grossOut</code> (pre-fee) for points — symmetric
+            accounting so two-way volume is measured consistently.
+          </li>
+          <li>
+            <code>maxUint256</code> approval on every USDC{" "}
+            <code>approve</code> the UI sends — second feed / second
+            market / second trade skips the approve popup.
+          </li>
+        </ul>
+        <h3>Profile updates</h3>
+        <p>
+          New <strong>Quests</strong> tab on <code>/profile</code> (the
+          default — fresh wallets land here, not on empty
+          trader/creator/deployer). <strong>CreditsBanner</strong> reads
+          the live balance from chain. <strong>DeployerTab</strong> now
+          discovers v2 agents via topic-filtered{" "}
+          <code>eth_getLogs</code> across all three Registry deployments —
+          a wallet that registers on v2 sees its agent in
+          &quot;deployer&quot; immediately after the tx confirms.
+        </p>
+      </>
+    ),
+  },
+  {
     date: "2026-05-17",
     title: "Markets v1.1 · verifiable markets live · Circle-product roadmap",
     body: (

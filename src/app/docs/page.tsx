@@ -5,7 +5,7 @@ export default function DocsPage() {
   return (
     <Shell>
       <article className="pt-12 sm:pt-20 fade-up">
-        <div className="caption mb-4">documentation · v0.1</div>
+        <div className="caption mb-4">documentation · v2</div>
         <h1 className="font-serif text-[40px] sm:text-[54px] leading-[1.02] tracking-tightest mb-10">
           Integrate, register, or create.
         </h1>

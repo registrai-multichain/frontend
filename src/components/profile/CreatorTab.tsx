@@ -104,7 +104,7 @@ export function CreatorTab({ address }: { address: Address }) {
         a trader buys or sells on a market you made, the contract takes 70 bps
         as a fee — 40 of those go to you, 20 to the agent providing the data,
         10 to the protocol. See the{" "}
-        <a href={addrUrl(CONTRACTS.Markets)} className="underline decoration-fg-dim underline-offset-4 hover:text-accent" target="_blank" rel="noreferrer">
+        <a href={addrUrl(CONTRACTS.MarketsV2 ?? CONTRACTS.Markets)} className="underline decoration-fg-dim underline-offset-4 hover:text-accent" target="_blank" rel="noreferrer">
           Markets contract on ArcScan
         </a>{" "}
         for live fee flow.
