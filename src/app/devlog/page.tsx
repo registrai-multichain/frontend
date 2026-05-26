@@ -9,6 +9,70 @@ interface Entry {
 
 const ENTRIES: Entry[] = [
   {
+    date: "2026-05-26",
+    title: "oracle-primitives extracted as a standalone fork-target",
+    body: (
+      <>
+        <p>
+          Pulled the bonded-agent oracle layer into its own MIT-licensed
+          repository at{" "}
+          <a
+            href="https://github.com/registrai-multichain/oracle-primitives"
+            target="_blank"
+            rel="noreferrer"
+            className="text-accent hover:underline"
+          >
+            registrai-multichain/oracle-primitives
+          </a>
+          {" "}— six audited Solidity primitives, stripped of every
+          app-layer dependency, ready for any Arc builder to fork.
+        </p>
+        <h3>What got extracted</h3>
+        <ul>
+          <li><code>Registry.sol</code> — permissionless feed + bonded agent registration</li>
+          <li><code>Attestation.sol</code> — value writes + dispute state machine</li>
+          <li><code>Dispute.sol</code> — counter-bond + slashing</li>
+          <li><code>AgentIdentity.sol</code> — global per-address profile</li>
+          <li><code>rules/MedianRule.sol</code> · <code>rules/TrimmedMeanRule.sol</code> — verifiable onchain aggregation</li>
+          <li>Foundry tests (65 passing), single-shot deploy script, two usage examples</li>
+        </ul>
+        <h3>What got stripped from the primitives</h3>
+        <p>
+          The deployed v2 stack integrates with{" "}
+          <code>RegistraiPoints</code> via optional hooks in{" "}
+          <code>Registry.setPoints()</code> and{" "}
+          <code>Attestation.setPoints()</code>. Those hooks make the
+          deployed bytecode &quot;app-aware&quot; — useful for the live
+          credit system, noise for a clean fork target. Removed entirely
+          in the primitives repo. Same with{" "}
+          <code>PointsValues</code> constants. The primitives are now
+          zero-coupling to any specific application.
+        </p>
+        <h3>Why this matters</h3>
+        <p>
+          Arc OSS Showcase asks specifically for &quot;standalone,
+          infra-focused repos that other builders can pick up.&quot; The
+          full <code>registrai-multichain/contracts</code> repo has
+          Markets, Cirque lending, and the credit system bundled — the
+          full production app, not the primitive. Extracting the oracle
+          layer as its own repo answers the showcase&apos;s exact criteria
+          and gives forkers a 870-line surface to work with instead of
+          a 3000-line one.
+        </p>
+        <h3>Pre-tag audit pass</h3>
+        <p>
+          Caught one Solidity warning (unused <code>verifiable</code> parameter
+          + dead <code>wasSlashable</code> local — vestigial from the Points
+          strip) and cleaned both before tagging{" "}
+          <code>v0.1.0</code>. Repo annotated with 8 topics
+          (arc-network, oracle, defi, solidity, foundry, prediction-markets,
+          circle-arc, usdc) for discoverability. All 65 tests still pass
+          post-cleanup.
+        </p>
+      </>
+    ),
+  },
+  {
     date: "2026-05-25",
     title: "Audit pass · CirqueLending + AttestedBTCOracle redeployed · admin escape hatch removed",
     body: (
