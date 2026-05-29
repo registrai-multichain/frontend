@@ -9,6 +9,60 @@ interface Entry {
 
 const ENTRIES: Entry[] = [
   {
+    date: "2026-05-27",
+    title: "Cirque v0.5 beta live · atomic leverage-and-bet · reviewed + redeployed",
+    body: (
+      <>
+        <p>
+          The headline cirBTC primitive is live on Arc testnet:{" "}
+          <strong>lock cirBTC, borrow USDC, and buy YES/NO shares on a
+          Registrai market in a single transaction.</strong> The borrowed
+          USDC never touches your wallet — it goes straight into the bet.
+          New CirqueLending at{" "}
+          <ExtAddr addr="0x2dd7bc570e876499422b8185dbb04c4b134cd504" />,
+          source-verified, pool seeded.
+        </p>
+        <h3>Position lifecycle</h3>
+        <ul>
+          <li><code>leverageAndBet</code> — open: lock cirBTC + borrow + buy, atomic</li>
+          <li><code>closePosition</code> — sell shares while trading, settle from proceeds</li>
+          <li><code>redeemAtExpiry</code> — after resolution: winning shares redeem at 1 USDC each; losing bet, cover the debt to reclaim cirBTC</li>
+          <li>On liquidation, the position forfeits to the treasury (closes the moral-hazard hole where a bettor could let cirBTC liquidate yet keep a winning bet)</li>
+        </ul>
+        <h3>Full-power review before shipping</h3>
+        <p>
+          Three parallel adversarial reviews (accounting / security /
+          edge-cases) ran against the new code. Three real findings, all
+          fixed before deploy:
+        </p>
+        <ul>
+          <li>
+            <strong>Redeem-escrow commingling (critical):</strong> with
+            multiple winners on one market, the first redeemer pulled
+            everyone&apos;s winnings into the commingled balance, which
+            could misprice supplier shares. Fixed with a per-market
+            <code>redeemPot</code> escrow excluded from pool value.
+          </li>
+          <li>
+            <strong>Never-resolve lockup (high):</strong> a market that
+            expired but never resolved could trap a borrower&apos;s
+            collateral forever. Fixed with an escape hatch.
+          </li>
+          <li>
+            <strong>Treasury-sweep sandwich (medium):</strong> restricted
+            sweeps to resolved markets (redeem at $1, zero slippage).
+          </li>
+        </ul>
+        <p>
+          131 contract tests pass. Two findings deferred to external audit
+          with written rationale (first-depositor share inflation —
+          griefing-only, capped; stale-oracle liquidation halt —
+          deliberate). UI to expose the one-click flow lands next.
+        </p>
+      </>
+    ),
+  },
+  {
     date: "2026-05-26",
     title: "oracle-primitives extracted as a standalone fork-target",
     body: (

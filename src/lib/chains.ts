@@ -127,11 +127,12 @@ export const ARC_TESTNET: ChainEntry = {
       .RegistraiPoints as Address | undefined,
     AgentIdentity: (live.contracts as { AgentIdentity?: string })
       .AgentIdentity as Address | undefined,
-    // v0.5 alpha cirque lending (cirBTC × USDC).
-    // Redeployed post-audit: removed adminWithdrawUSDC + bumped
-    // AttestedBTCOracle MAX_LOOKBACK to 100.
+    // v0.5 beta cirque lending (cirBTC × USDC).
+    // CirqueLending redeployed for the leverageAndBet feature + the
+    // full-power-review fixes (redeemPot escrow, dead-zone escape hatch,
+    // resolved-only treasury sweep). Oracle unchanged from v0.5 alpha.
     cirBTC: "0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF" as Address,
-    CirqueLending: "0x1045edf68502091ef751ade2f1dc0d12cdc059dc" as Address,
+    CirqueLending: "0x2dd7bc570e876499422b8185dbb04c4b134cd504" as Address,
     AttestedBTCOracle: "0x83f3e3d6e9cc18579de577d92df1e23cc27057a1" as Address,
   },
   viemChain: ARC_TESTNET_VIEM,
