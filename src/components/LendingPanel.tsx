@@ -1,12 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { parseUnits } from "viem";
 import Link from "next/link";
 import { useWallet } from "./WalletProvider";
 import { CONTRACTS, addrUrl, txUrl } from "@/lib/chain";
 import { usdcAbi, cirqueLendingAbi, attestedBtcOracleAbi, cirBtcAbi } from "@/lib/abi";
 import { humanizeError } from "@/lib/humanize-error";
+import { DEMO_MARKETS } from "@/lib/markets-demo";
+
+// Markets a leveraged bet can target: v2 (CirqueLending settles against
+// Markets v2), still trading, not past expiry.
+const LEVERAGEABLE_MARKETS = DEMO_MARKETS.filter(
+  (m) =>
+    (m.marketsVersion === "2.0" || m.marketsVersion === "2") &&
+    m.phase === "trading" &&
+    m.expiry * 1000 > Date.now(),
+);
 
 type SupplyMode = "supply" | "withdraw";
 type BorrowMode = "borrow" | "repay";
@@ -34,6 +44,10 @@ interface UserState {
   loanPrincipal: bigint;
   loanHealth: bigint;
   loanInterest: bigint;
+  // Leverage fields (zero/empty for a plain loan).
+  loanMarketId: `0x${string}`;
+  loanBetYes: boolean;
+  loanBetShares: bigint;
 }
 
 const fmtUSDC = (wei: bigint) => (Number(wei) / 1e6).toFixed(2);
@@ -64,6 +78,14 @@ export function LendingPanel() {
   const [error, setError] = useState<string | undefined>();
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+
+  // Leverage form state.
+  const [levMarketId, setLevMarketId] = useState<string>(
+    LEVERAGEABLE_MARKETS[0]?.id ?? "",
+  );
+  const [levCollateral, setLevCollateral] = useState("");
+  const [levBorrow, setLevBorrow] = useState("");
+  const [levYes, setLevYes] = useState(true);
 
   // Refresh wall-clock every 5s for oracle freshness display.
   useEffect(() => {
@@ -131,7 +153,7 @@ export function LendingPanel() {
             }) as Promise<bigint>,
             publicClient.readContract({
               address: lending, abi: cirqueLendingAbi, functionName: "loans", args: [address],
-            }) as Promise<[bigint, bigint, bigint, boolean]>,
+            }) as Promise<[bigint, bigint, bigint, boolean, `0x${string}`, boolean, bigint]>,
             publicClient.readContract({
               address: lending, abi: cirqueLendingAbi, functionName: "healthBps", args: [address],
             }) as Promise<bigint>,
@@ -149,6 +171,9 @@ export function LendingPanel() {
           loanPrincipal: loan[1],
           loanHealth: health,
           loanInterest: interest,
+          loanMarketId: loan[4],
+          loanBetYes: loan[5],
+          loanBetShares: loan[6],
         });
       } else {
         setUser(undefined);
@@ -172,6 +197,20 @@ export function LendingPanel() {
     stats && stats.totalPoolValue > 0n
       ? (stats.totalBorrowed * 10000n) / stats.totalPoolValue
       : 0n;
+
+  // Leverage-derived state.
+  const ZERO_ID = `0x${"0".repeat(64)}`;
+  const hasLeveraged = !!user?.hasLoan && user.loanMarketId !== ZERO_ID;
+  const hasPlainLoan = !!user?.hasLoan && user.loanMarketId === ZERO_ID;
+  const loanMarket = useMemo(
+    () => DEMO_MARKETS.find((m) => m.id.toLowerCase() === user?.loanMarketId?.toLowerCase()),
+    [user?.loanMarketId],
+  );
+  // Estimated max borrow against the leverage form's collateral (50% LTV).
+  const levMaxBorrow =
+    stats && levCollateral
+      ? (Number(levCollateral) * (Number(stats.btcPrice18) / 1e18) * 0.5) || 0
+      : 0;
 
   // ───────────────────────── Actions ──────────────────────────
 
@@ -297,6 +336,95 @@ export function LendingPanel() {
       setStatus("submitting");
       const hash = await walletClient.writeContract({
         address: lending, abi: cirqueLendingAbi, functionName: "repay",
+        args: [], chain: walletClient.chain, account: walletClient.account!,
+      });
+      setTxHash(hash);
+      const r = await publicClient.waitForTransactionReceipt({ hash });
+      if (r.status !== "success") throw new Error("transaction reverted");
+      setStatus("success");
+      await refresh();
+    } catch (e) {
+      setStatus("error");
+      setError(humanizeError(e));
+    }
+  }
+
+  // ── Leverage actions ──
+
+  async function doLeverage() {
+    if (!walletClient || !address || !lending || !cirbtc) return;
+    setError(undefined);
+    setTxHash(undefined);
+    const collateralWei = parseUnits(levCollateral || "0", 8);
+    const borrowWei = parseUnits(levBorrow || "0", 6);
+    if (collateralWei === 0n || borrowWei === 0n) {
+      setError("collateral and borrow amount required");
+      return;
+    }
+    if (!/^0x[0-9a-fA-F]{64}$/.test(levMarketId)) {
+      setError("select a market");
+      return;
+    }
+    try {
+      await ensureApproved(cirbtc, lending, collateralWei);
+      setStatus("submitting");
+      const hash = await walletClient.writeContract({
+        address: lending, abi: cirqueLendingAbi, functionName: "leverageAndBet",
+        // minSharesOut 0 for alpha; the AMM is thin and the position is
+        // collateral-backed regardless. v0.6 adds a slippage preview.
+        args: [collateralWei, borrowWei, levMarketId as `0x${string}`, levYes, 0n],
+        chain: walletClient.chain, account: walletClient.account!,
+      });
+      setTxHash(hash);
+      const r = await publicClient.waitForTransactionReceipt({ hash });
+      if (r.status !== "success") throw new Error("transaction reverted");
+      setStatus("success");
+      setLevCollateral("");
+      setLevBorrow("");
+      await refresh();
+    } catch (e) {
+      setStatus("error");
+      setError(humanizeError(e));
+    }
+  }
+
+  async function doClosePosition() {
+    if (!walletClient || !address || !lending || !usdc || !user) return;
+    setError(undefined);
+    setTxHash(undefined);
+    try {
+      // closePosition may need a small shortfall top-up (AMM fees / losing
+      // bet), so pre-approve a buffer above the current debt.
+      const buffer = ((user.loanPrincipal + user.loanInterest) * 120n) / 100n;
+      await ensureApproved(usdc, lending, buffer);
+      setStatus("submitting");
+      const hash = await walletClient.writeContract({
+        address: lending, abi: cirqueLendingAbi, functionName: "closePosition",
+        args: [0n], // minProceeds 0 (alpha)
+        chain: walletClient.chain, account: walletClient.account!,
+      });
+      setTxHash(hash);
+      const r = await publicClient.waitForTransactionReceipt({ hash });
+      if (r.status !== "success") throw new Error("transaction reverted");
+      setStatus("success");
+      await refresh();
+    } catch (e) {
+      setStatus("error");
+      setError(humanizeError(e));
+    }
+  }
+
+  async function doRedeemAtExpiry() {
+    if (!walletClient || !address || !lending || !usdc || !user) return;
+    setError(undefined);
+    setTxHash(undefined);
+    try {
+      // A losing/dead-zone bet requires covering the debt from the wallet.
+      const buffer = ((user.loanPrincipal + user.loanInterest) * 120n) / 100n;
+      await ensureApproved(usdc, lending, buffer);
+      setStatus("submitting");
+      const hash = await walletClient.writeContract({
+        address: lending, abi: cirqueLendingAbi, functionName: "redeemAtExpiry",
         args: [], chain: walletClient.chain, account: walletClient.account!,
       });
       setTxHash(hash);
@@ -638,23 +766,133 @@ export function LendingPanel() {
         </div>
       )}
 
-      {/* Markets pivot */}
-      <section className="border border-dashed border-line/60 p-6 text-[13px] text-fg-mute leading-relaxed">
-        <p>
-          After borrowing USDC, place a bet on one of Registrai&apos;s 12
-          live prediction markets.{" "}
-          <Link
-            href="/markets/"
-            className="text-accent hover:underline"
-          >
-            browse markets →
-          </Link>
-        </p>
-        <p className="mt-3 text-2xs text-fg-dim">
-          Coming in v0.5 beta: atomic borrow-and-bet in a single transaction.
-          v0.6: cirBTC-denominated market settlement.
-        </p>
-      </section>
+      {/* ─── Leverage: one-click lock cirBTC → borrow USDC → bet ─── */}
+      {address && isOnSupportedChain && (
+        <section className="border border-accent/40 bg-bg-elev/40 p-6">
+          <div className="flex items-baseline gap-3 mb-4 flex-wrap">
+            <span className="caption text-accent">lever into a market</span>
+            <span className="caption text-fg-dim text-[10px]">
+              cirBTC → USDC → YES/NO, one transaction
+            </span>
+          </div>
+
+          {/* Existing leveraged position */}
+          {hasLeveraged && user && (
+            <div className="space-y-3">
+              <p className="text-2xs text-fg-dim">your open leveraged position</p>
+              <div className="border border-line p-4 text-2xs space-y-1.5">
+                <div className="flex justify-between"><span className="text-fg-dim">market</span><span className="text-fg max-w-[60%] text-right">{loanMarket?.title ?? loanMarket?.feedSymbol ?? user.loanMarketId.slice(0, 14) + "…"}</span></div>
+                <div className="flex justify-between"><span className="text-fg-dim">side</span><span className={user.loanBetYes ? "text-up" : "text-down"}>{user.loanBetYes ? "YES" : "NO"}</span></div>
+                <div className="flex justify-between"><span className="text-fg-dim">shares held</span><span className="tnum">{fmtUSDC(user.loanBetShares)}</span></div>
+                <div className="flex justify-between"><span className="text-fg-dim">cirBTC collateral</span><span className="tnum">{fmtCirBTC(user.loanCollateral)}</span></div>
+                <div className="flex justify-between"><span className="text-fg-dim">debt (principal + interest)</span><span className="tnum">{fmtUSDC(user.loanPrincipal + user.loanInterest)} USDC</span></div>
+                <div className="flex justify-between"><span className="text-fg-dim">health</span><span className={user.loanHealth > 5000n ? "tnum text-down" : "tnum text-up"}>{fmtBps(user.loanHealth)}</span></div>
+                <div className="flex justify-between"><span className="text-fg-dim">market phase</span><span>{loanMarket?.phase ?? "—"}</span></div>
+              </div>
+
+              {loanMarket?.phase === "resolved" || (loanMarket && loanMarket.expiry * 1000 <= Date.now()) ? (
+                <ActionButton onClick={doRedeemAtExpiry} status={status}
+                  disabled={status === "approving" || status === "submitting"}>
+                  redeem at expiry →
+                </ActionButton>
+              ) : (
+                <ActionButton onClick={doClosePosition} status={status}
+                  disabled={status === "approving" || status === "submitting"}>
+                  close position (sell + settle) →
+                </ActionButton>
+              )}
+              <p className="text-2xs text-fg-dim leading-relaxed">
+                {loanMarket?.phase === "resolved"
+                  ? "Market resolved — redeem winning shares (1 USDC each) to settle the loan, or cover the debt if your bet lost. Either way you reclaim your cirBTC."
+                  : "Close before expiry to sell your shares back to the AMM and settle. After resolution, use redeem instead."}
+              </p>
+            </div>
+          )}
+
+          {/* Plain loan active — can't also leverage */}
+          {hasPlainLoan && (
+            <p className="text-2xs text-fg-mute leading-relaxed">
+              You have an active plain borrow. Repay it first to open a
+              leveraged position (one loan per wallet in v0.5 alpha).
+            </p>
+          )}
+
+          {/* Open a new leveraged position */}
+          {!user?.hasLoan && (
+            <div className="space-y-3">
+              {LEVERAGEABLE_MARKETS.length === 0 ? (
+                <p className="text-2xs text-fg-mute">
+                  No open v2 markets to bet on right now.{" "}
+                  <Link href="/markets/create/" className="text-accent hover:underline">create one →</Link>
+                </p>
+              ) : (
+                <>
+                  <div>
+                    <div className="caption mb-1.5 text-2xs">market</div>
+                    <select
+                      value={levMarketId}
+                      onChange={(e) => setLevMarketId(e.target.value)}
+                      className="w-full bg-bg border border-line px-3 py-2.5 text-[13px] focus:outline-none focus:border-accent"
+                    >
+                      {LEVERAGEABLE_MARKETS.map((m) => (
+                        <option key={m.id} value={m.id}>{m.title ?? m.feedSymbol}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setLevYes(true)}
+                      className={"flex-1 px-3 py-2 border text-2xs " + (levYes ? "border-up text-up" : "border-line/60 text-fg-dim hover:text-fg")}
+                    >YES</button>
+                    <button
+                      onClick={() => setLevYes(false)}
+                      className={"flex-1 px-3 py-2 border text-2xs " + (!levYes ? "border-down text-down" : "border-line/60 text-fg-dim hover:text-fg")}
+                    >NO</button>
+                  </div>
+
+                  <AmountInput
+                    value={levCollateral}
+                    onChange={setLevCollateral}
+                    symbol="cirBTC"
+                    balanceLabel="collateral · your balance"
+                    balanceValue={user ? fmtCirBTC(user.cirBTCBalance) : "…"}
+                    setMax={() => user && setLevCollateral(fmtCirBTC(user.cirBTCBalance))}
+                  />
+                  <AmountInput
+                    value={levBorrow}
+                    onChange={setLevBorrow}
+                    symbol="USDC"
+                    balanceLabel="borrow + bet · max"
+                    balanceValue={levCollateral ? levMaxBorrow.toFixed(2) : "…"}
+                    setMax={() => setLevBorrow(levMaxBorrow.toFixed(2))}
+                  />
+                  {user && user.cirBTCBalance === 0n && (
+                    <p className="text-2xs text-fg-dim">
+                      you have 0 cirBTC.{" "}
+                      <a href="https://faucet.circle.com" target="_blank" rel="noreferrer" className="text-accent hover:underline">claim from Circle&apos;s faucet ↗</a>
+                    </p>
+                  )}
+                  <ActionButton
+                    onClick={doLeverage}
+                    status={status}
+                    disabled={!levCollateral.trim() || !levBorrow.trim() || status === "approving" || status === "submitting"}
+                  >
+                    lever into bet →
+                  </ActionButton>
+                  <p className="text-2xs text-fg-dim leading-relaxed">
+                    Locks cirBTC, borrows USDC at 5% APY, and buys your YES/NO
+                    shares in one transaction — no BTC sold. 50% max LTV;
+                    liquidated above 65%. The borrowed USDC never touches your
+                    wallet. Aave can&apos;t bundle this — they don&apos;t own
+                    the markets contract.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

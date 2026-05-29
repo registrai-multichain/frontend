@@ -364,6 +364,9 @@ export const cirqueLendingAbi = [
       { name: "principal", type: "uint256" },
       { name: "borrowedAt", type: "uint256" },
       { name: "active", type: "bool" },
+      { name: "marketId", type: "bytes32" },
+      { name: "betYes", type: "bool" },
+      { name: "betShares", type: "uint256" },
     ],
   },
   {
@@ -400,6 +403,49 @@ export const cirqueLendingAbi = [
   {
     type: "function", name: "MAX_USDC_SUPPLY_PER_USER", stateMutability: "view",
     inputs: [], outputs: [{ type: "uint256" }],
+  },
+  // ── leverage (v0.5 beta) ──
+  {
+    type: "function", name: "leverageAndBet", stateMutability: "nonpayable",
+    inputs: [
+      { name: "collateralAmount", type: "uint256" },
+      { name: "usdcToBorrow", type: "uint256" },
+      { name: "marketId", type: "bytes32" },
+      { name: "betYes", type: "bool" },
+      { name: "minSharesOut", type: "uint256" },
+    ],
+    outputs: [
+      { name: "openingHealthBps", type: "uint256" },
+      { name: "sharesOut", type: "uint256" },
+    ],
+  },
+  {
+    type: "function", name: "closePosition", stateMutability: "nonpayable",
+    inputs: [{ name: "minProceeds", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function", name: "redeemAtExpiry", stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: "function", name: "sweepToTreasury", stateMutability: "nonpayable",
+    inputs: [
+      { name: "marketId", type: "bytes32" },
+      { name: "betYes", type: "bool" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function", name: "treasuryYesShares", stateMutability: "view",
+    inputs: [{ name: "marketId", type: "bytes32" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "treasuryNoShares", stateMutability: "view",
+    inputs: [{ name: "marketId", type: "bytes32" }],
+    outputs: [{ type: "uint256" }],
   },
 ] as const;
 
