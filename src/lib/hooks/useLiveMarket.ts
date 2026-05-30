@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { createPublicClient, http, type Hex } from "viem";
+import { createPublicClient, type Hex } from "viem";
 import { useChainPoll } from "./useChainPoll";
-import { DEFAULT_CHAIN } from "@/lib/chains";
+import { DEFAULT_CHAIN, arcTransport } from "@/lib/chains";
 import { marketsAbi } from "@/lib/abi";
 import { CONTRACTS } from "@/lib/chain";
 
@@ -45,7 +45,7 @@ export function useLiveMarket(marketId: string | undefined): {
     () =>
       createPublicClient({
         chain: DEFAULT_CHAIN.viemChain,
-        transport: http(DEFAULT_CHAIN.rpcUrls[0]),
+        transport: arcTransport(),
       }),
     [],
   );

@@ -13,7 +13,6 @@ import {
   createPublicClient,
   createWalletClient,
   custom,
-  http,
   type Address,
   type PublicClient,
   type WalletClient,
@@ -21,6 +20,7 @@ import {
 import {
   CHAINS,
   DEFAULT_CHAIN_ID,
+  arcTransport,
   getChain,
   isSupportedChain,
   type ChainEntry,
@@ -84,7 +84,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     () =>
       createPublicClient({
         chain: currentChain.viemChain,
-        transport: http(),
+        // Canteen-primary, Arc-official failover for read traffic.
+        transport: arcTransport(),
       }),
     [currentChain],
   );

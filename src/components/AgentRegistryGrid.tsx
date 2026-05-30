@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createPublicClient, http, type Hex } from "viem";
-import { DEFAULT_CHAIN } from "@/lib/chains";
+import { createPublicClient, type Hex } from "viem";
+import { DEFAULT_CHAIN, arcTransport } from "@/lib/chains";
 import { CONTRACTS, addrUrl } from "@/lib/chain";
 import { CREATABLE_FEEDS } from "@/lib/demo";
 import { registryAbi, agentIdentityAbi } from "@/lib/abi";
@@ -48,7 +48,7 @@ export function AgentRegistryGrid() {
     () =>
       createPublicClient({
         chain: DEFAULT_CHAIN.viemChain,
-        transport: http(DEFAULT_CHAIN.rpcUrls[0]),
+        transport: arcTransport(),
       }),
     [],
   );

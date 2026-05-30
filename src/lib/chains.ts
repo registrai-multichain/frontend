@@ -1,5 +1,20 @@
-import { defineChain, type Address, type Chain } from "viem";
+import { defineChain, fallback, http, type Address, type Chain, type Transport } from "viem";
 import live from "./live-data.json";
+
+// Arc testnet RPCs. Canteen's swarm endpoint is primary so the project's
+// read traffic is attributed to us on their dashboards; Arc-official is the
+// automatic failover so the app keeps working if Canteen flakes (as it did
+// for ~3 days). The swrm path token is an intentionally-public testnet
+// attribution key — no funds or production access behind it.
+export const ARC_RPC_CANTEEN =
+  "https://rpc.testnet.arc-node.thecanteenapp.com/v1/swrm_ab2685dbd14cd9d0af6037f396de151143407b65fe21073bc08d31e6246db546";
+export const ARC_RPC_OFFICIAL = "https://rpc.testnet.arc.network";
+
+/** Read transport for Arc: Canteen primary, Arc-official failover. Writes go
+ *  through the user's wallet RPC (custom transport), not this. */
+export function arcTransport(): Transport {
+  return fallback([http(ARC_RPC_CANTEEN), http(ARC_RPC_OFFICIAL)]);
+}
 
 /**
  * Multichain registry. The frontend is built to deploy on any chain Registrai
