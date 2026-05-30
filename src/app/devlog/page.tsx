@@ -9,6 +9,66 @@ interface Entry {
 
 const ENTRIES: Entry[] = [
   {
+    date: "2026-05-31",
+    title: "Bet-as-collateral lending · built, reviewed, held back on a critical",
+    body: (
+      <>
+        <p>
+          Took a real run at the original cirBTC-era idea: borrow USDC
+          against a prediction-market position you already hold — the
+          &quot;locked betting capital becomes liquid&quot; primitive.
+          Built two contracts, then an adversarial review caught a critical
+          that we&apos;re choosing not to ship around. Logging it honestly.
+        </p>
+        <h3>Shipped: MarketsV3 share-transfer primitive</h3>
+        <p>
+          v2 prediction-market shares were non-transferable (pure
+          msg.sender ledgers), so a position couldn&apos;t be used as
+          collateral by any other contract.{" "}
+          <code>MarketsV3</code> inherits Markets v2 unchanged and adds an
+          ERC-20-allowance-style operator model (<code>setShareOperator</code>{" "}
+          + <code>transferSharesFrom</code>) so a lending contract can
+          custody a position. Sibling deploy, no migration — v2 markets keep
+          running. 7 tests, clean review. This primitive is reusable and
+          stands on its own.
+        </p>
+        <h3>Built but NOT deployed: CirqueBetLending</h3>
+        <p>
+          Lends USDC against a held YES/NO position, marked at the live AMM
+          price. It solves the famous &quot;cliff-payoff&quot; problem (a
+          share trades at 60¢ but resolves to exactly $1 or $0) with a
+          force-close window: no loan may survive into resolution — anyone
+          can liquidate in the final 2h regardless of health. That mechanism
+          works and is proven by tests.
+        </p>
+        <p>
+          <strong>But the adversarial review found a CRITICAL:</strong>{" "}
+          marking binary collateral at the instantaneous AMM mid is
+          manipulable on a thin pool. In one transaction an attacker could
+          buy the opposite outcome to inflate their collateral&apos;s mark,
+          borrow against the inflated value, and unwind — over-borrowing for
+          only the ~0.7% round-trip fee. Spot-marking binary collateral on a
+          thin CPMM is unsafe at any LTV.
+        </p>
+        <p>
+          So we&apos;re <strong>holding it back</strong>, not patching around
+          it. A safe version needs a manipulation-resistant mark (TWAP +
+          depth-relative borrow caps), an incentivised force-close keeper, and
+          bad-debt accounting — a v0.6 research track, not a same-day fix. The
+          contract stays in-tree as a clearly-marked research reference (the
+          known issues are written into its header); it is not deployed and
+          not wired to the app. Shipping an exploitable lending contract to
+          look busy would be the wrong call.
+        </p>
+        <p>
+          147 contract tests pass (incl. the cliff-guard proofs). The honest
+          status: the hard mechanism is solved; the safe collateral mark is
+          the open problem.
+        </p>
+      </>
+    ),
+  },
+  {
     date: "2026-05-27",
     title: "Cirque v0.5 beta live · atomic leverage-and-bet · reviewed + redeployed",
     body: (
