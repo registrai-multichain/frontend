@@ -11,7 +11,7 @@ export default function LendingPage() {
           <div className="caption">cirque lending</div>
           <StatusBadge kind="beta" />
           <span className="caption text-fg-dim text-[10px]">
-            v0.5 alpha · testnet only
+            v0.5 beta · testnet only
           </span>
         </div>
         <h1 className="font-serif text-[40px] sm:text-[54px] leading-[1.02] tracking-tightest mb-6 max-w-[22ch]">
@@ -26,6 +26,15 @@ export default function LendingPage() {
         </p>
 
         <FaucetHint className="mb-6" />
+
+        <div className="mb-6 border border-line/60 bg-bg-elev/30 p-3 text-2xs text-fg-dim leading-relaxed">
+          Transactions failing with{" "}
+          <span className="text-fg-mute">&quot;JSON-RPC protocol not supported&quot;</span>?
+          Your wallet&apos;s Arc network is on a flaky RPC. Set Arc Testnet&apos;s
+          RPC URL to{" "}
+          <code className="text-accent">https://rpc.testnet.arc.network</code>{" "}
+          (MetaMask → Settings → Networks → Arc Testnet).
+        </div>
 
         <LendingPanel />
 
