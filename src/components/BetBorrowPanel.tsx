@@ -1,27 +1,90 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { parseUnits } from "viem";
+import { parseUnits, parseAbiItem, type PublicClient } from "viem";
 import { useWallet } from "./WalletProvider";
 import { CONTRACTS, txUrl } from "@/lib/chain";
 import { usdcAbi, marketsAbi, marketsV3ShareAbi, cirqueBetLendingAbi } from "@/lib/abi";
 import { humanizeError } from "@/lib/humanize-error";
 
-// Markets on MarketsV3 you can hold a position in and borrow against. There is
-// no cheap on-chain enumeration of markets, so the borrowable set is listed
-// here (the proposer/MM bots can append as they create v3 markets).
+// Markets on MarketsV3 you can hold a position in and borrow against. These are
+// DISCOVERED on-chain from MarketCreated logs (see useV3Markets) so any market
+// created on MarketsV3 — by the bots or anyone — shows up automatically. The
+// entry below is a fallback for the first paint / if log discovery fails.
 interface V3Market {
   id: `0x${string}`;
   label: string;
   expiry: number; // unix seconds
 }
-const V3_MARKETS: V3Market[] = [
+const FALLBACK_MARKETS: V3Market[] = [
   {
     id: "0xaa7ccbe1e14bc627cc92a1df58d8b1ae18ce8fb179b7d08c313e24dc2de0fd5d",
     label: "BTC/USD > $75,000",
     expiry: 1785504700,
   },
 ];
+
+// Block MarketsV3 was deployed — log scan start (kept small; testnet).
+const V3_DEPLOY_BLOCK = 44_990_000n;
+const MARKET_CREATED = parseAbiItem(
+  "event MarketCreated(bytes32 indexed marketId, address indexed creator, bytes32 indexed feedId, address agent, int256 threshold, uint8 comparator, uint256 expiry, uint256 liquidity)",
+);
+const CMP = [">", "≥", "<", "≤"]; // Comparator enum order
+// feedId → how to render its threshold. BTC feed is USDC18-scaled ($); the
+// rest come from the live feed registry (native integer / displayDivisor).
+const BTC_FEED = "0x23a85cd7cf982eb789a14a930d09d1d3ec7479b3e70679c5f46b1a190aafe64c";
+
+function fmtThreshold(feedId: string, threshold: bigint): string {
+  if (feedId.toLowerCase() === BTC_FEED) {
+    return `$${(Number(threshold) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  }
+  return threshold.toString();
+}
+function feedSymbol(feedId: string): string {
+  if (feedId.toLowerCase() === BTC_FEED) return "BTC/USD";
+  return `${feedId.slice(0, 6)}…`;
+}
+
+// Arc RPC caps eth_getLogs at a 10,000-block range, so scan in windows.
+const LOG_WINDOW = 9_000n;
+
+/** Discover every Trading market on MarketsV3 from its creation logs. */
+async function discoverV3Markets(
+  client: PublicClient,
+  markets: `0x${string}`,
+): Promise<V3Market[]> {
+  type MktArgs = {
+    marketId?: `0x${string}`; feedId?: `0x${string}`;
+    threshold?: bigint; comparator?: number; expiry?: bigint;
+  };
+  const latest = await client.getBlockNumber();
+  const args: MktArgs[] = [];
+  for (let from = V3_DEPLOY_BLOCK; from <= latest; from += LOG_WINDOW + 1n) {
+    const to = from + LOG_WINDOW > latest ? latest : from + LOG_WINDOW;
+    const chunk = await client.getLogs({ address: markets, event: MARKET_CREATED, fromBlock: from, toBlock: to });
+    for (const log of chunk) args.push(log.args as MktArgs);
+  }
+  const seen = new Set<string>();
+  const out: V3Market[] = [];
+  for (const a of args) {
+    if (!a.marketId || seen.has(a.marketId)) continue;
+    seen.add(a.marketId);
+    // Only list markets still Trading (skip resolved/expired).
+    try {
+      const m = (await client.readContract({
+        address: markets, abi: marketsAbi, functionName: "getMarket", args: [a.marketId],
+      })) as { phase: number };
+      if (m.phase !== 0) continue;
+    } catch { continue; }
+    const cmp = CMP[a.comparator ?? 0] ?? "?";
+    out.push({
+      id: a.marketId,
+      label: `${feedSymbol(a.feedId ?? "")} ${cmp} ${fmtThreshold(a.feedId ?? "", a.threshold ?? 0n)}`,
+      expiry: Number(a.expiry ?? 0n),
+    });
+  }
+  return out;
+}
 
 type SupplyMode = "supply" | "withdraw";
 type Side = "yes" | "no";
@@ -63,9 +126,10 @@ export function BetBorrowPanel() {
   const markets = CONTRACTS.MarketsV3;
   const usdc = CONTRACTS.USDC;
 
+  const [v3Markets, setV3Markets] = useState<V3Market[]>(FALLBACK_MARKETS);
   const [supplyMode, setSupplyMode] = useState<SupplyMode>("supply");
   const [supplyAmount, setSupplyAmount] = useState("");
-  const [selMarket, setSelMarket] = useState<`0x${string}`>(V3_MARKETS[0]?.id ?? ZERO_ADDR);
+  const [selMarket, setSelMarket] = useState<`0x${string}`>(FALLBACK_MARKETS[0]?.id ?? ZERO_ADDR);
   const [tradeSide, setTradeSide] = useState<Side>("yes");
   const [tradeAmount, setTradeAmount] = useState("");
   const [borrowSide, setBorrowSide] = useState<Side>("yes");
@@ -150,6 +214,24 @@ export function BetBorrowPanel() {
     const id = setInterval(() => { void refresh(); }, 12_000);
     return () => clearInterval(id);
   }, [refresh]);
+
+  // Discover every Trading market on MarketsV3 from creation logs.
+  useEffect(() => {
+    if (!markets) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const found = await discoverV3Markets(publicClient, markets);
+        if (cancelled || found.length === 0) return;
+        setV3Markets(found);
+        // Keep the selection valid if the current one isn't in the new set.
+        setSelMarket((cur) => (found.some((m) => m.id === cur) ? cur : found[0]!.id));
+      } catch (e) {
+        console.error("v3 market discovery failed", e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [markets, publicClient]);
 
   const needsConnect = !address || !isOnSupportedChain;
 
@@ -238,7 +320,7 @@ export function BetBorrowPanel() {
     }));
   }
 
-  const market = useMemo(() => V3_MARKETS.find((m) => m.id === selMarket), [selMarket]);
+  const market = useMemo(() => v3Markets.find((m) => m.id === selMarket), [v3Markets, selMarket]);
 
   // Live odds from reserves: price(YES) = noReserve / total.
   const yesProb = mkt && mkt.yesReserve + mkt.noReserve > 0n
@@ -306,7 +388,7 @@ export function BetBorrowPanel() {
               value={selMarket} onChange={(e) => setSelMarket(e.target.value as `0x${string}`)}
               className="bg-bg-elev/40 border border-line/60 px-2 py-1 text-2xs outline-none max-w-full"
             >
-              {V3_MARKETS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              {v3Markets.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
           </label>
         </div>

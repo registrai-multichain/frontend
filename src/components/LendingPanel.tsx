@@ -742,6 +742,7 @@ export function LendingPanel() {
       {/* Tx feedback */}
       {(txHash || error) && (
         <div
+          aria-live="polite"
           className={
             "border p-4 text-2xs " +
             (error
@@ -832,6 +833,7 @@ export function LendingPanel() {
                     <select
                       value={levMarketId}
                       onChange={(e) => setLevMarketId(e.target.value)}
+                      aria-label="market to bet on"
                       className="w-full bg-bg border border-line px-3 py-2.5 text-[13px] focus:outline-none focus:border-accent"
                     >
                       {LEVERAGEABLE_MARKETS.map((m) => (
@@ -840,12 +842,14 @@ export function LendingPanel() {
                     </select>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2" role="group" aria-label="bet side">
                     <button
+                      type="button" aria-pressed={levYes}
                       onClick={() => setLevYes(true)}
                       className={"flex-1 px-3 py-2 border text-2xs " + (levYes ? "border-up text-up" : "border-line/60 text-fg-dim hover:text-fg")}
                     >YES</button>
                     <button
+                      type="button" aria-pressed={!levYes}
                       onClick={() => setLevYes(false)}
                       className={"flex-1 px-3 py-2 border text-2xs " + (!levYes ? "border-down text-down" : "border-line/60 text-fg-dim hover:text-fg")}
                     >NO</button>
@@ -932,12 +936,14 @@ function ModeToggle<T extends string>({
   onChange: (v: T) => void;
 }) {
   return (
-    <div className="flex gap-1 text-2xs">
+    <div className="flex gap-1 text-2xs" role="group" aria-label={options.map((o) => o.label).join(" / ")}>
       {options.map((o) => {
         const active = current === o.value;
         return (
           <button
             key={o.value}
+            type="button"
+            aria-pressed={active}
             onClick={() => onChange(o.value)}
             className={
               "px-2 py-1 border " +
@@ -978,6 +984,8 @@ function AmountInput({
       <div className="flex items-center border border-line bg-bg">
         <input
           type="text"
+          inputMode="decimal"
+          aria-label={`${balanceLabel} — amount in ${symbol}`}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="0.0"
