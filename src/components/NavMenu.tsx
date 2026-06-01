@@ -24,6 +24,7 @@ const SECTIONS: MenuSection[] = [
       { label: "agents", href: "/agents", mobileOnly: true },
       { label: "vault", href: "/vault", mobileOnly: true },
       { label: "lending", href: "/lending", mobileOnly: true },
+      { label: "borrow", href: "/borrow", mobileOnly: true },
     ],
   },
   {

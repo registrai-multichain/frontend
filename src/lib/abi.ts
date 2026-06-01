@@ -505,3 +505,160 @@ export const cirBtcAbi = [
     outputs: [{ type: "bool" }],
   },
 ] as const;
+
+// ─────────── Borrow-against-bet: MarketsV3 share-transfer + CirqueBetLending ──
+
+/// MarketsV3 share-transfer primitive (everything else — buy/sell/priceOf/
+/// getMarket — is in marketsAbi, called against the MarketsV3 address).
+export const marketsV3ShareAbi = [
+  {
+    type: "function", name: "setShareOperator", stateMutability: "nonpayable",
+    inputs: [
+      { name: "operator", type: "address" },
+      { name: "approved", type: "bool" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function", name: "shareOperatorApproved", stateMutability: "view",
+    inputs: [
+      { name: "holder", type: "address" },
+      { name: "operator", type: "address" },
+    ],
+    outputs: [{ type: "bool" }],
+  },
+] as const;
+
+export const cirqueBetLendingAbi = [
+  // Supply side
+  {
+    type: "function", name: "supplyUSDC", stateMutability: "nonpayable",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [{ name: "sharesMinted", type: "uint256" }],
+  },
+  {
+    type: "function", name: "withdrawUSDC", stateMutability: "nonpayable",
+    inputs: [{ name: "shareAmount", type: "uint256" }],
+    outputs: [{ name: "usdcOut", type: "uint256" }],
+  },
+  // Borrow against a held bet
+  {
+    type: "function", name: "borrowAgainstBet", stateMutability: "nonpayable",
+    inputs: [
+      { name: "marketId", type: "bytes32" },
+      { name: "betYes", type: "bool" },
+      { name: "collateralShares", type: "uint256" },
+      { name: "usdcAmount", type: "uint256" },
+    ],
+    outputs: [{ name: "openingHealthBps", type: "uint256" }],
+  },
+  {
+    type: "function", name: "repayBet", stateMutability: "nonpayable",
+    inputs: [], outputs: [],
+  },
+  {
+    type: "function", name: "liquidateBet", stateMutability: "nonpayable",
+    inputs: [{ name: "borrower", type: "address" }], outputs: [],
+  },
+  {
+    type: "function", name: "writeOffBadDebt", stateMutability: "nonpayable",
+    inputs: [{ name: "borrower", type: "address" }], outputs: [],
+  },
+  // Views — supply
+  {
+    type: "function", name: "shares", stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "totalShares", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "balanceOfUSDC", stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "totalPoolValueUSDC", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "availableUSDC", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "totalBorrowedPrincipal", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "totalBadDebtRealizedUSDC", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+  // Views — loan
+  {
+    type: "function", name: "loans", stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [
+      { name: "marketId", type: "bytes32" },
+      { name: "betYes", type: "bool" },
+      { name: "shares", type: "uint256" },
+      { name: "principal", type: "uint256" },
+      { name: "borrowedAt", type: "uint256" },
+      { name: "active", type: "bool" },
+      { name: "markValueAtBorrow", type: "uint256" },
+    ],
+  },
+  {
+    type: "function", name: "healthBps", stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "interestOwed", stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "collateralValueUSDC", stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "isWriteOffable", stateMutability: "view",
+    inputs: [{ name: "borrower", type: "address" }], outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function", name: "maxBorrow", stateMutability: "view",
+    inputs: [
+      { name: "marketId", type: "bytes32" },
+      { name: "betYes", type: "bool" },
+      { name: "collateralShares", type: "uint256" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  // Constants
+  {
+    type: "function", name: "MAX_LTV_BPS", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "LIQ_LTV_BPS", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "LIQ_BONUS_BPS", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "INTEREST_BPS_PER_YEAR", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "MAX_BORROW_PER_USER", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "MIN_POOL_DEPTH", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function", name: "FORCE_CLOSE_WINDOW", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }],
+  },
+] as const;

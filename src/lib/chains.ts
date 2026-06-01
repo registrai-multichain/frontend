@@ -59,6 +59,11 @@ export interface ChainContracts {
   cirBTC?: Address;
   CirqueLending?: Address;
   AttestedBTCOracle?: Address;
+  /** Borrow-against-bet stack. MarketsV3 = Markets v2 + share-transfer
+   *  primitive; CirqueBetLending lends USDC against a held MarketsV3 position
+   *  at the depth-capped mark. */
+  MarketsV3?: Address;
+  CirqueBetLending?: Address;
 }
 
 export interface ChainEntry {
@@ -149,6 +154,11 @@ export const ARC_TESTNET: ChainEntry = {
     cirBTC: "0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF" as Address,
     CirqueLending: "0x2dd7bc570e876499422b8185dbb04c4b134cd504" as Address,
     AttestedBTCOracle: "0x83f3e3d6e9cc18579de577d92df1e23cc27057a1" as Address,
+    // Borrow-against-bet stack (deployed 2026-06-01). Sibling MarketsV3 reuses
+    // the v2 Registry + Attestation; CirqueBetLending lends against positions
+    // on MarketsV3 markets at the depth-capped mark.
+    MarketsV3: "0xDDC085320D5A739cB5726f01E9c4b5d058fFfB00" as Address,
+    CirqueBetLending: "0x8168bdD7990abc42b92b59DE6d411e9C66bB93C1" as Address,
   },
   viemChain: ARC_TESTNET_VIEM,
   label: "v2 · 2026-05",

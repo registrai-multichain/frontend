@@ -23,7 +23,9 @@
     "Attestation_v2": "0x060C61Cc315d9e8Baf2a58719f80C01163Bd6F48",
     "Dispute_v2": "0x1F78e08f5DdF5dD3fDD0e27097FE5398999Aa738",
     "Markets_v2": "0xb653c065E4805F4b2558af7AE01e9622D61Ff394",
-    "MarketMakerVault_v2": "0x13c7069F7f1526b160E885e201087caD6c67Ed47"
+    "MarketMakerVault_v2": "0x13c7069F7f1526b160E885e201087caD6c67Ed47",
+    "MarketsV3": "0xDDC085320D5A739cB5726f01E9c4b5d058fFfB00",
+    "CirqueBetLending": "0x8168bdD7990abc42b92b59DE6d411e9C66bB93C1"
   },
   "feed": {
     "id": "0xf4968db834c4e03f9c2e10bb883fe74f84c850cfacac058a1b520a8d8fa37c0b",

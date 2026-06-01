@@ -45,6 +45,9 @@ function TopNav() {
           <Link href="/lending" className="hidden sm:inline hover:text-fg transition-colors">
             lending
           </Link>
+          <Link href="/borrow" className="hidden sm:inline hover:text-fg transition-colors">
+            borrow
+          </Link>
           <NavMenu />
           <WalletButton />
         </nav>
