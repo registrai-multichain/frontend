@@ -1,6 +1,7 @@
 import { Shell } from "@/components/Shell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { BetBorrowPanel } from "@/components/BetBorrowPanel";
+import { BetCreditsCard } from "@/components/BetCreditsCard";
 import { FaucetHint } from "@/components/FaucetHint";
 
 export const metadata = {
@@ -42,6 +43,8 @@ export default function BorrowPage() {
         </div>
 
         <BetBorrowPanel />
+
+        <BetCreditsCard />
 
         <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-px bg-line">
           <Card
