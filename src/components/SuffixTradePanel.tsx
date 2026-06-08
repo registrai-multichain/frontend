@@ -6,6 +6,7 @@ import { useWallet } from "./WalletProvider";
 import { CONTRACTS, txUrl } from "@/lib/chain";
 import { usdcAbi, suffixTreasuryAbi, suffixTradeAbi } from "@/lib/abi";
 import { humanizeError } from "@/lib/humanize-error";
+import type { SuffixPool } from "@/lib/suffix-pools";
 
 // $ai (senior) trading only. $aiLP (junior) is a security and is intentionally
 // NOT tradeable here. The floor is a cash-backed buyback policy, not a
@@ -17,11 +18,12 @@ type Status = "idle" | "approving" | "submitting" | "success" | "error";
 const fmt = (w: bigint, dp = 2) => (Number(w) / 1e6).toFixed(dp);
 const px = (w: bigint) => `$${(Number(w) / 1e6).toFixed(3)}`;
 
-export function SuffixTradePanel() {
+export function SuffixTradePanel({ pool }: { pool: SuffixPool }) {
   const { address, publicClient, walletClient, isOnSupportedChain, connect, switchChain } = useWallet();
-  const treasury = CONTRACTS.SuffixTreasury;
-  const ai = CONTRACTS.SuffixSenior;
+  const treasury = pool.treasury;
+  const ai = pool.senior;
   const usdc = CONTRACTS.USDC;
+  const sym = pool.symbol;
 
   const [mode, setMode] = useState<Mode>("buy");
   const [amount, setAmount] = useState("");
@@ -114,7 +116,7 @@ export function SuffixTradePanel() {
   return (
     <div className="border border-line/60 bg-bg-elev/20 p-5 mb-px">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-serif text-[18px]">Trade $ai</h3>
+        <h3 className="font-serif text-[18px]">{`Trade $${sym}`}</h3>
         <div className="inline-flex border border-line/60 text-2xs" role="group" aria-label="buy / sell">
           {(["buy", "sell"] as Mode[]).map((m) => (
             <button key={m} type="button" aria-pressed={mode === m} onClick={() => setMode(m)}
@@ -130,12 +132,12 @@ export function SuffixTradePanel() {
 
       <input
         value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal"
-        aria-label={mode === "buy" ? "USDC to spend" : "$ai to sell"}
-        placeholder={mode === "buy" ? "USDC in" : "$ai in"}
+        aria-label={mode === "buy" ? "USDC to spend" : `$${sym} to sell`}
+        placeholder={mode === "buy" ? "USDC in" : `$${sym} in`}
         className="w-full bg-bg-elev/40 border border-line/60 px-3 py-2 text-[15px] outline-none focus:border-accent/60"
       />
       <div className="caption text-2xs text-fg-dim mt-1">
-        {mode === "buy" ? `wallet: ${fmt(usdcBal)} USDC` : `wallet: ${fmt(aiBal)} $ai`} · 0.30% fee → floor
+        {mode === "buy" ? `wallet: ${fmt(usdcBal)} USDC` : `wallet: ${fmt(aiBal)} $${sym}`} · 0.30% fee → floor
       </div>
 
       <button
@@ -143,20 +145,20 @@ export function SuffixTradePanel() {
         disabled={busy}
         className="mt-3 w-full py-2.5 text-[13px] bg-accent/90 text-bg hover:bg-accent disabled:opacity-40 transition-colors"
       >
-        {needsConnect ? (address ? "Switch to Arc" : "Connect") : mode === "buy" ? "Buy $ai" : "Sell $ai"}
+        {needsConnect ? (address ? "Switch to Arc" : "Connect") : mode === "buy" ? `Buy $${sym}` : `Sell $${sym}`}
       </button>
 
       {/* floor backstop */}
       <div className="mt-3 border-t border-line/30 pt-3">
         <div className="caption text-2xs text-fg-dim mb-1">
-          floor backstop — sell $ai to the treasury at {floor ? px(floor) : "—"} (cash-backed). Use when
-          the pool dips below the floor.
+          floor backstop — sell ${sym} to the treasury at {floor ? px(floor) : "—"} (cash-backed). Use
+          when the pool dips below the floor.
         </div>
         <button
           onClick={needsConnect ? (address ? () => switchChain() : connect) : doRedeemFloor}
           disabled={busy}
           className="w-full py-2 text-2xs border border-line hover:border-accent/60 disabled:opacity-40"
-        >Redeem at floor (amount = $ai above)</button>
+        >{`Redeem at floor (amount = $${sym} above)`}</button>
       </div>
 
       {status !== "idle" && (

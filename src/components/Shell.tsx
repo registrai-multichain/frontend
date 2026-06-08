@@ -48,7 +48,7 @@ function TopNav() {
           <Link href="/borrow" className="hidden sm:inline hover:text-fg transition-colors">
             borrow
           </Link>
-          <Link href="/domains" className="hidden sm:inline hover:text-fg transition-colors">
+          <Link href="/pools" className="hidden sm:inline hover:text-fg transition-colors">
             $ai
           </Link>
           <NavMenu />

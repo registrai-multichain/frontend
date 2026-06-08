@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useWallet } from "./WalletProvider";
-import { CONTRACTS, addrUrl } from "@/lib/chain";
+import { addrUrl } from "@/lib/chain";
 import { suffixTreasuryAbi } from "@/lib/abi";
+import type { SuffixPool } from "@/lib/suffix-pools";
 
 // Read-only. The Suffix Pool's $aiLP (junior) is a security; there is no
 // trading UI here until counsel clears the offering. This surfaces the live,
@@ -35,9 +36,9 @@ const usd = (w: bigint) => `$${(Number(w) / 1e6).toLocaleString(undefined, { max
 const px = (w: bigint) => `$${(Number(w) / 1e6).toFixed(3)}`;
 const pct = (bps: bigint) => `${(Number(bps) / 100).toFixed(bps % 100n === 0n ? 0 : 2)}%`;
 
-export function SuffixPanel() {
+export function SuffixPanel({ pool }: { pool: SuffixPool }) {
   const { publicClient } = useWallet();
-  const t = CONTRACTS.SuffixTreasury;
+  const t = pool.treasury;
   const [s, setS] = useState<State>();
 
   const refresh = useCallback(async () => {
@@ -81,7 +82,7 @@ export function SuffixPanel() {
     <div>
       {/* live band visualization */}
       <div className="border border-line/60 bg-bg-elev/20 p-5 mb-px">
-        <div className="caption text-2xs text-fg-dim mb-3">live price band ($ai)</div>
+        <div className="caption text-2xs text-fg-dim mb-3">live price band (${pool.symbol})</div>
         <div className="grid grid-cols-3 gap-px bg-line text-center">
           <Band label={`floor · k=${s ? pct(s.kBps) : "—"}`} value={s ? px(s.seniorFloorPrice) : "—"} sub="buyback floor" tone="floor" />
           <Band label="spot" value={s ? px(s.aiSpotPrice) : "—"} sub="protocol-owned pool" tone="spot" />
@@ -97,7 +98,7 @@ export function SuffixPanel() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-px bg-line">
         {/* senior */}
         <div className="bg-bg p-5">
-          <h3 className="font-serif text-[18px] mb-3">$ai · senior <span className="text-fg-dim text-2xs">(cash floor)</span></h3>
+          <h3 className="font-serif text-[18px] mb-3">${pool.symbol} · senior <span className="text-fg-dim text-2xs">(cash floor)</span></h3>
           <Stat label="float (external)" value={s ? usd(s.externalSenior) : undefined} />
           <Stat label="hard claim (HardNAV)" value={s ? usd(s.seniorClaim) : undefined} />
           <Stat label="floor price" value={s ? px(s.seniorFloorPrice) : undefined} />
@@ -106,7 +107,7 @@ export function SuffixPanel() {
         </div>
         {/* junior */}
         <div className="bg-bg p-5">
-          <h3 className="font-serif text-[18px] mb-3">$aiLP · junior <span className="text-fg-dim text-2xs">(first-loss / upside)</span></h3>
+          <h3 className="font-serif text-[18px] mb-3">${pool.symbol}LP · junior <span className="text-fg-dim text-2xs">(first-loss / upside)</span></h3>
           <Stat label="equity (residual)" value={s ? usd(s.juniorEquity) : undefined} />
           <Stat label="NAV / token" value={s ? px(s.juniorNav) : undefined} />
           <Stat label="cushion (of senior claim)" value={s ? pct(s.cushionBps) : undefined} />

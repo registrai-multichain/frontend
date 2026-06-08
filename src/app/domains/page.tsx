@@ -3,6 +3,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { SuffixPanel } from "@/components/SuffixPanel";
 import { SuffixTradePanel } from "@/components/SuffixTradePanel";
 import { FaucetHint } from "@/components/FaucetHint";
+import { getPool } from "@/lib/suffix-pools";
 
 export const metadata = {
   title: "Suffix Pool ($ai) · Registrai",
@@ -11,6 +12,7 @@ export const metadata = {
 };
 
 export default function DomainsPage() {
+  const ai = getPool("ai")!;
   return (
     <Shell>
       <article className="pt-12 sm:pt-20 fade-up">
@@ -41,9 +43,9 @@ export default function DomainsPage() {
           Real-asset backing is a future roadmap item. Do your own research.
         </div>
 
-        <SuffixTradePanel />
+        <SuffixTradePanel pool={ai} />
 
-        <SuffixPanel />
+        <SuffixPanel pool={ai} />
 
         <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-px bg-line">
           <Card
