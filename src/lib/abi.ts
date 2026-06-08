@@ -687,3 +687,16 @@ export const suffixTreasuryAbi = [
   { type: "function", name: "M_FROTH_BPS", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "SWAP_FEE_BPS", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
 ] as const;
+
+// Suffix — $ai memecoin trade methods (senior only; $aiLP is NOT traded here).
+export const suffixTradeAbi = [
+  { type: "function", name: "buyAi", stateMutability: "nonpayable",
+    inputs: [{ name: "usdcIn", type: "uint256" }, { name: "minAiOut", type: "uint256" }],
+    outputs: [{ name: "aiOut", type: "uint256" }] },
+  { type: "function", name: "sellAi", stateMutability: "nonpayable",
+    inputs: [{ name: "aiIn", type: "uint256" }, { name: "minUsdcOut", type: "uint256" }],
+    outputs: [{ name: "usdcOut", type: "uint256" }] },
+  { type: "function", name: "redeemSeniorAtFloor", stateMutability: "nonpayable",
+    inputs: [{ name: "seniorAmount", type: "uint256" }],
+    outputs: [{ name: "usdcOut", type: "uint256" }] },
+] as const;

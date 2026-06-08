@@ -1,6 +1,8 @@
 import { Shell } from "@/components/Shell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { SuffixPanel } from "@/components/SuffixPanel";
+import { SuffixTradePanel } from "@/components/SuffixTradePanel";
+import { FaucetHint } from "@/components/FaucetHint";
 
 export const metadata = {
   title: "Suffix Pool ($ai) · Registrai",
@@ -13,29 +15,33 @@ export default function DomainsPage() {
     <Shell>
       <article className="pt-12 sm:pt-20 fade-up">
         <div className="flex items-center gap-3 mb-4">
-          <div className="caption">suffix pool</div>
+          <div className="caption">$ai · suffix pool</div>
           <StatusBadge kind="beta" />
-          <span className="caption text-fg-dim text-[10px]">research · testnet · read-only</span>
+          <span className="caption text-fg-dim text-[10px]">testnet · cash-floored memecoin</span>
         </div>
         <h1 className="font-serif text-[40px] sm:text-[54px] leading-[1.02] tracking-tightest mb-6 max-w-[24ch]">
-          A meme with a <span className="italic text-accent">floor</span>, backed by the oracle.
+          A memecoin with a <span className="italic text-accent">floor</span>.
         </h1>
         <p className="text-fg-mute text-[15px] leading-relaxed max-w-[66ch] mb-10">
-          The Suffix Pool splits one treasury into two tokens. <b>$ai</b> (senior) is the boring
-          leg: a cash-backed buyback floor that ratchets up only from realized revenue. <b>$aiLP</b>{" "}
-          (junior) is the leveraged leg: it absorbs losses first and captures the upside. The treasury
-          market-makes a protocol-owned pool; trading fees and froth harvest the floor higher. The{" "}
-          <span className="italic">.ai</span> domain exposure — marked by a bonded Registrai oracle —
-          lives in the junior&apos;s upside, never in the floor. Registrai stays pure oracle infra
-          underneath.
+          <b>$ai</b> trades like any memecoin — but it has a <b>cash-backed buyback floor</b>. The
+          protocol owns the liquidity, market-makes its own pool, and every trade&apos;s fee plus any
+          froth above the band ratchets the floor higher. Buy and sell freely above the floor; if the
+          pool ever dips below it, sell straight to the treasury at the floor price. The floor is
+          backed by the <b>USDC reserve</b> today — real <span className="italic">.ai</span>-domain
+          backing (marked by a bonded Registrai oracle) is a post-mainnet roadmap item, not present
+          now and not a reason to buy.
         </p>
 
+        <FaucetHint className="mb-6" />
+
         <div className="mb-6 border border-amber-500/30 bg-amber-500/5 p-3 text-2xs text-amber-300/80 leading-relaxed">
-          <b>Read-only.</b> These are live testnet contracts shown for transparency. There is no
-          trading interface: <span className="text-fg-mute">$aiLP is a security</span> and any
-          offering is gated on legal review. Nothing here is an offer to sell or a solicitation, and
-          the floor is a protocol policy, not a redemption right.
+          <b>Testnet · not financial advice · not an offer.</b> $ai is a testnet token with a
+          cash buyback-floor policy (not a redemption right or profit promise). The junior tranche
+          <span className="text-fg-mute"> $aiLP is a security and is NOT offered or tradeable here.</span>{" "}
+          Real-asset backing is a future roadmap item. Do your own research.
         </div>
+
+        <SuffixTradePanel />
 
         <SuffixPanel />
 
