@@ -662,3 +662,28 @@ export const cirqueBetLendingAbi = [
     inputs: [], outputs: [{ type: "uint256" }],
   },
 ] as const;
+
+// ───────────── Suffix Pool — SuffixTreasury (read-only views) ─────────────
+// Read-only surface for the explainer/dashboard. No write methods exposed here:
+// $aiLP is a security; trading UI is gated on counsel.
+export const suffixTreasuryAbi = [
+  { type: "function", name: "floorPar", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "seniorFloorPrice", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "aiSpotPrice", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "frothPriceUSDC", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "externalSeniorSupply", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "seniorClaimUSDC", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "juniorEquityUSDC", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "juniorNAVPerToken", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "cushionBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "seniorSolvent", stateMutability: "view", inputs: [], outputs: [{ type: "bool" }] },
+  { type: "function", name: "totalUSDC", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "poolAi", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "poolUsdc", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "feesBankUsdc", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "seniorCap", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "minCushionBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "K_FLOOR_BPS", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "M_FROTH_BPS", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "SWAP_FEE_BPS", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+] as const;

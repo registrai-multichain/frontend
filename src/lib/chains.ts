@@ -64,6 +64,12 @@ export interface ChainContracts {
    *  at the depth-capped mark. */
   MarketsV3?: Address;
   CirqueBetLending?: Address;
+  /** Suffix Pool — two-tranche, cash-floored treasury ($ai senior + $aiLP
+   *  junior). Testnet research; junior is a security (no live trading UI until
+   *  counsel). */
+  SuffixTreasury?: Address;
+  SuffixSenior?: Address;
+  SuffixJunior?: Address;
 }
 
 export interface ChainEntry {
@@ -159,6 +165,11 @@ export const ARC_TESTNET: ChainEntry = {
     // on MarketsV3 markets at the depth-capped mark.
     MarketsV3: "0xDDC085320D5A739cB5726f01E9c4b5d058fFfB00" as Address,
     CirqueBetLending: "0x8168bdD7990abc42b92b59DE6d411e9C66bB93C1" as Address,
+    // Suffix Pool (deployed 2026-06-08, testnet research). Read-only surface
+    // for now — $aiLP is a security; no trading UI until counsel.
+    SuffixTreasury: "0x736430fc2Cbe77941a121c83Ac02328162C03a93" as Address,
+    SuffixSenior: "0xf6571cC2C67B681ED41a2eC04ecb3C3CC3B81F15" as Address,
+    SuffixJunior: "0xc337188cA1a43d11FcFf381aAefb1558563cAA79" as Address,
   },
   viemChain: ARC_TESTNET_VIEM,
   label: "v2 · 2026-05",
