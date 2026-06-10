@@ -167,9 +167,9 @@ export const ARC_TESTNET: ChainEntry = {
     CirqueBetLending: "0x8168bdD7990abc42b92b59DE6d411e9C66bB93C1" as Address,
     // Suffix Pool (deployed 2026-06-08, testnet research). Read-only surface
     // for now — $aiLP is a security; no trading UI until counsel.
-    SuffixTreasury: "0x736430fc2Cbe77941a121c83Ac02328162C03a93" as Address,
-    SuffixSenior: "0xf6571cC2C67B681ED41a2eC04ecb3C3CC3B81F15" as Address,
-    SuffixJunior: "0xc337188cA1a43d11FcFf381aAefb1558563cAA79" as Address,
+    SuffixTreasury: "0x0B146b14EEf4b4C0D16AEA9DADF461e714bf5Ce2" as Address,
+    SuffixSenior: "0x4b3A8957BFd80fC54393CeF7fBdf1a96586fbeA1" as Address,
+    SuffixJunior: "0xCa1e23c01bCF9fDf3AE1CA2d3b072cCE007fb814" as Address,
   },
   viemChain: ARC_TESTNET_VIEM,
   label: "v2 · 2026-05",

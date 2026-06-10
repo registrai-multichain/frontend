@@ -26,9 +26,9 @@
     "MarketMakerVault_v2": "0x13c7069F7f1526b160E885e201087caD6c67Ed47",
     "MarketsV3": "0xDDC085320D5A739cB5726f01E9c4b5d058fFfB00",
     "CirqueBetLending": "0x8168bdD7990abc42b92b59DE6d411e9C66bB93C1",
-    "SuffixTreasury": "0x736430fc2Cbe77941a121c83Ac02328162C03a93",
-    "SuffixSenior_ai": "0xf6571cC2C67B681ED41a2eC04ecb3C3CC3B81F15",
-    "SuffixJunior_aiLP": "0xc337188cA1a43d11FcFf381aAefb1558563cAA79"
+    "SuffixTreasury": "0x0B146b14EEf4b4C0D16AEA9DADF461e714bf5Ce2",
+    "SuffixSenior_ai": "0x4b3A8957BFd80fC54393CeF7fBdf1a96586fbeA1",
+    "SuffixJunior_aiLP": "0xCa1e23c01bCF9fDf3AE1CA2d3b072cCE007fb814"
   },
   "feed": {
     "id": "0xf4968db834c4e03f9c2e10bb883fe74f84c850cfacac058a1b520a8d8fa37c0b",

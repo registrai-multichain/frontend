@@ -43,9 +43,9 @@ export const SUFFIX_POOLS: SuffixPool[] = [
     tagline: "the everything suffix, floored",
     blurb:
       "Themed on the .xyz aftermarket. Same engine as $ai — a protocol-owned pool with a cash buyback floor that ratchets from real revenue.",
-    treasury: "0x007F263C90e93B40238523abdCaeC0E4c39749c1" as Address,
-    senior: "0xc8fCBd2A4003Bb47c36D08B349bc8ca4E863f2B4" as Address,
-    junior: "0xF64EC77AB4C2F97B05126188454fC1591d297fe6" as Address,
+    treasury: "0x41fFAf360C0F3120732BF69530a667Eec57FD7E3" as Address,
+    senior: "0x6a75077c05B216e8e0edCb6c46749A8F25eD7a7F" as Address,
+    junior: "0x430E2e619531c9a550AD2Db9EB29428769BC31f6" as Address,
     live: true,
   },
   {
@@ -54,9 +54,9 @@ export const SUFFIX_POOLS: SuffixPool[] = [
     tagline: "have fun, keep the floor",
     blurb:
       "Themed on the .fun aftermarket. Same cash-floored engine — trade above the floor, never below it.",
-    treasury: "0x4156288c4078f2d425BC6Dc94B6C9eD71cb191EA" as Address,
-    senior: "0xAaaC0a2287b62ed039C879f27b20a2ee137A2347" as Address,
-    junior: "0x3fe865d66ecd3Aed25BB5d861AD564Eb3bf15Bdd" as Address,
+    treasury: "0xcA9D317c846186F0B3f8446D8df94d6Ca826B1EB" as Address,
+    senior: "0x4eD56ffF54c40825e52Cd9d3Be128668F3870922" as Address,
+    junior: "0x7CA294950F3Ff30DCD4b98f1bb9b02920f691E14" as Address,
     live: true,
   },
 ];
