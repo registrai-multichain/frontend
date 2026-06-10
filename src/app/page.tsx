@@ -181,6 +181,35 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Suffix pools — the flagship consumer product. */}
+      <section className="fade-up mb-14" style={{ animationDelay: "110ms" }}>
+        <div className="border border-accent/30 bg-accent/[0.04] p-6 sm:p-8">
+          <div className="flex items-baseline gap-2 mb-2 flex-wrap">
+            <h2 className="caption text-accent">suffix pools · just shipped</h2>
+            <span className="caption text-fg-dim text-[10px]">memecoins with a floor</span>
+          </div>
+          <h3 className="font-serif text-[26px] sm:text-[34px] leading-[1.06] tracking-tightest mb-3 max-w-[24ch]">
+            Trade a memecoin that <span className="italic text-accent">can&apos;t go to zero</span>.
+          </h3>
+          <p className="text-[13.5px] text-fg-mute leading-relaxed max-w-[64ch] mb-4">
+            <code className="text-fg">$ai</code> · <code className="text-fg">$xyz</code> ·{" "}
+            <code className="text-fg">$fun</code> are live on Arc testnet — each a cash-backed
+            buyback floor that ratchets up from real trading revenue. Below the floor you can always
+            sell to the treasury; above it, the meme runs free. Real <span className="italic">.domain</span>{" "}
+            backing is the roadmap — sourced by the CaveBroDAO procurement team and added on-chain
+            once the DAO votes it in.
+          </p>
+          <div className="flex gap-5 flex-wrap items-baseline">
+            <Link href="/pools/" className="caption text-accent hover:tracking-[0.18em] transition-all">
+              trade suffix pools →
+            </Link>
+            <Link href="/borrow/" className="caption text-fg-dim hover:text-fg transition-colors">
+              or borrow against a bet you hold →
+            </Link>
+          </div>
+        </div>
+      </section>
+
       <div className="hr mb-12" />
 
       {/* ─────────────── LIVE PROOF ─────────────── */}
