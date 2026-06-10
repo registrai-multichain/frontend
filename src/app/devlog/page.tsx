@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Shell } from "@/components/Shell";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -8,6 +9,67 @@ interface Entry {
 }
 
 const ENTRIES: Entry[] = [
+  {
+    date: "2026-06-10",
+    title: "Suffix pools live · $ai, $xyz, $fun · memecoins with a floor",
+    body: (
+      <>
+        <p>
+          New product line, live on Arc testnet: <strong>suffix pools</strong>.
+          Each one is a cash&#8209;floored memecoin. You trade it on a
+          protocol&#8209;owned pool like any token, but it carries a buyback
+          floor backed by the treasury&apos;s USDC reserve, so it cannot fall to
+          zero while the reserve holds. Three are live now:{" "}
+          <code>$ai</code>, <code>$xyz</code>, <code>$fun</code>.
+        </p>
+        <h3>How the floor works</h3>
+        <p>
+          Two tokens over one treasury. The senior token (<code>$ai</code>) is
+          what you trade, with a floor at 0.9x par. The junior token is a
+          pre&#8209;funded first&#8209;loss buffer that absorbs drawdowns before
+          the floor is ever touched, and the protocol never mints junior to
+          defend senior (no reflexive death spiral). Below the floor, arbitrage
+          against the redeem&#8209;at&#8209;floor backstop pushes the price back
+          up. Above it, the meme runs free. Every trade pays a 0.30% fee, and
+          froth above the band is harvested. Both flow into the floor reserve,
+          so the floor only ratchets up, and only from realized revenue.
+        </p>
+        <h3>One engine, many suffixes</h3>
+        <p>
+          The whole stack is multi&#8209;suffix by design. Launching a new coin
+          is one deploy plus one registry entry, no code fork. We proved it by
+          shipping <code>$xyz</code> and <code>$fun</code> the same day as{" "}
+          <code>$ai</code>. The contracts cover the cash floor, the
+          protocol&#8209;owned AMM, fee skim, froth harvest, a competitive
+          Dutch&#8209;auction market maker, and a cap plus timelock&#8209;governable
+          admin. The economic core was simulated and reviewed (a multi&#8209;agent
+          review caught two real bugs, both fixed) before any deploy.
+        </p>
+        <h3>Real backing is a governed roadmap step</h3>
+        <p>
+          Today the floor is backed by the USDC reserve. Real{" "}
+          <span className="italic">.domain</span> backing is the next step, and
+          it is governed, not promised: the CaveBroDAO procurement team sources
+          real domain assets, the DAO votes, and approved backing gets added
+          on&#8209;chain. The community decides what backs each suffix.
+        </p>
+        <h3>Also shipped: borrow against a bet</h3>
+        <p>
+          The bet&#8209;as&#8209;collateral lending from the last entry is no
+          longer held back. The critical (spot&#8209;mark manipulation) is fixed
+          with a depth&#8209;capped mark, validated by a 10,000&#8209;run
+          adversarial fuzz, the two follow&#8209;up highs are fixed, and it is
+          deployed and live at <code>/borrow</code>.
+        </p>
+        <p>
+          Testnet only, and nothing here is an offer or financial advice. The
+          floor is a protocol policy, not a redemption right, and the junior
+          tranche is a security that is not offered or traded.{" "}
+          <Link href="/pools/">trade suffix pools</Link>.
+        </p>
+      </>
+    ),
+  },
   {
     date: "2026-05-31",
     title: "Bet-as-collateral lending · built, reviewed, held back on a critical",
