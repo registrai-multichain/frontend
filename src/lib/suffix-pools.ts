@@ -37,20 +37,27 @@ export const SUFFIX_POOLS: SuffixPool[] = [
     junior: CONTRACTS.SuffixJunior,
     live: true,
   },
-  // Planned — each gets its own DeploySuffix run + addresses, then `live: true`.
   {
     symbol: "xyz",
     name: "Suffix XYZ",
     tagline: "the everything suffix, floored",
-    blurb: "Same engine, $xyz theme. Deploys post-$ai.",
-    live: false,
+    blurb:
+      "Themed on the .xyz aftermarket. Same engine as $ai — a protocol-owned pool with a cash buyback floor that ratchets from real revenue.",
+    treasury: "0x007F263C90e93B40238523abdCaeC0E4c39749c1" as Address,
+    senior: "0xc8fCBd2A4003Bb47c36D08B349bc8ca4E863f2B4" as Address,
+    junior: "0xF64EC77AB4C2F97B05126188454fC1591d297fe6" as Address,
+    live: true,
   },
   {
     symbol: "fun",
     name: "Suffix FUN",
     tagline: "have fun, keep the floor",
-    blurb: "Same engine, $fun theme. Deploys post-$ai.",
-    live: false,
+    blurb:
+      "Themed on the .fun aftermarket. Same cash-floored engine — trade above the floor, never below it.",
+    treasury: "0x4156288c4078f2d425BC6Dc94B6C9eD71cb191EA" as Address,
+    senior: "0xAaaC0a2287b62ed039C879f27b20a2ee137A2347" as Address,
+    junior: "0x3fe865d66ecd3Aed25BB5d861AD564Eb3bf15Bdd" as Address,
+    live: true,
   },
 ];
 
