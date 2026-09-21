@@ -16,6 +16,14 @@ export function arcTransport(): Transport {
   return fallback([http(ARC_RPC_CANTEEN), http(ARC_RPC_OFFICIAL)]);
 }
 
+/** Read transport for a given chain entry — Arc gets its Canteen/official
+ *  fallback, everything else uses its first configured RPC URL. Keeps the
+ *  wallet provider's public client chain-agnostic. */
+export function transportFor(chain: ChainEntry): Transport {
+  if (chain.id === ARC_TESTNET.id) return arcTransport();
+  return http(chain.rpcUrls[0]);
+}
+
 /**
  * Multichain registry. The frontend is built to deploy on any chain Registrai
  * runs on — each chain entry is self-contained (RPC, explorer, contract
@@ -70,6 +78,23 @@ export interface ChainContracts {
   SuffixTreasury?: Address;
   SuffixSenior?: Address;
   SuffixJunior?: Address;
+  /** OracleStake — tiered pooled stake. Stake USDC once, launch oracle feeds
+   *  from the UI (tier quota); OracleStake is the feed creator + bonded agent
+   *  of record, with each feed independently bonded. */
+  OracleStake?: Address;
+  /** NanoLedger — fully on-chain trustless nanopayment settlement. Value moves
+   *  as internal balance accounting (gas decoupled from amount), with
+   *  reserve-funded streams; USDC only at deposit/withdraw. */
+  NanoLedger?: Address;
+  /** MarketsV4 — binary prediction market settled entirely on NanoLedger:
+   *  trades move internal balances, the per-trade fee is one accrual write. */
+  MarketsV4nano?: Address;
+  /** Perennial — fund builders by betting on their progress. Market fees pool
+   *  into a commons, distributed to builders by oracle/GitHub-verified progress. */
+  BuilderRegistry?: Address;
+  ProgressPool?: Address;
+  CaretakerRegistry?: Address;
+  MarketsPerennial?: Address;
 }
 
 export interface ChainEntry {
@@ -97,7 +122,14 @@ const ARC_TESTNET_VIEM = defineChain({
   name: "Arc Testnet",
   nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
   rpcUrls: {
-    default: { http: ["https://rpc.testnet.arc.network"] },
+    // Circle's official testnet endpoints, all verified live 2026-09-21.
+    default: {
+      http: [
+        "https://rpc.testnet.arc.network",
+        "https://rpc.testnet.arc.io",
+        "https://rpc.blockdaemon.testnet.arc.io",
+      ],
+    },
     public: { http: ["https://rpc.testnet.arc.network"] },
   },
   blockExplorers: {
@@ -170,6 +202,27 @@ export const ARC_TESTNET: ChainEntry = {
     SuffixTreasury: "0x0B146b14EEf4b4C0D16AEA9DADF461e714bf5Ce2" as Address,
     SuffixSenior: "0x4b3A8957BFd80fC54393CeF7fBdf1a96586fbeA1" as Address,
     SuffixJunior: "0xCa1e23c01bCF9fDf3AE1CA2d3b072cCE007fb814" as Address,
+    // OracleStake (deployed 2026-06-15). Stake USDC once, launch oracle feeds
+    // from the UI by tier; OracleStake is the bonded agent of record per feed.
+    OracleStake: (live.contracts as { OracleStake?: string })
+      .OracleStake as Address | undefined,
+    // NanoLedger (deployed 2026-06-16). Fully on-chain trustless nanopayment
+    // settlement: internal balances + reserve-funded streams; sub-cent flows.
+    NanoLedger: (live.contracts as { NanoLedger?: string })
+      .NanoLedger as Address | undefined,
+    // MarketsV4 (deployed 2026-06-16). Prediction market settled on NanoLedger;
+    // fee = one accrual write per trade, claimed from the ledger.
+    MarketsV4nano: (live.contracts as { MarketsV4?: string })
+      .MarketsV4 as Address | undefined,
+    // Perennial (deployed 2026-06-29). Builder funding via betting markets.
+    BuilderRegistry: (live.contracts as { BuilderRegistry?: string })
+      .BuilderRegistry as Address | undefined,
+    ProgressPool: (live.contracts as { ProgressPool?: string })
+      .ProgressPool as Address | undefined,
+    CaretakerRegistry: (live.contracts as { CaretakerRegistry?: string })
+      .CaretakerRegistry as Address | undefined,
+    MarketsPerennial: (live.contracts as { MarketsPerennial?: string })
+      .MarketsPerennial as Address | undefined,
   },
   viemChain: ARC_TESTNET_VIEM,
   label: "v2 · 2026-05",
@@ -201,6 +254,17 @@ export const CHAINS: Record<number, ChainEntry> = {
 
 export const DEFAULT_CHAIN_ID = ARC_TESTNET.id;
 export const DEFAULT_CHAIN = ARC_TESTNET;
+
+// ─────────────────────── Perennial chain pin ───────────────────────
+// Perennial now runs on Arc testnet, same chain as everything else — the pin is
+// kept as an indirection so it can be moved again without touching callers.
+//
+// Moved off Robinhood 2026-09-17 and that chain has since been removed from the
+// registry entirely — Arc only. The Robinhood deployment had stalled on
+// 2026-07-14 (fees and progress landed, no epoch was ever closed, nothing was
+// ever paid out) and its bytecode predated active-builder enforcement.
+export const PERENNIAL_CHAIN = ARC_TESTNET;
+export const PERENNIAL_CHAIN_ID = ARC_TESTNET.id;
 
 export function getChain(id: number | undefined): ChainEntry | undefined {
   if (id === undefined) return undefined;

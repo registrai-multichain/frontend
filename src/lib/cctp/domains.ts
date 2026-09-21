@@ -115,19 +115,20 @@ export const CCTP_CHAINS: CctpChain[] = [
     // Arc mainnet is live at CCTP domain 26. Circle's canonical endpoint opened
     // at the public launch and was re-verified 2026-09-21: HTTP 200, chain
     // 0x13b2, unauthenticated, full method coverage including eth_call. That
-    // was the stated precondition for moving off arc-scan.org.
+    // was the stated precondition for moving off third-party endpoints.
     //
-    // The read/wallet split below is deliberate. A bad READ endpoint can only
-    // show us wrong numbers; an endpoint installed in someone's WALLET controls
-    // every balance, quote and confirmation they ever see on that chain. So
-    // wallet installation points only at Circle's own RPC — never at a
-    // third-party operator, and least of all at the arc-scan cluster, which has
-    // a documented $37.6k take-deposits-and-never-burn incident against it.
-    // It stays as a read fallback only.
+    // Circle publishes a four-provider fleet, all verified live 2026-09-21
+    // (200, chain 0x13b2, unauthenticated), so there is no reason to keep a
+    // third party in the list at all — redundancy comes from Circle's own
+    // providers. arc-scan.org is gone entirely: that operator has a documented
+    // $37.6k take-deposits-and-never-burn incident, and a single bad read
+    // endpoint is enough to show a user a wrong balance before they sign.
     readRpcUrls: [
       ...(process.env.NEXT_PUBLIC_ARC_RPC ? [process.env.NEXT_PUBLIC_ARC_RPC] : []),
       "https://rpc.mainnet.arc.io",
-      "https://rpc.arc-scan.org",
+      "https://rpc.blockdaemon.mainnet.arc.io",
+      "https://rpc.drpc.mainnet.arc.io",
+      "https://rpc.quicknode.mainnet.arc.io",
     ],
     walletRpcUrl: process.env.NEXT_PUBLIC_ARC_RPC ?? "https://rpc.mainnet.arc.io",
     explorer: "https://explorer.arc.io",

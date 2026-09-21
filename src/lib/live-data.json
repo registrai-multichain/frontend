@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-09-21T19:41:02.032Z",
+  "syncedAt": "2026-09-21T20:39:24.069Z",
   "builders": [
     {
       "builderId": 1,
@@ -39,7 +39,7 @@
     }
   ],
   "atlas": {
-    "lastScannedBlock": "63300045",
+    "lastScannedBlock": "63307078",
     "progressByBuilder": {
       "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e": 17
     },
