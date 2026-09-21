@@ -6,25 +6,36 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "deploy": "next build && wrangler pages deploy out --project-name=registrai-web --branch=main"
+    "lint": "eslint .",
+    "deploy": "next build && wrangler pages deploy out --project-name=registrai-web --branch=main",
+    "test": "vitest run"
   },
   "dependencies": {
-    "next": "14.2.35",
-    "react": "^18",
-    "react-dom": "^18",
-    "viem": "^2.48.11"
+    "@circle-fin/adapter-solana-kit": "^1.6.3",
+    "@circle-fin/adapter-viem-v2": "^1.18.0",
+    "@circle-fin/bridge-kit": "^1.15.1",
+    "@solana/kit": "^5.5.1",
+    "@solana/web3.js": "^1.98.4",
+    "next": "^16.2.10",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "swr": "^2.4.2",
+    "viem": "^2.55.4"
   },
   "devDependencies": {
     "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.35",
-    "postcss": "^8",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.10",
+    "postcss": "^8.5.21",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.21.0",
     "typescript": "^5",
-    "wrangler": "^4.90.1"
+    "wrangler": "^4.90.1",
+    "vitest": "^2.1.0"
+  },
+  "overrides": {
+    "postcss": "$postcss"
   }
 }
