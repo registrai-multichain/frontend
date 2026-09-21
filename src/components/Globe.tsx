@@ -196,6 +196,10 @@ export function Globe({
     dragged.current = false;
     idle.current = false;
     lastPointer.current = [e.clientX, e.clientY];
+    // Drop the readout for the duration of the drag. The globe moves under the
+    // cursor while hit-testing is suspended, so keeping the old label would
+    // caption whatever country has rotated into that spot with the wrong name.
+    setHovered(null);
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
@@ -219,14 +223,17 @@ export function Globe({
   };
 
   const endDrag = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const under = countryAt(e.clientX - rect.left, e.clientY - rect.top);
     if (dragging.current && !dragged.current) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const f = countryAt(e.clientX - rect.left, e.clientY - rect.top);
-      const code = f?.id ?? null;
+      const code = under?.id ?? null;
       const known = code && cells.some((c) => c.code === code);
       onSelect(known && selected !== code ? code : null);
     }
     dragging.current = false;
+    // Re-label for wherever the globe came to rest, so the readout is correct
+    // again the moment the user lets go rather than on their next movement.
+    setHovered(under?.id ?? null);
     // Resume idle spin shortly after the user lets go.
     window.setTimeout(() => {
       if (!dragging.current) idle.current = true;
