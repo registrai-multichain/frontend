@@ -1,14 +1,6 @@
 {
-  "syncedAt": "2026-09-21T20:39:24.069Z",
-  "builders": [
-    {
-      "builderId": 1,
-      "address": "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e",
-      "lifetimeProgress": 17,
-      "volume": "3000000",
-      "country": null
-    }
-  ],
+  "syncedAt": "2026-09-21T21:02:17.555Z",
+  "builders": [],
   "perennialMarkets": [
     {
       "marketId": "0xb6e3a706e1b0078a7ccb7d31ace1be6432e7f3995bcd3c6b12532f55500467f6",
@@ -39,7 +31,7 @@
     }
   ],
   "atlas": {
-    "lastScannedBlock": "63307078",
+    "lastScannedBlock": "63309853",
     "progressByBuilder": {
       "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e": 17
     },

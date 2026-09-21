@@ -4,6 +4,7 @@ import { useState } from "react";
 import live from "@/lib/live-data.json";
 import meta from "@/lib/builder-meta.json";
 import { WorldMap } from "@/components/WorldMap";
+import { CityView } from "@/components/CityView";
 import {
   aggregateByCountry,
   impliedYes,
@@ -25,6 +26,7 @@ const usdc = (base: bigint | number) => (Number(base) / 1e6).toFixed(2);
 
 export function Atlas() {
   const [selected, setSelected] = useState<string | null>(null);
+  const [focusedBuilder, setFocusedBuilder] = useState<number | null>(null);
 
   const builders = mergeDeclaredMeta(
     ((live as { builders?: RawBuilder[] }).builders ?? []).map(
@@ -79,18 +81,35 @@ export function Atlas() {
         </dl>
       </header>
 
-      <WorldMap cells={mapped} selected={selected} onSelect={setSelected} max={max} />
+      <WorldMap
+        cells={mapped}
+        selected={selected}
+        onSelect={(c) => {
+          setSelected(c);
+          setFocusedBuilder(null);
+        }}
+        max={max}
+      />
 
       {/* Builders with no declared country, plus everyone folded in by the
           small-n floor. They have no geography by definition, so they sit
           beside the map rather than on it. */}
+      {totalBuilders === 0 && (
+        <p className="city-empty">
+          No builders registered yet. The map and the city fill in as builders opt in.
+        </p>
+      )}
+
       {unattributed && (
         <button
           type="button"
           className="atlas-unattributed"
           data-selected={selected === UNATTRIBUTED ? "true" : undefined}
           aria-pressed={selected === UNATTRIBUTED}
-          onClick={() => setSelected(selected === UNATTRIBUTED ? null : UNATTRIBUTED)}
+          onClick={() => {
+            setSelected(selected === UNATTRIBUTED ? null : UNATTRIBUTED);
+            setFocusedBuilder(null);
+          }}
         >
           <span className="atlas-unattributed-label">unattributed</span>
           <span className="tnum">{unattributed.builders}</span>
@@ -112,10 +131,27 @@ export function Atlas() {
             </button>
           </div>
 
+          <div className="atlas-city">
+            <CityView
+              builders={inCell.map((b) => ({
+                builderId: b.builderId,
+                address: b.address,
+                lifetimeProgress: b.lifetimeProgress,
+                volume: b.volume,
+              }))}
+              selectedId={focusedBuilder}
+              onSelect={setFocusedBuilder}
+            />
+          </div>
+
           {inCell.map((b) => {
             const mine = marketsForBuilders(cellMarkets, [b.builderId]);
             return (
-              <div key={b.builderId} className="atlas-builder">
+              <div
+                key={b.builderId}
+                className="atlas-builder"
+                data-dim={focusedBuilder !== null && focusedBuilder !== b.builderId ? "true" : undefined}
+              >
                 <div className="flex items-baseline justify-between gap-4 flex-wrap">
                   <span className="text-[13px]">builder #{b.builderId}</span>
                   <span className="text-2xs text-fg-dim tnum">

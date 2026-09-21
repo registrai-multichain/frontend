@@ -1267,3 +1267,107 @@ a:hover {
   .atlas-markets li { grid-template-columns: 1fr 44px auto; }
   .atlas-markets li .atlas-odds { display: none; }
 }
+
+/* ── city view · isometric block ──────────────────────────────────────────
+   Same engraved language as the map: hairline plate, teal ink. Three faces
+   per box with a light source up and to the left, so the geometry reads as
+   solid without any gradient or filter. */
+.city-figure { margin: 0; }
+.city-svg {
+  display: block;
+  width: 100%;
+  /* Cap the drawn size. Without this the SVG scales to its container width and
+     a small viewBox gets magnified several times over, taking the labels and
+     stroke widths with it. */
+  max-height: 300px;
+  height: auto;
+  overflow: visible;
+}
+
+/* Surveyed ground — the isometric cousin of the map's graticule. */
+.city-ground polygon {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 0.5;
+  stroke-opacity: 0.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.city-building { cursor: pointer; }
+.city-building polygon {
+  stroke: color-mix(in srgb, var(--commons) 55%, var(--fg));
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  transition: fill 0.16s ease;
+}
+
+/* Roof catches the light; the right face turns away from it. */
+.city-face-top { fill: color-mix(in srgb, var(--commons) 62%, white); }
+.city-face-left { fill: var(--commons); }
+.city-face-right { fill: color-mix(in srgb, var(--commons) 72%, black); }
+
+.city-shadow {
+  fill: var(--fg);
+  opacity: 0.1;
+}
+
+.city-building:hover .city-face-top,
+.city-building:focus-visible .city-face-top { fill: color-mix(in srgb, var(--accent) 45%, white); }
+.city-building:hover polygon,
+.city-building:focus-visible polygon { stroke: var(--accent); stroke-width: 1.1; }
+.city-building:focus-visible { outline: none; }
+
+.city-building[data-selected="true"] .city-face-top { fill: color-mix(in srgb, var(--accent) 55%, white); }
+.city-building[data-selected="true"] .city-face-left { fill: var(--accent); }
+.city-building[data-selected="true"] .city-face-right { fill: color-mix(in srgb, var(--accent) 70%, black); }
+.city-building[data-selected="true"] polygon { stroke: var(--fg); }
+
+.city-label,
+.city-sublabel {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  pointer-events: none;
+}
+.city-label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  fill: var(--fg);
+  /* Paper-coloured halo so an id stays legible where it crosses a roof. */
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.city-sublabel {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  fill: var(--accent);
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.city-caption {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+/* Empty lot: the ground is surveyed, nothing is built yet. */
+.city-empty {
+  padding: 26px 20px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--fg-dim);
+  border: 1px dashed var(--line-strong);
+}
+
+.atlas-city { padding: 18px 20px 6px; border-bottom: 1px solid var(--line); }
+.atlas-builder[data-dim="true"] { opacity: 0.4; transition: opacity 0.16s ease; }
