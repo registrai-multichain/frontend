@@ -1486,3 +1486,62 @@ a:hover {
 .globe-scale i[data-density="3"] { background: var(--globe-lit-3); }
 .globe-scale i[data-density="4"] { background: var(--globe-lit-4); }
 .globe-scale em { font-style: normal; margin-left: 8px; }
+
+/* ── atlas stage: globe alone, or docked beside a country's detail ─────── */
+
+.atlas-stage {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 22px;
+  align-items: start;
+  /* Animating the track itself is what makes the globe appear to slide into
+     the corner rather than jump there. Browsers without interpolable grid
+     tracks simply snap, which is a downgrade, not a break. */
+  transition: grid-template-columns 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.atlas-stage[data-docked="true"] {
+  grid-template-columns: minmax(220px, 0.62fr) 1fr;
+}
+
+/* The canvas reads its own box every frame, so shrinking the box is the whole
+   resize — there is nothing to tell the globe. */
+.atlas-stage-globe .globe-stage {
+  transition: max-height 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.atlas-stage[data-docked="true"] .globe-stage {
+  aspect-ratio: 1;
+  max-height: 300px;
+}
+
+.atlas-stage[data-docked="true"] .globe-caption {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+
+/* Below the split the two stack, so the globe keeps a readable size and the
+   detail sits under it instead of in a 150px column. */
+@media (max-width: 820px) {
+  .atlas-stage[data-docked="true"] {
+    grid-template-columns: 1fr;
+  }
+  .atlas-stage[data-docked="true"] .globe-stage {
+    max-height: 340px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-stage,
+  .atlas-stage-globe .globe-stage {
+    transition: none;
+  }
+}
+
+.atlas-empty {
+  border: 1px dashed var(--line-strong);
+  padding: 22px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--fg-dim);
+}

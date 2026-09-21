@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { geoOrthographic, geoPath, geoGraticule10, geoContains } from "d3-geo";
+import { geoOrthographic, geoPath, geoGraticule10, geoContains, geoCentroid } from "d3-geo";
 import type { GeoPermissibleObjects } from "d3-geo";
 import geo from "@/lib/world-geo.json";
 import { densityBucket } from "@/lib/atlas";
@@ -54,6 +54,8 @@ export function Globe({
   const dragged = useRef(false);
   const lastPointer = useRef<[number, number]>([0, 0]);
   const idle = useRef(true);
+  /** Rotation we are easing toward after a selection, or null when settled. */
+  const target = useRef<[number, number] | null>(null);
 
   const [hovered, setHovered] = useState<string | null>(null);
   // Mirrored into refs so the animation loop can read current values without
@@ -68,6 +70,22 @@ export function Globe({
     selectedRef.current = selected;
     hoveredRef.current = hovered;
   }, [cells, selected, hovered]);
+
+  // Turn the globe to face whatever was just selected. Without this the country
+  // you clicked can sit on the limb — or rotate off the back entirely — while
+  // the panel beside it claims to describe it.
+  useEffect(() => {
+    if (!selected) {
+      target.current = null;
+      return;
+    }
+    const f = FEATURES.find((x) => x.id === selected);
+    if (!f) return;
+    const [lon, lat] = geoCentroid(f as unknown as GeoPermissibleObjects);
+    // geoOrthographic().rotate() takes the NEGATED centre, so this brings the
+    // country's centroid to the middle of the disc.
+    target.current = [-lon, -lat];
+  }, [selected]);
 
   /** Screen point -> country, via the projection's inverse. */
   const countryAt = useCallback((px: number, py: number): Feature | null => {
@@ -122,7 +140,24 @@ export function Globe({
       const dt = (now - last) / 1000;
       last = now;
 
-      if (idle.current && !dragging.current && !reduceMotion) {
+      if (target.current && !dragging.current) {
+        const [tx, ty] = target.current;
+        // Take the short way round: +170 -> -170 is 20 degrees, not 340.
+        const dLon = ((((tx - rotation.current[0]) % 360) + 540) % 360) - 180;
+        const dLat = ty - rotation.current[1];
+        if (reduceMotion || (Math.abs(dLon) < 0.25 && Math.abs(dLat) < 0.25)) {
+          rotation.current = [tx, ty];
+          target.current = null;
+        } else {
+          // Frame-rate independent ease, so the flight takes the same time on a
+          // 120Hz display as on a 60Hz one.
+          const k = 1 - Math.pow(0.0015, dt);
+          rotation.current[0] += dLon * k;
+          rotation.current[1] += dLat * k;
+        }
+      } else if (idle.current && !dragging.current && !reduceMotion && !selectedRef.current) {
+        // Hold still while a country is selected — otherwise the thing the panel
+        // is describing quietly drifts off the visible face.
         rotation.current[0] = (rotation.current[0] + SPIN_PER_SEC * dt) % 360;
       }
 
@@ -195,6 +230,7 @@ export function Globe({
     dragging.current = true;
     dragged.current = false;
     idle.current = false;
+    target.current = null; // grabbing the globe overrides a fly-to in progress
     lastPointer.current = [e.clientX, e.clientY];
     // Drop the readout for the duration of the drag. The globe moves under the
     // cursor while hit-testing is suspended, so keeping the old label would

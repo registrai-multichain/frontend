@@ -4,7 +4,6 @@ import { useState } from "react";
 import live from "@/lib/live-data.json";
 import meta from "@/lib/builder-meta.json";
 import { Globe } from "@/components/Globe";
-import { CityView } from "@/components/CityView";
 import {
   aggregateByCountry,
   impliedYes,
@@ -26,7 +25,6 @@ const usdc = (base: bigint | number) => (Number(base) / 1e6).toFixed(2);
 
 export function Atlas() {
   const [selected, setSelected] = useState<string | null>(null);
-  const [focusedBuilder, setFocusedBuilder] = useState<number | null>(null);
 
   const builders = mergeDeclaredMeta(
     ((live as { builders?: RawBuilder[] }).builders ?? []).map(
@@ -81,22 +79,76 @@ export function Atlas() {
         </dl>
       </header>
 
-      <Globe
-        cells={mapped}
-        selected={selected}
-        onSelect={(c) => {
-          setSelected(c);
-          setFocusedBuilder(null);
-        }}
-        max={max}
-      />
+      {/* One grid: the globe alone at full width, or docked small to the left
+          with the country's detail beside it. The globe stays live either way —
+          it is also the way back out. */}
+      <div className="atlas-stage" data-docked={selected ? "true" : undefined}>
+        <div className="atlas-stage-globe">
+          <Globe cells={mapped} selected={selected} onSelect={setSelected} max={max} />
+        </div>
+        {selected && (
+          <div className="atlas-panel">
+            <div className="atlas-panel-head">
+              <span className="caption">
+                {selected === UNATTRIBUTED ? "unattributed" : selected} · {inCell.length} builder
+                {inCell.length === 1 ? "" : "s"} · {cellMarkets.length} market
+                {cellMarkets.length === 1 ? "" : "s"}
+              </span>
+              <button type="button" className="atlas-close" onClick={() => setSelected(null)}>
+                close ×
+              </button>
+            </div>
+
+            {inCell.length === 0 && (
+              <div className="atlas-builder text-2xs text-fg-dim">No builders in this cell.</div>
+            )}
+
+            {inCell.map((b) => {
+              const mine = marketsForBuilders(cellMarkets, [b.builderId]);
+              return (
+                <div key={b.builderId} className="atlas-builder">
+                  <div className="flex items-baseline justify-between gap-4 flex-wrap">
+                    <span className="text-[13px]">builder #{b.builderId}</span>
+                    <span className="text-2xs text-fg-dim tnum">
+                      {b.lifetimeProgress} progress · {usdc(b.volume)} USDC volume
+                    </span>
+                  </div>
+                  <div className="text-2xs text-fg-dim tnum mt-1">{b.address}</div>
+
+                  {mine.length === 0 ? (
+                    <div className="text-2xs text-fg-dim mt-3">No markets yet.</div>
+                  ) : (
+                    <ul className="atlas-markets">
+                      {mine.map((m) => {
+                        const p = impliedYes(BigInt(m.yesReserve), BigInt(m.noReserve));
+                        return (
+                          <li key={m.marketId}>
+                            <span className="tnum text-fg-mute">{m.marketId.slice(0, 14)}…</span>
+                            <span className="atlas-odds" style={{ ["--p" as string]: p }}>
+                              <i />
+                            </span>
+                            <span className="tnum">{(p * 100).toFixed(0)}%</span>
+                            <span className={m.phase === "resolved" ? "text-fg-dim" : "text-commons"}>
+                              {m.phase === "resolved" ? `settled ${m.yesWon ? "yes" : "no"}` : "trading"}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Builders with no declared country, plus everyone folded in by the
           small-n floor. They have no geography by definition, so they sit
-          beside the map rather than on it. */}
+          beside the globe rather than on it. */}
       {totalBuilders === 0 && (
-        <p className="city-empty">
-          No builders registered yet. The map and the city fill in as builders opt in.
+        <p className="atlas-empty">
+          No builders registered yet. Countries light up as builders opt in.
         </p>
       )}
 
@@ -106,10 +158,7 @@ export function Atlas() {
           className="atlas-unattributed"
           data-selected={selected === UNATTRIBUTED ? "true" : undefined}
           aria-pressed={selected === UNATTRIBUTED}
-          onClick={() => {
-            setSelected(selected === UNATTRIBUTED ? null : UNATTRIBUTED);
-            setFocusedBuilder(null);
-          }}
+          onClick={() => setSelected(selected === UNATTRIBUTED ? null : UNATTRIBUTED)}
         >
           <span className="atlas-unattributed-label">unattributed</span>
           <span className="tnum">{unattributed.builders}</span>
@@ -117,74 +166,6 @@ export function Atlas() {
             no declared country, or below the {MIN_BUILDERS_PER_CELL}-builder floor
           </span>
         </button>
-      )}
-
-      {selected && (
-        <div className="atlas-panel">
-          <div className="atlas-panel-head">
-            <span className="caption">
-              {selected === UNATTRIBUTED ? "unattributed" : selected} · {inCell.length} builder
-              {inCell.length === 1 ? "" : "s"}
-            </span>
-            <button type="button" className="atlas-close" onClick={() => setSelected(null)}>
-              close ×
-            </button>
-          </div>
-
-          <div className="atlas-city">
-            <CityView
-              builders={inCell.map((b) => ({
-                builderId: b.builderId,
-                address: b.address,
-                lifetimeProgress: b.lifetimeProgress,
-                volume: b.volume,
-              }))}
-              selectedId={focusedBuilder}
-              onSelect={setFocusedBuilder}
-            />
-          </div>
-
-          {inCell.map((b) => {
-            const mine = marketsForBuilders(cellMarkets, [b.builderId]);
-            return (
-              <div
-                key={b.builderId}
-                className="atlas-builder"
-                data-dim={focusedBuilder !== null && focusedBuilder !== b.builderId ? "true" : undefined}
-              >
-                <div className="flex items-baseline justify-between gap-4 flex-wrap">
-                  <span className="text-[13px]">builder #{b.builderId}</span>
-                  <span className="text-2xs text-fg-dim tnum">
-                    {b.lifetimeProgress} progress · {usdc(b.volume)} USDC volume
-                  </span>
-                </div>
-                <div className="text-2xs text-fg-dim tnum mt-1">{b.address}</div>
-
-                {mine.length === 0 ? (
-                  <div className="text-2xs text-fg-dim mt-3">No markets yet.</div>
-                ) : (
-                  <ul className="atlas-markets">
-                    {mine.map((m) => {
-                      const p = impliedYes(BigInt(m.yesReserve), BigInt(m.noReserve));
-                      return (
-                        <li key={m.marketId}>
-                          <span className="tnum text-fg-mute">{m.marketId.slice(0, 14)}…</span>
-                          <span className="atlas-odds" style={{ ["--p" as string]: p }}>
-                            <i />
-                          </span>
-                          <span className="tnum">{(p * 100).toFixed(0)}%</span>
-                          <span className={m.phase === "resolved" ? "text-fg-dim" : "text-commons"}>
-                            {m.phase === "resolved" ? `settled ${m.yesWon ? "yes" : "no"}` : "trading"}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            );
-          })}
-        </div>
       )}
 
       <p className="atlas-note">
