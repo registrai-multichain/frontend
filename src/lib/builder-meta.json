@@ -1,0 +1,4 @@
+{
+  "_comment": "SELF-DECLARED, UNVERIFIED, opt-in. Keyed by lowercased builder address. Country is ISO-3166-1 alpha-2. Never gate a payout or reward on anything in this file.",
+  "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e": { "country": "PL" }
+}

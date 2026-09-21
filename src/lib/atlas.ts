@@ -96,3 +96,24 @@ export function densityBucket(builders: number, max: number): number {
   const scaled = Math.log1p(ratio * DENSITY_CURVE) / Math.log1p(DENSITY_CURVE);
   return Math.max(0, Math.min(4, Math.round(scaled * 4)));
 }
+
+export type DeclaredMeta = Record<string, { country?: string }>;
+
+/**
+ * Overlay self-declared metadata onto chain-derived aggregates. Returns new
+ * objects — callers hold chain-derived data that must not be mutated.
+ *
+ * A country is accepted only as a two-letter code; anything else is dropped
+ * rather than guessed at, because a wrong flag is worse than no flag.
+ */
+export function mergeDeclaredMeta(
+  builders: BuilderAggregate[],
+  meta: DeclaredMeta,
+): BuilderAggregate[] {
+  return builders.map((b) => {
+    const declared = meta[b.address.toLowerCase()]?.country;
+    const country =
+      declared && /^[A-Za-z]{2}$/.test(declared) ? declared.toUpperCase() : null;
+    return { ...b, country };
+  });
+}
