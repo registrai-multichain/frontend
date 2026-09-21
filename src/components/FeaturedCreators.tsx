@@ -37,7 +37,7 @@ export function FeaturedCreators() {
       </div>
 
       {external.length === 0 ? (
-        <div className="border border-dashed border-line/60 p-6 sm:p-8">
+        <div className="border border-dashed border-line p-6 sm:p-8">
           <p className="font-serif italic text-fg-mute text-[15px] leading-snug max-w-[56ch] mb-4">
             No external creators yet — be the first.
           </p>

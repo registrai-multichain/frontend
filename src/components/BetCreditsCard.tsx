@@ -75,7 +75,7 @@ export function BetCreditsCard() {
 
         <div className="shrink-0">
           {state === "claimed" ? (
-            <div className="text-[13px] text-emerald-400">
+            <div className="text-[13px] text-up">
               ✓ {claim?.points ?? REWARD} credits claimed
               {claim?.txHash && (
                 <>
@@ -100,7 +100,7 @@ export function BetCreditsCard() {
       </div>
 
       {state === "error" && msg && (
-        <p className="mt-3 text-2xs text-amber-300/80" aria-live="polite">{msg}</p>
+        <p className="mt-3 text-2xs text-accent/80" aria-live="polite">{msg}</p>
       )}
     </div>
   );

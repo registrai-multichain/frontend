@@ -25,7 +25,7 @@ export default function AgentsIndexPage() {
 
         <AgentRegistryGrid />
 
-        <div className="mt-16 border border-dashed border-line/60 p-6 sm:p-8">
+        <div className="mt-16 border border-dashed border-line p-6 sm:p-8">
           <h3 className="font-serif italic text-[18px] mb-3 max-w-[44ch]">
             Don&apos;t see a feed you can attest to credibly?
           </h3>

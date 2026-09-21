@@ -20,7 +20,7 @@ import {
 import {
   CHAINS,
   DEFAULT_CHAIN_ID,
-  arcTransport,
+  transportFor,
   getChain,
   isSupportedChain,
   type ChainEntry,
@@ -84,8 +84,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     () =>
       createPublicClient({
         chain: currentChain.viemChain,
-        // Canteen-primary, Arc-official failover for read traffic.
-        transport: arcTransport(),
+        // Per-chain read transport: Arc gets Canteen-primary/official failover,
+        // other chains use their own RPC.
+        transport: transportFor(currentChain),
       }),
     [currentChain],
   );

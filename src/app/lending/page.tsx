@@ -27,7 +27,7 @@ export default function LendingPage() {
 
         <FaucetHint className="mb-6" />
 
-        <div className="mb-6 border border-line/60 bg-bg-elev/30 p-3 text-2xs text-fg-dim leading-relaxed">
+        <div className="mb-6 border border-line bg-bg-elev p-3 text-2xs text-fg-dim leading-relaxed">
           Transactions failing with{" "}
           <span className="text-fg-mute">&quot;JSON-RPC protocol not supported&quot;</span>?
           Your wallet&apos;s Arc network is on a flaky RPC. Set Arc Testnet&apos;s
@@ -47,7 +47,7 @@ export default function LendingPage() {
             body="BTC/USD comes from a bonded Registrai agent (25 USDC slashable) on Registry v2. Before each attestation the agent runs 4 onchain probes against cirBTC: paused, owner, supply growth, blacklisted. Any failure halts attestation; lending degrades to read-only after 1 hour." />
         </div>
 
-        <div className="mt-12 border border-dashed border-line/60 p-6 text-[13px] text-fg-mute">
+        <div className="mt-12 border border-dashed border-line p-6 text-[13px] text-fg-mute">
           <span className="font-serif italic">Alpha caveats.</span> v0.5
           alpha is testnet-only. Per-user caps: 1 cirBTC collateral, 1,000
           USDC supply. The owner has an admin escape hatch for migrations

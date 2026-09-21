@@ -18,19 +18,27 @@ interface MenuSection {
 
 const SECTIONS: MenuSection[] = [
   {
-    label: "go",
+    label: "apps",
     items: [
-      { label: "markets", href: "/markets", mobileOnly: true },
-      { label: "agents", href: "/agents", mobileOnly: true },
-      { label: "vault", href: "/vault", mobileOnly: true },
-      { label: "lending", href: "/lending", mobileOnly: true },
-      { label: "borrow", href: "/borrow", mobileOnly: true },
-      { label: "suffix pools ($ai)", href: "/pools", mobileOnly: true },
+      // The two market surfaces stay adjacent and at the top: they are the
+      // product now, and the rails below them are what the product runs on.
+      { label: "perennial · fund builders", href: "/perennial" },
+      { label: "common markets", href: "/markets" },
+      { label: "BTC · 5 min curve", href: "/markets/btc-5m" },
+      { label: "bridge USDC to Arc ↗", href: "https://bridge.registrai.cc", external: true },
+      { label: "nanopayments", href: "/nanopay" },
+      { label: "slash lab", href: "/slash" },
+      { label: "suffix pools ($ai)", href: "/pools" },
+      { label: "lending", href: "/lending" },
+      { label: "borrow against a bet", href: "/borrow" },
+      { label: "MM vault", href: "/vault" },
     ],
   },
   {
     label: "do",
     items: [
+      { label: "launch an oracle", href: "/launch" },
+      { label: "browse agents", href: "/agents" },
       { label: "create market", href: "/markets/create" },
       { label: "become agent", href: "/agents/create" },
     ],
@@ -75,7 +83,7 @@ export function NavMenu() {
         aria-haspopup="menu"
         className="flex items-center gap-1 text-[12px] tracking-wide text-fg-mute hover:text-fg transition-colors"
       >
-        more
+        menu
         <span
           className={`text-[8px] transition-transform ${open ? "rotate-180" : ""}`}
           aria-hidden
@@ -93,7 +101,7 @@ export function NavMenu() {
             const allMobileOnly = section.items.every((it) => it.mobileOnly);
             return (
               <div key={section.label} className={allMobileOnly ? "sm:hidden" : ""}>
-                {i > 0 && <div className="border-t border-line/60" />}
+                {i > 0 && <div className="border-t border-line" />}
                 <div className="px-4 pt-3 pb-1.5 caption text-fg-dim text-[10px]">
                   {section.label}
                 </div>
@@ -106,7 +114,7 @@ export function NavMenu() {
                       rel="noreferrer"
                       role="menuitem"
                       onClick={() => setOpen(false)}
-                      className={`block px-4 py-2 text-[12.5px] tracking-wide text-fg-mute hover:text-accent hover:bg-bg/60 transition-colors ${
+                      className={`block px-4 py-2 text-[12.5px] tracking-wide text-fg-mute hover:text-accent hover:bg-bg transition-colors ${
                         it.mobileOnly ? "sm:hidden" : ""
                       }`}
                     >
@@ -118,7 +126,7 @@ export function NavMenu() {
                       href={it.href}
                       role="menuitem"
                       onClick={() => setOpen(false)}
-                      className={`block px-4 py-2 text-[12.5px] tracking-wide text-fg-mute hover:text-accent hover:bg-bg/60 transition-colors ${
+                      className={`block px-4 py-2 text-[12.5px] tracking-wide text-fg-mute hover:text-accent hover:bg-bg transition-colors ${
                         it.mobileOnly ? "sm:hidden" : ""
                       }`}
                     >

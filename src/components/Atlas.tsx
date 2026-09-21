@@ -3,7 +3,7 @@
 import { useState } from "react";
 import live from "@/lib/live-data.json";
 import meta from "@/lib/builder-meta.json";
-import { WorldMap } from "@/components/WorldMap";
+import { Globe } from "@/components/Globe";
 import { CityView } from "@/components/CityView";
 import {
   aggregateByCountry,
@@ -81,7 +81,7 @@ export function Atlas() {
         </dl>
       </header>
 
-      <WorldMap
+      <Globe
         cells={mapped}
         selected={selected}
         onSelect={(c) => {

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { WalletButton } from "./WalletButton";
 import { StatusBadge } from "./StatusBadge";
 import { NavMenu } from "./NavMenu";
+import { BrandLockup } from "./Brand";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -17,39 +18,34 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
 function TopNav() {
   return (
-    <header className="w-full border-b border-line/80 sticky top-0 z-10 bg-bg">
+    <header className="w-full border-b border-line sticky top-0 z-10 bg-bg">
       <div className="max-w-[920px] mx-auto px-5 sm:px-10 h-14 sm:h-16 flex items-center justify-between gap-3">
         <Link
           href="/"
           className="flex items-center gap-2.5 sm:gap-3 hover:opacity-80 transition-opacity min-w-0"
           aria-label="Registrai"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/wordmark-dark.png"
-            alt="Registrai"
-            className="h-7 sm:h-12 w-auto shrink-0"
+          <BrandLockup
+            markClassName="h-7 w-7 sm:h-9 sm:w-9"
+            wordmarkClassName="text-[19px] sm:text-[22px]"
           />
           <StatusBadge kind="beta" className="hidden sm:inline-flex ml-1" />
         </Link>
-        <nav className="flex items-center gap-3 sm:gap-5 text-[12px] tracking-wide text-fg-mute shrink-0">
-          <Link href="/markets" className="hidden sm:inline hover:text-fg transition-colors">
-            markets
+        <nav className="flex items-center gap-4 sm:gap-5 text-[12px] tracking-wide text-fg-mute shrink-0">
+          {/* The two market surfaces sit together and are colour-coded by where
+              their rake goes: perennial in commons teal, common markets in
+              paper ink. Same fee, same pool — different subject matter. */}
+          <Link
+            href="/perennial"
+            className="hidden sm:inline text-commons font-medium hover:opacity-70 transition-opacity"
+          >
+            perennial
           </Link>
-          <Link href="/agents" className="hidden sm:inline hover:text-fg transition-colors">
-            agents
-          </Link>
-          <Link href="/vault" className="hidden sm:inline hover:text-fg transition-colors">
-            vault
-          </Link>
-          <Link href="/lending" className="hidden sm:inline hover:text-fg transition-colors">
-            lending
-          </Link>
-          <Link href="/borrow" className="hidden sm:inline hover:text-fg transition-colors">
-            borrow
-          </Link>
-          <Link href="/pools" className="hidden sm:inline hover:text-fg transition-colors">
-            $ai
+          <Link
+            href="/markets"
+            className="hidden sm:inline hover:text-fg transition-colors"
+          >
+            common markets
           </Link>
           <NavMenu />
           <WalletButton />
@@ -61,27 +57,30 @@ function TopNav() {
 
 function Footer() {
   return (
-    <footer className="border-t border-line/80 mt-24">
+    <footer className="border-t border-line mt-24">
       <div className="max-w-[920px] mx-auto px-6 sm:px-10 py-10 flex flex-col gap-6">
         <div className="flex items-center justify-between">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/wordmark-dark.png"
-            alt="Registrai"
-            className="h-10 sm:h-12 w-auto"
+          <BrandLockup
+            markClassName="h-9 w-9"
+            wordmarkClassName="text-[22px]"
           />
-          <a
-            href="https://github.com/registrai-multichain"
-            target="_blank"
-            rel="noreferrer"
-            className="text-2xs tracking-wide text-fg-dim hover:text-accent transition-colors"
-          >
-            github ↗
-          </a>
+          <div className="flex items-center gap-4 text-2xs tracking-wide text-fg-dim">
+            <a href="/brand/registrai-brand-kit.zip" download className="hover:text-accent transition-colors">
+              brand kit ↓
+            </a>
+            <a
+              href="https://github.com/registrai-multichain"
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-accent transition-colors"
+            >
+              github ↗
+            </a>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] tracking-wide text-fg-dim border-t border-line/60 pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] tracking-wide text-fg-dim border-t border-line pt-4">
           <div className="flex items-center gap-2">
-            <span>registrai // arc testnet // v2 · onchain credits live</span>
+            <span>registrai // EVM · arc testnet // v2 · onchain credits live</span>
             <a
               href="https://testnet.arcscan.app/address/0xF5897349819B16f4431A61Ad61293C1b31bD3381"
               target="_blank"

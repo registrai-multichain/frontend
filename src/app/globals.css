@@ -1388,3 +1388,101 @@ a:hover {
    to stay readable. */
 .city-building[data-selected="true"] .city-window { fill: color-mix(in srgb, var(--fg) 55%, transparent); }
 .city-building[data-selected="true"] .city-window[data-lit="true"] { fill: var(--bg-elev); }
+
+/* ── perennial theme ──────────────────────────────────────────────────────
+   The old warm-paper Registrai palette is retired. This redefines the SAME
+   token names the components already consume, so every surface built against
+   --bg / --fg / --accent / --commons re-themes without touching a component.
+
+   Night ground, paper type, orange for action, acid green for data. Sourced
+   from the landing page's own --lp-* set so the two agree. */
+.perennial {
+  --bg: #0d0d0c;
+  --bg-elev: #151513;
+  --fg: #f1eddc;
+  --fg-mute: #aaa99f;
+  --fg-dim: #75746c;
+  --accent: #ff5a1f;
+  --accent-deep: #d6431060;
+  /* The commons colour. Acid green rather than the old teal: on a near-black
+     ground teal reads as murky, and acid is the palette's data hue. */
+  --commons: #c9ff3d;
+  --commons-soft: #1e2a12;
+  --up: #65d9b1;
+  --down: #ff5a1f;
+  --line: #2a2a26;
+  --line-strong: #3d3d37;
+
+  /* Globe-specific. Read by Globe.tsx at draw time — canvas cannot inherit
+     CSS, so the palette is handed over explicitly rather than hardcoded. */
+  --globe-ocean: #121210;
+  --globe-land: #26261f;
+  --globe-border: #3a3a32;
+  --globe-graticule: #1f1f1a;
+  --globe-halo: #ff5a1f;
+  --globe-accent: #ff5a1f;
+  --globe-lit-0: #33401d;
+  --globe-lit-1: #4a6626;
+  --globe-lit-2: #6b9330;
+  --globe-lit-3: #97c536;
+  --globe-lit-4: #c9ff3d;
+
+  background: var(--bg);
+  color: var(--fg);
+  min-height: 100vh;
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+/* ── globe ───────────────────────────────────────────────────────────────── */
+.globe-figure { margin: 0; }
+.globe-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  max-height: 520px;
+}
+.globe-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none; /* let the canvas own drag gestures on touch */
+}
+.globe-canvas:active { cursor: grabbing; }
+
+.globe-readout {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 13px;
+  border: 1px solid var(--line-strong);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+.globe-readout-name { font-size: 13px; color: var(--fg); }
+.globe-readout-stat { font-size: 11px; color: var(--commons); }
+
+.globe-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.globe-scale { display: inline-flex; align-items: center; gap: 3px; }
+.globe-scale i { width: 20px; height: 8px; display: inline-block; }
+.globe-scale i[data-density="0"] { background: var(--globe-lit-0); }
+.globe-scale i[data-density="1"] { background: var(--globe-lit-1); }
+.globe-scale i[data-density="2"] { background: var(--globe-lit-2); }
+.globe-scale i[data-density="3"] { background: var(--globe-lit-3); }
+.globe-scale i[data-density="4"] { background: var(--globe-lit-4); }
+.globe-scale em { font-style: normal; margin-left: 8px; }

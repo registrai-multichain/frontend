@@ -70,7 +70,7 @@ export function CreditsBanner({ address: subjectAddr }: { address: Address }) {
   const dailyPct = Math.min(100, Math.round((dailyUsed / DAILY_TRADE_CAP) * 100));
 
   return (
-    <section className="mb-8 border border-accent/40 bg-bg-elev/40 p-5">
+    <section className="mb-8 border border-accent/40 bg-bg p-5">
       <div className="flex items-baseline justify-between flex-wrap gap-4">
         <div>
           <div className="caption text-accent mb-2">onchain credits</div>
@@ -112,7 +112,7 @@ export function CreditsBanner({ address: subjectAddr }: { address: Address }) {
         )}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-5 border-t border-line/60 text-2xs">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-5 border-t border-line text-2xs">
         <Earn label="register agent" v="1000 pts" highlight />
         <Earn label="create market" v="200 pts" />
         <Earn label="attest data" v="50 pts" />

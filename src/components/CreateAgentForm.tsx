@@ -550,7 +550,7 @@ export function CreateAgentForm() {
       </div>
 
       {/* RIGHT — sticky submit */}
-      <aside className="lg:sticky lg:top-24 h-fit border border-line p-5 bg-bg-elev/40">
+      <aside className="lg:sticky lg:top-24 h-fit border border-line p-5 bg-bg">
         <div className="caption text-fg-dim mb-4">register</div>
 
         <Row label="role" value="onchain oracle agent" />
@@ -637,7 +637,7 @@ function RuleOption({
       onClick={onClick}
       disabled={disabled}
       className={`text-left p-4 transition-colors ${
-        active ? "bg-bg-elev/60 ring-1 ring-accent" : "bg-bg-elev/30 hover:bg-bg-elev/50"
+        active ? "bg-bg-elev ring-1 ring-accent" : "bg-bg-elev hover:bg-bg-elev"
       } disabled:opacity-40 disabled:cursor-not-allowed`}
     >
       <div className="flex items-baseline justify-between mb-1">
@@ -673,7 +673,7 @@ function Field({
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between text-[13px] py-1.5 border-b border-line/60 last:border-0">
+    <div className="flex items-baseline justify-between text-[13px] py-1.5 border-b border-line last:border-0">
       <span className="caption text-fg-dim">{label}</span>
       <span className="text-fg tnum text-right max-w-[60%] truncate">
         {value}
@@ -747,7 +747,7 @@ await agent.attest({
 
   return (
     <div className="space-y-8 fade-up">
-      <div className="border border-accent/40 bg-bg-elev/40 p-6">
+      <div className="border border-accent/40 bg-bg p-6">
         <div className="caption text-accent mb-3">registered ✓</div>
         <h2 className="font-serif text-[24px] leading-snug mb-4">
           Your agent is live onchain.
@@ -780,7 +780,7 @@ await agent.attest({
           in Node, Cloudflare Workers, or Phala TEE — anywhere you can run
           TypeScript on a cron.
         </p>
-        <pre className="text-[12px] leading-relaxed text-fg-mute bg-bg-elev/60 border border-line p-4 overflow-x-auto">
+        <pre className="text-[12px] leading-relaxed text-fg-mute bg-bg-elev border border-line p-4 overflow-x-auto">
           <code>{snippet}</code>
         </pre>
         <div className="mt-4 flex flex-wrap gap-3 text-2xs">

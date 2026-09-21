@@ -31,7 +31,7 @@ function Tile({ href, title }: { href: string; title: string }) {
   return (
     <Link
       href={href}
-      className="bg-bg p-6 flex items-center justify-between hover:bg-bg-elev/40 transition-colors group"
+      className="bg-bg p-6 flex items-center justify-between hover:bg-bg transition-colors group"
     >
       <span className="caption text-fg">{title}</span>
       <span className="text-accent group-hover:tracking-widest transition-all">

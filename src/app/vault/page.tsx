@@ -42,7 +42,7 @@ export default function VaultPage() {
             bet integration. Two-sided market: cirBTC suppliers earn yield,
             bettors borrow USDC against cirBTC to lever into Registrai
             markets in one transaction. */}
-        <div className="mt-12 border border-accent/40 bg-bg-elev/40 p-6">
+        <div className="mt-12 border border-accent/40 bg-bg p-6">
           <div className="flex items-baseline gap-3 mb-3 flex-wrap">
             <span className="caption text-accent">coming · v0.5</span>
             <span className="caption text-fg-dim text-[10px]">
@@ -71,7 +71,7 @@ export default function VaultPage() {
           </p>
         </div>
 
-        <div className="mt-8 border border-dashed border-line/60 p-6 text-[13px] text-fg-mute">
+        <div className="mt-8 border border-dashed border-line p-6 text-[13px] text-fg-mute">
           <span className="font-serif italic">v1 vault, conservative NAV.</span>{" "}
           Performance fees, mark-to-market NAV, and a fully permissionless
           operator role (anyone bonds + competes for the slot) are on the

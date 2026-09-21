@@ -4,10 +4,13 @@ import { ALL_FEEDS } from "@/lib/demo";
 
 const BASE = "https://registrai.cc";
 
+export const dynamic = "force-static";
+
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
   const staticRoutes = [
     "",
+    "/bridge",
     "/markets",
     "/markets/create",
     "/vault",

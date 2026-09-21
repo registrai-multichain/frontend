@@ -1,25 +1,36 @@
 /**
- * Small banner pointing new testers at the Circle USDC faucet. Without
- * testnet USDC nothing on the site is usable — surfacing the link saves
- * the inevitable first round of "I connected, now what?" questions.
+ * Small banner pointing new testers at a testnet faucet. Without gas/testnet
+ * USDC nothing on the site is usable — surfacing the link saves the inevitable
+ * first round of "I connected, now what?" questions.
+ *
+ * Defaults to the Circle USDC faucet (Arc). Pass `href`/`label`/`hint` to point
+ * testers elsewhere — e.g. the Perennial page points at Circle's Arc faucet.
  */
-export function FaucetHint({ className = "" }: { className?: string }) {
+export function FaucetHint({
+  className = "",
+  href = "https://faucet.circle.com",
+  label = "faucet.circle.com",
+  hint = "pick Arc Sepolia, paste your wallet address",
+}: {
+  className?: string;
+  href?: string;
+  label?: string;
+  hint?: string;
+}) {
   return (
     <div
-      className={`flex flex-wrap items-center gap-2 text-2xs caption text-fg-dim border border-dashed border-line/60 px-3 py-2 ${className}`}
+      className={`flex flex-wrap items-center gap-2 text-2xs caption text-fg-dim border border-dashed border-line px-3 py-2 ${className}`}
     >
-      <span>need testnet USDC?</span>
+      <span>need testnet gas / USDC?</span>
       <a
-        href="https://faucet.circle.com"
+        href={href}
         target="_blank"
         rel="noreferrer"
         className="text-accent hover:underline tnum"
       >
-        faucet.circle.com ↗
+        {label} ↗
       </a>
-      <span className="hidden sm:inline text-fg-dim">
-        · pick Arc Sepolia, paste your wallet address
-      </span>
+      <span className="hidden sm:inline text-fg-dim">· {hint}</span>
     </div>
   );
 }

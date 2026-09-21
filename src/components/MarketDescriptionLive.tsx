@@ -22,7 +22,7 @@ export function MarketDescriptionLive({
   if (!description) return null;
 
   return (
-    <div className="border-t border-line/60 pt-4">
+    <div className="border-t border-line pt-4">
       <div className="flex items-baseline gap-2 mb-2">
         <span className="caption text-accent">this market</span>
         {data?.creator && (

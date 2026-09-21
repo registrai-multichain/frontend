@@ -386,7 +386,7 @@ export function BetBorrowPanel() {
             <span className="sr-only">select market</span>
             <select
               value={selMarket} onChange={(e) => setSelMarket(e.target.value as `0x${string}`)}
-              className="bg-bg-elev/40 border border-line/60 px-2 py-1 text-2xs outline-none max-w-full"
+              className="bg-bg border border-line px-2 py-1 text-2xs outline-none max-w-full"
             >
               {v3Markets.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
@@ -394,7 +394,7 @@ export function BetBorrowPanel() {
         </div>
 
         {/* live odds */}
-        <div className="flex items-center justify-between border-b border-line/30 pb-2 mb-3 text-[13px]">
+        <div className="flex items-center justify-between border-b border-line pb-2 mb-3 text-[13px]">
           <span className="caption text-2xs text-fg-dim">market odds</span>
           <span>
             {yesProb !== undefined
@@ -404,7 +404,7 @@ export function BetBorrowPanel() {
         </div>
 
         {!eligible && loaded && (
-          <div className="mb-3 border border-amber-500/30 bg-amber-500/5 p-2 text-2xs text-amber-300/80">
+          <div className="mb-3 border border-accent/30 bg-accent/5 p-2 text-2xs text-accent/80">
             Market too shallow to borrow against (needs ≥ {stats ? fmt(stats.minPoolDepth, 0) : "—"} USDC
             per side{depthShortfall > 0n ? ` — ~${fmt(depthShortfall, 0)} more` : ""}). Buy into it below
             to deepen, or pick another market.
@@ -412,7 +412,7 @@ export function BetBorrowPanel() {
         )}
 
         {/* get a position */}
-        <div className="border border-line/50 p-3 mb-3">
+        <div className="border border-line p-3 mb-3">
           <div className="caption text-2xs text-fg-dim mb-2">your position · {market?.label}</div>
           <div className="flex gap-4 text-[13px] mb-2">
             <span>YES <span className="text-fg-mute">{fmt(pos?.yes ?? 0n)}</span></span>
@@ -423,7 +423,7 @@ export function BetBorrowPanel() {
             <input
               value={tradeAmount} onChange={(e) => setTradeAmount(e.target.value)}
               inputMode="decimal" placeholder="buy amt USDC" aria-label="USDC amount to buy"
-              className="flex-1 min-w-0 bg-bg-elev/40 border border-line/60 px-2 py-1 text-[13px] outline-none focus:border-accent/60"
+              className="flex-1 min-w-0 bg-bg border border-line px-2 py-1 text-[13px] outline-none focus:border-accent/60"
             />
             <button
               onClick={needsConnect ? (address ? () => switchChain() : connect) : doTrade}
@@ -441,7 +441,7 @@ export function BetBorrowPanel() {
           </span>
         </div>
         {!operatorOk && address && (
-          <div className="mb-2 border border-line/50 bg-bg-elev/20 p-2 text-2xs text-fg-dim leading-relaxed">
+          <div className="mb-2 border border-line bg-bg-elev p-2 text-2xs text-fg-dim leading-relaxed">
             One-time: approve the pool to custody (move) your MarketsV3 shares as
             collateral.{" "}
             <button onClick={needsConnect ? (() => switchChain()) : doApproveOperator} className="text-accent underline disabled:opacity-40" disabled={busy(actCh)}>
@@ -457,7 +457,7 @@ export function BetBorrowPanel() {
         <div className="flex items-center justify-between caption text-2xs mt-1">
           <span className="text-fg-dim">40% max LTV · depth-capped mark · 5% APY</span>
           {borrowWei > 0n && markValueSel > 0n && (
-            <span className={overCap ? "text-red-400" : "text-fg-mute"}>
+            <span className={overCap ? "text-down" : "text-fg-mute"}>
               LTV {fmtBps(projLtvBps)}{overCap ? " · over cap" : ""}
             </span>
           )}
@@ -496,19 +496,19 @@ function StatusRow({ ch }: { ch: ChannelState }) {
       {ch.status === "approving" && <span className="text-fg-dim">approving…</span>}
       {ch.status === "submitting" && <span className="text-fg-dim">submitting…</span>}
       {ch.status === "success" && (
-        <span className="text-emerald-400">
+        <span className="text-up">
           done.{" "}
           {ch.tx && <a className="underline" href={txUrl(ch.tx)} target="_blank" rel="noreferrer">view tx</a>}
         </span>
       )}
-      {ch.status === "error" && <span className="text-red-400">{ch.error}</span>}
+      {ch.status === "error" && <span className="text-down">{ch.error}</span>}
     </div>
   );
 }
 
 function Stat({ label, value, small }: { label: string; value?: string; small?: boolean }) {
   return (
-    <div className={`flex items-center justify-between ${small ? "py-0.5" : "py-1"} border-b border-line/30 last:border-0`}>
+    <div className={`flex items-center justify-between ${small ? "py-0.5" : "py-1"} border-b border-line last:border-0`}>
       <span className="caption text-2xs text-fg-dim">{label}</span>
       <span className={`${small ? "text-[13px]" : "text-[14px]"} ${value === undefined ? "text-fg-dim/40 animate-pulse" : ""}`}>
         {value ?? "···"}
@@ -526,7 +526,7 @@ function AmountInput({ id, ariaLabel, value, onChange, onMax }: {
         id={id} aria-label={ariaLabel}
         value={value} onChange={(e) => onChange(e.target.value)}
         inputMode="decimal" placeholder="0.00"
-        className="w-full bg-bg-elev/40 border border-line/60 pl-3 pr-14 py-2 text-[15px] outline-none focus:border-accent/60"
+        className="w-full bg-bg border border-line pl-3 pr-14 py-2 text-[15px] outline-none focus:border-accent/60"
       />
       <button
         type="button" onClick={onMax}
@@ -540,7 +540,7 @@ function Toggle<T extends string>({ name, a, b, value, onChange, small }: {
   name: string; a: T; b: T; value: T; onChange: (v: T) => void; small?: boolean;
 }) {
   return (
-    <div className="inline-flex border border-line/60 text-2xs" role="group" aria-label={name}>
+    <div className="inline-flex border border-line text-2xs" role="group" aria-label={name}>
       {[a, b].map((opt) => (
         <button
           key={opt} type="button" aria-pressed={value === opt} onClick={() => onChange(opt)}

@@ -94,7 +94,7 @@ export function MethodologyLive({
   // 1. Worker has the text — primary render path.
   if (data?.methodology) {
     return (
-      <div className="border border-line bg-bg-elev/30 p-4">
+      <div className="border border-line bg-bg-elev p-4">
         <div className="flex items-baseline gap-2 mb-2">
           <span className="caption text-accent">creator-supplied</span>
           <span className="caption text-fg-dim text-[10px]">
@@ -111,7 +111,7 @@ export function MethodologyLive({
   // 2. Pending unsaved methodology — offer retry if the viewer is the creator.
   if (isCreator && pendingText) {
     return (
-      <div className="border border-down/40 bg-bg-elev/30 p-4 space-y-2">
+      <div className="border border-down/40 bg-bg-elev p-4 space-y-2">
         <div className="caption text-down">methodology not yet published</div>
         <p className="text-[12.5px] text-fg-mute leading-relaxed">
           Your methodology was hashed onchain but the signature to publish the

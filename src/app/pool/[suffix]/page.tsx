@@ -13,8 +13,9 @@ export function generateStaticParams() {
   return SUFFIX_POOLS.map((p) => ({ suffix: p.symbol }));
 }
 
-export function generateMetadata({ params }: { params: { suffix: string } }) {
-  const pool = getPool(params.suffix);
+export async function generateMetadata({ params }: { params: Promise<{ suffix: string }> }) {
+  const { suffix } = await params;
+  const pool = getPool(suffix);
   if (!pool) return { title: "Suffix pool · Registrai" };
   return {
     title: `$${pool.symbol} · ${pool.name} · Registrai`,
@@ -22,8 +23,9 @@ export function generateMetadata({ params }: { params: { suffix: string } }) {
   };
 }
 
-export default function PoolPage({ params }: { params: { suffix: string } }) {
-  const pool = getPool(params.suffix);
+export default async function PoolPage({ params }: { params: Promise<{ suffix: string }> }) {
+  const { suffix } = await params;
+  const pool = getPool(suffix);
   if (!pool) notFound();
 
   return (
@@ -52,7 +54,7 @@ export default function PoolPage({ params }: { params: { suffix: string } }) {
 
             <FaucetHint className="mb-6" />
 
-            <div className="mb-6 border border-amber-500/30 bg-amber-500/5 p-3 text-2xs text-amber-300/80 leading-relaxed">
+            <div className="mb-6 border border-accent/30 bg-accent/5 p-3 text-2xs text-accent/80 leading-relaxed">
               <b>Testnet · not financial advice · not an offer.</b> ${pool.symbol} is a testnet token
               with a cash buyback-floor policy (not a redemption right or profit promise). The junior
               tranche <span className="text-fg-mute">${pool.symbol}LP is a security and is NOT offered
@@ -81,7 +83,7 @@ export default function PoolPage({ params }: { params: { suffix: string } }) {
 
             {/* tokenomics */}
             <h2 className="font-serif text-[26px] mt-14 mb-5">Tokenomics</h2>
-            <div className="border border-line/60 divide-y divide-line/40 text-[13px]">
+            <div className="border border-line divide-y divide-line/40 text-[13px]">
               <Row k="two tokens" v={`$${pool.symbol} (senior, cash-floored, what you trade) + $${pool.symbol}LP (junior, first-loss/upside — a security, not offered yet)`} />
               <Row k="floor" v="k = 0.90 × par; backed by the USDC reserve; ratchets from fees + froth harvest" />
               <Row k="liquidity" v="100% protocol-owned (POL) — no mercenary LPs; the treasury market-makes its own pool" />

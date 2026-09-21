@@ -66,7 +66,7 @@ export default function MarketsPage() {
 
         <ProposalsPanel />
 
-        <div className="mt-12 border border-dashed border-line/60 p-6 text-[13px] text-fg-mute">
+        <div className="mt-12 border border-dashed border-line p-6 text-[13px] text-fg-mute">
           <span className="font-serif italic">{totalTrades} trades</span> across{" "}
           {markets.length} markets on Arc testnet. Trades happen permissionlessly
           on the <code className="text-fg">Markets</code> contract; resolution is

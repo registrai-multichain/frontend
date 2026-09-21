@@ -34,7 +34,7 @@ export default function BorrowPage() {
 
         <FaucetHint className="mb-6" />
 
-        <div className="mb-6 border border-line/60 bg-bg-elev/30 p-3 text-2xs text-fg-dim leading-relaxed">
+        <div className="mb-6 border border-line bg-bg-elev p-3 text-2xs text-fg-dim leading-relaxed">
           Transactions failing with{" "}
           <span className="text-fg-mute">&quot;JSON-RPC protocol not supported&quot;</span>?
           Set Arc Testnet&apos;s RPC URL to{" "}
@@ -61,7 +61,7 @@ export default function BorrowPage() {
           />
         </div>
 
-        <div className="mt-12 border border-dashed border-line/60 p-6 text-[13px] text-fg-mute">
+        <div className="mt-12 border border-dashed border-line p-6 text-[13px] text-fg-mute">
           <span className="font-serif italic">Testnet caveats.</span> v0.9
           research, testnet only. Per-user borrow cap 1,000 USDC; one open loan
           at a time. The eligibility floor (MIN_POOL_DEPTH) is scaled down for

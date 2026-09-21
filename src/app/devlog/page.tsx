@@ -1270,7 +1270,7 @@ export default function DevlogPage() {
           ))}
         </div>
 
-        <div className="mt-20 border border-dashed border-line/60 p-6 text-[13px] text-fg-mute">
+        <div className="mt-20 border border-dashed border-line p-6 text-[13px] text-fg-mute">
           <span className="font-serif italic">Subscribed?</span> Watch the{" "}
           <a
             href="https://github.com/registrai-multichain/contracts"

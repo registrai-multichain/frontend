@@ -15,8 +15,9 @@ export function generateStaticParams() {
 
 export const dynamicParams = false;
 
-export default function MarketPage({ params }: { params: { id: string } }) {
-  const market = findMarket(params.id);
+export default async function MarketPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const market = findMarket(id);
   if (!market) notFound();
 
   const daysToExpiry = Math.max(0, Math.ceil((market.expiry - Date.now() / 1000) / 86_400));
@@ -64,7 +65,7 @@ export default function MarketPage({ params }: { params: { id: string } }) {
               return (
                 <section>
                   <div className="caption mb-3">about</div>
-                  <div className="border border-line bg-bg-elev/30 p-5 space-y-4">
+                  <div className="border border-line bg-bg-elev p-5 space-y-4">
                     {explainer && (
                       <>
                         <p className="text-[14.5px] leading-snug text-fg font-serif italic">
@@ -87,7 +88,7 @@ export default function MarketPage({ params }: { params: { id: string } }) {
             {/* Resolution rule */}
             <section>
               <div className="caption mb-3">resolution rule</div>
-              <div className="border border-line bg-bg-elev/40 p-5">
+              <div className="border border-line bg-bg p-5">
                 <p className="text-[13.5px] leading-relaxed text-fg">
                   At <span className="text-accent tnum">{isoDateTime(market.expiry)}</span>{" "}
                   UTC, the market reads{" "}
@@ -158,4 +159,3 @@ function Spec({ label, value }: { label: string; value: React.ReactNode }) {
     </div>
   );
 }
-

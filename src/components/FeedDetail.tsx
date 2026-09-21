@@ -301,7 +301,7 @@ function Row({ head, cells }: { head?: boolean; cells: React.ReactNode[] }) {
   return (
     <div
       className={`grid grid-cols-[1.4fr_1fr_0.8fr_1fr_1fr] gap-2 px-4 py-2.5 items-center ${
-        head ? "caption border-b border-line bg-bg-elev/40" : "border-b border-line/60 last:border-0 hover:bg-bg-elev/40 transition-colors"
+        head ? "caption border-b border-line bg-bg" : "border-b border-line last:border-0 hover:bg-bg transition-colors"
       } text-[12.5px]`}
     >
       {cells.map((c, i) => (

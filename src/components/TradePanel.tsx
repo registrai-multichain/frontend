@@ -336,7 +336,7 @@ export function TradePanel({ market }: { market: Market }) {
   // Past expiry but not yet resolved: anyone can call resolve().
   if (expired) {
     return (
-      <div className="border border-line bg-bg-elev/30 p-5 sm:p-6">
+      <div className="border border-line bg-bg-elev p-5 sm:p-6">
         <div className="caption mb-4">resolve this market</div>
         <p className="text-fg-mute text-[13px] leading-relaxed mb-5">
           The market expired {new Date(market.expiry * 1000).toUTCString()}. Anyone can settle
@@ -375,9 +375,9 @@ export function TradePanel({ market }: { market: Market }) {
   }
 
   return (
-    <div className="border border-line bg-bg-elev/30 p-5 sm:p-6">
+    <div className="border border-line bg-bg-elev p-5 sm:p-6">
       {/* Live odds — single source of truth, reads from chain reserves. */}
-      <div className="flex items-baseline justify-between gap-3 pb-4 mb-4 border-b border-line/60">
+      <div className="flex items-baseline justify-between gap-3 pb-4 mb-4 border-b border-line">
         <div className="flex items-baseline gap-4">
           <div>
             <div className="text-2xs text-up caption mb-0.5">yes</div>
@@ -701,7 +701,7 @@ function ResolvedPanel({
   const userLosing = yesWon ? noShares : yesShares;
 
   return (
-    <div className="border border-accent/40 bg-bg-elev/30 p-5 sm:p-6">
+    <div className="border border-accent/40 bg-bg-elev p-5 sm:p-6">
       <div className="caption mb-2 text-accent">
         ● resolved · {yesWon ? "YES won" : "NO won"}
       </div>

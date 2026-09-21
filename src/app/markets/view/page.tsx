@@ -184,14 +184,14 @@ function ViewMarketInner() {
           <div className="space-y-8 min-w-0">
             <section>
               <div className="caption mb-3">description</div>
-              <div className="border border-line bg-bg-elev/30 p-5">
+              <div className="border border-line bg-bg-elev p-5">
                 <MarketDescriptionLive marketId={market.id} fallback={undefined} />
               </div>
             </section>
 
             <section>
               <div className="caption mb-3">resolution rule</div>
-              <div className="border border-line bg-bg-elev/40 p-5">
+              <div className="border border-line bg-bg p-5">
                 <p className="text-[13.5px] leading-relaxed text-fg">
                   At <span className="text-accent tnum">{isoDateTime(market.expiry)}</span>{" "}
                   UTC, the market reads{" "}

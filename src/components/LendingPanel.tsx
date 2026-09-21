@@ -443,7 +443,7 @@ export function LendingPanel() {
   return (
     <div className="space-y-10">
       {/* ─── Pool stats banner ─── */}
-      <section className="border border-line bg-bg-elev/40 p-5">
+      <section className="border border-line bg-bg p-5">
         <div className="flex items-baseline gap-3 mb-4 flex-wrap">
           <span className="caption text-accent">pool · live</span>
           <span className="text-2xs text-fg-dim">
@@ -504,7 +504,7 @@ export function LendingPanel() {
 
       {/* ─── Connect prompt ─── */}
       {!address && (
-        <section className="border border-line bg-bg-elev/40 p-6 text-center">
+        <section className="border border-line bg-bg p-6 text-center">
           <p className="text-[13px] text-fg-mute mb-4">
             Connect a wallet to supply USDC or borrow against cirBTC.
           </p>
@@ -600,7 +600,7 @@ export function LendingPanel() {
 
             {/* Your supplier position */}
             {user && user.shares > 0n && (
-              <div className="mt-6 pt-5 border-t border-line/50 text-2xs space-y-1.5">
+              <div className="mt-6 pt-5 border-t border-line text-2xs space-y-1.5">
                 <div className="caption mb-2">your position</div>
                 <div className="flex justify-between"><span className="text-fg-dim">shares</span><span className="tnum">{fmtUSDC(user.shares)}</span></div>
                 <div className="flex justify-between"><span className="text-fg-dim">redeemable</span><span className="tnum">{fmtUSDC(user.positionValueUSDC)} USDC</span></div>
@@ -638,7 +638,7 @@ export function LendingPanel() {
 
             {/* No cirBTC → faucet hint */}
             {user && user.cirBTCBalance === 0n && !user.hasLoan && borrowMode === "borrow" && (
-              <div className="border border-line/60 p-3 mb-4 text-2xs text-fg-mute leading-relaxed">
+              <div className="border border-line p-3 mb-4 text-2xs text-fg-mute leading-relaxed">
                 you have 0 cirBTC.{" "}
                 <a
                   href="https://faucet.circle.com"
@@ -721,7 +721,7 @@ export function LendingPanel() {
                       <div className="flex justify-between"><span className="text-fg-dim">collateral locked</span><span className="tnum">{fmtCirBTC(user.loanCollateral)} cirBTC</span></div>
                       <div className="flex justify-between"><span className="text-fg-dim">principal</span><span className="tnum">{fmtUSDC(user.loanPrincipal)} USDC</span></div>
                       <div className="flex justify-between"><span className="text-fg-dim">interest accrued</span><span className="tnum">{fmtUSDC(user.loanInterest)} USDC</span></div>
-                      <div className="flex justify-between border-t border-line/50 pt-1.5 mt-2"><span>total owed</span><span className="tnum">{fmtUSDC(user.loanPrincipal + user.loanInterest)} USDC</span></div>
+                      <div className="flex justify-between border-t border-line pt-1.5 mt-2"><span>total owed</span><span className="tnum">{fmtUSDC(user.loanPrincipal + user.loanInterest)} USDC</span></div>
                       <div className="flex justify-between"><span className="text-fg-dim">health</span><span className={user.loanHealth > 5000n ? "tnum text-down" : "tnum text-up"}>{fmtBps(user.loanHealth)}</span></div>
                     </div>
                     <ActionButton
@@ -769,7 +769,7 @@ export function LendingPanel() {
 
       {/* ─── Leverage: one-click lock cirBTC → borrow USDC → bet ─── */}
       {address && isOnSupportedChain && (
-        <section className="border border-accent/40 bg-bg-elev/40 p-6">
+        <section className="border border-accent/40 bg-bg p-6">
           <div className="flex items-baseline gap-3 mb-4 flex-wrap">
             <span className="caption text-accent">lever into a market</span>
             <span className="caption text-fg-dim text-[10px]">
@@ -846,12 +846,12 @@ export function LendingPanel() {
                     <button
                       type="button" aria-pressed={levYes}
                       onClick={() => setLevYes(true)}
-                      className={"flex-1 px-3 py-2 border text-2xs " + (levYes ? "border-up text-up" : "border-line/60 text-fg-dim hover:text-fg")}
+                      className={"flex-1 px-3 py-2 border text-2xs " + (levYes ? "border-up text-up" : "border-line text-fg-dim hover:text-fg")}
                     >YES</button>
                     <button
                       type="button" aria-pressed={!levYes}
                       onClick={() => setLevYes(false)}
-                      className={"flex-1 px-3 py-2 border text-2xs " + (!levYes ? "border-down text-down" : "border-line/60 text-fg-dim hover:text-fg")}
+                      className={"flex-1 px-3 py-2 border text-2xs " + (!levYes ? "border-down text-down" : "border-line text-fg-dim hover:text-fg")}
                     >NO</button>
                   </div>
 
@@ -949,7 +949,7 @@ function ModeToggle<T extends string>({
               "px-2 py-1 border " +
               (active
                 ? "border-accent text-accent"
-                : "border-line/60 text-fg-dim hover:text-fg")
+                : "border-line text-fg-dim hover:text-fg")
             }
           >
             {o.label}

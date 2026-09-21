@@ -163,7 +163,7 @@ export function ChainMarketsSection() {
             <Link
               key={m.id}
               href={`/markets/view/?id=${m.id}`}
-              className="block border border-line hover:border-line-strong hover:bg-bg-elev/40 transition-all p-5"
+              className="block border border-line hover:border-line-strong hover:bg-bg transition-all p-5"
             >
               <div className="flex items-baseline justify-between gap-2 flex-wrap mb-3">
                 <span className="caption text-accent">

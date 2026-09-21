@@ -9,8 +9,9 @@ export function generateStaticParams() {
 
 export const dynamicParams = false;
 
-export default function FeedPage({ params }: { params: { feedId: string } }) {
-  const feed = ALL_FEEDS.find((f) => f.id.toLowerCase() === params.feedId.toLowerCase());
+export default async function FeedPage({ params }: { params: Promise<{ feedId: string }> }) {
+  const { feedId } = await params;
+  const feed = ALL_FEEDS.find((f) => f.id.toLowerCase() === feedId.toLowerCase());
   if (!feed) notFound();
   return (
     <Shell>

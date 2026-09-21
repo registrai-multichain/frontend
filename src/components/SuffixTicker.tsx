@@ -41,7 +41,7 @@ export function SuffixTicker({ pool }: { pool: SuffixPool }) {
       </div>
       <div>
         <div className="caption text-2xs text-fg-dim">cash floor</div>
-        <div className="font-serif text-[40px] leading-none text-emerald-400 tabular-nums">
+        <div className="font-serif text-[40px] leading-none text-up tabular-nums">
           {floor !== undefined ? `$${floor.toFixed(3)}` : <span className="text-fg-dim/40">—</span>}
         </div>
       </div>
