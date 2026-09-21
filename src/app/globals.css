@@ -997,7 +997,15 @@ a:hover {
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--commons) 6%, var(--bg-elev));
   color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+  transition: outline-color 0.12s ease;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
 }
+.atlas-cell:hover { outline-color: color-mix(in srgb, var(--commons) 40%, transparent); }
+.atlas-cell:focus-visible { outline-color: var(--commons); }
+.atlas-cell[data-selected="true"] { outline-color: var(--commons); }
 .atlas-cell[data-density="1"] { background: color-mix(in srgb, var(--commons) 20%, var(--bg-elev)); }
 .atlas-cell[data-density="2"] { background: color-mix(in srgb, var(--commons) 42%, var(--bg-elev)); }
 .atlas-cell[data-density="3"] {
