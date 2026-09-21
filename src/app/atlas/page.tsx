@@ -1,33 +1,36 @@
-import Link from "next/link";
-import { BrandLockup } from "@/components/Brand";
+import type { Metadata } from "next";
+import { PerennialShell } from "@/components/PerennialShell";
+import { PerennialViews } from "@/components/PerennialViews";
 import { Atlas } from "@/components/Atlas";
 
-export const metadata = {
-  title: "Builder Atlas · Registrai",
+export const metadata: Metadata = {
+  title: "Builder Atlas · Perennial",
   description:
-    "Builder density worldwide. Progress and volume read from chain; country self-declared.",
+    "Perennial seen geographically and by season: builder density worldwide, and the running season's country, builder and trader boards.",
+  alternates: { canonical: "/atlas" },
 };
 
 /**
- * Self-contained rather than wrapped in `Shell`: Shell carries the retired
- * warm-paper palette, and half a page in each theme looks like a mistake.
+ * The atlas is a view of Perennial, not a separate product — same shell, same
+ * theme, reached through the same switcher as the markets view.
  */
 export default function AtlasPage() {
   return (
-    <div className="perennial">
-      <div className="mx-auto w-full max-w-[1080px] px-6 sm:px-10">
-        <header className="flex items-center justify-between gap-4 py-6 border-b border-[color:var(--line)]">
-          <Link href="/" className="flex items-center gap-2.5" aria-label="Registrai home">
-            <BrandLockup markClassName="h-7 w-7" wordmarkClassName="text-[18px]" />
-          </Link>
-          <span className="text-[10px] tracking-[0.14em] uppercase text-[color:var(--fg-dim)]">
-            arc testnet
-          </span>
+    <PerennialShell>
+      <article className="perennial-app-page">
+        <header className="perennial-app-header">
+          <div>
+            <div className="perennial-app-status">
+              <i /> Arc testnet · live
+            </div>
+            <h1>Builder atlas</h1>
+            <p>Where the grind is — by country, by builder, by season.</p>
+          </div>
+          <PerennialViews />
         </header>
-        <main className="py-10">
-          <Atlas />
-        </main>
-      </div>
-    </div>
+
+        <Atlas />
+      </article>
+    </PerennialShell>
   );
 }

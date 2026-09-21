@@ -8,6 +8,16 @@
  */
 import { createPublicClient, http, defineChain, type Address, type Hex } from "viem";
 import { writeFileSync, readFileSync } from "node:fs";
+import { EMPTY_PNL, foldTrades, seasonWindows } from "../src/lib/seasons";
+import type { PnlState, Season, Trade } from "../src/lib/seasons";
+
+/**
+ * Bump when the season fold changes shape or semantics. A cursor written by an
+ * older version is replayed from the anchor rather than resumed — "state exists"
+ * is not the same as "state is right", and a hollow cursor from a half-built
+ * version would otherwise be trusted forever.
+ */
+const SEASONS_CURSOR_VERSION = 1;
 import { resolve } from "node:path";
 
 const DEPLOYMENT = JSON.parse(
@@ -224,6 +234,29 @@ const perennialBoughtEvent = {
     { name: "collateralIn", type: "uint256", indexed: false },
     { name: "sharesOut", type: "uint256", indexed: false },
     { name: "fee", type: "uint256", indexed: false },
+  ],
+} as const;
+
+const perennialSoldEvent = {
+  type: "event",
+  name: "Sold",
+  inputs: [
+    { name: "marketId", type: "bytes32", indexed: true },
+    { name: "seller", type: "address", indexed: true },
+    { name: "outcome", type: "uint8", indexed: false },
+    { name: "sharesIn", type: "uint256", indexed: false },
+    { name: "collateralOut", type: "uint256", indexed: false },
+    { name: "fee", type: "uint256", indexed: false },
+  ],
+} as const;
+
+const perennialResolvedEvent = {
+  type: "event",
+  name: "Resolved",
+  inputs: [
+    { name: "marketId", type: "bytes32", indexed: true },
+    { name: "yesWon", type: "bool", indexed: false },
+    { name: "value", type: "int256", indexed: false },
   ],
 } as const;
 
@@ -588,7 +621,20 @@ async function main(): Promise<void> {
     progressByBuilder: Record<string, number>;
     volumeByBuilderId: Record<string, string>;
     marketToBuilder: Record<string, number>;
+    /** Resumable trader P&L fold — see seasons.ts. */
+    pnl?: PnlState;
+    /** seasonId -> builder address -> progress earned inside that season. */
+    progressBySeason?: Record<string, Record<string, number>>;
+    /** seasonId -> resolved first block. Immutable once past, so cached. */
+    seasonStartBlocks?: Record<string, string>;
+    seasonsVersion?: number;
   } | null = null;
+
+  let seasons: Season[] = [];
+  let seasonBoards: Record<
+    string,
+    { traders: Array<[string, string]>; builders: Array<[string, number]> }
+  > = {};
 
   const perennialMarkets: Array<{
     marketId: string;
@@ -705,6 +751,151 @@ async function main(): Promise<void> {
       });
       await pace();
     }
+    /* ── seasons ──────────────────────────────────────────────────────────
+       A season is a block range, so every board below is a windowed replay of
+       events already fetched above. No contract knows seasons exist. */
+
+    // Anchor the calendar to the block the stack went live, not to "now" — the
+    // season a past trade belongs to must never move because we synced again.
+    const anchorBlock = await client.getBlock({ blockNumber: anchor });
+    await pace();
+    const windows = seasonWindows(Number(anchorBlock.timestamp), Math.floor(Date.now() / 1000));
+
+    /** First block at or after `target`, by binary search on block timestamps. */
+    async function blockAtTime(targetTs: number): Promise<bigint> {
+      let lo = anchor;
+      let hi = latestBlock;
+      while (lo < hi) {
+        const mid = lo + (hi - lo) / 2n;
+        const b = await client.getBlock({ blockNumber: mid });
+        await pace();
+        if (Number(b.timestamp) < targetTs) lo = mid + 1n;
+        else hi = mid;
+      }
+      return lo;
+    }
+
+    // ~20 RPC calls per boundary, once ever: a past boundary cannot move, so it
+    // is cached in the cursor and never searched again.
+    const startBlocks = new Map<number, bigint>(
+      Object.entries(cursor?.seasonStartBlocks ?? {}).map(([k, v]) => [Number(k), BigInt(v)]),
+    );
+    for (const w of windows) {
+      if (startBlocks.has(w.id)) continue;
+      startBlocks.set(w.id, w.id === 1 ? anchor : await blockAtTime(w.startedAt));
+    }
+
+    seasons = windows.map((w, i) => {
+      const next = windows[i + 1];
+      const start = startBlocks.get(w.id)!;
+      const end = next ? startBlocks.get(next.id)! - 1n : null;
+      return {
+        id: w.id,
+        label: w.label,
+        startBlock: Number(start),
+        endBlock: end === null ? null : Number(end),
+        startedAt: w.startedAt,
+        endsAt: w.endsAt,
+      };
+    });
+
+    // Seasons were added after this deployment had already been syncing, so the
+    // fold's own history is missing from the cursor. Without a one-time backfill
+    // from the anchor the boards would silently start from whenever seasons
+    // shipped, and every trade before that would vanish from the record.
+    const needsBackfill = cursor?.seasonsVersion !== SEASONS_CURSOR_VERSION;
+    const seasonFrom = needsBackfill ? anchor : scanFrom;
+    if (needsBackfill) {
+      console.log(
+        `  backfilling season history from block ${anchor} ` +
+          `(${Math.ceil(Number(latestBlock - anchor) / 5000)} chunks/event, one time)`,
+      );
+    }
+    const seasonProgressLogs = needsBackfill
+      ? await getLogsFor(poolAddr, progressAddedEvent, anchor)
+      : progressLogs;
+    const boughtForPnl = needsBackfill
+      ? await getLogsFor(perennialAddr, perennialBoughtEvent, anchor)
+      : trades;
+
+    // Per-season builder progress, from the same ProgressAdded logs.
+    const progressBySeason = new Map<number, Map<string, number>>(
+      Object.entries(cursor?.progressBySeason ?? {}).map(([sid, m]) => [
+        Number(sid),
+        new Map(Object.entries(m)),
+      ]),
+    );
+    for (const l of seasonProgressLogs) {
+      const a = (l as unknown as { args: { builder: Address; weight: bigint } }).args;
+      const blk = Number(l.blockNumber ?? 0n);
+      const season = seasons.find((x) => blk >= x.startBlock && (x.endBlock === null || blk <= x.endBlock));
+      if (!season) continue;
+      let board = progressBySeason.get(season.id);
+      if (!board) progressBySeason.set(season.id, (board = new Map()));
+      const k = a.builder.toLowerCase();
+      board.set(k, (board.get(k) ?? 0) + Number(a.weight));
+    }
+
+    // Trader ledger. Bought is already in hand from the volume pass; Sold and
+    // Resolved are the two events that actually realise a gain or a loss.
+    const sold = await getLogsFor(perennialAddr, perennialSoldEvent, seasonFrom);
+    const resolved = await getLogsFor(perennialAddr, perennialResolvedEvent, seasonFrom);
+
+    const seq = (l: { logIndex?: number | null }) => Number(l.logIndex ?? 0);
+    const tradeEvents: Trade[] = [
+      ...boughtForPnl.map((l) => {
+        const a = (l as unknown as {
+          args: { marketId: `0x${string}`; buyer: Address; outcome: number; collateralIn: bigint; sharesOut: bigint };
+        }).args;
+        return {
+          kind: "buy" as const,
+          block: Number(l.blockNumber ?? 0n),
+          seq: seq(l),
+          trader: a.buyer.toLowerCase(),
+          marketId: a.marketId.toLowerCase(),
+          outcome: Number(a.outcome),
+          collateral: a.collateralIn,
+          shares: a.sharesOut,
+        };
+      }),
+      ...sold.map((l) => {
+        const a = (l as unknown as {
+          args: { marketId: `0x${string}`; seller: Address; outcome: number; sharesIn: bigint; collateralOut: bigint };
+        }).args;
+        return {
+          kind: "sell" as const,
+          block: Number(l.blockNumber ?? 0n),
+          seq: seq(l),
+          trader: a.seller.toLowerCase(),
+          marketId: a.marketId.toLowerCase(),
+          outcome: Number(a.outcome),
+          collateral: a.collateralOut,
+          shares: a.sharesIn,
+        };
+      }),
+      ...resolved.map((l) => {
+        const a = (l as unknown as { args: { marketId: `0x${string}`; yesWon: boolean } }).args;
+        return {
+          kind: "resolve" as const,
+          block: Number(l.blockNumber ?? 0n),
+          seq: seq(l),
+          marketId: a.marketId.toLowerCase(),
+          yesWon: a.yesWon,
+        };
+      }),
+    ];
+
+    const pnl = foldTrades(cursor?.pnl ?? EMPTY_PNL, tradeEvents, seasons);
+    seasonBoards = Object.fromEntries(
+      seasons.map((x) => [
+        String(x.id),
+        {
+          traders: Object.entries(pnl.realised[String(x.id)] ?? {}) as Array<[string, string]>,
+          builders: [...(progressBySeason.get(x.id) ?? new Map())] as Array<[string, number]>,
+        },
+      ]),
+    );
+
     atlasCursor = {
       lastScannedBlock: latestBlock.toString(),
       progressByBuilder: Object.fromEntries(progressByBuilder),
@@ -712,6 +903,14 @@ async function main(): Promise<void> {
         Array.from(volumeByBuilderId, ([k, v]) => [String(k), v.toString()]),
       ),
       marketToBuilder: Object.fromEntries(marketToBuilder),
+      pnl,
+      progressBySeason: Object.fromEntries(
+        [...progressBySeason].map(([sid, m]) => [String(sid), Object.fromEntries(m)]),
+      ),
+      seasonStartBlocks: Object.fromEntries(
+        [...startBlocks].map(([sid, b]) => [String(sid), b.toString()]),
+      ),
+      seasonsVersion: SEASONS_CURSOR_VERSION,
     };
     // Market ids come from the cached map, so this loop is bounded by market
     // count and never by block range — no log scan, no Arc range ceiling.
@@ -751,6 +950,8 @@ async function main(): Promise<void> {
     builders: builderAgg,
     perennialMarkets,
     atlas: atlasCursor,
+    seasons,
+    seasonBoards,
     chainId: DEPLOYMENT.chainId,
     explorer: DEPLOYMENT.explorer,
     contracts: DEPLOYMENT.contracts,

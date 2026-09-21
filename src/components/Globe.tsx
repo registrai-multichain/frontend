@@ -113,7 +113,10 @@ export function Globe({
     if (!ctx) return;
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const styles = getComputedStyle(document.documentElement);
+    // Resolved against the canvas, not documentElement: the theme class sits on
+    // an ancestor div, so reading the root would always miss and silently fall
+    // back — which is exactly what it did until this was caught.
+    const styles = getComputedStyle(canvas);
     const v = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback;
 
     const palette = {

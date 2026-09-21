@@ -4,6 +4,7 @@ import { useState } from "react";
 import live from "@/lib/live-data.json";
 import meta from "@/lib/builder-meta.json";
 import { Globe } from "@/components/Globe";
+import { SeasonBoards } from "@/components/SeasonBoards";
 import {
   aggregateByCountry,
   impliedYes,
@@ -13,6 +14,9 @@ import {
   UNATTRIBUTED,
 } from "@/lib/atlas";
 import type { BuilderAggregate, DeclaredMeta, PerennialMarket } from "@/lib/atlas";
+import type { Season, SeasonProgress } from "@/lib/seasons";
+
+type SeasonBoardData = { traders: Array<[string, string]>; builders: Array<[string, number]> };
 
 type RawBuilder = {
   builderId: number;
@@ -28,6 +32,17 @@ export function Atlas() {
   // Second level of the drill-down: country -> builder -> that builder's markets.
   const [openBuilder, setOpenBuilder] = useState<number | null>(null);
 
+  const seasons = (live as unknown as { seasons?: Season[] }).seasons ?? [];
+  // Through `unknown`: TypeScript infers string[][] from the JSON literal and
+  // will not narrow an array to a tuple on its own.
+  const boards =
+    (live as unknown as { seasonBoards?: Record<string, SeasonBoardData> }).seasonBoards ?? {};
+  // Default to the season still running — that is the one people are competing in.
+  const [seasonId, setSeasonId] = useState<number | null>(
+    seasons.length ? seasons[seasons.length - 1].id : null,
+  );
+  const season = seasons.find((s) => s.id === seasonId) ?? null;
+
   const builders = mergeDeclaredMeta(
     ((live as { builders?: RawBuilder[] }).builders ?? []).map(
       (b): BuilderAggregate => ({
@@ -42,6 +57,20 @@ export function Atlas() {
   );
 
   const markets = (live as { perennialMarkets?: PerennialMarket[] }).perennialMarkets ?? [];
+
+  const syncedAt = Math.floor(
+    new Date((live as { syncedAt?: string }).syncedAt ?? 0).getTime() / 1000,
+  );
+
+  const board = season ? boards[String(season.id)] : undefined;
+  // Progress is keyed by builder ADDRESS on chain; the boards want ids and
+  // countries, which only the registry join can supply.
+  const byAddress = new Map(builders.map((b) => [b.address.toLowerCase(), b]));
+  const seasonProgress: SeasonProgress[] = (board?.builders ?? []).flatMap(([addr, prog]) => {
+    const b = byAddress.get(addr.toLowerCase());
+    return b ? [{ builderId: b.builderId, address: b.address, country: b.country, progress: prog }] : [];
+  });
+  const traderPnl = new Map((board?.traders ?? []).map(([addr, v]) => [addr, BigInt(v)]));
   const cells = aggregateByCountry(builders);
   const mapped = cells.filter((c) => c.code !== UNATTRIBUTED);
   const unattributed = cells.find((c) => c.code === UNATTRIBUTED);
@@ -68,19 +97,11 @@ export function Atlas() {
 
   return (
     <section className="atlas-root">
-      <header className="atlas-head">
-        <div>
-          <p className="caption text-fg-dim">builder atlas</p>
-          <h1 className="font-serif text-[32px] sm:text-[44px] leading-[1.02] tracking-tightest mt-1">
-            Where the <span className="italic text-commons">grind</span> is.
-          </h1>
-        </div>
-        <dl className="atlas-stats">
-          <Stat label="builders" value={String(totalBuilders)} />
-          <Stat label="progress" value={String(totalProgress)} />
-          <Stat label="volume" value={`${usdc(totalVolume)} USDC`} />
-        </dl>
-      </header>
+      <dl className="atlas-stats">
+        <Stat label="builders" value={String(totalBuilders)} />
+        <Stat label="progress" value={String(totalProgress)} />
+        <Stat label="volume" value={`${usdc(totalVolume)} USDC`} />
+      </dl>
 
       {/* One grid: the globe alone at full width, or docked small to the left
           with the country's detail beside it. The globe stays live either way —
@@ -201,6 +222,31 @@ export function Atlas() {
           </div>
         )}
       </div>
+
+      {season && (
+        <>
+          {seasons.length > 1 && (
+            <nav className="season-picker" aria-label="Season">
+              {seasons.map((x) => (
+                <button
+                  key={x.id}
+                  type="button"
+                  data-active={x.id === season.id ? "true" : undefined}
+                  onClick={() => setSeasonId(x.id)}
+                >
+                  {x.label}
+                </button>
+              ))}
+            </nav>
+          )}
+          <SeasonBoards
+            season={season}
+            progress={seasonProgress}
+            traderPnl={traderPnl}
+            syncedAt={syncedAt}
+          />
+        </>
+      )}
 
       {/* Builders with no declared country, plus everyone folded in by the
           small-n floor. They have no geography by definition, so they sit

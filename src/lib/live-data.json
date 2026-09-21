@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-09-21T21:21:16.288Z",
+  "syncedAt": "2026-09-21T22:22:09.512Z",
   "builders": [],
   "perennialMarkets": [
     {
@@ -31,7 +31,7 @@
     }
   ],
   "atlas": {
-    "lastScannedBlock": "63312046",
+    "lastScannedBlock": "63317753",
     "progressByBuilder": {
       "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e": 17
     },
@@ -42,6 +42,54 @@
       "0xb6e3a706e1b0078a7ccb7d31ace1be6432e7f3995bcd3c6b12532f55500467f6": 1,
       "0x5e7e88c1e7e16ec469bf6089c22309d7f5983069332e8ba6e1bc43c344ae6296": 1,
       "0x3837c1cf18b873bfd3da2e82ea5e5926963e9ccecf2d600c5926980c547aab98": 1
+    },
+    "pnl": {
+      "positions": {
+        "0x5e7e88c1e7e16ec469bf6089c22309d7f5983069332e8ba6e1bc43c344ae6296|0x84c799941c6b69abb296ec46a02e4e0772ad2e5e|0": {
+          "shares": "1821466",
+          "cost": "1000000"
+        }
+      },
+      "realised": {
+        "1": {
+          "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e": "-2000000"
+        }
+      }
+    },
+    "progressBySeason": {
+      "1": {
+        "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e": 17
+      }
+    },
+    "seasonStartBlocks": {
+      "1": "62539246"
+    },
+    "seasonsVersion": 1
+  },
+  "seasons": [
+    {
+      "id": 1,
+      "label": "Season 1",
+      "startBlock": 62539246,
+      "endBlock": null,
+      "startedAt": 1789630500,
+      "endsAt": 1792049700
+    }
+  ],
+  "seasonBoards": {
+    "1": {
+      "traders": [
+        [
+          "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e",
+          "-2000000"
+        ]
+      ],
+      "builders": [
+        [
+          "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e",
+          17
+        ]
+      ]
     }
   },
   "chainId": 5042002,

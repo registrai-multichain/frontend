@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PerennialShell } from "@/components/PerennialShell";
 import { PerennialPanel } from "@/components/PerennialPanel";
 import { FaucetHint } from "@/components/FaucetHint";
+import { PerennialViews } from "@/components/PerennialViews";
 
 export const metadata: Metadata = {
   title: "Perennial Markets · Registrai",
@@ -32,12 +33,15 @@ export default function PerennialPage() {
             <h1>Perennial markets</h1>
             <p>Builder milestone markets and progress-based commons payouts.</p>
           </div>
-          <FaucetHint
-            className="perennial-app-faucet"
-            href="https://faucet.circle.com"
-            label="get test USDC"
-            hint="Arc Testnet — USDC is also gas"
-          />
+          <div className="perennial-app-actions">
+            <PerennialViews />
+            <FaucetHint
+              className="perennial-app-faucet"
+              href="https://faucet.circle.com"
+              label="get test USDC"
+              hint="Arc Testnet — USDC is also gas"
+            />
+          </div>
         </header>
 
         <PerennialPanel />

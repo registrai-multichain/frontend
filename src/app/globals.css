@@ -540,6 +540,23 @@ a:hover {
   --down: #ff765f;
   --line: #4a4c43;
   --line-strong: #7a7d70;
+  --commons: #d7ff56;
+
+  /* Globe palette. Read by Globe.tsx at draw time from the canvas's own
+     computed style — canvas cannot inherit CSS, so the values are handed over
+     explicitly rather than hardcoded in the component. */
+  --globe-ocean: #0d0f0b;
+  --globe-land: #24271e;
+  --globe-border: #3f4337;
+  --globe-graticule: #1b1e16;
+  --globe-halo: #ff7038;
+  --globe-accent: #ff7038;
+  --globe-lit-0: #3a4520;
+  --globe-lit-1: #556a26;
+  --globe-lit-2: #7a9a2f;
+  --globe-lit-3: #a8cf3d;
+  --globe-lit-4: #d7ff56;
+
   position: relative;
   isolation: isolate;
   color: var(--fg);
@@ -1595,3 +1612,121 @@ a:hover {
 }
 .atlas-builder-stats { grid-column: 1 / -1; font-size: 11px; color: var(--fg-mute); }
 .atlas-builder-stats b { color: var(--commons); font-weight: 500; }
+
+/* ── perennial view switcher ───────────────────────────────────────────── */
+
+.perennial-app-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.pv-switch {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
+}
+
+.pv-switch-item {
+  padding: 7px 15px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  border-right: 1px solid var(--line);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.pv-switch-item:last-child { border-right: 0; }
+.pv-switch-item:hover { color: var(--fg); }
+.pv-switch-item[data-active="true"] { color: var(--bg); background: var(--accent); }
+
+/* ── seasons ───────────────────────────────────────────────────────────── */
+
+.season-picker { display: flex; gap: 0; flex-wrap: wrap; border: 1px solid var(--line); width: max-content; }
+.season-picker button {
+  padding: 7px 14px;
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  background: none;
+  border: 0;
+  border-right: 1px solid var(--line);
+  cursor: pointer;
+}
+.season-picker button:last-child { border-right: 0; }
+.season-picker button:hover { color: var(--fg); }
+.season-picker button[data-active="true"] { color: var(--bg); background: var(--commons); }
+
+.season { display: flex; flex-direction: column; gap: 18px; }
+
+.season-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.season-title { display: flex; flex-direction: column; gap: 3px; }
+.season-title strong { font-size: 15px; font-weight: 500; letter-spacing: -0.01em; }
+.season-left { font-size: 11px; color: var(--fg-dim); white-space: nowrap; }
+
+.season-meter { height: 3px; background: var(--line); position: relative; overflow: hidden; }
+.season-meter i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--pct, 0%);
+  background: var(--commons);
+  transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Three boards side by side, stacking before they get too narrow to read. */
+.season-boards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  /* Size each board to its own content: a 3-row country board stretched to
+     match a 10-row builder board is mostly empty box. */
+  align-items: start;
+}
+
+.board { border: 1px solid var(--line); background: var(--bg-elev); display: flex; flex-direction: column; }
+.board-head { padding: 14px 16px 12px; border-bottom: 1px solid var(--line); }
+.board-head h3 { font-size: 13px; font-weight: 500; margin: 0; }
+.board-head p {
+  margin: 4px 0 0;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.board-empty { margin: 0; padding: 18px 16px; font-size: 12px; color: var(--fg-dim); }
+
+.board-rows { list-style: none; margin: 0; padding: 4px 0; }
+.board-row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 16px;
+}
+.board-rank { font-size: 11px; color: var(--fg-dim); }
+.board-label { font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+.board-label small { display: block; font-size: 10px; color: var(--fg-dim); margin-top: 2px; }
+.board-value { font-size: 13px; color: var(--commons); white-space: nowrap; }
+.board-value[data-negative="true"] { color: var(--down); }
+
+.season-note {
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--fg-dim);
+  max-width: 78ch;
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .season-head { grid-template-columns: 1fr; }
+  .season-left { justify-self: start; }
+}
