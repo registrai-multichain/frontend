@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-09-21T19:34:13.093Z",
+  "syncedAt": "2026-09-21T19:41:02.032Z",
   "builders": [
     {
       "builderId": 1,
@@ -9,8 +9,37 @@
       "country": null
     }
   ],
+  "perennialMarkets": [
+    {
+      "marketId": "0xb6e3a706e1b0078a7ccb7d31ace1be6432e7f3995bcd3c6b12532f55500467f6",
+      "builderId": 1,
+      "expiry": 1789640052,
+      "phase": "resolved",
+      "yesWon": true,
+      "yesReserve": "3578586",
+      "noReserve": "6986000"
+    },
+    {
+      "marketId": "0x5e7e88c1e7e16ec469bf6089c22309d7f5983069332e8ba6e1bc43c344ae6296",
+      "builderId": 1,
+      "expiry": 1790248841,
+      "phase": "trading",
+      "yesWon": false,
+      "yesReserve": "4171534",
+      "noReserve": "5993000"
+    },
+    {
+      "marketId": "0x3837c1cf18b873bfd3da2e82ea5e5926963e9ccecf2d600c5926980c547aab98",
+      "builderId": 1,
+      "expiry": 1790267782,
+      "phase": "trading",
+      "yesWon": false,
+      "yesReserve": "5000000",
+      "noReserve": "5000000"
+    }
+  ],
   "atlas": {
-    "lastScannedBlock": "63299227",
+    "lastScannedBlock": "63300045",
     "progressByBuilder": {
       "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e": 17
     },

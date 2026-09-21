@@ -161,6 +161,34 @@ const builderRegistryAbi = [
   },
 ] as const;
 
+const perennialMarketAbi = [
+  {
+    type: "function",
+    name: "getMarket",
+    stateMutability: "view",
+    inputs: [{ name: "marketId", type: "bytes32" }],
+    outputs: [
+      {
+        type: "tuple",
+        components: [
+          { name: "feedId", type: "bytes32" },
+          { name: "agent", type: "address" },
+          { name: "threshold", type: "int256" },
+          { name: "comparator", type: "uint8" },
+          { name: "expiry", type: "uint256" },
+          { name: "creator", type: "address" },
+          { name: "builderId", type: "uint256" },
+          { name: "yesReserve", type: "uint256" },
+          { name: "noReserve", type: "uint256" },
+          { name: "phase", type: "uint8" },
+          { name: "yesWon", type: "bool" },
+          { name: "createdAt", type: "uint256" },
+        ],
+      },
+    ],
+  },
+] as const;
+
 const progressAddedEvent = {
   type: "event",
   name: "ProgressAdded",
@@ -562,6 +590,16 @@ async function main(): Promise<void> {
     marketToBuilder: Record<string, number>;
   } | null = null;
 
+  const perennialMarkets: Array<{
+    marketId: string;
+    builderId: number;
+    expiry: number;
+    phase: "trading" | "resolved";
+    yesWon: boolean;
+    yesReserve: string;
+    noReserve: string;
+  }> = [];
+
   const builderAgg: Array<{
     builderId: number;
     address: string;
@@ -675,12 +713,43 @@ async function main(): Promise<void> {
       ),
       marketToBuilder: Object.fromEntries(marketToBuilder),
     };
-    console.log(`  ${builderAgg.length} active builder(s), cursor at block ${latestBlock}`);
+    // Market ids come from the cached map, so this loop is bounded by market
+    // count and never by block range — no log scan, no Arc range ceiling.
+    for (const [marketId, builderId] of marketToBuilder) {
+      const m = (await client.readContract({
+        address: perennialAddr,
+        abi: perennialMarketAbi,
+        functionName: "getMarket",
+        args: [marketId as `0x${string}`],
+      })) as {
+        expiry: bigint;
+        yesReserve: bigint;
+        noReserve: bigint;
+        phase: number;
+        yesWon: boolean;
+      };
+      perennialMarkets.push({
+        marketId,
+        builderId,
+        expiry: Number(m.expiry),
+        phase: m.phase === 0 ? "trading" : "resolved",
+        yesWon: m.yesWon,
+        yesReserve: m.yesReserve.toString(),
+        noReserve: m.noReserve.toString(),
+      });
+      await pace();
+    }
+
+    console.log(
+      `  ${builderAgg.length} active builder(s), ${perennialMarkets.length} market(s), ` +
+        `cursor at block ${latestBlock}`,
+    );
   }
 
   const out = {
     syncedAt: new Date().toISOString(),
     builders: builderAgg,
+    perennialMarkets,
     atlas: atlasCursor,
     chainId: DEPLOYMENT.chainId,
     explorer: DEPLOYMENT.explorer,
