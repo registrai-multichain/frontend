@@ -1021,3 +1021,249 @@ a:hover {
 .atlas-code { font-size: 13px; font-weight: 500; letter-spacing: 0.02em; }
 .atlas-count { font-size: 13px; opacity: 0.9; }
 .atlas-progress { font-size: 11px; opacity: 0.6; }
+
+/* ── builder atlas · engraved almanac ─────────────────────────────────────
+   The map is printed matter, not a dashboard widget: hairline plate borders,
+   a faint graticule standing in for printed guide lines, and teal ink soaking
+   into countries by density. Teal means the commons everywhere else on this
+   site, so a saturated country reads as "builders here draw from the pool".
+
+   Everything is drawn from build-time path strings — no map library, no
+   runtime projection — so the only cost on the client is paint. */
+
+.atlas-figure { margin: 0; }
+
+.atlas-map {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* The plate edge. A single hairline, the way a chart is bounded by its border
+   rather than a UI panel. */
+.atlas-sphere {
+  stroke: var(--line-strong);
+  stroke-width: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Printed guide lines: present, never competing. */
+.atlas-graticule {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 0.4;
+  stroke-opacity: 0.45;
+  vector-effect: non-scaling-stroke;
+}
+
+.atlas-country {
+  fill: color-mix(in srgb, var(--fg) 5%, transparent);
+  stroke: var(--line);
+  stroke-width: 0.4;
+  vector-effect: non-scaling-stroke;
+  transition:
+    fill 0.18s ease,
+    stroke 0.18s ease;
+  animation: atlas-ink 0.7s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+/* Ink soaking in, by density. Five steps, one hue — brightness alone carries
+   the value, so it survives colour-blindness and a greyscale screenshot. */
+.atlas-country[data-lit="true"] { cursor: pointer; }
+.atlas-country[data-density="0"] { fill: color-mix(in srgb, var(--commons) 12%, transparent); }
+.atlas-country[data-density="1"] { fill: color-mix(in srgb, var(--commons) 28%, transparent); }
+.atlas-country[data-density="2"] { fill: color-mix(in srgb, var(--commons) 48%, transparent); }
+.atlas-country[data-density="3"] { fill: color-mix(in srgb, var(--commons) 72%, transparent); }
+.atlas-country[data-density="4"] { fill: var(--commons); }
+
+.atlas-country[data-lit="true"]:hover {
+  stroke: var(--accent);
+  stroke-width: 1.1;
+}
+.atlas-country[data-selected="true"] {
+  stroke: var(--accent);
+  stroke-width: 1.4;
+}
+.atlas-country:focus-visible {
+  outline: none;
+  stroke: var(--accent);
+  stroke-width: 1.4;
+}
+
+@keyframes atlas-ink {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Survey marks. A chart annotates a station with a crosshair and a code, not
+   a dropped pin. */
+.atlas-marks { pointer-events: none; }
+.atlas-mark-ring {
+  fill: none;
+  stroke: var(--fg);
+  stroke-width: 0.7;
+  stroke-opacity: 0.55;
+  vector-effect: non-scaling-stroke;
+}
+.atlas-mark-tick {
+  stroke: var(--fg);
+  stroke-width: 0.7;
+  stroke-opacity: 0.5;
+  vector-effect: non-scaling-stroke;
+}
+.atlas-mark-label {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  fill: var(--fg-mute);
+}
+.atlas-mark[data-selected="true"] .atlas-mark-ring,
+.atlas-mark[data-selected="true"] .atlas-mark-tick { stroke: var(--accent); stroke-opacity: 1; }
+.atlas-mark[data-selected="true"] .atlas-mark-label { fill: var(--accent); }
+
+.atlas-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+/* Almanac key: five swatches reading left to right. */
+.atlas-scale { display: inline-flex; align-items: center; gap: 3px; }
+.atlas-scale i {
+  width: 22px;
+  height: 8px;
+  border: 1px solid var(--line);
+  display: inline-block;
+}
+.atlas-scale i[data-density="0"] { background: color-mix(in srgb, var(--commons) 12%, transparent); }
+.atlas-scale i[data-density="1"] { background: color-mix(in srgb, var(--commons) 28%, transparent); }
+.atlas-scale i[data-density="2"] { background: color-mix(in srgb, var(--commons) 48%, transparent); }
+.atlas-scale i[data-density="3"] { background: color-mix(in srgb, var(--commons) 72%, transparent); }
+.atlas-scale i[data-density="4"] { background: var(--commons); }
+.atlas-scale em { font-style: normal; margin-left: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-country { animation: none; }
+}
+
+/* ── atlas · page furniture ──────────────────────────────────────────────── */
+.atlas-root { display: flex; flex-direction: column; gap: 22px; }
+
+.atlas-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 18px;
+}
+
+/* Stats read as a chart key: label above, figure below, rules between. */
+.atlas-stats { display: flex; gap: 0; margin: 0; }
+.atlas-stat {
+  padding: 0 18px;
+  border-left: 1px solid var(--line);
+}
+.atlas-stat:first-child { padding-left: 0; border-left: 0; }
+.atlas-stat dd { margin: 3px 0 0; font-size: 19px; letter-spacing: -0.02em; }
+
+/* The off-map bucket. Deliberately not a country shape — it is a card in the
+   margin, the way an almanac footnotes what it could not place. */
+.atlas-unattributed {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-self: flex-start;
+  padding: 10px 14px;
+  border: 1px dashed var(--line-strong);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.atlas-unattributed:hover { background: var(--bg-elev); }
+.atlas-unattributed[data-selected="true"] {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+.atlas-unattributed-label {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.atlas-unattributed-note { font-size: 11px; color: var(--fg-dim); }
+
+.atlas-panel { border: 1px solid var(--line); background: var(--bg-elev); }
+.atlas-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.atlas-close {
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 11px;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+.atlas-close:hover { color: var(--fg); }
+.atlas-builder { padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.atlas-builder:last-child { border-bottom: 0; }
+
+.atlas-markets { list-style: none; padding: 0; margin: 12px 0 0; display: flex; flex-direction: column; gap: 7px; }
+.atlas-markets li {
+  display: grid;
+  grid-template-columns: 1fr 64px 44px auto;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+}
+
+/* A market's odds as a filled rule rather than a number alone — the bar is the
+   thing you read, the percent only confirms it. */
+.atlas-odds {
+  height: 4px;
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+  position: relative;
+  overflow: hidden;
+}
+.atlas-odds i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--p) * 100%);
+  background: var(--commons);
+}
+
+.atlas-note {
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--fg-dim);
+  max-width: 66ch;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+@media (max-width: 640px) {
+  .atlas-stats { width: 100%; }
+  .atlas-stat { padding: 0 12px; }
+  .atlas-markets li { grid-template-columns: 1fr 44px auto; }
+  .atlas-markets li .atlas-odds { display: none; }
+}
