@@ -25,6 +25,8 @@ const usdc = (base: bigint | number) => (Number(base) / 1e6).toFixed(2);
 
 export function Atlas() {
   const [selected, setSelected] = useState<string | null>(null);
+  // Second level of the drill-down: country -> builder -> that builder's markets.
+  const [openBuilder, setOpenBuilder] = useState<number | null>(null);
 
   const builders = mergeDeclaredMeta(
     ((live as { builders?: RawBuilder[] }).builders ?? []).map(
@@ -62,6 +64,7 @@ export function Atlas() {
     markets,
     inCell.map((b) => b.builderId),
   );
+  const cellLabel = selected === UNATTRIBUTED ? "unattributed" : selected;
 
   return (
     <section className="atlas-root">
@@ -84,17 +87,47 @@ export function Atlas() {
           it is also the way back out. */}
       <div className="atlas-stage" data-docked={selected ? "true" : undefined}>
         <div className="atlas-stage-globe">
-          <Globe cells={mapped} selected={selected} onSelect={setSelected} max={max} />
+          <Globe
+            cells={mapped}
+            selected={selected}
+            onSelect={(c) => {
+              setSelected(c);
+              setOpenBuilder(null);
+            }}
+            max={max}
+          />
         </div>
         {selected && (
           <div className="atlas-panel">
+            {/* Breadcrumb doubles as the control: the country step is a button
+                once you are a level deeper, so back is where you looked. */}
             <div className="atlas-panel-head">
-              <span className="caption">
-                {selected === UNATTRIBUTED ? "unattributed" : selected} · {inCell.length} builder
-                {inCell.length === 1 ? "" : "s"} · {cellMarkets.length} market
-                {cellMarkets.length === 1 ? "" : "s"}
+              <span className="atlas-crumbs">
+                {openBuilder === null ? (
+                  <span className="caption">
+                    {cellLabel} · {inCell.length} builder{inCell.length === 1 ? "" : "s"}
+                  </span>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="atlas-crumb"
+                      onClick={() => setOpenBuilder(null)}
+                    >
+                      ← {cellLabel}
+                    </button>
+                    <span className="caption">builder #{openBuilder}</span>
+                  </>
+                )}
               </span>
-              <button type="button" className="atlas-close" onClick={() => setSelected(null)}>
+              <button
+                type="button"
+                className="atlas-close"
+                onClick={() => {
+                  setSelected(null);
+                  setOpenBuilder(null);
+                }}
+              >
                 close ×
               </button>
             </div>
@@ -103,42 +136,68 @@ export function Atlas() {
               <div className="atlas-builder text-2xs text-fg-dim">No builders in this cell.</div>
             )}
 
-            {inCell.map((b) => {
-              const mine = marketsForBuilders(cellMarkets, [b.builderId]);
-              return (
-                <div key={b.builderId} className="atlas-builder">
-                  <div className="flex items-baseline justify-between gap-4 flex-wrap">
-                    <span className="text-[13px]">builder #{b.builderId}</span>
-                    <span className="text-2xs text-fg-dim tnum">
-                      {b.lifetimeProgress} progress · {usdc(b.volume)} USDC volume
-                    </span>
-                  </div>
-                  <div className="text-2xs text-fg-dim tnum mt-1">{b.address}</div>
+            {openBuilder === null
+              ? inCell.map((b) => {
+                  const n = marketsForBuilders(cellMarkets, [b.builderId]).length;
+                  return (
+                    <button
+                      key={b.builderId}
+                      type="button"
+                      className="atlas-builder-row"
+                      onClick={() => setOpenBuilder(b.builderId)}
+                    >
+                      <span className="atlas-builder-id">builder #{b.builderId}</span>
+                      <span className="atlas-builder-addr tnum">{b.address}</span>
+                      <span className="atlas-builder-stats tnum">
+                        <b>{b.lifetimeProgress}</b> progress · {usdc(b.volume)} USDC
+                      </span>
+                      <span className="atlas-builder-go tnum">
+                        {n} market{n === 1 ? "" : "s"} →
+                      </span>
+                    </button>
+                  );
+                })
+              : (() => {
+                  const b = inCell.find((x) => x.builderId === openBuilder);
+                  if (!b) return null;
+                  const mine = marketsForBuilders(cellMarkets, [b.builderId]);
+                  return (
+                    <div className="atlas-builder">
+                      <div className="flex items-baseline justify-between gap-4 flex-wrap">
+                        <span className="text-2xs text-fg-dim tnum">{b.address}</span>
+                        <span className="text-2xs text-fg-dim tnum">
+                          {b.lifetimeProgress} progress · {usdc(b.volume)} USDC volume
+                        </span>
+                      </div>
 
-                  {mine.length === 0 ? (
-                    <div className="text-2xs text-fg-dim mt-3">No markets yet.</div>
-                  ) : (
-                    <ul className="atlas-markets">
-                      {mine.map((m) => {
-                        const p = impliedYes(BigInt(m.yesReserve), BigInt(m.noReserve));
-                        return (
-                          <li key={m.marketId}>
-                            <span className="tnum text-fg-mute">{m.marketId.slice(0, 14)}…</span>
-                            <span className="atlas-odds" style={{ ["--p" as string]: p }}>
-                              <i />
-                            </span>
-                            <span className="tnum">{(p * 100).toFixed(0)}%</span>
-                            <span className={m.phase === "resolved" ? "text-fg-dim" : "text-commons"}>
-                              {m.phase === "resolved" ? `settled ${m.yesWon ? "yes" : "no"}` : "trading"}
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-              );
-            })}
+                      {mine.length === 0 ? (
+                        <div className="text-2xs text-fg-dim mt-3">No markets yet.</div>
+                      ) : (
+                        <ul className="atlas-markets">
+                          {mine.map((m) => {
+                            const p = impliedYes(BigInt(m.yesReserve), BigInt(m.noReserve));
+                            return (
+                              <li key={m.marketId}>
+                                <span className="tnum text-fg-mute">{m.marketId.slice(0, 14)}…</span>
+                                <span className="atlas-odds" style={{ ["--p" as string]: p }}>
+                                  <i />
+                                </span>
+                                <span className="tnum">{(p * 100).toFixed(0)}%</span>
+                                <span
+                                  className={m.phase === "resolved" ? "text-fg-dim" : "text-commons"}
+                                >
+                                  {m.phase === "resolved"
+                                    ? `settled ${m.yesWon ? "yes" : "no"}`
+                                    : "trading"}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })()}
           </div>
         )}
       </div>
@@ -158,7 +217,10 @@ export function Atlas() {
           className="atlas-unattributed"
           data-selected={selected === UNATTRIBUTED ? "true" : undefined}
           aria-pressed={selected === UNATTRIBUTED}
-          onClick={() => setSelected(selected === UNATTRIBUTED ? null : UNATTRIBUTED)}
+          onClick={() => {
+            setSelected(selected === UNATTRIBUTED ? null : UNATTRIBUTED);
+            setOpenBuilder(null);
+          }}
         >
           <span className="atlas-unattributed-label">unattributed</span>
           <span className="tnum">{unattributed.builders}</span>

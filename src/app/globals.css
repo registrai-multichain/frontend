@@ -1545,3 +1545,53 @@ a:hover {
   font-size: 13px;
   color: var(--fg-dim);
 }
+
+/* ── atlas drill-down: country -> builder -> markets ───────────────────── */
+
+.atlas-crumbs { display: inline-flex; align-items: center; gap: 9px; min-width: 0; }
+
+.atlas-crumb {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.atlas-crumb:hover { color: var(--accent); }
+
+/* A whole row is the hit target — a builder with no markets is still worth
+   opening, so the affordance cannot hang off the market count. */
+.atlas-builder-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 4px 14px;
+  width: 100%;
+  text-align: left;
+  padding: 14px 20px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.atlas-builder-row:last-child { border-bottom: 0; }
+.atlas-builder-row:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.atlas-builder-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+
+.atlas-builder-id { font-size: 13px; }
+.atlas-builder-go { font-size: 11px; color: var(--fg-dim); justify-self: end; }
+.atlas-builder-row:hover .atlas-builder-go { color: var(--accent); }
+
+.atlas-builder-addr {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--fg-dim);
+  overflow-wrap: anywhere;
+}
+.atlas-builder-stats { grid-column: 1 / -1; font-size: 11px; color: var(--fg-mute); }
+.atlas-builder-stats b { color: var(--commons); font-weight: 500; }
