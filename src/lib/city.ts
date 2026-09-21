@@ -136,3 +136,113 @@ export function layoutCity(builders: CityBuilder[], maxProgress: number): Plot[]
 
   return plots.sort((a, b) => a.gx + a.gy - (b.gx + b.gy));
 }
+
+/* ── pixel-art facades ──────────────────────────────────────────────────── */
+
+export type Face = "left" | "right";
+
+/**
+ * A point on one vertical face of an isometric box, in face coordinates:
+ * `u` runs 0..1 along the base edge, `v` runs 0..1 from ground to roof.
+ *
+ * The faces are parallelograms, not rectangles, so anything drawn on them has
+ * to be sheared to match or it floats off the surface.
+ */
+export function facePoint(
+  face: Face,
+  gx: number,
+  gy: number,
+  u: number,
+  v: number,
+  footprint: number,
+  height: number,
+): [number, number] {
+  const w = (TILE_W / 2) * footprint;
+  const h = (TILE_H / 2) * footprint;
+  const [cx, cy] = isoPoint(gx, gy);
+
+  // left: west corner -> south corner. right: south corner -> east corner.
+  const [x, y] =
+    face === "left"
+      ? [cx - w + u * w, cy + u * h]
+      : [cx + u * w, cy + h - u * h];
+
+  return [x, y - v * height];
+}
+
+/**
+ * Deterministic PRNG (mulberry32).
+ *
+ * Deliberately not Math.random(): the facades are generated during render, and
+ * a random pattern would differ between the server and client passes and blow
+ * up hydration. Seeded on builderId, every builder gets a stable building.
+ */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export type WindowCell = { face: Face; points: string; lit: boolean };
+
+/** Floor height in grid units — sets how chunky the pixel grid reads. */
+const FLOOR_H = 13;
+
+/**
+ * Window grid for one building: rows of lit and unlit cells on both visible
+ * faces, sheared onto the isometric planes.
+ *
+ * Lighting is seeded per builder so a building looks the same on every render
+ * and every machine, and so two builders never look identical.
+ */
+export function windowGrid(plot: {
+  gx: number;
+  gy: number;
+  footprint: number;
+  height: number;
+  builderId: number;
+}): WindowCell[] {
+  const { gx, gy, footprint, height, builderId } = plot;
+  if (height <= FLOOR_H) return [];
+
+  const floors = Math.max(1, Math.floor(height / FLOOR_H) - 1);
+  const cols = Math.max(2, Math.round(2 + footprint * 2));
+  const rnd = mulberry32(builderId * 2654435761);
+
+  const cells: WindowCell[] = [];
+  // Inset so windows sit inside the facade rather than bleeding over its edges.
+  const padU = 0.16;
+  const usable = 1 - padU * 2;
+  const cellU = usable / cols;
+  const winU = cellU * 0.62;
+  const winV = (FLOOR_H * 0.46) / height;
+
+  for (const face of ["left", "right"] as Face[]) {
+    for (let f = 0; f < floors; f++) {
+      // Start one floor up so there is a solid base course.
+      const v0 = ((f + 1) * FLOOR_H) / height;
+      if (v0 + winV > 0.94) continue;
+      for (let c = 0; c < cols; c++) {
+        const u0 = padU + c * cellU + (cellU - winU) / 2;
+        const pts = [
+          facePoint(face, gx, gy, u0, v0, footprint, height),
+          facePoint(face, gx, gy, u0 + winU, v0, footprint, height),
+          facePoint(face, gx, gy, u0 + winU, v0 + winV, footprint, height),
+          facePoint(face, gx, gy, u0, v0 + winV, footprint, height),
+        ];
+        cells.push({
+          face,
+          points: pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" "),
+          // Roughly a third lit: enough to read as occupied, sparse enough that
+          // the facade still reads as a grid rather than a solid block.
+          lit: rnd() < 0.34,
+        });
+      }
+    }
+  }
+  return cells;
+}

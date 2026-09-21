@@ -1371,3 +1371,20 @@ a:hover {
 
 .atlas-city { padding: 18px 20px 6px; border-bottom: 1px solid var(--line); }
 .atlas-builder[data-dim="true"] { opacity: 0.4; transition: opacity 0.16s ease; }
+
+/* Pixel facades. Crisp edges, no anti-aliased stroke — the grid should read as
+   deliberate blocks, not as texture. Lit windows borrow the amber accent, so a
+   busy building looks occupied at a glance against the teal. */
+.city-window {
+  stroke: none;
+  shape-rendering: crispEdges;
+}
+.city-window[data-face="left"] { fill: color-mix(in srgb, var(--commons) 55%, black); }
+.city-window[data-face="right"] { fill: color-mix(in srgb, var(--commons) 40%, black); }
+.city-window[data-lit="true"][data-face="left"] { fill: color-mix(in srgb, var(--accent) 72%, white); }
+.city-window[data-lit="true"][data-face="right"] { fill: color-mix(in srgb, var(--accent) 55%, white); }
+
+/* On the picked building the facade inverts: the amber box needs dark windows
+   to stay readable. */
+.city-building[data-selected="true"] .city-window { fill: color-mix(in srgb, var(--fg) 55%, transparent); }
+.city-building[data-selected="true"] .city-window[data-lit="true"] { fill: var(--bg-elev); }

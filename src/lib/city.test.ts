@@ -111,3 +111,66 @@ describe("layoutCity", () => {
     expect(layoutCity([], 100)).toEqual([]);
   });
 });
+
+import { facePoint, windowGrid } from "./city";
+
+describe("facePoint", () => {
+  it("maps the face's own corners to the box corners", () => {
+    // u=0,v=0 is the base of the left edge; u=1,v=0 the base of the right edge.
+    const a = facePoint("left", 0, 0, 0, 0, 1, 40);
+    const b = facePoint("left", 0, 0, 1, 0, 1, 40);
+    expect(a).not.toEqual(b);
+  });
+
+  it("raises the point as v increases", () => {
+    const low = facePoint("left", 0, 0, 0.5, 0, 1, 40);
+    const high = facePoint("left", 0, 0, 0.5, 1, 1, 40);
+    expect(high[1]).toBeLessThan(low[1]);
+  });
+
+  it("puts the left and right faces on opposite sides of the centre", () => {
+    const l = facePoint("left", 0, 0, 0.5, 0.5, 1, 40);
+    const r = facePoint("right", 0, 0, 0.5, 0.5, 1, 40);
+    expect(l[0]).toBeLessThan(r[0]);
+  });
+});
+
+describe("windowGrid", () => {
+  const plot = { gx: 0, gy: 0, footprint: 1, height: 100, builderId: 7 };
+
+  it("is deterministic for a given builder", () => {
+    const a = windowGrid(plot);
+    const b = windowGrid(plot);
+    expect(a.map((w) => w.lit)).toEqual(b.map((w) => w.lit));
+  });
+
+  it("differs between builders", () => {
+    const other = windowGrid({ ...plot, builderId: 8 });
+    const mine = windowGrid(plot);
+    expect(other.map((w) => w.lit).join("")).not.toBe(mine.map((w) => w.lit).join(""));
+  });
+
+  it("puts more windows on a taller building", () => {
+    const tall = windowGrid({ ...plot, height: 160 });
+    const short = windowGrid({ ...plot, height: 30 });
+    expect(tall.length).toBeGreaterThan(short.length);
+  });
+
+  it("emits none for a building with no height", () => {
+    expect(windowGrid({ ...plot, height: 0 })).toEqual([]);
+  });
+
+  it("emits closed polygons on both faces", () => {
+    const g = windowGrid(plot);
+    expect(g.some((w) => w.face === "left")).toBe(true);
+    expect(g.some((w) => w.face === "right")).toBe(true);
+    expect(g[0].points.split(" ")).toHaveLength(4);
+  });
+
+  it("lights some windows but not all", () => {
+    const g = windowGrid(plot);
+    const litCount = g.filter((w) => w.lit).length;
+    expect(litCount).toBeGreaterThan(0);
+    expect(litCount).toBeLessThan(g.length);
+  });
+});

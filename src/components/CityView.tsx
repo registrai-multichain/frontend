@@ -1,6 +1,6 @@
 "use client";
 
-import { buildingFaces, isoPoint, layoutCity, TILE_H, TILE_W } from "@/lib/city";
+import { buildingFaces, isoPoint, layoutCity, windowGrid, TILE_H, TILE_W } from "@/lib/city";
 import type { CityBuilder } from "@/lib/city";
 
 /**
@@ -81,6 +81,7 @@ export function CityView({
           const f = buildingFaces(p.gx, p.gy, p.footprint, p.height);
           const [cx, cy] = isoPoint(p.gx, p.gy);
           const isSelected = selectedId === p.builderId;
+          const windows = windowGrid(p);
           return (
             <g
               key={p.builderId}
@@ -108,6 +109,19 @@ export function CityView({
               <polygon points={f.left} className="city-face-left" />
               <polygon points={f.right} className="city-face-right" />
               <polygon points={f.top} className="city-face-top" />
+
+              {/* Facade. Sheared onto the face planes so the grid sits on the
+                  surface instead of floating over it, and seeded per builder so
+                  the same building renders identically every time. */}
+              {windows.map((w, i) => (
+                <polygon
+                  key={i}
+                  points={w.points}
+                  className="city-window"
+                  data-face={w.face}
+                  data-lit={w.lit ? "true" : undefined}
+                />
+              ))}
               <text x={cx} y={cy - p.height - 20} textAnchor="middle" className="city-label">
                 #{p.builderId}
               </text>
