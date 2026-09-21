@@ -117,3 +117,35 @@ export function mergeDeclaredMeta(
     return { ...b, country };
   });
 }
+
+export type PerennialMarket = {
+  marketId: string;
+  builderId: number;
+  expiry: number;
+  phase: "trading" | "resolved";
+  yesWon: boolean;
+  /** CPMM reserves, USDC base units, as decimal strings (bigint is not JSON-safe). */
+  yesReserve: string;
+  noReserve: string;
+};
+
+/**
+ * CPMM implied probability of YES.
+ *
+ * Buying YES adds collateral to both reserves then removes the bought shares
+ * from yesReserve, so a DRAINED yes side means the crowd is betting yes:
+ * P(yes) = no / (yes + no).
+ */
+export function impliedYes(yesReserve: bigint, noReserve: bigint): number {
+  const total = yesReserve + noReserve;
+  if (total === 0n) return 0.5;
+  return Number(noReserve) / Number(total);
+}
+
+export function marketsForBuilders(
+  markets: PerennialMarket[],
+  builderIds: number[],
+): PerennialMarket[] {
+  const wanted = new Set(builderIds);
+  return markets.filter((m) => wanted.has(m.builderId));
+}

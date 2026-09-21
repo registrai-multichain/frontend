@@ -2,10 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   aggregateByCountry,
   densityBucket,
+  impliedYes,
+  marketsForBuilders,
   mergeDeclaredMeta,
   MIN_BUILDERS_PER_CELL,
 } from "./atlas";
-import type { BuilderAggregate } from "./atlas";
+import type { BuilderAggregate, PerennialMarket } from "./atlas";
 
 const b = (
   id: number,
@@ -97,5 +99,42 @@ describe("mergeDeclaredMeta", () => {
 
   it("normalises a lowercase declared code to uppercase", () => {
     expect(mergeDeclaredMeta(base, { "0xabc": { country: "de" } })[0].country).toBe("DE");
+  });
+});
+
+const mkt = (id: string, builderId: number, yes = 100n, no = 100n): PerennialMarket => ({
+  marketId: id,
+  builderId,
+  expiry: 0,
+  phase: "trading",
+  yesWon: false,
+  yesReserve: yes.toString(),
+  noReserve: no.toString(),
+});
+
+describe("impliedYes", () => {
+  it("is 0.5 for a balanced book", () => {
+    expect(impliedYes(100n, 100n)).toBeCloseTo(0.5);
+  });
+
+  it("rises as the YES reserve is drained by buying", () => {
+    // Buying YES removes from yesReserve, so a small yesReserve means a high
+    // implied probability: P(yes) = no / (yes + no).
+    expect(impliedYes(50n, 200n)).toBeCloseTo(0.8);
+  });
+
+  it("returns 0.5 for an empty market rather than dividing by zero", () => {
+    expect(impliedYes(0n, 0n)).toBe(0.5);
+  });
+});
+
+describe("marketsForBuilders", () => {
+  it("keeps only markets belonging to the given builders", () => {
+    const out = marketsForBuilders([mkt("0xa", 1), mkt("0xb", 2)], [1]);
+    expect(out.map((m) => m.marketId)).toEqual(["0xa"]);
+  });
+
+  it("returns an empty array when no builder matches", () => {
+    expect(marketsForBuilders([mkt("0xa", 1)], [9])).toEqual([]);
   });
 });
