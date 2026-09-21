@@ -16,8 +16,16 @@ import type { PnlState, Season, Trade } from "../src/lib/seasons";
  * older version is replayed from the anchor rather than resumed — "state exists"
  * is not the same as "state is right", and a hollow cursor from a half-built
  * version would otherwise be trusted forever.
+ *
+ * v2: the Outcome enum was read backwards (MarketsPerennial declares
+ * `{ Yes, No }`, so YES is 0), which inverted every trader's result at
+ * resolution. Every stored `realised` value from v1 is wrong and must be
+ * recomputed, not resumed.
+ *
+ * v3: the v2 backfill seeded the fold with the existing cursor and then replayed
+ * all of history on top of it, double counting everything it re-read.
  */
-const SEASONS_CURSOR_VERSION = 1;
+const SEASONS_CURSOR_VERSION = 3;
 import { resolve } from "node:path";
 
 const DEPLOYMENT = JSON.parse(
@@ -818,12 +826,17 @@ async function main(): Promise<void> {
       ? await getLogsFor(perennialAddr, perennialBoughtEvent, anchor)
       : trades;
 
+    // A backfill REPLACES the season state; it does not extend it. Seeding the
+    // fold with the cursor and then replaying all of history on top counts every
+    // event twice — which is exactly what happened: builder progress read 34
+    // instead of 17, and the trader board carried a stale figure plus the
+    // recomputed one. Accumulators must start empty whenever the scan does.
+    const priorProgress = needsBackfill ? {} : (cursor?.progressBySeason ?? {});
+    const priorPnl = needsBackfill ? EMPTY_PNL : (cursor?.pnl ?? EMPTY_PNL);
+
     // Per-season builder progress, from the same ProgressAdded logs.
     const progressBySeason = new Map<number, Map<string, number>>(
-      Object.entries(cursor?.progressBySeason ?? {}).map(([sid, m]) => [
-        Number(sid),
-        new Map(Object.entries(m)),
-      ]),
+      Object.entries(priorProgress).map(([sid, m]) => [Number(sid), new Map(Object.entries(m))]),
     );
     for (const l of seasonProgressLogs) {
       const a = (l as unknown as { args: { builder: Address; weight: bigint } }).args;
@@ -885,7 +898,7 @@ async function main(): Promise<void> {
       }),
     ];
 
-    const pnl = foldTrades(cursor?.pnl ?? EMPTY_PNL, tradeEvents, seasons);
+    const pnl = foldTrades(priorPnl, tradeEvents, seasons);
     seasonBoards = Object.fromEntries(
       seasons.map((x) => [
         String(x.id),

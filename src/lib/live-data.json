@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-09-21T22:22:09.512Z",
+  "syncedAt": "2026-09-21T23:21:13.529Z",
   "builders": [],
   "perennialMarkets": [
     {
@@ -31,7 +31,7 @@
     }
   ],
   "atlas": {
-    "lastScannedBlock": "63317753",
+    "lastScannedBlock": "63324812",
     "progressByBuilder": {
       "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e": 17
     },
@@ -52,7 +52,7 @@
       },
       "realised": {
         "1": {
-          "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e": "-2000000"
+          "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e": "1407414"
         }
       }
     },
@@ -64,7 +64,7 @@
     "seasonStartBlocks": {
       "1": "62539246"
     },
-    "seasonsVersion": 1
+    "seasonsVersion": 3
   },
   "seasons": [
     {
@@ -81,7 +81,7 @@
       "traders": [
         [
           "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e",
-          "-2000000"
+          "1407414"
         ]
       ],
       "builders": [

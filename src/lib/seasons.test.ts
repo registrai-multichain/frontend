@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   builderBoard,
+  OUTCOME_YES,
   countryBoard,
   rank,
   realisedPnl,
@@ -48,18 +49,18 @@ describe("realisedPnl", () => {
   });
 
   it("books a winning resolution as shares minus cost", () => {
-    const out = realisedPnl([buy(110, "alice", 1, 100n, 180n), resolve(150, true)], SEASONS);
+    const out = realisedPnl([buy(110, "alice", 0, 100n, 180n), resolve(150, true)], SEASONS);
     expect(out.get(1)?.get("alice")).toBe(80n);
   });
 
   it("books the whole cost as a loss on the losing side", () => {
-    const out = realisedPnl([buy(110, "bob", 0, 100n, 180n), resolve(150, true)], SEASONS);
+    const out = realisedPnl([buy(110, "bob", 1, 100n, 180n), resolve(150, true)], SEASONS);
     expect(out.get(1)?.get("bob")).toBe(-100n);
   });
 
   it("books a loss even though the holder never redeemed", () => {
     // There is no Redeemed event here at all — resolution alone settles it.
-    const out = realisedPnl([buy(110, "bob", 0, 250n, 400n), resolve(160, true)], SEASONS);
+    const out = realisedPnl([buy(110, "bob", 1, 250n, 400n), resolve(160, true)], SEASONS);
     expect(out.get(1)?.get("bob")).toBe(-250n);
   });
 
@@ -67,7 +68,7 @@ describe("realisedPnl", () => {
     // 100 for 100 shares, then 300 for 100 shares => average 2 per share.
     // Selling 100 shares for 250 realises 250 - 200 = 50.
     const out = realisedPnl(
-      [buy(110, "alice", 1, 100n, 100n), buy(120, "alice", 1, 300n, 100n), sell(130, "alice", 1, 250n, 100n)],
+      [buy(110, "alice", 0, 100n, 100n), buy(120, "alice", 0, 300n, 100n), sell(130, "alice", 0, 250n, 100n)],
       SEASONS,
     );
     expect(out.get(1)?.get("alice")).toBe(50n);
@@ -76,8 +77,8 @@ describe("realisedPnl", () => {
   it("leaves the remaining basis behind after a partial sell", () => {
     const out = realisedPnl(
       [
-        buy(110, "alice", 1, 400n, 200n),
-        sell(120, "alice", 1, 150n, 100n), // realises 150 - 200 = -50
+        buy(110, "alice", 0, 400n, 200n),
+        sell(120, "alice", 0, 150n, 100n), // realises 150 - 200 = -50
         resolve(130, true), //                100 shares left, basis 200 => -100
       ],
       SEASONS,
@@ -87,7 +88,7 @@ describe("realisedPnl", () => {
 
   it("books each realisation to the season it happened in", () => {
     const out = realisedPnl(
-      [buy(110, "alice", 1, 100n, 200n), sell(120, "alice", 1, 60n, 100n), resolve(250, true)],
+      [buy(110, "alice", 0, 100n, 200n), sell(120, "alice", 0, 60n, 100n), resolve(250, true)],
       SEASONS,
     );
     expect(out.get(1)?.get("alice")).toBe(10n); // 60 - 50
@@ -95,7 +96,7 @@ describe("realisedPnl", () => {
   });
 
   it("is insensitive to the order events arrive in", () => {
-    const events = [buy(110, "a", 1, 100n, 100n), buy(120, "a", 1, 300n, 100n), sell(130, "a", 1, 250n, 100n)];
+    const events = [buy(110, "a", 0, 100n, 100n), buy(120, "a", 0, 300n, 100n), sell(130, "a", 0, 250n, 100n)];
     const forward = realisedPnl(events, SEASONS).get(1)?.get("a");
     const backward = realisedPnl([...events].reverse(), SEASONS).get(1)?.get("a");
     expect(backward).toBe(forward);
@@ -103,19 +104,19 @@ describe("realisedPnl", () => {
 
   it("keeps separate markets separate", () => {
     const out = realisedPnl(
-      [buy(110, "a", 1, 100n, 200n, "m1"), buy(110, "a", 1, 100n, 200n, "m2"), resolve(150, true, "m1")],
+      [buy(110, "a", 0, 100n, 200n, "m1"), buy(110, "a", 0, 100n, 200n, "m2"), resolve(150, true, "m1")],
       SEASONS,
     );
     expect(out.get(1)?.get("a")).toBe(100n); // only m1 settled
   });
 
   it("ignores trades before any season began", () => {
-    const out = realisedPnl([buy(5, "a", 1, 100n, 200n), resolve(50, true)], SEASONS);
+    const out = realisedPnl([buy(5, "a", 0, 100n, 200n), resolve(50, true)], SEASONS);
     expect(out.size).toBe(0);
   });
 
   it("does not invent a basis for shares it never saw bought", () => {
-    const out = realisedPnl([sell(110, "ghost", 1, 90n, 100n)], SEASONS);
+    const out = realisedPnl([sell(110, "ghost", 0, 90n, 100n)], SEASONS);
     expect(out.get(1)?.get("ghost")).toBe(90n);
   });
 });
@@ -212,10 +213,10 @@ import { EMPTY_PNL, foldTrades } from "./seasons";
 
 describe("foldTrades resumability", () => {
   const all: Trade[] = [
-    buy(110, "a", 1, 100n, 100n),
-    buy(120, "a", 1, 300n, 100n),
-    sell(130, "a", 1, 250n, 100n),
-    buy(140, "b", 0, 200n, 400n),
+    buy(110, "a", 0, 100n, 100n),
+    buy(120, "a", 0, 300n, 100n),
+    sell(130, "a", 0, 250n, 100n),
+    buy(140, "b", 1, 200n, 400n),
     resolve(210, true),
   ];
 
@@ -235,14 +236,14 @@ describe("foldTrades resumability", () => {
   it("carries an open position across the resume boundary", () => {
     // The buy is in the first batch, the resolution in the second: the basis has
     // to survive in the cursor or the gain is computed against nothing.
-    const first = foldTrades(EMPTY_PNL, [buy(110, "c", 1, 40n, 90n)], SEASONS);
+    const first = foldTrades(EMPTY_PNL, [buy(110, "c", 0, 40n, 90n)], SEASONS);
     expect(Object.keys(first.positions)).toHaveLength(1);
     const second = foldTrades(first, [resolve(150, true)], SEASONS);
     expect(second.realised["1"]["c"]).toBe("50");
   });
 
   it("forgets positions once they are closed", () => {
-    const done = foldTrades(EMPTY_PNL, [buy(110, "c", 1, 40n, 90n), resolve(150, true)], SEASONS);
+    const done = foldTrades(EMPTY_PNL, [buy(110, "c", 0, 40n, 90n), resolve(150, true)], SEASONS);
     expect(done.positions).toEqual({});
   });
 });
@@ -288,5 +289,40 @@ describe("seasonElapsed", () => {
   });
   it("does not divide by a zero-length season", () => {
     expect(seasonElapsed({ startedAt: 5, endsAt: 5 }, 5)).toBe(1);
+  });
+});
+
+describe("outcome polarity, anchored to a real Arc trace", () => {
+  // MarketsPerennial declares `enum Outcome { Yes, No }`, so 0 is YES. These are
+  // the actual logs of market 0xb6e3a706… on Arc testnet:
+  //   BUY     blk 62547786  outcome=0  paid 2000000  shares 3407414
+  //   RESOLVE blk 62553541  yesWon=true
+  //   REDEEM  blk 62553583  payout 3407414
+  // The redeem paying out exactly the shares bought under outcome=0 while
+  // yesWon is what proves 0 is the winning side here. An inverted mapping turns
+  // this trader's +1.407414 into -2.000000, which is what shipped before.
+  const REAL: Season[] = [
+    { id: 1, label: "S1", startBlock: 62539246, endBlock: null, startedAt: 0, endsAt: 1 },
+  ];
+
+  it("books the real trade as a gain, not a loss", () => {
+    const out = realisedPnl(
+      [
+        { kind: "buy", block: 62547786, seq: 0, trader: "0x84c7", marketId: "0xb6e3", outcome: OUTCOME_YES, collateral: 2_000_000n, shares: 3_407_414n },
+        { kind: "resolve", block: 62553541, seq: 0, marketId: "0xb6e3", yesWon: true },
+      ],
+      REAL,
+    );
+    expect(out.get(1)?.get("0x84c7")).toBe(1_407_414n);
+  });
+
+  it("agrees with what redeem() would have paid", () => {
+    // redeem() pays 1:1 on the winning balance, so the gain must be
+    // payout - cost exactly.
+    expect(3_407_414n - 2_000_000n).toBe(1_407_414n);
+  });
+
+  it("states that YES is zero", () => {
+    expect(OUTCOME_YES).toBe(0);
   });
 });

@@ -75,13 +75,21 @@ export type Trade =
       seq: number;
       trader: string;
       marketId: string;
-      /** 0 = NO, 1 = YES, matching the contract's Outcome enum. */
+      /**
+       * Matches `enum Outcome { Yes, No }` in MarketsPerennial — so 0 is YES and
+       * 1 is NO. Worth stating: the intuitive reading is the opposite one, and
+       * getting it backwards inverts every trader's result at resolution
+       * without failing anything obvious.
+       */
       outcome: number;
       /** Buy: gross collateral paid, fee included. Sell: net proceeds received. */
       collateral: bigint;
       shares: bigint;
     }
   | { kind: "resolve"; block: number; seq: number; marketId: string; yesWon: boolean };
+
+/** MarketsPerennial declares `enum Outcome { Yes, No }`, so YES is zero. */
+export const OUTCOME_YES = 0;
 
 type Position = { shares: bigint; cost: bigint };
 
@@ -145,7 +153,7 @@ export function foldTrades(prior: PnlState, trades: Trade[], seasons: Season[]):
       for (const [key, pos] of [...positions]) {
         const [marketId, trader, outcomeStr] = key.split("|");
         if (marketId !== t.marketId) continue;
-        const won = (Number(outcomeStr) === 1) === t.yesWon;
+        const won = (Number(outcomeStr) === OUTCOME_YES) === t.yesWon;
         book(t.block, trader, won ? pos.shares - pos.cost : -pos.cost);
         positions.delete(key);
       }
