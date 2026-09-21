@@ -143,8 +143,74 @@ const marketsAbi = [
   },
 ] as const;
 
+const builderRegistryAbi = [
+  { type: "function", name: "nextId", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  {
+    type: "function",
+    name: "ownerOf",
+    stateMutability: "view",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
+    name: "isActiveBuilderId",
+    stateMutability: "view",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [{ type: "bool" }],
+  },
+] as const;
+
+const progressAddedEvent = {
+  type: "event",
+  name: "ProgressAdded",
+  inputs: [
+    { name: "epoch", type: "uint256", indexed: true },
+    { name: "builder", type: "address", indexed: true },
+    { name: "weight", type: "uint256", indexed: false },
+  ],
+} as const;
+
+const marketCreatedEvent = {
+  type: "event",
+  name: "MarketCreated",
+  inputs: [
+    { name: "marketId", type: "bytes32", indexed: true },
+    { name: "builderId", type: "uint256", indexed: true },
+    { name: "creator", type: "address", indexed: true },
+    { name: "feedId", type: "bytes32", indexed: false },
+    { name: "agent", type: "address", indexed: false },
+    { name: "threshold", type: "int256", indexed: false },
+    { name: "comparator", type: "uint8", indexed: false },
+    { name: "expiry", type: "uint256", indexed: false },
+  ],
+} as const;
+
+const perennialBoughtEvent = {
+  type: "event",
+  name: "Bought",
+  inputs: [
+    { name: "marketId", type: "bytes32", indexed: true },
+    { name: "buyer", type: "address", indexed: true },
+    { name: "outcome", type: "uint8", indexed: false },
+    { name: "collateralIn", type: "uint256", indexed: false },
+    { name: "sharesOut", type: "uint256", indexed: false },
+    { name: "fee", type: "uint256", indexed: false },
+  ],
+} as const;
+
 async function main(): Promise<void> {
-  const client = createPublicClient({ chain: arc, transport: http() });
+  /**
+   * The public Arc testnet endpoint rate-limits ("Request exceeds defined
+   * limit") well before this script finishes its reads, so the transport needs
+   * real backoff rather than viem's default 3 fast retries. Set RPC= to a
+   * dedicated endpoint to make this moot.
+   */
+  const client = createPublicClient({
+    chain: arc,
+    transport: http(undefined, { retryCount: 8, retryDelay: 1_200, batch: false }),
+  });
+  const pace = (ms = 120) => new Promise((r) => setTimeout(r, ms));
 
   const agent = DEPLOYMENT.agent as Address;
   const feedDefs = DEPLOYMENT.feeds as Array<{
@@ -314,20 +380,43 @@ async function main(): Promise<void> {
 
   const latestBlock = await client.getBlockNumber();
   const fromBlock = latestBlock > 100_000n ? latestBlock - 100_000n : 0n;
-  const [allTrades, allFees] = await Promise.all([
-    client.getLogs({
-      address: DEPLOYMENT.contracts.Markets as Address,
-      event: boughtEvent,
-      fromBlock,
-      toBlock: latestBlock,
-    }),
-    client.getLogs({
-      address: DEPLOYMENT.contracts.Markets as Address,
-      event: feesEvent,
-      fromBlock,
-      toBlock: latestBlock,
-    }),
-  ]);
+
+  /**
+   * Arc's RPC rejects wide `eth_getLogs` windows with
+   * `-32012 requested range too large`, so the 100k-block lookback has to be
+   * walked in chunks rather than asked for in one call. 5k is comfortably
+   * inside the limit; the chunks run sequentially because firing 20 parallel
+   * requests at a public endpoint is how you get rate-limited instead.
+   */
+  const CHUNK = 5_000n;
+  /**
+   * Walk the lookback window for one event on one contract. Every log scan in
+   * this script goes through here so the Arc chunking and pacing live in one
+   * place. `event` is deliberately loose: viem infers `args` from a literal
+   * event ABI, and that inference does not survive being passed as a
+   * parameter, so each caller re-asserts the shape it expects.
+   */
+  async function getLogsFor(
+    address: Address,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    event: any,
+    since: bigint = fromBlock,
+  ) {
+    const out: Awaited<ReturnType<typeof client.getLogs>> = [];
+    for (let start = since; start <= latestBlock; start += CHUNK) {
+      const end = start + CHUNK - 1n > latestBlock ? latestBlock : start + CHUNK - 1n;
+      const logs = await client.getLogs({ address, event, fromBlock: start, toBlock: end });
+      out.push(...logs);
+      await pace();
+    }
+    return out;
+  }
+
+  const getLogsChunked = <E extends typeof boughtEvent | typeof feesEvent>(event: E) =>
+    getLogsFor(DEPLOYMENT.contracts.Markets as Address, event);
+
+  const allTrades = await getLogsChunked(boughtEvent);
+  const allFees = await getLogsChunked(feesEvent);
 
   // Get block timestamps (one-shot per unique block to avoid hammering RPC).
   const uniqueBlocks = Array.from(new Set(allTrades.map((t) => t.blockNumber!)));
@@ -453,8 +542,146 @@ async function main(): Promise<void> {
     });
   }
 
+  // ── builder atlas aggregates ─────────────────────────────────────────────
+  // Lifetime progress MUST be summed from ProgressAdded events. The on-chain
+  // progressWeight[epoch][builder] is consumed at closeEpoch, so reading the
+  // current epoch reports 0 for a builder who has already been paid — which is
+  // exactly what the live site shows for builder #1 today.
+  const builderRegistryAddr = (DEPLOYMENT.contracts as { BuilderRegistry?: string }).BuilderRegistry as
+    | Address
+    | undefined;
+  const perennialAddr = (DEPLOYMENT.contracts as { MarketsPerennial?: string }).MarketsPerennial as
+    | Address
+    | undefined;
+  const poolAddr = (DEPLOYMENT.contracts as { ProgressPool?: string }).ProgressPool as Address | undefined;
+
+  let atlasCursor: {
+    lastScannedBlock: string;
+    progressByBuilder: Record<string, number>;
+    volumeByBuilderId: Record<string, string>;
+    marketToBuilder: Record<string, number>;
+  } | null = null;
+
+  const builderAgg: Array<{
+    builderId: number;
+    address: string;
+    lifetimeProgress: number;
+    volume: string;
+    country: null;
+  }> = [];
+
+  if (builderRegistryAddr && perennialAddr && poolAddr) {
+    // Arc testnet runs ~0.555s blocks (155,712/day), so `latestBlock - 100_000`
+    // is a sliding ~15h window — it cannot see a stack deployed two days ago.
+    // Anchor to the recorded deployment block instead.
+    // Incremental scan. A full sweep is 150+ chunks per event and grows by ~31
+    // chunks/event/day at Arc's block rate, so the totals and the last scanned
+    // block are carried in live-data.json and each run only covers new blocks.
+    // marketToBuilder must be carried too: a trade in a new block can reference
+    // a market created long before the cursor.
+    type AtlasCursor = {
+      lastScannedBlock: string;
+      progressByBuilder: Record<string, number>;
+      volumeByBuilderId: Record<string, string>;
+      marketToBuilder: Record<string, number>;
+    };
+    let cursor: AtlasCursor | undefined;
+    try {
+      const prev = JSON.parse(readFileSync(resolve(__dirname, "../src/lib/live-data.json"), "utf8"));
+      if (prev?.atlas?.lastScannedBlock) cursor = prev.atlas as AtlasCursor;
+    } catch {
+      // No previous sync, or unreadable — fall through to a full scan.
+    }
+
+    const deployBlock = BigInt(
+      (DEPLOYMENT.perennial as { deployBlock?: number } | undefined)?.deployBlock ?? 0,
+    );
+    const anchor = deployBlock > 0n ? deployBlock : fromBlock;
+    const scanFrom = cursor ? BigInt(cursor.lastScannedBlock) + 1n : anchor;
+    const spanBlocks = latestBlock - scanFrom;
+    console.log(
+      `reading builder atlas aggregates… (from block ${scanFrom}, ${spanBlocks} blocks, ` +
+        `${Math.ceil(Number(spanBlocks) / 5000)} chunks/event)`,
+    );
+
+    const nextId = (await client.readContract({
+      address: builderRegistryAddr,
+      abi: builderRegistryAbi,
+      functionName: "nextId",
+      args: [],
+    })) as bigint;
+
+    const progressLogs = await getLogsFor(poolAddr, progressAddedEvent, scanFrom);
+    const progressByBuilder = new Map<string, number>(
+      Object.entries(cursor?.progressByBuilder ?? {}),
+    );
+    for (const l of progressLogs) {
+      const a = (l as unknown as { args: { builder: Address; weight: bigint } }).args;
+      const k = a.builder.toLowerCase();
+      progressByBuilder.set(k, (progressByBuilder.get(k) ?? 0) + Number(a.weight));
+    }
+
+    // Bought/Sold carry only marketId, so build marketId -> builderId from
+    // MarketCreated first, then attribute each trade's notional to a builder.
+    const created = await getLogsFor(perennialAddr, marketCreatedEvent, scanFrom);
+    const marketToBuilder = new Map<string, number>(
+      Object.entries(cursor?.marketToBuilder ?? {}),
+    );
+    for (const l of created) {
+      const a = (l as unknown as { args: { marketId: `0x${string}`; builderId: bigint } }).args;
+      marketToBuilder.set(a.marketId.toLowerCase(), Number(a.builderId));
+    }
+
+    const trades = await getLogsFor(perennialAddr, perennialBoughtEvent, scanFrom);
+    const volumeByBuilderId = new Map<number, bigint>(
+      Object.entries(cursor?.volumeByBuilderId ?? {}).map(([k, v]) => [Number(k), BigInt(v)]),
+    );
+    for (const l of trades) {
+      const a = (l as unknown as { args: { marketId: `0x${string}`; collateralIn: bigint } }).args;
+      const bid = marketToBuilder.get(a.marketId.toLowerCase());
+      if (bid === undefined) continue;
+      volumeByBuilderId.set(bid, (volumeByBuilderId.get(bid) ?? 0n) + a.collateralIn);
+    }
+
+    for (let id = 1n; id < nextId; id++) {
+      const active = (await client.readContract({
+        address: builderRegistryAddr,
+        abi: builderRegistryAbi,
+        functionName: "isActiveBuilderId",
+        args: [id],
+      })) as boolean;
+      if (!active) continue;
+      const owner = (await client.readContract({
+        address: builderRegistryAddr,
+        abi: builderRegistryAbi,
+        functionName: "ownerOf",
+        args: [id],
+      })) as Address;
+      builderAgg.push({
+        builderId: Number(id),
+        address: owner.toLowerCase(),
+        lifetimeProgress: progressByBuilder.get(owner.toLowerCase()) ?? 0,
+        // bigint is not JSON-serialisable; the consumer parses with BigInt().
+        volume: (volumeByBuilderId.get(Number(id)) ?? 0n).toString(),
+        country: null,
+      });
+      await pace();
+    }
+    atlasCursor = {
+      lastScannedBlock: latestBlock.toString(),
+      progressByBuilder: Object.fromEntries(progressByBuilder),
+      volumeByBuilderId: Object.fromEntries(
+        Array.from(volumeByBuilderId, ([k, v]) => [String(k), v.toString()]),
+      ),
+      marketToBuilder: Object.fromEntries(marketToBuilder),
+    };
+    console.log(`  ${builderAgg.length} active builder(s), cursor at block ${latestBlock}`);
+  }
+
   const out = {
     syncedAt: new Date().toISOString(),
+    builders: builderAgg,
+    atlas: atlasCursor,
     chainId: DEPLOYMENT.chainId,
     explorer: DEPLOYMENT.explorer,
     contracts: DEPLOYMENT.contracts,
