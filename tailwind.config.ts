@@ -19,6 +19,10 @@ const config: Config = {
         down: "var(--down)",
         line: "var(--line)",
         "line-strong": "var(--line-strong)",
+        commons: "var(--commons)",
+        "commons-soft": "var(--commons-soft)",
+        "commons-line": "var(--commons-line)",
+        "accent-deep": "var(--accent-deep)",
       },
       fontFamily: {
         mono: ["var(--font-mono)", "ui-monospace", "monospace"],

@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Keep `next dev` from generating repository-level agent instruction files.
+  agentRules: false,
   // Static export for Cloudflare Pages. All routes pre-rendered to HTML.
   output: "export",
   // Cloudflare Pages serves /foo as /foo/index.html — trailingSlash makes
