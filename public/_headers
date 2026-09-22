@@ -1,0 +1,6 @@
+# Next's generated OG route emits an extensionless file, so Cloudflare Pages
+# serves it as application/octet-stream and social scrapers reject the card.
+# Declare the real type.
+/atlas/opengraph-image
+  Content-Type: image/png
+  Cache-Control: public, max-age=3600
