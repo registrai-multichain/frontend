@@ -12,6 +12,16 @@ const usdc = (base: bigint) => {
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
+/** Data older than this is called out rather than shown as if it were current. */
+const STALE_AFTER = 6 * 3600;
+
+function age(seconds: number): string {
+  if (seconds < 90) return "just now";
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`;
+  if (seconds < 86_400) return `${Math.round(seconds / 3600)}h ago`;
+  return `${Math.round(seconds / 86_400)}d ago`;
+}
+
 function Board({
   title,
   note,
@@ -115,6 +125,14 @@ export function SeasonBoards({
           format={usdc}
         />
       </div>
+
+      {/* The page ships a build-time snapshot, so the countdown above keeps
+          running whether or not anyone re-synced. Without this the boards can
+          sit frozen for days while still looking live. */}
+      <p className="season-synced" data-stale={now - syncedAt > STALE_AFTER ? "true" : undefined}>
+        Chain data synced {age(Math.max(0, now - syncedAt))}
+        {now - syncedAt > STALE_AFTER && " — boards may be behind the chain"}
+      </p>
 
       <p className="season-note">
         Seasons are a scoreboard, not a purse — nothing here pays out. Every number is a replay of

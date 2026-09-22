@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-09-21T23:21:13.529Z",
+  "syncedAt": "2026-09-22T09:46:16.583Z",
   "builders": [],
   "perennialMarkets": [
     {
@@ -31,7 +31,7 @@
     }
   ],
   "atlas": {
-    "lastScannedBlock": "63324812",
+    "lastScannedBlock": "63400770",
     "progressByBuilder": {
       "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e": 17
     },

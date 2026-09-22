@@ -8,6 +8,20 @@ export const metadata: Metadata = {
   description:
     "Perennial seen geographically and by season: builder density worldwide, and the running season's country, builder and trader boards.",
   alternates: { canonical: "/atlas" },
+  openGraph: {
+    title: "Builder Atlas · Perennial",
+    description:
+      "Builder density worldwide, and the running season's country, builder and trader boards.",
+    url: "https://registrai.cc/atlas/",
+    images: [{ url: "/social/registrai-landing.png", width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Builder Atlas · Perennial",
+    description:
+      "Builder density worldwide, and the running season's country, builder and trader boards.",
+    images: ["/social/registrai-landing.png"],
+  },
 };
 
 /**

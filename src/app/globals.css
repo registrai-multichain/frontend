@@ -993,197 +993,9 @@ a:hover {
   .pp-reveal { animation: none; }
 }
 
-/* ── builder atlas ────────────────────────────────────────────────────────
-   One hue, five brightness steps driven by data-density (0..4). A single hue
-   means brightness alone carries density, which survives colour-blindness and
-   a greyscale screenshot. Teal is the commons colour and is used nowhere else,
-   so a lit cell reads as "builders drawing from the pool live here". */
-.atlas-cells {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-.atlas-cell {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 9px 13px;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--commons) 6%, var(--bg-elev));
-  color: var(--fg);
-  cursor: pointer;
-  font: inherit;
-  transition: outline-color 0.12s ease;
-  outline: 2px solid transparent;
-  outline-offset: 2px;
-}
-.atlas-cell:hover { outline-color: color-mix(in srgb, var(--commons) 40%, transparent); }
-.atlas-cell:focus-visible { outline-color: var(--commons); }
-.atlas-cell[data-selected="true"] { outline-color: var(--commons); }
-.atlas-cell[data-density="1"] { background: color-mix(in srgb, var(--commons) 20%, var(--bg-elev)); }
-.atlas-cell[data-density="2"] { background: color-mix(in srgb, var(--commons) 42%, var(--bg-elev)); }
-.atlas-cell[data-density="3"] {
-  background: color-mix(in srgb, var(--commons) 70%, var(--bg-elev));
-  color: var(--bg-elev);
-  border-color: var(--commons);
-}
-.atlas-cell[data-density="4"] {
-  background: var(--commons);
-  color: var(--bg-elev);
-  border-color: var(--commons);
-}
-.atlas-code { font-size: 13px; font-weight: 500; letter-spacing: 0.02em; }
-.atlas-count { font-size: 13px; opacity: 0.9; }
-.atlas-progress { font-size: 11px; opacity: 0.6; }
-
-/* ── builder atlas · engraved almanac ─────────────────────────────────────
-   The map is printed matter, not a dashboard widget: hairline plate borders,
-   a faint graticule standing in for printed guide lines, and teal ink soaking
-   into countries by density. Teal means the commons everywhere else on this
-   site, so a saturated country reads as "builders here draw from the pool".
-
-   Everything is drawn from build-time path strings — no map library, no
-   runtime projection — so the only cost on the client is paint. */
-
-.atlas-figure { margin: 0; }
-
-.atlas-map {
-  display: block;
-  width: 100%;
-  height: auto;
-  overflow: visible;
-}
-
-/* The plate edge. A single hairline, the way a chart is bounded by its border
-   rather than a UI panel. */
-.atlas-sphere {
-  stroke: var(--line-strong);
-  stroke-width: 0.8;
-  vector-effect: non-scaling-stroke;
-}
-
-/* Printed guide lines: present, never competing. */
-.atlas-graticule {
-  fill: none;
-  stroke: var(--line);
-  stroke-width: 0.4;
-  stroke-opacity: 0.45;
-  vector-effect: non-scaling-stroke;
-}
-
-.atlas-country {
-  fill: color-mix(in srgb, var(--fg) 5%, transparent);
-  stroke: var(--line);
-  stroke-width: 0.4;
-  vector-effect: non-scaling-stroke;
-  transition:
-    fill 0.18s ease,
-    stroke 0.18s ease;
-  animation: atlas-ink 0.7s cubic-bezier(0.22, 1, 0.36, 1) backwards;
-}
-
-/* Ink soaking in, by density. Five steps, one hue — brightness alone carries
-   the value, so it survives colour-blindness and a greyscale screenshot. */
-.atlas-country[data-lit="true"] { cursor: pointer; }
-.atlas-country[data-density="0"] { fill: color-mix(in srgb, var(--commons) 12%, transparent); }
-.atlas-country[data-density="1"] { fill: color-mix(in srgb, var(--commons) 28%, transparent); }
-.atlas-country[data-density="2"] { fill: color-mix(in srgb, var(--commons) 48%, transparent); }
-.atlas-country[data-density="3"] { fill: color-mix(in srgb, var(--commons) 72%, transparent); }
-.atlas-country[data-density="4"] { fill: var(--commons); }
-
-.atlas-country[data-lit="true"]:hover {
-  stroke: var(--accent);
-  stroke-width: 1.1;
-}
-.atlas-country[data-selected="true"] {
-  stroke: var(--accent);
-  stroke-width: 1.4;
-}
-.atlas-country:focus-visible {
-  outline: none;
-  stroke: var(--accent);
-  stroke-width: 1.4;
-}
-
-@keyframes atlas-ink {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-/* Survey marks. A chart annotates a station with a crosshair and a code, not
-   a dropped pin. */
-.atlas-marks { pointer-events: none; }
-.atlas-mark-ring {
-  fill: none;
-  stroke: var(--fg);
-  stroke-width: 0.7;
-  stroke-opacity: 0.55;
-  vector-effect: non-scaling-stroke;
-}
-.atlas-mark-tick {
-  stroke: var(--fg);
-  stroke-width: 0.7;
-  stroke-opacity: 0.5;
-  vector-effect: non-scaling-stroke;
-}
-.atlas-mark-label {
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  fill: var(--fg-mute);
-}
-.atlas-mark[data-selected="true"] .atlas-mark-ring,
-.atlas-mark[data-selected="true"] .atlas-mark-tick { stroke: var(--accent); stroke-opacity: 1; }
-.atlas-mark[data-selected="true"] .atlas-mark-label { fill: var(--accent); }
-
-.atlas-caption {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-top: 10px;
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--fg-dim);
-}
-
-/* Almanac key: five swatches reading left to right. */
-.atlas-scale { display: inline-flex; align-items: center; gap: 3px; }
-.atlas-scale i {
-  width: 22px;
-  height: 8px;
-  border: 1px solid var(--line);
-  display: inline-block;
-}
-.atlas-scale i[data-density="0"] { background: color-mix(in srgb, var(--commons) 12%, transparent); }
-.atlas-scale i[data-density="1"] { background: color-mix(in srgb, var(--commons) 28%, transparent); }
-.atlas-scale i[data-density="2"] { background: color-mix(in srgb, var(--commons) 48%, transparent); }
-.atlas-scale i[data-density="3"] { background: color-mix(in srgb, var(--commons) 72%, transparent); }
-.atlas-scale i[data-density="4"] { background: var(--commons); }
-.atlas-scale em { font-style: normal; margin-left: 8px; }
-
-@media (prefers-reduced-motion: reduce) {
-  .atlas-country { animation: none; }
-}
-
 /* ── atlas · page furniture ──────────────────────────────────────────────── */
 .atlas-root { display: flex; flex-direction: column; gap: 22px; }
 
-.atlas-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 18px;
-}
 
 /* Stats read as a chart key: label above, figure below, rules between. */
 .atlas-stats { display: flex; gap: 0; margin: 0; }
@@ -1378,16 +1190,7 @@ a:hover {
 }
 
 /* Empty lot: the ground is surveyed, nothing is built yet. */
-.city-empty {
-  padding: 26px 20px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--fg-dim);
-  border: 1px dashed var(--line-strong);
-}
 
-.atlas-city { padding: 18px 20px 6px; border-bottom: 1px solid var(--line); }
-.atlas-builder[data-dim="true"] { opacity: 0.4; transition: opacity 0.16s ease; }
 
 /* Pixel facades. Crisp edges, no anti-aliased stroke — the grid should read as
    deliberate blocks, not as texture. Lit windows borrow the amber accent, so a
@@ -1405,50 +1208,6 @@ a:hover {
    to stay readable. */
 .city-building[data-selected="true"] .city-window { fill: color-mix(in srgb, var(--fg) 55%, transparent); }
 .city-building[data-selected="true"] .city-window[data-lit="true"] { fill: var(--bg-elev); }
-
-/* ── perennial theme ──────────────────────────────────────────────────────
-   The old warm-paper Registrai palette is retired. This redefines the SAME
-   token names the components already consume, so every surface built against
-   --bg / --fg / --accent / --commons re-themes without touching a component.
-
-   Night ground, paper type, orange for action, acid green for data. Sourced
-   from the landing page's own --lp-* set so the two agree. */
-.perennial {
-  --bg: #0d0d0c;
-  --bg-elev: #151513;
-  --fg: #f1eddc;
-  --fg-mute: #aaa99f;
-  --fg-dim: #75746c;
-  --accent: #ff5a1f;
-  --accent-deep: #d6431060;
-  /* The commons colour. Acid green rather than the old teal: on a near-black
-     ground teal reads as murky, and acid is the palette's data hue. */
-  --commons: #c9ff3d;
-  --commons-soft: #1e2a12;
-  --up: #65d9b1;
-  --down: #ff5a1f;
-  --line: #2a2a26;
-  --line-strong: #3d3d37;
-
-  /* Globe-specific. Read by Globe.tsx at draw time — canvas cannot inherit
-     CSS, so the palette is handed over explicitly rather than hardcoded. */
-  --globe-ocean: #121210;
-  --globe-land: #26261f;
-  --globe-border: #3a3a32;
-  --globe-graticule: #1f1f1a;
-  --globe-halo: #ff5a1f;
-  --globe-accent: #ff5a1f;
-  --globe-lit-0: #33401d;
-  --globe-lit-1: #4a6626;
-  --globe-lit-2: #6b9330;
-  --globe-lit-3: #97c536;
-  --globe-lit-4: #c9ff3d;
-
-  background: var(--bg);
-  color: var(--fg);
-  min-height: 100vh;
-  font-family: var(--font-mono), ui-monospace, monospace;
-}
 
 /* ── globe ───────────────────────────────────────────────────────────────── */
 .globe-figure { margin: 0; }
@@ -1730,3 +1489,12 @@ a:hover {
   .season-head { grid-template-columns: 1fr; }
   .season-left { justify-self: start; }
 }
+
+.season-synced {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.season-synced[data-stale="true"] { color: var(--accent); }
