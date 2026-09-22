@@ -13,14 +13,14 @@ export const metadata: Metadata = {
     description:
       "Builder density worldwide, and the running season's country, builder and trader boards.",
     url: "https://registrai.cc/atlas/",
-    images: [{ url: "/social/registrai-landing.png", width: 1200, height: 630 }],
+    // No `images` here on purpose: opengraph-image.tsx generates the card from
+    // the live season, and an explicit entry would override it.
   },
   twitter: {
     card: "summary_large_image",
     title: "Builder Atlas · Perennial",
     description:
       "Builder density worldwide, and the running season's country, builder and trader boards.",
-    images: ["/social/registrai-landing.png"],
   },
 };
 
