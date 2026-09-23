@@ -86,7 +86,9 @@ export type Trade =
       collateral: bigint;
       shares: bigint;
     }
-  | { kind: "resolve"; block: number; seq: number; marketId: string; yesWon: boolean };
+  | { kind: "resolve"; block: number; seq: number; marketId: string; yesWon: boolean }
+  /** MarketVoided: nothing could settle the market, every share redeems for half a unit. */
+  | { kind: "void"; block: number; seq: number; marketId: string };
 
 /** MarketsPerennial declares `enum Outcome { Yes, No }`, so YES is zero. */
 export const OUTCOME_YES = 0;
@@ -149,6 +151,22 @@ export function foldTrades(prior: PnlState, trades: Trade[], seasons: Season[]):
   const ordered = [...trades].sort((a, b) => a.block - b.block || a.seq - b.seq);
 
   for (const t of ordered) {
+    if (t.kind === "void") {
+      // The contract pays each holder (yes + no) / 2, flooring ONCE over both
+      // sides. Combine a trader's sides before flooring, or a trader holding
+      // both would be booked a unit away from what they actually received.
+      const byTrader = new Map<string, { shares: bigint; cost: bigint }>();
+      for (const [key, pos] of [...positions]) {
+        const [marketId, trader] = key.split("|");
+        if (marketId !== t.marketId) continue;
+        const acc = byTrader.get(trader) ?? { shares: 0n, cost: 0n };
+        byTrader.set(trader, { shares: acc.shares + pos.shares, cost: acc.cost + pos.cost });
+        positions.delete(key);
+      }
+      for (const [trader, acc] of byTrader) book(t.block, trader, acc.shares / 2n - acc.cost);
+      continue;
+    }
+
     if (t.kind === "resolve") {
       for (const [key, pos] of [...positions]) {
         const [marketId, trader, outcomeStr] = key.split("|");

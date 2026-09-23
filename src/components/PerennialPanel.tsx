@@ -521,7 +521,7 @@ export function PerennialPanel() {
                 </div>
                 {hasMarket ? <MarketOdds yes={yp} /> : <p className="mt-5 text-sm text-fg-dim">No open market yet.</p>}
                 <div className="pp-market-facts">
-                  <span><b>Status</b>{selectedMeta?.phase === 0 ? "trading" : "settling"}</span>
+                  <span><b>Status</b>{selectedMeta?.phase === 0 ? "trading" : selectedMeta?.phase === 2 ? "voided" : "settled"}</span>
                   <span><b>Closes</b>{remaining(selectedMeta?.expiry)}</span>
                   <span><b>Liquidity</b>${stat(fmt((selectedMeta?.yesReserve ?? 0n) + (selectedMeta?.noReserve ?? 0n)))}</span>
                   <span><b>Resolution</b>bonded oracle</span>

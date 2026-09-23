@@ -205,11 +205,13 @@ export function Atlas() {
                                 </span>
                                 <span className="tnum">{(p * 100).toFixed(0)}%</span>
                                 <span
-                                  className={m.phase === "resolved" ? "text-fg-dim" : "text-commons"}
+                                  className={m.phase === "trading" ? "text-commons" : "text-fg-dim"}
                                 >
                                   {m.phase === "resolved"
                                     ? `settled ${m.yesWon ? "yes" : "no"}`
-                                    : "trading"}
+                                    : m.phase === "voided"
+                                      ? "voided · refunds 50/50"
+                                      : "trading"}
                                 </span>
                               </li>
                             );

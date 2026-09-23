@@ -258,6 +258,12 @@ const perennialSoldEvent = {
   ],
 } as const;
 
+const perennialVoidedEvent = {
+  type: "event",
+  name: "MarketVoided",
+  inputs: [{ name: "marketId", type: "bytes32", indexed: true }],
+} as const;
+
 const perennialResolvedEvent = {
   type: "event",
   name: "Resolved",
@@ -648,7 +654,7 @@ async function main(): Promise<void> {
     marketId: string;
     builderId: number;
     expiry: number;
-    phase: "trading" | "resolved";
+    phase: "trading" | "resolved" | "voided";
     yesWon: boolean;
     yesReserve: string;
     noReserve: string;
@@ -676,6 +682,9 @@ async function main(): Promise<void> {
       progressByBuilder: Record<string, number>;
       volumeByBuilderId: Record<string, string>;
       marketToBuilder: Record<string, number>;
+      /** Which chain and contract this cursor describes. */
+      chainId?: number;
+      markets?: string;
     };
     let cursor: AtlasCursor | undefined;
     try {
@@ -683,6 +692,21 @@ async function main(): Promise<void> {
       if (prev?.atlas?.lastScannedBlock) cursor = prev.atlas as AtlasCursor;
     } catch {
       // No previous sync, or unreadable — fall through to a full scan.
+    }
+    // A cursor is a block number plus folded state, and both are meaningless on
+    // another chain or against another contract. Without this check, pointing the
+    // deployment at mainnet (or redeploying on testnet) would resume the old
+    // contract's P&L against the new one's events. A cursor with no stamp is
+    // rescanned rather than trusted: "state exists" is not "state is right".
+    if (
+      cursor &&
+      (cursor.chainId !== DEPLOYMENT.chainId || cursor.markets?.toLowerCase() !== perennialAddr.toLowerCase())
+    ) {
+      console.log(
+        `  cursor belongs to chain ${cursor.chainId ?? "?"} / ${cursor.markets ?? "unstamped"}; ` +
+          `rescanning for chain ${DEPLOYMENT.chainId} / ${perennialAddr}`,
+      );
+      cursor = undefined;
     }
 
     const deployBlock = BigInt(
@@ -853,6 +877,8 @@ async function main(): Promise<void> {
     // Resolved are the two events that actually realise a gain or a loss.
     const sold = await getLogsFor(perennialAddr, perennialSoldEvent, seasonFrom);
     const resolved = await getLogsFor(perennialAddr, perennialResolvedEvent, seasonFrom);
+    // Voids realise every position at half a unit a share (SettlementPolicy).
+    const voided = await getLogsFor(perennialAddr, perennialVoidedEvent, seasonFrom);
 
     const seq = (l: { logIndex?: number | null }) => Number(l.logIndex ?? 0);
     const tradeEvents: Trade[] = [
@@ -896,6 +922,12 @@ async function main(): Promise<void> {
           yesWon: a.yesWon,
         };
       }),
+      ...voided.map((l) => ({
+        kind: "void" as const,
+        block: Number(l.blockNumber ?? 0n),
+        seq: seq(l),
+        marketId: ((l as unknown as { args: { marketId: `0x${string}` } }).args.marketId).toLowerCase(),
+      })),
     ];
 
     const pnl = foldTrades(priorPnl, tradeEvents, seasons);
@@ -924,6 +956,8 @@ async function main(): Promise<void> {
         [...startBlocks].map(([sid, b]) => [String(sid), b.toString()]),
       ),
       seasonsVersion: SEASONS_CURSOR_VERSION,
+      chainId: DEPLOYMENT.chainId,
+      markets: perennialAddr,
     };
     // Market ids come from the cached map, so this loop is bounded by market
     // count and never by block range — no log scan, no Arc range ceiling.
@@ -944,7 +978,8 @@ async function main(): Promise<void> {
         marketId,
         builderId,
         expiry: Number(m.expiry),
-        phase: m.phase === 0 ? "trading" : "resolved",
+        // Phase enum: Trading, Resolved, Voided. "Not trading" is not "resolved".
+        phase: m.phase === 0 ? "trading" : m.phase === 2 ? "voided" : "resolved",
         yesWon: m.yesWon,
         yesReserve: m.yesReserve.toString(),
         noReserve: m.noReserve.toString(),

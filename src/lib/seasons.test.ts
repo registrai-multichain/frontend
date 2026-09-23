@@ -326,3 +326,51 @@ describe("outcome polarity, anchored to a real Arc trace", () => {
     expect(OUTCOME_YES).toBe(0);
   });
 });
+
+describe("voided markets", () => {
+  const voidAt = (block: number, marketId = "m1"): Trade => ({ kind: "void", block, seq: seq++, marketId });
+
+  it("realises half a unit per share, on both sides, less cost", () => {
+    // YES bought for 100 -> 180 shares; void pays 90. Realised: -10.
+    const out = realisedPnl([buy(110, "a", OUTCOME_YES, 100n, 180n), voidAt(150)], SEASONS);
+    expect(out.get(1)?.get("a")).toBe(-10n);
+  });
+
+  it("pays the NO side identically", () => {
+    const out = realisedPnl([buy(110, "b", 1, 40n, 100n), voidAt(150)], SEASONS);
+    expect(out.get(1)?.get("b")).toBe(10n); // 50 - 40
+  });
+
+  it("closes every position in the market, so none lingers as open", () => {
+    const s = foldTrades(EMPTY_PNL, [buy(110, "a", OUTCOME_YES, 100n, 180n), buy(111, "b", 1, 40n, 100n), voidAt(150)], SEASONS);
+    expect(s.positions).toEqual({});
+  });
+
+  it("books to the season the void happened in", () => {
+    const out = realisedPnl([buy(110, "a", OUTCOME_YES, 100n, 180n), voidAt(250)], SEASONS);
+    expect(out.get(1)?.get("a")).toBeUndefined();
+    expect(out.get(2)?.get("a")).toBe(-10n);
+  });
+
+  it("leaves other markets alone", () => {
+    const s = foldTrades(EMPTY_PNL, [buy(110, "a", OUTCOME_YES, 100n, 180n, "m2"), voidAt(150, "m1")], SEASONS);
+    expect(Object.keys(s.positions)).toHaveLength(1);
+  });
+
+  it("floors an odd share count the way the contract does", () => {
+    // redeem pays (yes + no) / 2 in integer division: 181 shares -> 90.
+    const out = realisedPnl([buy(110, "a", OUTCOME_YES, 100n, 181n), voidAt(150)], SEASONS);
+    expect(out.get(1)?.get("a")).toBe(-10n);
+  });
+});
+
+describe("voided markets, both sides held", () => {
+  it("floors once over the combined position, exactly as redeem does", () => {
+    // 101 YES + 100 NO: redeem pays (201) / 2 = 100. Per-side flooring would say 50 + 50.
+    const out = realisedPnl(
+      [buy(110, "a", OUTCOME_YES, 60n, 101n), buy(111, "a", 1, 50n, 100n), { kind: "void", block: 150, seq: seq++, marketId: "m1" }],
+      SEASONS,
+    );
+    expect(out.get(1)?.get("a")).toBe(100n - 110n);
+  });
+});

@@ -122,7 +122,7 @@ export type PerennialMarket = {
   marketId: string;
   builderId: number;
   expiry: number;
-  phase: "trading" | "resolved";
+  phase: "trading" | "resolved" | "voided";
   yesWon: boolean;
   /** CPMM reserves, USDC base units, as decimal strings (bigint is not JSON-safe). */
   yesReserve: string;

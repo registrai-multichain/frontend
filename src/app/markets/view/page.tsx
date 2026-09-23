@@ -279,7 +279,8 @@ function chainToMarket(
   const comparator = ([">", ">=", "<", "<="] as Comparator[])[
     Number(m.comparator)
   ] ?? ">";
-  const phase: MarketPhase = m.phase === 1 ? "resolved" : "trading";
+  // Phase enum: Trading, Resolved, Voided. "Not 1" is not "trading".
+  const phase: MarketPhase = m.phase === 1 ? "resolved" : m.phase === 2 ? "voided" : "trading";
   // For markets in the static manifest we'd have nice feed metadata; for
   // ad-hoc markets created via the UI we have only the feedId on chain.
   const feedSymbol =
