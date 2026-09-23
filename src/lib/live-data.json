@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-09-22T09:46:16.583Z",
+  "syncedAt": "2026-09-23T10:09:21.282Z",
   "builders": [],
   "perennialMarkets": [
     {
@@ -31,7 +31,7 @@
     }
   ],
   "atlas": {
-    "lastScannedBlock": "63400770",
+    "lastScannedBlock": "63571151",
     "progressByBuilder": {
       "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e": 17
     },
@@ -64,7 +64,9 @@
     "seasonStartBlocks": {
       "1": "62539246"
     },
-    "seasonsVersion": 3
+    "seasonsVersion": 3,
+    "chainId": 5042002,
+    "markets": "0x6F233843Db915EfD931DEC22842C9dBf55788f46"
   },
   "seasons": [
     {
@@ -989,7 +991,7 @@
         "bond": "10000000",
         "lockedBond": "0",
         "registeredAt": 1778768867,
-        "lastAttestationAt": 1789999247,
+        "lastAttestationAt": 1790085648,
         "active": true,
         "slashed": false
       },
@@ -1471,6 +1473,14 @@
           "value": 275,
           "timestamp": 1789999247,
           "finalizedAt": 1790085647,
+          "inputHash": "0x50ba14656d4e6b9428cff45fd389356639af13c324cf4adf5cb74cc05fce75cd",
+          "status": 0
+        },
+        {
+          "id": "0x7c1027443e9c7a579848941dd82e56eea7b38455de3ba23f8f67d753a8ae6879",
+          "value": 275,
+          "timestamp": 1790085648,
+          "finalizedAt": 1790172048,
           "inputHash": "0x50ba14656d4e6b9428cff45fd389356639af13c324cf4adf5cb74cc05fce75cd",
           "status": 0
         }
