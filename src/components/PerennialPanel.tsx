@@ -278,10 +278,21 @@ function PerennialLive() {
     } catch (e) { setStatus("error"); setError(humanizeError(e)); return false; }
     finally { setPending(""); }
   }
-  async function ensure(token: `0x${string}`, spender: `0x${string}`, needed: bigint, abi: readonly unknown[], fn: string) {
-    const a = (await publicClient.readContract({ address: token, abi: abi as never, functionName: fn as never, args: [address!, spender] as never })) as bigint;
+  // Exact-amount allowance, per token. The two tokens name their approval
+  // differently: ERC-20 USDC has `approve`, NanoLedger only `approveSpender`
+  // (it has no `approve`, so a generic mapping threw before the wallet prompt).
+  // No unlimited approvals: each action approves exactly what it spends.
+  async function ensureUsdcAllowance(spender: `0x${string}`, needed: bigint) {
+    const a = (await publicClient.readContract({ address: usdc, abi: usdcAbi, functionName: "allowance", args: [address!, spender] })) as bigint;
     if (a >= needed) return;
-    const h = await walletClient!.writeContract({ address: token, abi: abi as never, functionName: (fn === "allowance" ? "approve" : "approveSpender") as never, args: [spender, 2n ** 256n - 1n] as never, chain: walletClient!.chain, account: walletClient!.account! } as never);
+    const h = await walletClient!.writeContract({ address: usdc, abi: usdcAbi, functionName: "approve", args: [spender, needed], chain: walletClient!.chain, account: walletClient!.account! });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: h });
+    if (receipt.status !== "success") throw new Error("approval reverted");
+  }
+  async function ensureLedgerAllowance(spender: `0x${string}`, needed: bigint) {
+    const a = (await publicClient.readContract({ address: nl!, abi: nanoLedgerAbi, functionName: "allowance", args: [address!, spender] })) as bigint;
+    if (a >= needed) return;
+    const h = await walletClient!.writeContract({ address: nl!, abi: nanoLedgerAbi, functionName: "approveSpender", args: [spender, needed], chain: walletClient!.chain, account: walletClient!.account! });
     const receipt = await publicClient.waitForTransactionReceipt({ hash: h });
     if (receipt.status !== "success") throw new Error("approval reverted");
   }
@@ -292,7 +303,7 @@ function PerennialLive() {
     const ok = await run(
       "deposit",
       () => walletClient!.writeContract({ address: nl!, abi: nanoLedgerAbi, functionName: "deposit", args: [wei], chain: walletClient!.chain, account: walletClient!.account! }),
-      () => ensure(usdc, nl!, wei, usdcAbi, "allowance"),
+      () => ensureUsdcAllowance(nl!, wei),
     );
     if (ok) setDepAmt("");
   }
@@ -326,7 +337,7 @@ function PerennialLive() {
           chain: walletClient!.chain, account: walletClient!.account!,
         });
       },
-      () => ensure(nl!, mp!, wei, nanoLedgerAbi, "allowance"),
+      () => ensureLedgerAllowance(mp!, wei),
     );
     if (ok) setBetAmt("");
   }
@@ -343,7 +354,7 @@ function PerennialLive() {
     setError(undefined); setTxHash(undefined); setPending("create");
     try {
       setStatus("approving");
-      await ensure(nl!, mp!, liq, nanoLedgerAbi, "allowance");
+      await ensureLedgerAllowance(mp!, liq);
       setStatus("submitting");
       const expiry = BigInt(Math.floor(Date.now() / 1000) + days * 86400);
       const hash = await walletClient.writeContract({ address: mp!, abi: marketsPerennialAbi, functionName: "createMarket", args: [BigInt(selected.builderId), CREATE_FEED.feedId, CREATE_FEED.agent, 1n, 1, expiry, liq], chain: walletClient.chain, account: walletClient.account! });
