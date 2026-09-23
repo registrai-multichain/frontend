@@ -4,12 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPublicClient, parseUnits } from "viem";
 import useSWR from "swr";
 import { useWallet } from "./WalletProvider";
-import {
-  PERENNIAL_CHAIN,
-  PERENNIAL_CHAIN_ID,
-  transportFor,
-  txUrl as txUrlFor,
-} from "@/lib/chains";
+import { transportFor, txUrl as txUrlFor } from "@/lib/chains";
+import { PERENNIAL } from "@/lib/perennial-network";
 import { usdcAbi, nanoLedgerAbi, builderRegistryAbi, progressPoolAbi, marketsPerennialAbi } from "@/lib/abi";
 import { humanizeError } from "@/lib/humanize-error";
 import {
@@ -53,12 +49,30 @@ const CLAIM_SCAN_LIMIT = 52n;
 const fmt = (w: bigint, dp = 2) => (Number(w) / 1e6).toFixed(dp).replace(/\.?0+$/, "");
 const yesPctNum = (w: bigint) => Math.round(Number(w) / 1e16);
 
-// Perennial runs on Arc testnet, pinned via PERENNIAL_CHAIN, independent of the
-// app-wide DEFAULT_CHAIN (Arc) that powers the oracle/feed/markets pages.
-const P = PERENNIAL_CHAIN.contracts;
+// Perennial runs on the build-selected network (PERENNIAL), independent of the
+// app-wide DEFAULT_CHAIN that powers the oracle/feed/markets pages.
+const PERENNIAL_CHAIN = PERENNIAL.chain;
+const PERENNIAL_CHAIN_ID = PERENNIAL.chain.id;
+const P = PERENNIAL.contracts;
 const txUrl = (hash: string) => txUrlFor(PERENNIAL_CHAIN, hash);
 
 export function PerennialPanel() {
+  // Nothing on this network yet: say so, and make no contract calls at all.
+  if (!PERENNIAL.deployed) return <PerennialNotDeployed />;
+  return <PerennialLive />;
+}
+
+function PerennialNotDeployed() {
+  return (
+    <div className="pp-notice border border-line bg-bg-elev p-5 text-[13px] text-fg-dim">
+      <strong className="text-fg">Perennial is not deployed on {PERENNIAL.label} yet.</strong>{" "}
+      Markets, deposits and builder payouts open here once the contracts are live. Nothing on
+      this page reads or writes {PERENNIAL.label} until then.
+    </div>
+  );
+}
+
+function PerennialLive() {
   const { address, walletChainId, walletClient, connect, switchChain } = useWallet();
 
   // Reads are pinned to the Perennial chain regardless of what chain the wallet
@@ -78,7 +92,7 @@ export function PerennialPanel() {
   const pool = P.ProgressPool;
   const reg = P.BuilderRegistry;
   const mp = P.MarketsPerennial;
-  const usdc = P.USDC;
+  const usdc = P.USDC!;
 
   const [role, setRole] = useState<Role>("bet");
   const [selected, setSelected] = useState<PerennialBuilder>(PERENNIAL_BUILDERS[0]);

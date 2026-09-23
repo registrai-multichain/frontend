@@ -7,6 +7,7 @@
  * contract.
  */
 import type { Address } from "viem";
+import { ARC_TESTNET } from "./chains";
 
 export const VALUE_SCALE = 1_000_000;
 
@@ -220,10 +221,12 @@ export type CurveMarketConfig = {
  * the market's own schedule; otherwise it falls back to a wall-clock preview.
  */
 export const CURVE_DEPLOYMENT = {
-  chainId: 5042002,
+  // Chain facts come from the chain registry (official RPC only) rather than
+  // literals, so there is one place that says what "Arc testnet" means.
+  chainId: ARC_TESTNET.id,
   network: "Arc testnet",
-  rpcUrl: "https://rpc.testnet.arc.io",
-  explorer: "https://testnet.arcscan.app",
+  rpcUrl: ARC_TESTNET.rpcUrls[0],
+  explorer: ARC_TESTNET.explorer.url,
   address: "0xf5d0857df82f7bb26e81f59a5cc10c4ddffe2f2c" as Address,
   marketId: "0xa31c25344f6a844af0272dc1c242449b5bcc91ff98c5e05dd55ae318085e494c" as `0x${string}`,
   bucketCount: 9,

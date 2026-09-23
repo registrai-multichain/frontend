@@ -1,0 +1,7 @@
+{
+  "network": "testnet",
+  "chainId": 5042002,
+  "note": "Perennial extras for Arc testnet. Contract addresses come from live-data.json (synced from contracts/deployments/arc-testnet.json). operator = keeper/config.arc.json operator_addr (the caretaker's bonded milestone agent); deployBlock = contracts/deployments/arc-testnet.json perennial.deployBlock.",
+  "deployBlock": 62539246,
+  "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263"
+}

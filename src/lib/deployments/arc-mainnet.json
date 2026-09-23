@@ -1,0 +1,14 @@
+{
+  "network": "mainnet",
+  "chainId": 5042,
+  "note": "Perennial is NOT deployed on Arc mainnet yet. Fill these from the mainnet deployment record once it exists; while any is null the Perennial UI renders a not-deployed state and makes no contract calls.",
+  "deployBlock": null,
+  "operator": null,
+  "contracts": {
+    "NanoLedger": null,
+    "BuilderRegistry": null,
+    "ProgressPool": null,
+    "CaretakerRegistry": null,
+    "MarketsPerennial": null
+  }
+}

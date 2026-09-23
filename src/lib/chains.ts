@@ -14,7 +14,7 @@ export function arcTransport(): Transport {
 }
 
 /** Read transport for a given chain entry: its own (official) RPC list only. */
-export function transportFor(chain: ChainEntry): Transport {
+export function transportFor(chain: WalletChain): Transport {
   return fallback(chain.rpcUrls.map((url) => http(url)));
 }
 
@@ -91,17 +91,27 @@ export interface ChainContracts {
   MarketsPerennial?: Address;
 }
 
-export interface ChainEntry {
+/** What a wallet needs to know about a chain (switch/add, reads, explorer).
+ *  Every chain the app can point a wallet at is one of these; only chains with
+ *  the full oracle stack deployed are also a {@link ChainEntry}. */
+export interface WalletChain {
   id: number;
-  family: Family;
   name: string;             // "Arc Testnet"
   shortName: string;        // "arc"
   testnet: boolean;
+  /** Official RPC endpoints only — these are installed into users' wallets. */
   rpcUrls: readonly string[];
   explorer: { name: string; url: string };
+  /** Native gas currency. On Arc this is USDC with 18-decimal accounting. */
   nativeCurrency: { name: string; symbol: string; decimals: number };
-  contracts: ChainContracts;
+  /** The ERC-20 USDC interface (6 decimals on Arc). */
+  usdc: { address: Address; decimals: number };
   viemChain: Chain;
+}
+
+export interface ChainEntry extends WalletChain {
+  family: Family;
+  contracts: ChainContracts;
   /** Optional human label for the deployment (e.g. "v1 · 2026-05"). */
   label?: string;
 }
@@ -110,6 +120,10 @@ export interface ChainEntry {
 // USDC on Arc is the native gas token (18-decimal accounting) but has an
 // ERC-20 interface at 0x3600…0000 with 6 decimals — that's what our
 // contracts use.
+
+/** Arc's ERC-20 USDC interface — same address on testnet and mainnet, 6
+ *  decimals on both (verified on-chain). Native gas USDC is 18 decimals. */
+export const ARC_USDC_ERC20 = "0x3600000000000000000000000000000000000000" as Address;
 
 const ARC_TESTNET_VIEM = defineChain({
   id: 5042002,
@@ -135,6 +149,7 @@ export const ARC_TESTNET: ChainEntry = {
   rpcUrls: [ARC_TESTNET_RPC],
   explorer: { name: "ArcScan", url: "https://testnet.arcscan.app" },
   nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
+  usdc: { address: ARC_USDC_ERC20, decimals: 6 },
   contracts: {
     USDC: live.contracts.USDC as Address,
     EURC: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a" as Address,
@@ -216,6 +231,39 @@ export const ARC_TESTNET: ChainEntry = {
   label: "v2 · 2026-05",
 };
 
+// ─────────────────────── Arc Mainnet ───────────────────────
+// Chain facts mirror the bridge registry (cctp/domains.ts: chain 5042, CCTP
+// domain 26, explorer.arc.io). Wallet-level only: the oracle stack is not
+// deployed on mainnet, so this is deliberately NOT in `CHAINS` — pages that
+// drive contracts through `currentChain` keep reading testnet. Perennial picks
+// its network separately (see lib/perennial-network.ts).
+
+const ARC_MAINNET_VIEM = defineChain({
+  id: 5042,
+  name: "Arc",
+  nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
+  rpcUrls: {
+    default: { http: [ARC_MAINNET_RPC] },
+    public: { http: [ARC_MAINNET_RPC] },
+  },
+  blockExplorers: {
+    default: { name: "Arc Explorer", url: "https://explorer.arc.io" },
+  },
+  testnet: false,
+});
+
+export const ARC_MAINNET: WalletChain = {
+  id: 5042,
+  name: "Arc",
+  shortName: "arc",
+  testnet: false,
+  rpcUrls: [ARC_MAINNET_RPC],
+  explorer: { name: "Arc Explorer", url: "https://explorer.arc.io" },
+  nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
+  usdc: { address: ARC_USDC_ERC20, decimals: 6 },
+  viemChain: ARC_MAINNET_VIEM,
+};
+
 // ─────────────────────── HyperEVM (planned) ───────────────────────
 // Stub entry — uncomment + fill addresses when contracts deploy on HyperEVM.
 // Same Solidity, different chain. The frontend is wired to support both.
@@ -243,16 +291,20 @@ export const CHAINS: Record<number, ChainEntry> = {
 export const DEFAULT_CHAIN_ID = ARC_TESTNET.id;
 export const DEFAULT_CHAIN = ARC_TESTNET;
 
-// ─────────────────────── Perennial chain pin ───────────────────────
-// Perennial now runs on Arc testnet, same chain as everything else — the pin is
-// kept as an indirection so it can be moved again without touching callers.
-//
-// Moved off Robinhood 2026-09-17 and that chain has since been removed from the
-// registry entirely — Arc only. The Robinhood deployment had stalled on
-// 2026-07-14 (fees and progress landed, no epoch was ever closed, nothing was
-// ever paid out) and its bytecode predated active-builder enforcement.
-export const PERENNIAL_CHAIN = ARC_TESTNET;
-export const PERENNIAL_CHAIN_ID = ARC_TESTNET.id;
+/** Every chain the app may ask a wallet to switch to / add. */
+export const WALLET_CHAINS: Record<number, WalletChain> = {
+  [ARC_TESTNET.id]: ARC_TESTNET,
+  [ARC_MAINNET.id]: ARC_MAINNET,
+};
+
+export function getWalletChain(id: number | undefined): WalletChain | undefined {
+  if (id === undefined) return undefined;
+  return WALLET_CHAINS[id];
+}
+
+// Perennial's network (testnet | mainnet) is chosen at build time in
+// lib/perennial-network.ts via NEXT_PUBLIC_PERENNIAL_NETWORK; it is not pinned
+// here any more.
 
 export function getChain(id: number | undefined): ChainEntry | undefined {
   if (id === undefined) return undefined;
@@ -265,10 +317,10 @@ export function isSupportedChain(id: number | undefined): boolean {
 
 // ─────────────────────── Helpers ───────────────────────
 
-export function txUrl(chain: ChainEntry, hash: string): string {
+export function txUrl(chain: WalletChain, hash: string): string {
   return `${chain.explorer.url}/tx/${hash}`;
 }
 
-export function addrUrl(chain: ChainEntry, addr: string): string {
+export function addrUrl(chain: WalletChain, addr: string): string {
   return `${chain.explorer.url}/address/${addr}`;
 }

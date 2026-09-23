@@ -3,17 +3,24 @@
 import { useWallet } from "./WalletProvider";
 import { shortAddr } from "@/lib/format";
 
-export function WalletButton() {
+/**
+ * `chain` pins the button to one network (e.g. the Perennial network, which may
+ * be mainnet while the rest of the app runs on testnet).
+ */
+export function WalletButton({ chain }: { chain?: { id: number; name: string; shortName: string } } = {}) {
   const {
     address,
     isConnecting,
-    isOnSupportedChain,
-    currentChain,
+    isOnSupportedChain: onAppChain,
+    walletChainId,
+    currentChain: appChain,
     connect,
     disconnect,
     switchChain,
     error,
   } = useWallet();
+  const isOnSupportedChain = chain ? walletChainId === chain.id : onAppChain;
+  const currentChain = chain ?? appChain;
 
   if (!address) {
     return (
@@ -32,11 +39,11 @@ export function WalletButton() {
     return (
       <button
         type="button"
-        onClick={() => switchChain()}
+        onClick={() => switchChain(chain?.id)}
         className="px-3 py-1.5 border border-down/50 text-down text-[11px] tracking-[0.16em] uppercase hover:bg-down hover:text-bg transition-colors"
         title={error}
       >
-        switch to {currentChain.shortName}
+        switch to {chain ? currentChain.name : currentChain.shortName}
       </button>
     );
   }

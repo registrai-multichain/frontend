@@ -22,6 +22,7 @@ import {
   DEFAULT_CHAIN_ID,
   transportFor,
   getChain,
+  getWalletChain,
   isSupportedChain,
   type ChainEntry,
 } from "@/lib/chains";
@@ -55,7 +56,8 @@ interface WalletContextValue {
   error: string | undefined;
   connect: () => Promise<void>;
   disconnect: () => void;
-  /** Switch the wallet to a specific supported chain. Defaults to the
+  /** Switch the wallet to a chain the app knows (Arc testnet or mainnet),
+   *  adding it with the official RPC if the wallet lacks it. Defaults to the
    *  protocol's default chain (Arc testnet today). */
   switchChain: (chainId?: number) => Promise<void>;
   publicClient: PublicClient;
@@ -138,35 +140,48 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const switchChain = useCallback(
     async (targetId?: number) => {
       if (typeof window === "undefined" || !window.ethereum) return;
-      const target = getChain(targetId ?? DEFAULT_CHAIN_ID);
+      const eth = window.ethereum;
+      // Any chain the app can point a wallet at (testnet and mainnet), not
+      // only chains with the full contract stack.
+      const target = getWalletChain(targetId ?? DEFAULT_CHAIN_ID);
       if (!target) {
         setError("Unknown chain.");
         return;
       }
+      setError(undefined);
       const hexId = `0x${target.id.toString(16)}`;
+      const doSwitch = () =>
+        eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hexId }] });
       try {
-        await window.ethereum.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: hexId }],
-        });
+        await doSwitch();
       } catch (e) {
-        const code = (e as { code?: number }).code;
-        if (code === 4902) {
-          // Chain not in wallet — add it.
-          await window.ethereum.request({
+        if (!isUnknownChainError(e)) {
+          setError(isUserRejection(e) ? "Network switch cancelled in your wallet." : (e as Error).message);
+          await refreshChain();
+          return;
+        }
+        // Chain not in the wallet yet — add it with Circle's official RPC only.
+        try {
+          await eth.request({
             method: "wallet_addEthereumChain",
             params: [
               {
                 chainId: hexId,
                 chainName: target.name,
                 nativeCurrency: target.nativeCurrency,
-                rpcUrls: target.rpcUrls,
+                rpcUrls: [...target.rpcUrls],
                 blockExplorerUrls: [target.explorer.url],
               },
             ],
           });
-        } else {
-          setError((e as Error).message);
+          // Some wallets add without switching; ask again (no-op if already on it).
+          await doSwitch().catch(() => undefined);
+        } catch (addErr) {
+          setError(
+            isUserRejection(addErr)
+              ? `Adding ${target.name} was cancelled in your wallet.`
+              : `Could not add ${target.name} to your wallet: ${(addErr as Error).message ?? "unknown error"}`,
+          );
         }
       }
       await refreshChain();
@@ -222,6 +237,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+function errCode(e: unknown): number | undefined {
+  const x = e as { code?: number; data?: { originalError?: { code?: number } } };
+  return x?.code ?? x?.data?.originalError?.code;
+}
+
+function isUnknownChainError(e: unknown): boolean {
+  if (errCode(e) === 4902) return true;
+  const msg = String((e as Error)?.message ?? "").toLowerCase();
+  return msg.includes("unrecognized chain") || msg.includes("unknown chain");
+}
+
+function isUserRejection(e: unknown): boolean {
+  if (errCode(e) === 4001) return true;
+  const msg = String((e as Error)?.message ?? "").toLowerCase();
+  return msg.includes("user rejected") || msg.includes("user denied");
 }
 
 export function useWallet(): WalletContextValue {

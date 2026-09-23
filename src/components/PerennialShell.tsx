@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { BrandLockup } from "./Brand";
 import { WalletButton } from "./WalletButton";
+import { PERENNIAL } from "@/lib/perennial-network";
 
 export function PerennialShell({ children }: { children: ReactNode }) {
   return (
@@ -24,7 +25,7 @@ export function PerennialShell({ children }: { children: ReactNode }) {
             <Link href="/bridge" className="hidden font-mono text-[9px] uppercase tracking-[0.13em] text-fg-dim transition-colors hover:text-fg md:inline">
               bridge
             </Link>
-            <WalletButton />
+            <WalletButton chain={PERENNIAL.chain} />
           </nav>
         </div>
       </header>
