@@ -1,27 +1,21 @@
 import { defineChain, fallback, http, type Address, type Chain, type Transport } from "viem";
 import live from "./live-data.json";
 
-// Arc testnet RPCs. Canteen's swarm endpoint is primary so the project's
-// read traffic is attributed to us on their dashboards; Arc-official is the
-// automatic failover so the app keeps working if Canteen flakes (as it did
-// for ~3 days). The swrm path token is an intentionally-public testnet
-// attribution key — no funds or production access behind it.
-export const ARC_RPC_CANTEEN =
-  "https://rpc.testnet.arc-node.thecanteenapp.com/v1/swrm_ab2685dbd14cd9d0af6037f396de151143407b65fe21073bc08d31e6246db546";
-export const ARC_RPC_OFFICIAL = "https://rpc.testnet.arc.network";
+// Circle's official Arc RPC endpoints — the ONLY endpoints the app reads from or
+// hands to a wallet. Project rule: no third-party RPC and no API keys in the
+// bundle (a key here is public the moment the site is built).
+export const ARC_TESTNET_RPC = "https://rpc.testnet.arc.io";
+export const ARC_MAINNET_RPC = "https://rpc.mainnet.arc.io";
 
-/** Read transport for Arc: Canteen primary, Arc-official failover. Writes go
+/** Read transport for Arc testnet: Circle's official endpoint only. Writes go
  *  through the user's wallet RPC (custom transport), not this. */
 export function arcTransport(): Transport {
-  return fallback([http(ARC_RPC_CANTEEN), http(ARC_RPC_OFFICIAL)]);
+  return fallback([http(ARC_TESTNET_RPC)]);
 }
 
-/** Read transport for a given chain entry — Arc gets its Canteen/official
- *  fallback, everything else uses its first configured RPC URL. Keeps the
- *  wallet provider's public client chain-agnostic. */
+/** Read transport for a given chain entry: its own (official) RPC list only. */
 export function transportFor(chain: ChainEntry): Transport {
-  if (chain.id === ARC_TESTNET.id) return arcTransport();
-  return http(chain.rpcUrls[0]);
+  return fallback(chain.rpcUrls.map((url) => http(url)));
 }
 
 /**
@@ -122,15 +116,9 @@ const ARC_TESTNET_VIEM = defineChain({
   name: "Arc Testnet",
   nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
   rpcUrls: {
-    // Circle's official testnet endpoints, all verified live 2026-09-21.
-    default: {
-      http: [
-        "https://rpc.testnet.arc.network",
-        "https://rpc.testnet.arc.io",
-        "https://rpc.blockdaemon.testnet.arc.io",
-      ],
-    },
-    public: { http: ["https://rpc.testnet.arc.network"] },
+    // Circle's official testnet endpoint only.
+    default: { http: [ARC_TESTNET_RPC] },
+    public: { http: [ARC_TESTNET_RPC] },
   },
   blockExplorers: {
     default: { name: "ArcScan", url: "https://testnet.arcscan.app" },
@@ -144,7 +132,7 @@ export const ARC_TESTNET: ChainEntry = {
   name: "Arc Testnet",
   shortName: "arc",
   testnet: true,
-  rpcUrls: ["https://rpc.testnet.arc.network"],
+  rpcUrls: [ARC_TESTNET_RPC],
   explorer: { name: "ArcScan", url: "https://testnet.arcscan.app" },
   nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
   contracts: {

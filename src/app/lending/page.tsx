@@ -32,7 +32,7 @@ export default function LendingPage() {
           <span className="text-fg-mute">&quot;JSON-RPC protocol not supported&quot;</span>?
           Your wallet&apos;s Arc network is on a flaky RPC. Set Arc Testnet&apos;s
           RPC URL to{" "}
-          <code className="text-accent">https://rpc.testnet.arc.network</code>{" "}
+          <code className="text-accent">https://rpc.testnet.arc.io</code>{" "}
           (MetaMask → Settings → Networks → Arc Testnet).
         </div>
 

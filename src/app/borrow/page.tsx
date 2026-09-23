@@ -38,7 +38,7 @@ export default function BorrowPage() {
           Transactions failing with{" "}
           <span className="text-fg-mute">&quot;JSON-RPC protocol not supported&quot;</span>?
           Set Arc Testnet&apos;s RPC URL to{" "}
-          <code className="text-accent">https://rpc.testnet.arc.network</code>{" "}
+          <code className="text-accent">https://rpc.testnet.arc.io</code>{" "}
           in your wallet.
         </div>
 

@@ -84,8 +84,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     () =>
       createPublicClient({
         chain: currentChain.viemChain,
-        // Per-chain read transport: Arc gets Canteen-primary/official failover,
-        // other chains use their own RPC.
+        // Per-chain read transport: the chain's official RPC only.
         transport: transportFor(currentChain),
       }),
     [currentChain],

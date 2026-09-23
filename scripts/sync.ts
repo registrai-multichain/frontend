@@ -36,7 +36,8 @@ const arc = defineChain({
   id: DEPLOYMENT.chainId,
   name: "Arc Testnet",
   nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
-  rpcUrls: { default: { http: [process.env.RPC ?? DEPLOYMENT.rpc] } },
+  // Circle's official endpoint by default (the deployment file may name an older alias).
+  rpcUrls: { default: { http: [process.env.RPC ?? "https://rpc.testnet.arc.io"] } },
   blockExplorers: {
     default: { name: "ArcScan", url: DEPLOYMENT.explorer },
   },

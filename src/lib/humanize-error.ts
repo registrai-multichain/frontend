@@ -49,15 +49,15 @@ export function humanizeError(e: unknown): string {
     return "Agent is not rule-bound — use the plain submission path.";
 
   // RPC / network
-  // The Canteen swarm endpoint (often pre-configured in wallets from the
-  // hackathon docs) rejects writes with this error. Point the wallet's Arc
-  // network at the Arc-official RPC instead.
+  // Some third-party Arc endpoints (often pre-configured in wallets from
+  // hackathon docs) reject writes with this error. Point the wallet's Arc
+  // network at Circle's official RPC instead.
   if (
     s.includes("version of json-rpc protocol is not supported") ||
     s.includes("json-rpc protocol is not supported") ||
     s.includes("jsonrpc version")
   )
-    return "Your wallet's Arc RPC is rejecting the transaction. In MetaMask → Settings → Networks → Arc Testnet, set the RPC URL to https://rpc.testnet.arc.network and retry.";
+    return "Your wallet's Arc RPC is rejecting the transaction. In MetaMask → Settings → Networks → Arc Testnet, set the RPC URL to Circle's official endpoint (https://rpc.testnet.arc.io on testnet, https://rpc.mainnet.arc.io on mainnet) and retry.";
   if (s.includes("network") && (s.includes("disconnected") || s.includes("error")))
     return "Network issue. Check your RPC and try again.";
   if (s.includes("nonce too low"))

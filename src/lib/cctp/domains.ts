@@ -53,14 +53,12 @@ export type CctpChain = {
   /**
    * Endpoints WE read from, tried in order via a viem fallback transport.
    *
-   * Always more than one. A single endpoint is a single point of failure and
+   * Other chains list more than one. A single endpoint is a single point of failure and
    * we learned that the hard way: publicnode's free tier answers
    * eth_blockNumber happily but rejects eth_getTransactionReceipt as an
    * "archive request", which killed a live transfer between the approve and
-   * the burn. Multiple because Arc has no
-   * canonical public RPC yet and the available ones have different method
-   * coverage — Infura's arc-mainnet serves eth_getCode but refused eth_call
-   * on our test key, so a single endpoint is not safe to depend on.
+   * the burn. Arc is the exception: it lists Circle's official endpoint only
+   * (project rule — no third-party RPC on Arc).
    */
   readRpcUrls: string[];
   /**
@@ -123,14 +121,12 @@ export const CCTP_CHAINS: CctpChain[] = [
     // providers. arc-scan.org is gone entirely: that operator has a documented
     // $37.6k take-deposits-and-never-burn incident, and a single bad read
     // endpoint is enough to show a user a wrong balance before they sign.
-    readRpcUrls: [
-      ...(process.env.NEXT_PUBLIC_ARC_RPC ? [process.env.NEXT_PUBLIC_ARC_RPC] : []),
-      "https://rpc.mainnet.arc.io",
-      "https://rpc.blockdaemon.mainnet.arc.io",
-      "https://rpc.drpc.mainnet.arc.io",
-      "https://rpc.quicknode.mainnet.arc.io",
-    ],
-    walletRpcUrl: process.env.NEXT_PUBLIC_ARC_RPC ?? "https://rpc.mainnet.arc.io",
+    //
+    // Project rule since then: Circle's canonical endpoint ONLY, for reads and
+    // for the wallet. No provider fleet, and no env override — a build-time
+    // override is how a keyed third-party URL ends up baked into the bundle.
+    readRpcUrls: ["https://rpc.mainnet.arc.io"],
+    walletRpcUrl: "https://rpc.mainnet.arc.io",
     explorer: "https://explorer.arc.io",
     gasSymbol: "USDC",
     usdcIsGas: true,
