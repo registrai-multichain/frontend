@@ -18,6 +18,7 @@ import {
   normalizeSource,
   projectStatus,
   proofUrl as proofUrlFor,
+  parseProofText,
   validateProof,
   type BuilderStatus,
   type Claim,
@@ -134,7 +135,7 @@ export function makeFetchJson(opts: { timeoutMs?: number; fetchImpl?: typeof fet
     try {
       const res = await f(freshProofUrl(url), { signal: AbortSignal.timeout(opts.timeoutMs ?? 10_000), cache: "no-store", redirect: "follow" });
       if (!res.ok) return null;
-      return JSON.parse(await res.text());
+      return parseProofText(await res.text());
     } catch {
       return null;
     }

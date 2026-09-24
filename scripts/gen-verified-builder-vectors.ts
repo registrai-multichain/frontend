@@ -10,12 +10,12 @@
  */
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { buildVerifiedBuilderVectors } from "../src/lib/verified-builder-vectors";
+import { buildVerifiedBuilderVectors, serializeVectors } from "../src/lib/verified-builder-vectors";
 
 async function main() {
   const vectors = await buildVerifiedBuilderVectors();
   const target = resolve(__dirname, "../src/lib/__fixtures__/verified-builder-vectors.json");
-  writeFileSync(target, `${JSON.stringify(vectors, null, 2)}\n`);
+  writeFileSync(target, serializeVectors(vectors));
   console.log(`wrote ${target}`);
 }
 

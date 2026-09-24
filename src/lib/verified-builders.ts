@@ -221,8 +221,88 @@ export type ProofResult =
   | { valid: false; rule: 0 | 1 | 2 | 3 | 4 | 5; reason: string };
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
-const isHexSig = (v: unknown): v is Hex => typeof v === "string" && /^0x[0-9a-fA-F]*$/.test(v);
+  typeof v === "object" && v !== null && !Array.isArray(v) && !(v instanceof JsonNonInteger);
+/** A 65-byte (r, s, v) signature as hex. The 64-byte EIP-2098 compact form is
+ *  refused (the keeper refuses it too): one canonical encoding. */
+const isHexSig = (v: unknown): v is Hex => typeof v === "string" && /^0x[0-9a-fA-F]{130}$/.test(v);
+/** A JSON integer ≥ 0 (never a float like 5042.0, a string or a negative). */
+const isJsonUint = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+
+/**
+ * A JSON number written with a fraction or an exponent (`1.0`, `5042e0`).
+ * JSON.parse turns `1.0` into the integer 1; parseProofText keeps it as this
+ * marker instead, so a proof whose `version` / `chain` is not a JSON integer
+ * is refused exactly as the keeper (Python's json keeps floats) refuses it.
+ */
+export class JsonNonInteger {
+  constructor(readonly literal: string) {}
+  toJSON(): number {
+    return Number(this.literal);
+  }
+}
+
+/**
+ * Parse a proof file's text. Same syntax as JSON.parse (it throws the same
+ * SyntaxError on invalid JSON), except that every number with a fraction or
+ * an exponent becomes a JsonNonInteger. Use it for every fetched proof before
+ * validateProof.
+ */
+export function parseProofText(text: string): unknown {
+  JSON.parse(text); // the syntax check (throws SyntaxError)
+  const s = text;
+  let i = 0;
+  const NUM = /-?(?:0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?/y;
+  const STR = /"(?:[^"\\]|\\.)*"/y;
+  const ws = () => {
+    while (i < s.length && (s[i] === " " || s[i] === "\t" || s[i] === "\n" || s[i] === "\r")) i++;
+  };
+  const str = (): string => {
+    STR.lastIndex = i;
+    const m = STR.exec(s)!;
+    i = STR.lastIndex;
+    return JSON.parse(m[0]) as string;
+  };
+  const value = (): unknown => {
+    ws();
+    const c = s[i];
+    if (c === "{") {
+      i++;
+      const o: Record<string, unknown> = {};
+      ws();
+      if (s[i] === "}") return i++, o;
+      for (;;) {
+        ws();
+        const k = str();
+        ws();
+        i++; // :
+        // defineProperty, as JSON.parse does: a "__proto__" key is a plain key.
+        Object.defineProperty(o, k, { value: value(), enumerable: true, writable: true, configurable: true });
+        ws();
+        if (s[i++] === "}") return o;
+      }
+    }
+    if (c === "[") {
+      i++;
+      const a: unknown[] = [];
+      ws();
+      if (s[i] === "]") return i++, a;
+      for (;;) {
+        a.push(value());
+        ws();
+        if (s[i++] === "]") return a;
+      }
+    }
+    if (c === '"') return str();
+    if (c === "t") return (i += 4), true;
+    if (c === "f") return (i += 5), false;
+    if (c === "n") return (i += 4), null;
+    NUM.lastIndex = i;
+    const m = NUM.exec(s)!;
+    i = NUM.lastIndex;
+    return m[1] || m[2] ? new JsonNonInteger(m[0]) : Number(m[0]);
+  };
+  return value();
+}
 
 async function recovers(message: string, signature: unknown, expected: string): Promise<boolean> {
   if (!isHexSig(signature)) return false;
@@ -236,7 +316,11 @@ async function recovers(message: string, signature: unknown, expected: string): 
 
 /**
  * The spec's five rules, in order; the first failure is reported. `file` is
- * the parsed JSON exactly as fetched (unknown shape).
+ * the parsed JSON exactly as fetched (unknown shape) — parse fetched text with
+ * parseProofText, so a float `version` / `chain` is seen as one. Shape (rule
+ * 0): `chain` a JSON integer ≥ 0, `signatures.deployers` an object (may be
+ * empty). Signatures are 65-byte hex (a 64-byte EIP-2098 compact one fails
+ * its rule: 3 for the builder, 5 for a deployer).
  */
 export async function validateProof(
   file: unknown,
@@ -253,12 +337,13 @@ export async function validateProof(
     typeof c.source !== "string" ||
     !Array.isArray(c.deployers) || !c.deployers.every((d) => typeof d === "string" && isAddress(d, { strict: false })) ||
     typeof c.country !== "string" ||
-    typeof c.chain !== "number" ||
+    !isJsonUint(c.chain) ||
     typeof c.issued !== "string"
   ) {
-    return bad(0, "claim fields are missing or have the wrong type");
+    return bad(0, "claim fields are missing or have the wrong type (chain must be a JSON integer)");
   }
-  if (sigs.deployers !== undefined && !isObj(sigs.deployers)) return bad(0, "signatures.deployers must be an object");
+  // Always an object, empty when there is no other deployer to sign.
+  if (!isObj(sigs.deployers)) return bad(0, "signatures.deployers must be an object");
   const claim: Claim = {
     builder: c.builder,
     source: c.source,
@@ -268,8 +353,8 @@ export async function validateProof(
     issued: c.issued,
   };
 
-  // Rule 1.
-  if (file.version !== 1) return bad(1, `version must be 1`);
+  // Rule 1. `version` is the JSON integer 1: never 1.0, "1" or true.
+  if (!isJsonUint(file.version) || file.version !== 1) return bad(1, `version must be the integer 1`);
   if (!/^[A-Z]{2}$/.test(claim.country)) return bad(1, `country must be two uppercase letters`);
   if (claim.chain !== ctx.chainId) return bad(1, `claim is for chain ${claim.chain}, this deployment is chain ${ctx.chainId}`);
 
@@ -292,7 +377,7 @@ export async function validateProof(
     return bad(5, "open-source claims must list no deployers");
   }
   const deployerSigs = new Map<string, unknown>(
-    Object.entries((sigs.deployers ?? {}) as Record<string, unknown>).map(([k, v]) => [k.toLowerCase(), v]),
+    Object.entries(sigs.deployers as Record<string, unknown>).map(([k, v]) => [k.toLowerCase(), v]),
   );
   for (const d of claim.deployers) {
     if (d.toLowerCase() === claim.builder.toLowerCase()) continue;

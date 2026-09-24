@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { getContractAddress, type Address, type Hex } from "viem";
 import vectors from "./__fixtures__/verified-builder-vectors.json";
-import { buildVerifiedBuilderVectors } from "./verified-builder-vectors";
+import { buildVerifiedBuilderVectors, serializeVectors } from "./verified-builder-vectors";
 import {
   freshProofUrl,
   MAX_PROJECTS_PER_BUILDER,
@@ -13,8 +15,10 @@ import {
   countCreateDeployments,
   createDeployAddress,
   milestoneFeedFor,
+  JsonNonInteger,
   normalizeSource,
   operatorFeeds,
+  parseProofText,
   proofConfigFromEnv,
   projectStatus,
   proofUrl,
@@ -25,12 +29,16 @@ import {
   type DeployCountClient,
 } from "./verified-builders";
 
+const FIXTURE_TEXT = readFileSync(resolve(__dirname, "__fixtures__/verified-builder-vectors.json"), "utf8");
+/** The fixture as a keeper reads it: floats stay floats (the JSON import turns `1.0` into 1). */
+const rawVectors = parseProofText(FIXTURE_TEXT) as typeof vectors;
+
 const B0 = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 const B1 = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8";
 
 describe("shared fixture", () => {
   test("is exactly what the generator produces (regenerate with scripts/gen-verified-builder-vectors.ts)", async () => {
-    expect(JSON.parse(JSON.stringify(await buildVerifiedBuilderVectors()))).toEqual(vectors);
+    expect(serializeVectors(await buildVerifiedBuilderVectors())).toBe(FIXTURE_TEXT);
   });
 
   test("dev keys are anvil's", () => {
@@ -138,7 +146,7 @@ describe("validateProof", () => {
         ? { valid: false, rule: 0 }
         : { valid: false, rule: Number(/^rule (\d):/.exec(name)![1]) };
 
-  test.each(vectors.proofs.map((p) => [p.name, p] as const))("%s", async (_name, p) => {
+  test.each(rawVectors.proofs.map((p) => [p.name, p] as const))("%s", async (_name, p) => {
     const r = await validateProof(p.file, p.context);
     const got = r.valid ? { valid: true, rule: null } : { valid: false, rule: r.rule };
     expect(got).toEqual(expected(p.name));
@@ -152,10 +160,49 @@ describe("validateProof", () => {
     }
   });
 
+  test("the keeper-alignment cases are in the fixture, with stable ids", () => {
+    const ids = rawVectors.proofs.map((p) => (p as { id?: string }).id).filter(Boolean);
+    expect(ids).toEqual([
+      "version-float",
+      "version-string",
+      "chain-float",
+      "chain-negative",
+      "builder-sig-compact",
+      "deployer-sig-compact",
+      "deployer-sigs-missing",
+      "deployer-sigs-array",
+      "deployer-sigs-empty",
+    ]);
+    // the floats are written as JSON floats, not as integers
+    expect(FIXTURE_TEXT).toMatch(/"version": 1\.0,/);
+    expect(FIXTURE_TEXT).toMatch(/"chain": 5042002\.0,/);
+  });
+
   test("a valid proof returns the claim", async () => {
     const p = vectors.proofs[0];
     const r = await validateProof(p.file, p.context);
     expect(r.valid && r.claim.source).toBe("github:registrai-multichain/oracle-primitives");
+  });
+});
+
+describe("parseProofText", () => {
+  test("like JSON.parse, but a number with a fraction or exponent stays a non-integer", () => {
+    const v = parseProofText('{"version": 1.0, "chain": 5042, "x": [1e3, -2, 0.5], "s": "1.0", "n": null, "t": true, "f": false}') as Record<string, unknown>;
+    expect(v.version).toBeInstanceOf(JsonNonInteger);
+    expect((v.version as JsonNonInteger).literal).toBe("1.0");
+    expect(v.chain).toBe(5042);
+    expect((v.x as unknown[])[0]).toBeInstanceOf(JsonNonInteger);
+    expect((v.x as unknown[])[1]).toBe(-2);
+    expect(v.s).toBe("1.0");
+    expect([v.n, v.t, v.f]).toEqual([null, true, false]);
+    expect(parseProofText(' {"a": {"b": [{}, []]}, "e": "q\\"\\u00e9"} ')).toEqual({ a: { b: [{}, []] }, e: 'q"\u00e9' });
+  });
+  test("invalid JSON throws a SyntaxError; __proto__ is a plain key", () => {
+    expect(() => parseProofText("{nope")).toThrow(SyntaxError);
+    expect(() => parseProofText("")).toThrow(SyntaxError);
+    const o = parseProofText('{"__proto__": {"x": 1}}') as Record<string, unknown>;
+    expect(Object.getPrototypeOf(o)).toBe(Object.prototype);
+    expect(Object.keys(o)).toEqual(["__proto__"]);
   });
 });
 
