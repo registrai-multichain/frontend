@@ -9,8 +9,17 @@
  * with its own signed proof. The card shows the builder's projects as chips.
  *
  * Pure except readLiveGallery and the browser proof checks, which take their
- * client / fetch as arguments. Used by scripts/sync.ts (the snapshot) and the
+ * client / reader as arguments. Used by scripts/sync.ts (the snapshot) and the
  * page (the snapshot plus a live overlay).
+ *
+ * ── Who decides (the live overlay is authoritative) ─────────────────────────
+ * The snapshot paints the page first. Then every active project of every
+ * active builder is re-checked live (GET /api/proof on builder.registrai.cc, a
+ * direct fetch elsewhere; checkLiveProofs: 6 at a time, 20 s in all) and that
+ * verdict wins. The snapshot's verdict is only the fallback for a project the
+ * live check could not read; a project neither could confirm is "unconfirmed":
+ * grey, never counted, never named by its profile. Nominated / Verified need a
+ * validated proof (live, or the snapshot's).
  *
  * ── Invited list: src/data/nominees.json ──────────────────────────────────
  * Curated by hand by the owner. A JSON array; each entry is one PROJECT:
@@ -23,23 +32,24 @@
  * `source` may also be written the way /verify accepts it (a GitHub URL,
  * `owner/repo`, a bare host); it is normalised, and an entry whose source does
  * not normalise is dropped. Duplicates (same normalised source) keep the first.
- * A nominee whose source is an active project of any builder merges into that
- * builder's card (never twice; see mergeGallery); otherwise it is shown as
- * Invited, with only what the file says: name, source link, X handle. Never a
- * country or a wallet: an invitee has claimed nothing.
+ * A nominee whose source is a VALIDATED project (verified or nominated: its
+ * proof checks out) of a shown builder merges into that builder's card (never
+ * twice; see mergeGallery); otherwise — a squatter without a valid proof
+ * included — it stays Invited, with only what the file says: name, source
+ * link, X handle. Never a country or a wallet: an invitee has claimed nothing.
  *
  * On builder.registrai.cc the page also merges the invites the owner made in
  * /admin (GET /api/invites, public fields only): parsePublicInvites +
  * mergeNominees. Where that API does not exist the file alone is shown.
  *
  * ── A builder's name (builderName) ──────────────────────────────────────────
- *   1. its profileURI, when the builder has a verified project and the profile
- *      is a plain short name (plainProfileName: ≤ 48 characters of letters,
- *      digits, spaces and . , ' & + _ ( ) ! -; so never a link, a `registrai:`
- *      string or an address). An unproven builder cannot put its own text on the
- *      gallery.
- *   2. the owner's curated name (nominee / invite) of one of its projects, in
+ *   1. the owner's curated name (nominee / invite) of one of its projects, in
  *      project order
+ *   2. ONLY once onboarded (shown as Verified): its profileURI, when it is a
+ *      plain short name (plainProfileName: ≤ 48 characters of Latin letters,
+ *      digits, spaces and . , ' ’ & + _ ( ) ! -; so never a link, a `registrai:`
+ *      string, an address or a look-alike from another script). A builder the
+ *      multisig has not onboarded cannot put its own text on the gallery.
  *   3. its lead project's label (`owner/repo` or the host): the first verified
  *      project, else the first active one, else the first
  *   4. "Builder #id"
@@ -50,24 +60,29 @@
  */
 import { getAddress, isAddress, parseAbi, zeroAddress, type Address, type Hex } from "viem";
 import {
-  freshProofUrl,
   builderCountry,
   builderStatus,
   normalizeSource,
+  parseProofText,
   proofUrl as proofUrlFor,
   sourceLabel,
   validateProof,
   type BuilderStatus,
   type ProjectStatus,
 } from "./verified-builders";
+import { browserProofReader, createProofReader, type ProofReader } from "./proof-fetch";
 import type { BuilderRecord } from "./verified-builders-chain";
 import { parseSnapshotBadge, readBadge, serialDigits, type BadgeInfo, type BadgeReader } from "./verified-builder-badge";
 
 // ───────────────────────────── snapshot ─────────────────────────────
 
-/** A chain builder's status in the gallery (the spec's builder status). */
-export type GalleryStatus = BuilderStatus;
-const STATUSES: readonly GalleryStatus[] = ["verified", "pending", "lapsed", "unverified", "inactive"];
+/** A chain builder's status in the gallery: the spec's builder status, plus
+ *  "unconfirmed" (live overlay only: no project verified, and at least one
+ *  that neither the live check nor the snapshot could confirm). */
+export type GalleryStatus = BuilderStatus | "unconfirmed";
+const STATUSES: readonly BuilderStatus[] = ["verified", "pending", "lapsed", "unverified", "inactive"];
+/** A project's status in the gallery: the spec's, plus "unconfirmed" (live overlay only). */
+export type GalleryProjectStatus = ProjectStatus | "unconfirmed";
 const PROJECT_STATUSES: readonly ProjectStatus[] = ["verified", "lapsed", "inactive"];
 
 /** live-data.json `gallery.builders[].projects[]`. Canonical sources only. */
@@ -77,11 +92,12 @@ export interface GalleryProject {
   source: string;
   /** The registry's flag (a removed project is inactive). */
   active: boolean;
-  status: ProjectStatus;
+  status: GalleryProjectStatus;
   /** From the project's valid claim only. */
   country: string | null;
   proofUrl: string | null;
-  /** Live overlay only: a domain proof the browser could not read (CORS). */
+  /** Live overlay only: the live check could not read the proof, so `status`
+   *  is the snapshot's verdict (or "unconfirmed" without one). */
   proofUnchecked?: boolean;
 }
 
@@ -100,7 +116,9 @@ export interface GalleryBuilder {
   badge: BadgeInfo | null;
   /** Registration time, unix seconds (0 when unknown). */
   createdAt: number;
-  /** Live overlay only: the builder is claimed only through proofs the browser could not read. */
+  /** The multisig onboarded it: its caretaker is the operator (false when unknown). */
+  onboarded?: boolean;
+  /** Live overlay only: some active project's proof could not be read live (see GalleryProject.proofUnchecked). */
   proofUnchecked?: boolean;
 }
 
@@ -117,10 +135,13 @@ export interface GallerySnapshot {
 
 const claimedStatus = (s: GalleryStatus) => s === "verified" || s === "pending";
 
-/** Pure (sync.ts): the gallery rows for chain records and their badges. */
+/** Pure (sync.ts): the gallery rows for chain records and their badges. `operator`
+ *  tells an onboarded builder (caretaker = operator) from one never onboarded. */
 export function galleryRowsFromRecords(
-  records: Pick<BuilderRecord, "builderId" | "owner" | "active" | "status" | "profileURI" | "projects" | "country" | "createdAt">[],
+  records: (Pick<BuilderRecord, "builderId" | "owner" | "active" | "status" | "profileURI" | "projects" | "country" | "createdAt"> &
+    Partial<Pick<BuilderRecord, "caretaker">>)[],
   badges: ReadonlyMap<number, BadgeInfo>,
+  operator: string | null = null,
 ): GalleryBuilder[] {
   return records.map((r) => ({
     id: r.builderId,
@@ -140,6 +161,9 @@ export function galleryRowsFromRecords(
     country: claimedStatus(r.status) ? r.country : null,
     badge: badges.get(r.builderId) ?? null,
     createdAt: r.createdAt ?? 0,
+    onboarded:
+      r.status === "verified" ||
+      Boolean(operator && r.caretaker && r.caretaker.toLowerCase() !== zeroAddress && r.caretaker.toLowerCase() === operator.toLowerCase()),
   }));
 }
 
@@ -151,8 +175,10 @@ export function buildGallerySnapshot(o: {
   syncedAt: string;
   records: Parameters<typeof galleryRowsFromRecords>[0];
   badges: ReadonlyMap<number, BadgeInfo>;
+  /** The keeper operator (caretaker of every onboarded builder). */
+  operator?: string | null;
 }): GallerySnapshot {
-  const builders = galleryRowsFromRecords(o.records, o.badges);
+  const builders = galleryRowsFromRecords(o.records, o.badges, o.operator ?? null);
   return {
     network: o.network,
     chainId: o.chainId,
@@ -211,7 +237,7 @@ function parseGalleryProject(raw: unknown): GalleryProject | null {
  * one project: a claimed builder's (verified / pending) source is a verified
  * project, a lapsed builder's a lapsed one, anything else inactive.
  */
-function legacyProjects(raw: Record<string, unknown>, status: GalleryStatus): GalleryProject[] {
+function legacyProjects(raw: Record<string, unknown>, status: BuilderStatus): GalleryProject[] {
   const source = canonicalOrNull(raw.source);
   if (!source) return [];
   const ps: ProjectStatus = claimedStatus(status) ? "verified" : status === "lapsed" ? "lapsed" : "inactive";
@@ -232,8 +258,8 @@ function parseGalleryRow(raw: unknown): GalleryBuilder | null {
   const { id, owner, status, createdAt } = raw;
   if (typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0) return null;
   if (typeof owner !== "string" || !isAddress(owner, { strict: false })) return null;
-  if (typeof status !== "string" || !STATUSES.includes(status as GalleryStatus)) return null;
-  const st = status as GalleryStatus;
+  if (typeof status !== "string" || !STATUSES.includes(status as BuilderStatus)) return null;
+  const st = status as BuilderStatus;
   const projects = Array.isArray(raw.projects)
     ? raw.projects.map(parseGalleryProject).filter((p): p is GalleryProject => p !== null)
     : legacyProjects(raw, st);
@@ -246,6 +272,8 @@ function parseGalleryRow(raw: unknown): GalleryBuilder | null {
     country: claimedStatus(st) ? countryOrNull(raw.country) : null,
     badge: parseSnapshotBadge(raw.badge),
     createdAt: typeof createdAt === "number" && createdAt > 0 ? createdAt : 0,
+    // Older snapshots do not say: only a verified builder is known to be onboarded.
+    onboarded: typeof raw.onboarded === "boolean" ? raw.onboarded : st === "verified",
   };
 }
 
@@ -279,28 +307,43 @@ export function parseGallerySnapshot(
 
 // ───────────────────────────── display ─────────────────────────────
 
-/** What a card shows. Claimed = colour; lapsed and not claimed = grayscale. */
-export type DisplayKind = "verified" | "nominated" | "lapsed" | "invited";
+/** What a card shows. Claimed = colour; lapsed, unconfirmed and not claimed = grayscale. */
+export type DisplayKind = "verified" | "nominated" | "lapsed" | "unconfirmed" | "invited";
 
 export const DISPLAY: Record<DisplayKind, { label: string; tone: "color" | "grayscale" }> = {
   verified: { label: "Verified", tone: "color" },
   nominated: { label: "Nominated", tone: "color" },
   lapsed: { label: "Lapsed", tone: "grayscale" },
+  unconfirmed: { label: "Unconfirmed", tone: "grayscale" },
   invited: { label: "Invited", tone: "grayscale" },
 };
 
 /**
- * Pure: how a chain builder is shown, or null when it is not shown at all
- * (unverified: no active project; inactive: deactivated on chain).
- *   lapsed     no verified project, or its badge is marked lapsed on chain
- *   verified   caretaker set, or a (non-lapsed) badge issued
- *   nominated  pending: a verified project, awaiting the Safe's onboarding batch
+ * Pure: how a chain builder is shown, or null when it is not shown at all.
+ *   hidden       no active project or deactivated — unless it holds a badge;
+ *                lapsed and never onboarded (no caretaker, no badge): /admin only
+ *   lapsed       no verified project, or its badge is marked lapsed on chain; a
+ *                badge holder without an active project (its badge link resolves)
+ *   unconfirmed  no verified project, and a proof nobody could read: grey
+ *   verified     caretaker set, or a (non-lapsed) badge issued
+ *   nominated    pending: a verified project, awaiting the Safe's onboarding batch
  */
-export function displayKind(b: Pick<GalleryBuilder, "status" | "badge">): Exclude<DisplayKind, "invited"> | null {
-  if (b.status === "unverified" || b.status === "inactive") return null;
-  if (b.status === "lapsed" || b.badge?.lapsed) return "lapsed";
+export function displayKind(b: Pick<GalleryBuilder, "status" | "badge" | "onboarded">): Exclude<DisplayKind, "invited"> | null {
+  if (b.status === "unverified" || b.status === "inactive") return b.badge ? "lapsed" : null;
+  if (b.status === "lapsed") return b.onboarded || b.badge ? "lapsed" : null;
+  if (b.badge?.lapsed) return "lapsed";
+  if (b.status === "unconfirmed") return "unconfirmed";
   if (b.status === "verified" || b.badge) return "verified";
   return "nominated";
+}
+
+/** Pure: why a greyed builder card is grey (null for the others). */
+export function greyReason(b: Pick<GalleryBuilder, "status" | "badge" | "projects">): string | null {
+  if (b.status === "inactive") return "Deactivated on the registry";
+  if (b.status === "unverified" || !b.projects.some((p) => p.active)) return "No active project";
+  if (b.status === "unconfirmed") return "Proof couldn't be read right now: unconfirmed";
+  if (b.status === "lapsed" || b.badge?.lapsed) return "No project proof checks out right now";
+  return null;
 }
 
 export const toneOf = (k: DisplayKind) => DISPLAY[k].tone;
@@ -309,8 +352,8 @@ export const labelOf = (k: DisplayKind) => DISPLAY[k].label;
 // ───────────────────────────── projects on a card ─────────────────────────────
 
 /** A project chip: verified (the builder is onboarded), nominated (verified
- *  project, builder not onboarded yet) or lapsed (greyed). */
-export type ChipKind = "verified" | "nominated" | "lapsed";
+ *  project, builder not onboarded yet), lapsed or unconfirmed (greyed). */
+export type ChipKind = "verified" | "nominated" | "lapsed" | "unconfirmed";
 
 export interface ProjectChip {
   id: number;
@@ -321,9 +364,10 @@ export interface ProjectChip {
 }
 
 /** Pure: one project's chip on its builder's card; null for an inactive project. */
-export function projectChipKind(p: Pick<GalleryProject, "status" | "active">, b: Pick<GalleryBuilder, "status" | "badge">): ChipKind | null {
+export function projectChipKind(p: Pick<GalleryProject, "status" | "active">, b: Pick<GalleryBuilder, "status" | "badge" | "onboarded">): ChipKind | null {
   if (!p.active || p.status === "inactive") return null;
   if (p.status === "lapsed") return "lapsed";
+  if (p.status === "unconfirmed") return "unconfirmed";
   const k = displayKind(b);
   return k === "verified" || (k === "lapsed" && b.status === "verified") ? "verified" : "nominated";
 }
@@ -343,8 +387,14 @@ export function leadProject(b: Pick<GalleryBuilder, "projects">): GalleryProject
   return b.projects.find((p) => p.status === "verified") ?? b.projects.find((p) => p.active) ?? b.projects[0] ?? null;
 }
 
-/** A plain short display name: ≤ 48 characters of letters, digits, spaces and . , ' & + _ ( ) ! -. */
-const PLAIN_NAME = /^[\p{L}\p{N}][\p{L}\p{N} .,'\u2019&+_()!-]*$/u;
+/**
+ * A plain short display name: ≤ 48 characters of LATIN letters (A–Z, a–z and
+ * the accented Latin-1 / Latin Extended-A ones: é ñ ü ß ł ż …, minus the
+ * look-alikes ı ĸ ŉ ſ), ASCII digits, spaces and . , ' ’ & + _ ( ) ! -.
+ * Nothing from another script, so no look-alike of a real project's name (a
+ * Cyrillic "а" for a Latin "a", a fullwidth "Ｕ", an Arabic-Indic digit).
+ */
+const PLAIN_NAME = /^[A-Za-z0-9\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0130\u0132-\u0137\u0139-\u0148\u014A-\u017E][A-Za-z0-9\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0130\u0132-\u0137\u0139-\u0148\u014A-\u017E .,'\u2019&+_()!-]*$/;
 export const MAX_NAME_LEN = 48;
 
 /** Pure: the profileURI as a display name, or null when it is not a plain short name. */
@@ -354,16 +404,19 @@ export function plainProfileName(profileURI: string | null | undefined): string 
   return PLAIN_NAME.test(s) ? s : null;
 }
 
-/** Pure: a builder's name (the rule is in the header). */
+/**
+ * Pure: a builder's name (the rule is in the header). `onboarded` = the card
+ * shows it as Verified (displayKind); only then may its own profile name it.
+ */
 export function builderName(
   b: Pick<GalleryBuilder, "id" | "profileURI" | "projects">,
   nominees: readonly Pick<Nominee, "name">[] = [],
+  onboarded = false,
 ): string {
-  const claimed = b.projects.some((p) => p.status === "verified");
-  const profile = claimed ? plainProfileName(b.profileURI) : null;
-  if (profile) return profile;
   const curated = nominees.find((n) => n.name)?.name;
   if (curated) return curated;
+  const profile = onboarded ? plainProfileName(b.profileURI) : null;
+  if (profile) return profile;
   const lead = leadProject(b);
   return lead ? sourceLabel(lead.source) : `Builder #${b.id}`;
 }
@@ -466,8 +519,8 @@ export interface GalleryEntry {
   avatar: string | null;
 }
 
-const KIND_ORDER: Record<DisplayKind, number> = { verified: 0, nominated: 1, lapsed: 2, invited: 3 };
-const RANK: Record<string, number> = { verified: 0, nominated: 1, lapsed: 2 };
+const KIND_ORDER: Record<DisplayKind, number> = { verified: 0, nominated: 1, unconfirmed: 2, lapsed: 3, invited: 4 };
+const RANK: Record<string, number> = { verified: 0, nominated: 1 };
 
 /** @deprecated An invitee's display name: the nominee's name, else `owner/repo` / the host. */
 export function entryName(source: string | null, builderId?: number, nominee?: Nominee): string {
@@ -476,34 +529,44 @@ export function entryName(source: string | null, builderId?: number, nominee?: N
   return builderId !== undefined ? `Builder #${builderId}` : "";
 }
 
-/** Pure: every source that is an active project of some builder (shown or not). */
+/**
+ * Pure: every source that is a VALIDATED project (active, proof verified) of a
+ * builder shown as verified or nominated. Only these absorb an invite: a
+ * project without a proof that checks out (a squatter's, a lapsed or an
+ * unconfirmed one) never swallows it.
+ */
 export function claimedSources(builders: readonly GalleryBuilder[]): Set<string> {
   const out = new Set<string>();
-  for (const b of builders) for (const p of b.projects) if (p.active) out.add(p.source);
+  for (const b of builders) {
+    const kind = displayKind(b);
+    if (kind !== "verified" && kind !== "nominated") continue;
+    for (const p of b.projects) if (p.active && p.status === "verified") out.add(p.source);
+  }
   return out;
 }
 
 /**
  * Pure: chain builders merged with the invited list, in gallery order —
- * verified by badge serial, then nominated, lapsed (by builder id), then
- * invitees in file order. A nominee whose source is an active project of any
- * builder is never "Invited"; it merges into the best-ranked SHOWN builder
- * holding that project (verified, nominated, lapsed; lowest id on a tie),
- * which then carries its name and X handle (see builderName). A builder may
- * absorb several nominees (one per project).
+ * verified by badge serial, then nominated, unconfirmed, lapsed (by builder
+ * id), then invitees in file order. A nominee whose source is a validated
+ * project (claimedSources) is never "Invited"; it merges into the best-ranked
+ * builder holding that validated project (verified, then nominated; lowest id
+ * on a tie), which then carries its name and X handle (see builderName). A
+ * builder may absorb several nominees (one per project).
  */
 export function mergeGallery(builders: GalleryBuilder[], nominees: Nominee[]): GalleryEntry[] {
   const shown = builders
     .map((b) => ({ b, kind: displayKind(b) }))
     .filter((x): x is { b: GalleryBuilder; kind: Exclude<DisplayKind, "invited"> } => x.kind !== null);
   const claimed = claimedSources(builders);
-  // Each claimed nominee attaches to the best-ranked shown builder with that project.
+  // Each claimed nominee attaches to the best-ranked builder with that validated project.
   const bestFor = new Map<string, { id: number; rank: number }>();
   for (const { b, kind } of shown) {
+    const rank = RANK[kind];
+    if (rank === undefined) continue;
     for (const p of b.projects) {
-      if (!p.active) continue;
+      if (!p.active || p.status !== "verified") continue;
       const cur = bestFor.get(p.source);
-      const rank = RANK[kind];
       if (!cur || rank < cur.rank || (rank === cur.rank && b.id < cur.id)) bestFor.set(p.source, { id: b.id, rank });
     }
   }
@@ -514,7 +577,7 @@ export function mergeGallery(builders: GalleryBuilder[], nominees: Nominee[]): G
       .filter((p) => p.active && bestFor.get(p.source)?.id === b.id)
       .map((p) => nomineeBySource.get(p.source))
       .filter((n): n is Nominee => Boolean(n));
-    const name = builderName(b, mine);
+    const name = builderName(b, mine, kind === "verified");
     return {
       key: `builder-${b.id}`,
       kind,
@@ -553,7 +616,7 @@ export function mergeGallery(builders: GalleryBuilder[], nominees: Nominee[]): G
 // ───────────────────────────── filters, counts ─────────────────────────────
 
 export type GalleryFilter = "all" | DisplayKind;
-export const FILTERS: GalleryFilter[] = ["all", "verified", "nominated", "lapsed", "invited"];
+export const FILTERS: GalleryFilter[] = ["all", "verified", "nominated", "unconfirmed", "lapsed", "invited"];
 
 /** Pure: a `?filter=`-style value, else "all". */
 export function parseFilter(raw: string | null | undefined): GalleryFilter {
@@ -586,13 +649,15 @@ export interface GalleryCounts {
   verified: number;
   nominated: number;
   lapsed: number;
+  /** Shown grey; never in the header stats. */
+  unconfirmed: number;
   invited: number;
   /** Distinct countries among claimed (verified + nominated) builders. */
   countries: number;
 }
 
 export function galleryCounts(entries: GalleryEntry[]): GalleryCounts {
-  const c: GalleryCounts = { all: entries.length, verified: 0, nominated: 0, lapsed: 0, invited: 0, countries: 0 };
+  const c: GalleryCounts = { all: entries.length, verified: 0, nominated: 0, lapsed: 0, unconfirmed: 0, invited: 0, countries: 0 };
   const countries = new Set<string>();
   for (const e of entries) {
     c[e.kind]++;
@@ -732,32 +797,74 @@ export async function readLiveGallery(
 const isCanonical = (source: string) => normalizeSource(source) === source;
 
 /** The snapshot's verdict for a live project, when it still applies: same
- *  owner (a proof names the owner), same project, and it was checked. */
+ *  owner (a proof names the owner), same project, and it was checked. Only the
+ *  fallback when the live check could not read the proof. */
 function snapshotVerdict(row: LiveChainRow, p: LiveProjectRow, snap: GalleryBuilder | undefined): GalleryProject | null {
   if (!snap || snap.owner !== row.owner.toLowerCase() || snap.status === "inactive") return null;
   const sp = snap.projects.find((x) => x.id === p.id && x.source === p.source);
-  return sp && sp.active && sp.status !== "inactive" ? sp : null;
+  return sp && sp.active && (sp.status === "verified" || sp.status === "lapsed") ? sp : null;
 }
 
-/** Pure: the projects of a live row whose proof the browser must check (the snapshot never checked them). */
-export function projectsNeedingCheck(row: LiveChainRow, snap: GalleryBuilder | undefined): LiveProjectRow[] {
+/** Pure: the projects of a live row whose proof the page checks — every
+ *  active canonical project of an active builder (the live check is authoritative). */
+export function projectsToCheck(row: LiveChainRow): LiveProjectRow[] {
   if (!row.active) return [];
-  return row.projects.filter((p) => p.active && isCanonical(p.source) && !snapshotVerdict(row, p, snap));
+  return row.projects.filter((p) => p.active && isCanonical(p.source));
 }
 
-/** Pure: whether the browser must check any of this row's proofs. */
-export function needsProofCheck(row: LiveChainRow, snap: GalleryBuilder | undefined): boolean {
-  return projectsNeedingCheck(row, snap).length > 0;
+/** Live proof checks: at most this many at once… */
+export const LIVE_CHECK_PARALLEL = 6;
+/** …and all of them within this long; the rest stay unchecked (the snapshot's verdict, else unconfirmed). */
+export const LIVE_CHECK_BUDGET_MS = 20_000;
+
+/**
+ * Check every project of `rows` (projectsToCheck) with `check`, LIVE_CHECK_PARALLEL
+ * at a time, within `budgetMs` in all. A check still running when the budget
+ * runs out, or one that throws, is left out of the map (= unchecked).
+ */
+export async function checkLiveProofs(
+  rows: readonly LiveChainRow[],
+  check: (p: { owner: string; source: string }) => Promise<LiveProof>,
+  o: { parallel?: number; budgetMs?: number } = {},
+): Promise<Map<number, LiveProof>> {
+  const out = new Map<number, LiveProof>();
+  const queue = rows.flatMap((r) => projectsToCheck(r).map((p) => ({ owner: r.owner, id: p.id, source: p.source })));
+  let expired = false;
+  const workers = Array.from({ length: Math.min(o.parallel ?? LIVE_CHECK_PARALLEL, queue.length) }, async () => {
+    for (let t = queue.shift(); t !== undefined && !expired; t = queue.shift()) {
+      try {
+        const r = await check({ owner: t.owner, source: t.source });
+        if (!expired) out.set(t.id, r);
+      } catch {
+        // unchecked
+      }
+    }
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const budget = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      expired = true;
+      resolve();
+    }, o.budgetMs ?? LIVE_CHECK_BUDGET_MS);
+  });
+  await Promise.race([Promise.all(workers).then(() => undefined), budget]);
+  clearTimeout(timer);
+  expired = true;
+  return new Map(out);
 }
 
 /**
- * Pure: the snapshot updated with the live chain. A project the snapshot
- * already checked (same owner) keeps its proof verdict (re-checked at the next
- * sync); a project it never saw — or any project after an owner change — uses
- * the browser's check (`proofs`, by project id). A domain the browser could not
- * read (CORS) counts as verified, flagged unchecked. Caretaker, badge, active
- * flags and the project list are always live. A non-canonical source is never
- * shown but counts as a lapsed project.
+ * Pure: the snapshot updated with the live chain. The live proof check
+ * (`proofs`, by project id) decides every active project: valid = verified,
+ * invalid = lapsed. Only where it could not read the proof (unchecked, or not
+ * checked in time) does the snapshot's verdict stand in (same owner, same
+ * project; flagged proofUnchecked); without one the project is "unconfirmed".
+ * Caretaker, badge, active flags and the project list are always live. A
+ * non-canonical source is never shown but counts as a lapsed project.
+ *
+ * Builder status: verified / pending with ≥1 verified project (caretaker =
+ * operator or not); else "unconfirmed" when a project is unconfirmed; else
+ * lapsed / unverified / inactive as the spec says.
  */
 export function overlayLive(
   snapshot: GalleryBuilder[],
@@ -779,30 +886,28 @@ export function overlayLive(
         if (row.active && p.active) hiddenLapsed = true;
         continue;
       }
-      const base = { id: p.id, source: p.source, active: p.active };
+      const base = { id: p.id, source: p.source, active: p.active, proofUrl: proofHref(p.source) };
       if (!row.active || !p.active) {
-        projects.push({ ...base, status: "inactive", country: null, proofUrl: proofHref(p.source) });
-        continue;
-      }
-      const v = snapshotVerdict(row, p, snap);
-      if (v) {
-        projects.push({ ...base, status: v.status, country: v.country, proofUrl: v.proofUrl ?? proofHref(p.source), ...(v.proofUnchecked ? { proofUnchecked: true } : {}) });
+        projects.push({ ...base, status: "inactive", country: null });
         continue;
       }
       const proof = proofs.get(p.id) ?? { state: "unchecked" };
-      if (proof.state === "invalid") projects.push({ ...base, status: "lapsed", country: null, proofUrl: proofHref(p.source) });
-      else
-        projects.push({
-          ...base,
-          status: "verified",
-          country: proof.state === "valid" ? proof.country : null,
-          proofUrl: proofHref(p.source),
-          ...(proof.state === "unchecked" ? { proofUnchecked: true } : {}),
-        });
+      if (proof.state === "valid") {
+        projects.push({ ...base, status: "verified", country: proof.country });
+        continue;
+      }
+      if (proof.state === "invalid") {
+        projects.push({ ...base, status: "lapsed", country: null });
+        continue;
+      }
+      const v = snapshotVerdict(row, p, snap);
+      if (v) projects.push({ ...base, status: v.status, country: v.status === "verified" ? v.country : null, proofUnchecked: true });
+      else projects.push({ ...base, status: "unconfirmed", country: null, proofUnchecked: true });
     }
-    const forStatus = hiddenLapsed ? [...projects, { status: "lapsed" as const }] : projects;
-    const status = builderStatus({ active: row.active, projects: forStatus, caretakerIsOperator });
-    const verified = projects.filter((p) => p.status === "verified");
+    const confirmed = projects.filter((p): p is GalleryProject & { status: ProjectStatus } => p.status !== "unconfirmed");
+    const forStatus = hiddenLapsed ? [...confirmed, { status: "lapsed" as const }] : confirmed;
+    let status: GalleryStatus = builderStatus({ active: row.active, projects: forStatus, caretakerIsOperator });
+    if ((status === "lapsed" || status === "unverified") && projects.some((p) => p.status === "unconfirmed")) status = "unconfirmed";
     const b: GalleryBuilder = {
       id: row.id,
       owner: row.owner.toLowerCase(),
@@ -812,53 +917,55 @@ export function overlayLive(
       country: claimedStatus(status) ? builderCountry(projects) : null,
       badge: row.badge,
       createdAt: row.createdAt || snap?.createdAt || 0,
+      onboarded: caretakerIsOperator,
     };
-    if (verified.length > 0 && verified.every((p) => p.proofUnchecked)) b.proofUnchecked = true;
+    if (projects.some((p) => p.proofUnchecked)) b.proofUnchecked = true;
     out.set(row.id, b);
   }
   return [...out.values()].sort((a, b) => a.id - b.id);
 }
 
 /**
- * A project's proof as the browser sees it, with the reason:
+ * A project's proof as the page sees it, with the reason:
  *   valid      checks out for this owner
  *   resign     a well-signed proof for ANOTHER wallet (the builder's owner
  *              changed): the current wallet must re-sign it
  *   invalid    present but does not check out
  *   missing    404 / 410
- *   unchecked  the browser may not read it (CORS, network, 5xx) — never a verdict
+ *   unchecked  could not be read (network, 5xx, 429, CORS without the proof
+ *              API, larger than PROOF_MAX_BYTES) — never a verdict
  */
 export type ProjectProofState =
   | { state: "valid"; country: string }
   | { state: "resign"; signer: string }
   | { state: "invalid"; reason: string }
   | { state: "missing" }
-  | { state: "unchecked" };
+  | { state: "unchecked"; reason?: string };
 
-export async function browserProjectProof(
-  p: { owner: string; source: string },
-  o: { chainId: number; fetchImpl?: typeof fetch; timeoutMs?: number },
-): Promise<ProjectProofState> {
-  let url: string;
-  try {
-    url = proofUrlFor(p.source);
-  } catch {
-    return { state: "invalid", reason: "not a canonical source" };
-  }
-  let res: Response;
-  try {
-    res = await (o.fetchImpl ?? fetch)(freshProofUrl(url), { cache: "no-store", signal: AbortSignal.timeout(o.timeoutMs ?? 10_000) });
-  } catch {
-    return { state: "unchecked" };
-  }
-  if (!res.ok) return res.status === 404 || res.status === 410 ? { state: "missing" } : { state: "unchecked" };
+export interface ProofCheckOptions {
+  chainId: number;
+  /** How to read the file; default: the browser's shared reader (GET /api/proof, else direct). */
+  reader?: ProofReader;
+  /** Tests / scripts: read directly with this fetch (no proof API). */
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+}
+
+function readerFor(o: ProofCheckOptions): ProofReader {
+  if (o.reader) return o.reader;
+  if (o.fetchImpl) return createProofReader({ fetchImpl: o.fetchImpl, apiPath: null, timeoutMs: o.timeoutMs });
+  return browserProofReader();
+}
+
+/** Pure: a read proof file checked for this owner (parseProofText + validateProof). */
+export async function judgeProofText(text: string, p: { owner: string; source: string }, chainId: number): Promise<ProjectProofState> {
   let body: unknown;
   try {
-    body = JSON.parse(await res.text());
+    body = parseProofText(text);
   } catch {
     return { state: "invalid", reason: "the file is not valid JSON" };
   }
-  const r = await validateProof(body, { expectedSource: p.source, onchainOwner: getAddress(p.owner), chainId: o.chainId });
+  const r = await validateProof(body, { expectedSource: p.source, onchainOwner: getAddress(p.owner), chainId });
   if (r.valid) return { state: "valid", country: r.claim.country };
   if (r.rule === 4) {
     const signer = String((body as { claim?: { builder?: unknown } }).claim?.builder ?? "").toLowerCase();
@@ -867,17 +974,29 @@ export async function browserProjectProof(
   return { state: "invalid", reason: r.reason };
 }
 
+export async function browserProjectProof(p: { owner: string; source: string }, o: ProofCheckOptions): Promise<ProjectProofState> {
+  try {
+    proofUrlFor(p.source);
+  } catch {
+    return { state: "invalid", reason: "not a canonical source" };
+  }
+  const read = await readerFor(o)(p.source);
+  if (!read.ok) {
+    if (read.error === "missing") return { state: "missing" };
+    if (read.error === "invalid-json") return { state: "invalid", reason: "the file is not valid JSON" };
+    return { state: "unchecked", reason: read.detail };
+  }
+  return judgeProofText(read.text, p, o.chainId);
+}
+
 /**
- * Check a claim's proof from the browser. GitHub raw is CORS-friendly; a domain
- * may not be, and a read the browser is not allowed to make is "unchecked"
- * (the sync reads it server-side), never "invalid".
+ * Check a claim's proof from the page: through the builders site's proof API
+ * (server-side, so a domain's CORS does not matter), else directly. A read
+ * that fails is "unchecked", never "invalid".
  */
-export async function browserProofCheck(
-  b: { owner: string; source: string },
-  o: { chainId: number; fetchImpl?: typeof fetch; timeoutMs?: number },
-): Promise<LiveProof> {
+export async function browserProofCheck(b: { owner: string; source: string }, o: ProofCheckOptions): Promise<LiveProof> {
   const r = await browserProjectProof(b, o);
   if (r.state === "valid") return r;
-  if (r.state === "unchecked") return r;
+  if (r.state === "unchecked") return { state: "unchecked" };
   return { state: "invalid" };
 }

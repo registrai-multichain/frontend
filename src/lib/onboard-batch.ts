@@ -25,7 +25,8 @@ export interface PlannedTx {
     | "revoke"
     | "startRecovery"
     | "cancelRecovery"
-    | "setProjectActive";
+    | "setProjectActive"
+    | "setActive";
   to: Address;
   value: "0";
   data: Hex;
@@ -80,6 +81,9 @@ export function planOnboarding(opts: {
    *  while it has an active project (`issue` reverts NoProject otherwise).
    *  `serials` = serialOf(builderId) as read; a missing entry counts as 0. */
   badge?: { address: Address; serials: ReadonlyMap<number, number> };
+  /** Builders whose badge was revoked and that were not reactivated since
+   *  (revokedBuilders): never re-onboarded, never re-issued a badge. */
+  revoked?: ReadonlySet<number>;
 }): OnboardingPlan {
   const txs: PlannedTx[] = [];
   const skipped: OnboardingPlan["skipped"] = [];
@@ -130,6 +134,10 @@ export function planOnboarding(opts: {
   const badge = opts.badge;
   for (const r of opts.records) {
     if (r.status !== "pending" && r.status !== "verified") continue;
+    if (opts.revoked?.has(r.builderId)) {
+      skipped.push({ what: `builder #${r.builderId}`, reason: "its badge was revoked and it was not reactivated since: not re-onboarded" });
+      continue;
+    }
     const names = sourcesText(r.verifiedSources);
     if (r.status === "pending") {
       txs.push({
@@ -176,7 +184,7 @@ export function safeBatchJson(txs: PlannedTx[], opts: { chainId: number; created
 /** "1 registerFor, 2 setCaretaker" (+ ", 1 addProjectFor" / ", 2 issue" / … when the batch has them). */
 export function batchSummary(txs: PlannedTx[]): string {
   const n = (k: PlannedTx["kind"]) => txs.filter((t) => t.kind === k).length;
-  const extra = (["addProjectFor", "issue", "revoke", "startRecovery", "cancelRecovery", "setProjectActive"] as const)
+  const extra = (["addProjectFor", "issue", "revoke", "setActive", "startRecovery", "cancelRecovery", "setProjectActive"] as const)
     .map((k) => (n(k) ? `, ${n(k)} ${k}` : ""))
     .join("");
   return `${n("registerFor")} registerFor, ${n("setCaretaker")} setCaretaker${extra}`;
@@ -193,6 +201,18 @@ export function revokeBadgeTx(badge: Address, builderId: number, serial?: number
     value: "0",
     data: encodeFunctionData({ abi: badgeAbi, functionName: "revoke", args: [BigInt(builderId)] }),
     label: `revoke(${builderId})  # burns badge${serial ? ` No. ${String(serial).padStart(3, "0")}` : ""} of builder #${builderId}`,
+  };
+}
+
+/** REGISTRAR (the Safe): switch a builder off (or back on). A deactivated
+ *  builder is never onboarded; its badge reads lapsed. */
+export function setBuilderActiveTx(registry: Address, builderId: number, active: boolean): PlannedTx {
+  return {
+    kind: "setActive",
+    to: registry,
+    value: "0",
+    data: encodeFunctionData({ abi: verifiedBuilderAbi, functionName: "setActive", args: [BigInt(builderId), active] }),
+    label: `setActive(${builderId}, ${active})  # ${active ? "reactivates" : "deactivates"} builder #${builderId}`,
   };
 }
 

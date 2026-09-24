@@ -185,3 +185,22 @@ describe("single-transaction Safe files", () => {
     expect(verifiedSourcesOf({ projects: [p("github:a/b", "verified"), p("github:c/d", "lapsed"), p("domain:e.org", "verified")] })).toEqual(["github:a/b", "domain:e.org"]);
   });
 });
+
+describe("planOnboarding: revoked badges", () => {
+  test("a revoked builder gets neither setCaretaker nor issue, and the skip says why", () => {
+    const plan = planOnboarding({
+      records: records.filter((r) => r.builderId === 2 || r.builderId === 3),
+      registrations: [],
+      builderRegistry: REG,
+      caretakerRegistry: CARE,
+      operator: OP,
+      badge: { address: B2, serials: new Map() },
+      revoked: new Set([3]),
+    });
+    expect(plan.txs.map((t) => [t.kind, t.label.split("  ")[0]])).toEqual([
+      ["setCaretaker", `setCaretaker(2, ${OP})`],
+      ["issue", "issue(2)"],
+    ]);
+    expect(plan.skipped).toEqual([{ what: "builder #3", reason: "its badge was revoked and it was not reactivated since: not re-onboarded" }]);
+  });
+});

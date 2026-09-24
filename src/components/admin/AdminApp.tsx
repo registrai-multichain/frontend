@@ -8,7 +8,17 @@ import { BUILDERS } from "@/lib/builders-network";
 import { transportFor } from "@/lib/chains";
 import { shortAddr } from "@/lib/format";
 import { humanizeError } from "@/lib/humanize-error";
-import { builderName, projectChipKind, sourceHref, xHref, type GalleryBuilder, type GalleryReader } from "@/lib/builders-gallery";
+import {
+  browserProofCheck,
+  builderName,
+  displayKind,
+  projectChipKind,
+  sourceHref,
+  xHref,
+  type GalleryBuilder,
+  type GalleryReader,
+} from "@/lib/builders-gallery";
+import { readRevokedBuilders, type LogReader } from "@/lib/badge-revocations";
 import { ADMIN_SERVICE, adminLoginMessage, inviteDm, type InviteRecord } from "@/lib/builders-admin";
 import {
   cancelRecoverySafeFile,
@@ -35,6 +45,7 @@ import {
   onboarderRoles,
   planOnboardSteps,
   readBuilderForOnboarding,
+  recheckOnboardingProofs,
 } from "@/lib/builders-onboarder";
 import { sendBuildersTx } from "@/components/verify/sendTx";
 import { buildersClient } from "@/components/verify/useMyBuilder";
@@ -260,7 +271,7 @@ function Dashboard({ admin, onSignedOut }: { admin: string; onSignedOut: () => v
         .filter((p) => p.active)
         .map((p) => invites.data?.find((i) => i.source === p.source))
         .filter((i): i is AdminInvite => Boolean(i));
-      return builderName(b, named);
+      return builderName(b, named, displayKind(b) === "verified");
     },
     [invites.data],
   );
@@ -446,13 +457,19 @@ function StatusChip({ s }: { s: InviteChainStatus | null }) {
     );
   if (s.kind === "nominated")
     return (
-      <span className="bld-chip" data-kind="nominated" title={`builder #${s.builderId}${s.unchecked ? " · proof not readable from the browser" : ""}`}>
+      <span className="bld-chip" data-kind="nominated" title={`builder #${s.builderId}${s.unchecked ? " · proof not readable just now" : ""}`}>
         Nominated{s.unchecked ? " · unchecked" : ""}
       </span>
     );
+  if (s.kind === "unconfirmed")
+    return (
+      <span className="bld-chip" data-kind="unconfirmed" title={`builder #${s.builderId} holds it, but its proof couldn't be read: the gallery still shows the invite`}>
+        Unconfirmed · #{s.builderId}
+      </span>
+    );
   return (
-    <span className="bld-chip" data-kind="lapsed" title={`builder #${s.builderId}`}>
-      Lapsed
+    <span className="bld-chip" data-kind="lapsed" title={`builder #${s.builderId} holds it without a proof that checks out: the gallery still shows the invite`}>
+      Lapsed · #{s.builderId}
     </span>
   );
 }
@@ -693,12 +710,29 @@ function OnboardingSection({
   const { address, walletChainId, switchChain, connect, isConnecting } = useWallet();
   const missing = [!REG && "BuilderRegistry", !CARE && "CaretakerRegistry", !OPERATOR && "the operator"].filter(Boolean);
   const badge = BUILDERS.badgesOn ? BADGE : null;
+  // Revoked badges (Revoked logs not followed by a reactivation): never re-onboarded.
+  const revocations = useSWR(
+    badge && REG ? ["admin-revocations", BUILDERS.chainId, badge, builders?.length ?? 0] : null,
+    () =>
+      readRevokedBuilders(buildersClient() as unknown as LogReader, {
+        badge: badge!,
+        registry: REG!,
+        fromBlock: BUILDERS.deployBlock ?? 0n,
+        maxChunks: 400,
+      }),
+    { revalidateOnFocus: false, shouldRetryOnError: false },
+  );
+  // No badge contract: nothing can have been revoked. Otherwise null (unknown) until the logs are read.
+  const revoked: ReadonlySet<number> | null = useMemo(
+    () => (!badge ? new Set<number>() : revocations.data?.ok ? revocations.data.revoked : null),
+    [badge, revocations.data],
+  );
   const queue = useMemo(
     () =>
       builders && REG && CARE && OPERATOR
-        ? onboardingQueue(builders, { builderRegistry: REG, caretakerRegistry: CARE, operator: OPERATOR as Address, badge })
+        ? onboardingQueue(builders, { builderRegistry: REG, caretakerRegistry: CARE, operator: OPERATOR as Address, badge, revoked })
         : null,
-    [builders, badge],
+    [builders, badge, revoked],
   );
 
   // Direct onboarding: the connected wallet must hold BOTH onboarder roles.
@@ -725,7 +759,20 @@ function OnboardingSection({
       await ensureBuildersChain(walletChainId, switchChain);
       const client = buildersClient() as unknown as GalleryReader;
       const now = await readBuilderForOnboarding(client, b.id, contracts);
-      const plan = planOnboardSteps({ builderId: b.id, ...now, operator: OPERATOR as Address, expectedOwner: b.owner });
+      // Re-check the proofs at send time, against the owner as read now: a proof
+      // removed since the page loaded stops the onboarding here.
+      patch(b.id, (r) => ({ ...r, note: "re-checking its proofs…" }));
+      const validProofs = await recheckOnboardingProofs(client, { registry: REG, builderId: b.id, owner: now.owner }, (p) =>
+        browserProofCheck(p, { chainId: BUILDERS.chainId }),
+      );
+      const plan = planOnboardSteps({
+        builderId: b.id,
+        ...now,
+        operator: OPERATOR as Address,
+        expectedOwner: b.owner,
+        revoked: revoked === null ? undefined : revoked.has(b.id),
+        validProofs,
+      });
       if (!plan.ok) throw new Error(plan.reason);
       if (plan.steps.length === 0) {
         patch(b.id, (r) => ({ ...r, state: "done", note: "Already onboarded: nothing to send." }));
@@ -909,8 +956,8 @@ function OnboardingSection({
           {queue.excluded.length > 0 && (
             <div className="adm-excluded">
               <p className="vf-note">
-                <b>Not in this batch:</b> the browser could not read any of their project proofs (domains, CORS). Verify with{" "}
-                <code>{CLI}</code>.
+                <b>Not in this batch:</b> none of their project proofs could be read just now (unconfirmed). Re-read the
+                chain later, or verify with <code>{CLI}</code>.
               </p>
               <ul className="adm-list">
                 {queue.excluded.map((b) => (
@@ -919,6 +966,29 @@ function OnboardingSection({
                     <span className="adm-sub">
                       builder #{b.id} · {b.projects.filter((p) => p.proofUnchecked).map((p) => sourceLabel(p.source)).join(", ")}
                     </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {badge && revoked === null && (
+            <p className="vf-hint">
+              {revocations.error || (revocations.data && !revocations.data.ok)
+                ? `Couldn't read the badge revocation history (${revocations.data && !revocations.data.ok ? revocations.data.error : "log read failed"}): verified builders without a badge are held back. The CLI reads the full history: `
+                : "Reading the badge revocation history…"}
+              {(revocations.error || (revocations.data && !revocations.data.ok)) && <code>{CLI}</code>}
+            </p>
+          )}
+          {queue.revoked.length > 0 && (
+            <div className="adm-excluded">
+              <p className="vf-note">
+                <b>Not onboarded again:</b> a revoked badge is never re-issued from here. To re-admit a builder, the Safe
+                reactivates it (<code>setActive(id, true)</code>) first.
+              </p>
+              <ul className="adm-list">
+                {queue.revoked.map(({ builder: b, reason }) => (
+                  <li key={b.id}>
+                    <b>{nameOf(b)}</b> <span className="adm-sub">builder #{b.id} · {reason}</span>
                   </li>
                 ))}
               </ul>
@@ -988,7 +1058,7 @@ function BadgeSection({
                   </td>
                   <td>{b.badge!.lapsed ? "lapsed" : b.status}</td>
                   <td>
-                    <button type="button" className="vf-mini" onClick={() => setConfirm(b)}>
+                    <button type="button" className="vf-mini" onClick={() => setConfirm(b)} disabled={!REG}>
                       Revoke badge
                     </button>
                   </td>
@@ -1018,11 +1088,13 @@ function RevokeDialog({ b, name, onClose }: { b: GalleryBuilder; name: string; o
         </h2>
         <p className="vf-note">
           <code>revoke({b.id})</code> on the badge contract burns builder #{b.id}&apos;s soulbound badge and retires{" "}
-          {serialLabel(serial)} for good: a later re-issue gets a new number.
+          {serialLabel(serial)} for good, and <code>setActive({b.id}, false)</code> on the registry{" "}
+          <b>deactivates builder #{b.id}</b>: it leaves the gallery, can&apos;t add projects, and is never onboarded or
+          given a badge again unless the Safe reactivates it.
         </p>
         <p className="vf-note">
-          Nothing is sent from this page. You download a one-transaction Safe batch; the Safe&apos;s signers decide.
-          The builder stays registered{b.status === "verified" ? " and verified: the onboarding queue will offer it a new badge unless its claim lapses" : ""}.
+          Nothing is sent from this page. You download a two-transaction Safe batch (revoke, then deactivate); the
+          Safe&apos;s signers decide.
         </p>
         <div className="adm-actions">
           <button
@@ -1031,12 +1103,12 @@ function RevokeDialog({ b, name, onClose }: { b: GalleryBuilder; name: string; o
             onClick={() => {
               download(
                 safeFileName(`revoke-badge-${serial}`, Date.now()),
-                revokeSafeFile({ badge: BADGE!, builderId: b.id, serial, chainId: BUILDERS.chainId, createdAt: Date.now() }),
+                revokeSafeFile({ badge: BADGE!, registry: REG!, builderId: b.id, serial, chainId: BUILDERS.chainId, createdAt: Date.now() }),
               );
               onClose();
             }}
           >
-            Download revoke batch
+            Download revoke + deactivate batch
           </button>
           <button type="button" className="vf-mini" onClick={onClose}>
             cancel
@@ -1302,7 +1374,7 @@ function ProjectsSection({
                     <b>{nameOf(b)}</b>
                     <span className="adm-sub">#{b.id}</span>
                   </td>
-                  <td>{projectChipKind(p, b) ?? "inactive"}{p.proofUnchecked ? " · unchecked" : ""}</td>
+                  <td>{projectChipKind(p, b) ?? "inactive"}</td>
                   <td>
                     <button
                       type="button"

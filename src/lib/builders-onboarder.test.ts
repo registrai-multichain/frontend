@@ -9,6 +9,7 @@ import {
   onboarderRoles,
   planOnboardSteps,
   readBuilderForOnboarding,
+  recheckOnboardingProofs,
 } from "./builders-onboarder";
 import type { GalleryReader } from "./builders-gallery";
 import { decodeRevertData, humanizeError } from "./humanize-error";
@@ -96,6 +97,44 @@ describe("planOnboardSteps", () => {
     expect(p.ok).toBe(false);
     expect(p.ok ? "" : p.reason).toMatch(/changed owner/);
     expect(kinds(planOnboardSteps({ ...base, owner: OWNER, expectedOwner: OWNER.toLowerCase() }))).toEqual(["setCaretaker", "issue"]);
+  });
+});
+
+describe("send-time checks", () => {
+  test("a revoked badge is never re-issued: refused before any step", () => {
+    const p = planOnboardSteps({ ...base, revoked: true });
+    expect(p.ok).toBe(false);
+    expect(kinds(p)).toMatch(/revoked/);
+    expect(kinds(planOnboardSteps({ ...base, revoked: false }))).toEqual(["setCaretaker", "issue"]);
+  });
+
+  test("proofs re-checked at send time: none valid any more = refused; any valid = go", () => {
+    expect(kinds(planOnboardSteps({ ...base, validProofs: [] }))).toMatch(/no project proof checks out any more/);
+    expect(kinds(planOnboardSteps({ ...base, validProofs: ["github:o/r"] }))).toEqual(["setCaretaker", "issue"]);
+    // not re-checked (undefined): the plan is as before
+    expect(kinds(planOnboardSteps(base))).toEqual(["setCaretaker", "issue"]);
+  });
+
+  test("recheckOnboardingProofs: every ACTIVE project, against the owner read now", async () => {
+    const client: GalleryReader = {
+      async readContract({ functionName, args }) {
+        if (functionName === "projectsOf") return [1n, 2n, 3n];
+        if (functionName === "projects") {
+          const id = Number(args![0] as bigint);
+          return [7n, ["github:o/ok", "domain:gone.example", "github:o/removed"][id - 1], id !== 3, 1n] as const;
+        }
+        throw new Error(functionName);
+      },
+    };
+    const asked: string[] = [];
+    const valid = await recheckOnboardingProofs(client, { registry: REG, builderId: 7, owner: OTHER }, async (p) => {
+      asked.push(`${p.owner}:${p.source}`);
+      return p.source === "github:o/ok" ? { state: "valid", country: "PL" } : { state: "invalid" };
+    });
+    expect(valid).toEqual(["github:o/ok"]);
+    expect(asked).toEqual([`${OTHER}:github:o/ok`, `${OTHER}:domain:gone.example`]);
+    // a check that throws counts as not valid
+    expect(await recheckOnboardingProofs(client, { registry: REG, builderId: 7, owner: OTHER }, async () => Promise.reject(new Error("x")))).toEqual([]);
   });
 });
 

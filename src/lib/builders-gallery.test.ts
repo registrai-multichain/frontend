@@ -17,7 +17,8 @@ import {
   labelOf,
   mergeGallery,
   mergeNominees,
-  needsProofCheck,
+  checkLiveProofs,
+  greyReason,
   overlayLive,
   parseFilter,
   parseGallerySnapshot,
@@ -38,7 +39,7 @@ import {
   leadProject,
   plainProfileName,
   projectChips,
-  projectsNeedingCheck,
+  projectsToCheck,
   type GalleryBuilder,
   type GalleryProject,
   type GalleryReader,
@@ -69,7 +70,7 @@ function row(id: number, over: Partial<GalleryBuilder> & { source?: string | nul
   const status = rest.status ?? "verified";
   const pStatus = status === "verified" || status === "pending" ? "verified" : status === "lapsed" ? "lapsed" : "inactive";
   const projects = rest.projects ?? (source ? [proj(id * 10, source, { status: pStatus })] : []);
-  return { id, owner: B0, status, profileURI: "", projects, country: "PL", badge: null, createdAt: 1, ...rest };
+  return { id, owner: B0, status, profileURI: "", projects, country: "PL", badge: null, createdAt: 1, onboarded: status === "verified", ...rest };
 }
 
 describe("display: status -> kind, label, tone", () => {
@@ -78,8 +79,10 @@ describe("display: status -> kind, label, tone", () => {
       verified: { label: "Verified", tone: "color" },
       nominated: { label: "Nominated", tone: "color" },
       lapsed: { label: "Lapsed", tone: "grayscale" },
+      unconfirmed: { label: "Unconfirmed", tone: "grayscale" },
       invited: { label: "Invited", tone: "grayscale" },
     });
+    expect(toneOf("unconfirmed")).toBe("grayscale");
     expect(toneOf("verified")).toBe("color");
     expect(toneOf("nominated")).toBe("color");
     expect(toneOf("lapsed")).toBe("grayscale");
@@ -90,9 +93,34 @@ describe("display: status -> kind, label, tone", () => {
   test("chain status maps to a kind; unverified and inactive are not shown", () => {
     expect(displayKind({ status: "verified", badge: null })).toBe("verified");
     expect(displayKind({ status: "pending", badge: null })).toBe("nominated");
-    expect(displayKind({ status: "lapsed", badge: null })).toBe("lapsed");
+    expect(displayKind({ status: "lapsed", badge: null, onboarded: true })).toBe("lapsed");
+    expect(displayKind({ status: "unconfirmed", badge: null })).toBe("unconfirmed");
     expect(displayKind({ status: "unverified", badge: null })).toBeNull();
-    expect(displayKind({ status: "inactive", badge: badge(1) })).toBeNull();
+    expect(displayKind({ status: "inactive", badge: null })).toBeNull();
+  });
+
+  test("lapsed and never onboarded (no caretaker, no badge): hidden; onboarded or badge-holding lapsed builders stay grey", () => {
+    expect(displayKind({ status: "lapsed", badge: null, onboarded: false })).toBeNull();
+    expect(displayKind({ status: "lapsed", badge: null })).toBeNull();
+    expect(displayKind({ status: "lapsed", badge: null, onboarded: true })).toBe("lapsed");
+    expect(displayKind({ status: "lapsed", badge: badge(2), onboarded: false })).toBe("lapsed");
+    // parsed from an old snapshot without the flag: only a verified row is known onboarded
+    const snap = parseGallerySnapshot(
+      { chainId: CHAIN, builderRegistry: REG, builders: [{ id: 1, owner: B0, status: "lapsed" }, { id: 2, owner: B0, status: "verified" }, { id: 3, owner: B0, status: "lapsed", onboarded: true }] },
+      { chainId: CHAIN, builderRegistry: REG },
+    )!;
+    expect(snap.builders.map((b) => b.onboarded)).toEqual([false, true, true]);
+    expect(mergeGallery(snap.builders, []).map((e) => e.builder?.id)).toEqual([2, 3]);
+  });
+
+  test("a badge holder never vanishes: no active project or deactivated, it shows grey so its ?builder= link resolves", () => {
+    expect(displayKind({ status: "unverified", badge: badge(4) })).toBe("lapsed");
+    expect(displayKind({ status: "inactive", badge: badge(4, true) })).toBe("lapsed");
+    const holder = row(9, { status: "unverified", source: null, badge: badge(4), onboarded: true });
+    const [e] = mergeGallery([holder], []);
+    expect([e.key, e.kind, e.chips]).toEqual(["builder-9", "lapsed", []]);
+    expect(greyReason(holder)).toBe("No active project");
+    expect(greyReason(row(9, { status: "inactive", source: null, badge: badge(4) }))).toBe("Deactivated on the registry");
   });
 
   test("a badge issued counts as verified; a lapsed badge as lapsed", () => {
@@ -174,7 +202,7 @@ describe("mergeGallery", () => {
     { source: "domain:gone.example.com", name: "Deactivated" },
   ]);
   const builders: GalleryBuilder[] = [
-    row(1, { status: "lapsed", country: null }),
+    row(1, { status: "lapsed", country: null, onboarded: true }),
     row(2, { status: "pending" }),
     row(3, { badge: badge(2) }),
     row(4, { badge: badge(1), country: "DE" }),
@@ -187,11 +215,8 @@ describe("mergeGallery", () => {
   test("a nominee that claimed on chain is shown once, as that builder", () => {
     const acme = entries.filter((e) => e.builder?.projects.some((p) => p.source === "github:acme/p2"));
     // builder #2 (nominated) carries the nominee's name and handle; #7 (another
-    // wallet's lapsed claim on the same repo) is still shown, without them.
-    expect(acme.map((e) => [e.builder?.id, e.kind, e.name, e.x])).toEqual([
-      [2, "nominated", "Acme Two", "@acme"],
-      [7, "lapsed", "acme/p2", null],
-    ]);
+    // wallet's lapsed claim on the same repo, never onboarded) is not shown at all.
+    expect(acme.map((e) => [e.builder?.id, e.kind, e.name, e.x])).toEqual([[2, "nominated", "Acme Two", "@acme"]]);
     expect(entries.some((e) => e.kind === "invited" && e.source === "github:acme/p2")).toBe(false);
   });
 
@@ -208,12 +233,22 @@ describe("mergeGallery", () => {
         chips: [],
         avatar: "https://avatars.githubusercontent.com/someone?size=128",
       },
+      {
+        key: "invited-domain-gone-example-com",
+        kind: "invited",
+        name: "Deactivated",
+        source: "domain:gone.example.com",
+        x: null,
+        builder: null,
+        chips: [],
+        avatar: null,
+      },
     ]);
   });
 
-  test("unverified and inactive builders are hidden; a nominee they claimed is not re-invited", () => {
+  test("unverified and inactive builders are hidden; a nominee only they hold stays invited (no validated proof)", () => {
     expect(entries.some((e) => e.builder?.id === 5 || e.builder?.id === 6)).toBe(false);
-    expect(entries.some((e) => e.source === "domain:gone.example.com")).toBe(false);
+    expect(entries.filter((e) => e.source === "domain:gone.example.com").map((e) => e.kind)).toEqual(["invited"]);
   });
 
   test("order: verified by serial, nominated, lapsed by id, then invited", () => {
@@ -222,21 +257,24 @@ describe("mergeGallery", () => {
       "builder-3",
       "builder-2",
       "builder-1",
-      "builder-7",
       "invited-github-someone-unclaimed",
+      "invited-domain-gone-example-com",
     ]);
   });
 
   test("counts: countries only from claimed builders", () => {
-    expect(galleryCounts(entries)).toEqual({ all: 6, verified: 2, nominated: 1, lapsed: 2, invited: 1, countries: 2 });
+    expect(galleryCounts(entries)).toEqual({ all: 6, verified: 2, nominated: 1, lapsed: 1, unconfirmed: 0, invited: 2, countries: 2 });
+    // unconfirmed builders are listed but never counted as claimed, nor their country
+    const withUnconfirmed = mergeGallery([...builders, row(8, { status: "unconfirmed", country: "FR", projects: [proj(80, "domain:u.example.org", { status: "unconfirmed" })] })], nominees);
+    expect(galleryCounts(withUnconfirmed)).toMatchObject({ verified: 2, nominated: 1, unconfirmed: 1, countries: 2 });
   });
 
   test("filters and search", () => {
-    expect(FILTERS).toEqual(["all", "verified", "nominated", "lapsed", "invited"]);
+    expect(FILTERS).toEqual(["all", "verified", "nominated", "unconfirmed", "lapsed", "invited"]);
     expect(filterGallery(entries, "all", "")).toHaveLength(6);
     expect(filterGallery(entries, "verified", "").map((e) => e.builder?.id)).toEqual([4, 3]);
-    expect(filterGallery(entries, "invited", "").map((e) => e.name)).toEqual(["Unclaimed"]);
-    expect(filterGallery(entries, "lapsed", "").map((e) => e.builder?.id)).toEqual([1, 7]);
+    expect(filterGallery(entries, "invited", "").map((e) => e.name)).toEqual(["Unclaimed", "Deactivated"]);
+    expect(filterGallery(entries, "lapsed", "").map((e) => e.builder?.id)).toEqual([1]);
     // name, handle, country, serial, builder id — case-insensitive, every word
     expect(filterGallery(entries, "all", "ACME two").map((e) => e.builder?.id)).toEqual([2]);
     expect(filterGallery(entries, "all", "@someone").map((e) => e.kind)).toEqual(["invited"]);
@@ -284,20 +322,22 @@ describe("builders with several projects", () => {
       { source: "github:beta/app", name: "Beta" },
     ]);
     const entries = mergeGallery([multi, pending], noms);
-    // a nominee whose source is only a REMOVED project is invited again
+    // a nominee whose source is only a REMOVED or a LAPSED project is invited again
     expect(entries.map((e) => [e.key, e.kind, e.name])).toEqual([
-      ["builder-1", "verified", "Acme Labs"],
+      ["builder-1", "verified", "Tool"],
       ["builder-2", "nominated", "Beta"],
+      ["invited-github-acme-old", "invited", "Old Tool"],
       ["invited-github-acme-removed", "invited", "Removed"],
     ]);
     // X handle: the first merged nominee (project order) that has one
     expect(entries[0].x).toBe("@acme");
     expect(entries[0].chips).toHaveLength(3);
-    expect(claimedSources([multi])).toEqual(new Set(["domain:acme.xyz", "github:acme/tool", "github:acme/old"]));
+    // only validated projects absorb an invite
+    expect(claimedSources([multi])).toEqual(new Set(["domain:acme.xyz", "github:acme/tool"]));
   });
 
-  test("a nominee merges into the best-ranked shown builder holding that project", () => {
-    const squatter = row(3, { status: "lapsed", owner: B1, projects: [proj(31, "github:acme/tool", { status: "lapsed" })] });
+  test("a nominee merges into the best-ranked builder holding that VALIDATED project", () => {
+    const squatter = row(3, { status: "lapsed", owner: B1, onboarded: true, projects: [proj(31, "github:acme/tool", { status: "lapsed" })] });
     const noms = parseNominees([{ source: "github:acme/tool", name: "Tool", x: "@acme" }]);
     const entries = mergeGallery([squatter, row(1, { projects: [proj(11, "github:acme/tool")] })], noms);
     expect(entries.map((e) => [e.builder?.id, e.name, e.x])).toEqual([
@@ -306,15 +346,46 @@ describe("builders with several projects", () => {
     ]);
   });
 
-  test("name: plain profile name (claimed builders only) > curated name > lead project > Builder #id", () => {
-    expect(builderName(multi)).toBe("Acme Labs");
-    expect(builderName(multi, [{ name: "Curated" }])).toBe("Acme Labs");
-    expect(builderName({ ...multi, profileURI: "https://acme.xyz" }, [{ name: "Curated" }])).toBe("Curated");
-    expect(builderName({ ...multi, profileURI: "registrai:github:acme/tool" })).toBe("acme.xyz");
+  test("a squatter without a valid proof never swallows an invite: it stays Invited · Claim this project", () => {
+    const noms = parseNominees([{ source: "github:acme/tool", name: "Tool", x: "@acme" }]);
+    // lapsed (proof missing) and onboarded long ago: shown grey, invite still open
+    const lapsedSquatter = row(3, { status: "lapsed", owner: B1, onboarded: true, projects: [proj(31, "github:acme/tool", { status: "lapsed" })] });
+    expect(mergeGallery([lapsedSquatter], noms).map((e) => [e.key, e.kind, e.name])).toEqual([
+      ["builder-3", "lapsed", "acme/tool"],
+      ["invited-github-acme-tool", "invited", "Tool"],
+    ]);
+    // unconfirmed (proof unreadable): same
+    const unconfirmed = row(4, { status: "unconfirmed", owner: B1, projects: [proj(41, "github:acme/tool", { status: "unconfirmed" })] });
+    expect(mergeGallery([unconfirmed], noms).map((e) => [e.kind, e.name])).toEqual([
+      ["unconfirmed", "acme/tool"],
+      ["invited", "Tool"],
+    ]);
+    // a nominated builder whose OTHER project is verified does not absorb it through its lapsed one
+    const mixed = row(5, { status: "pending", owner: B1, projects: [proj(51, "github:b/ok"), proj(52, "github:acme/tool", { status: "lapsed" })] });
+    expect(mergeGallery([mixed], noms).map((e) => [e.kind, e.name])).toEqual([
+      ["nominated", "b/ok"],
+      ["invited", "Tool"],
+    ]);
+  });
+
+  test("name: curated name > profile (onboarded only) > lead project > Builder #id", () => {
+    // onboarded (shown as Verified): curated first, then its own plain profile name
+    expect(builderName(multi, [], true)).toBe("Acme Labs");
+    expect(builderName(multi, [{ name: "Curated" }], true)).toBe("Curated");
+    expect(builderName({ ...multi, profileURI: "https://acme.xyz" }, [], true)).toBe("acme.xyz");
+    expect(builderName({ ...multi, profileURI: "registrai:github:acme/tool" }, [], true)).toBe("acme.xyz");
+    // before onboarding (pending / nominated): never the self-chosen profile
+    expect(builderName({ ...pending, profileURI: "Uniswap" })).toBe("beta/app");
+    expect(builderName({ ...pending, profileURI: "Uniswap" }, [{ name: "Beta Curated" }])).toBe("Beta Curated");
     // an unproven (lapsed) builder cannot put its own text on the gallery
     const lapsed = row(4, { status: "lapsed", profileURI: "Uniswap", projects: [proj(41, "github:x/y", { status: "lapsed" })] });
     expect(builderName(lapsed)).toBe("x/y");
     expect(builderName(row(5, { status: "unverified", source: null }))).toBe("Builder #5");
+    // mergeGallery applies it: the nominated card is named by its project, the verified one by its profile
+    const entries = mergeGallery([multi, { ...pending, profileURI: "Uniswap" }], []);
+    expect(entries.map((e) => e.name)).toEqual(["Acme Labs", "beta/app"]);
+    const unconfirmed = row(6, { status: "unconfirmed", profileURI: "Uniswap", projects: [proj(61, "domain:u.org", { status: "unconfirmed" })] });
+    expect(mergeGallery([unconfirmed], [])[0].name).toBe("u.org");
     // lead project: first verified, else first active, else first
     expect(leadProject(multi)?.source).toBe("domain:acme.xyz");
     expect(leadProject(lapsed)?.source).toBe("github:x/y");
@@ -323,7 +394,14 @@ describe("builders with several projects", () => {
   test("plainProfileName: a short plain name, never a link or a claim", () => {
     expect(plainProfileName("  Acme   Labs ")).toBe("Acme Labs");
     expect(plainProfileName("Zoë & Co. (beta)!")).toBe("Zoë & Co. (beta)!");
+    expect(plainProfileName("Café Ñandú")).toBe("Café Ñandú");
+    expect(plainProfileName("Łódź Straße")).toBe("Łódź Straße");
+    expect(plainProfileName("O\u2019Brien Labs")).toBe("O\u2019Brien Labs");
     expect(plainProfileName("acme.xyz")).toBe("acme.xyz");
+    // Latin only: no look-alikes from other scripts, no other digits
+    for (const homoglyph of ["Unisw\u0430p", "\u0410cme", "Ζeta", "Ｕniswap", "Acme\u200b", "Acme \u0661", "L\u0131nk", "\u017Fwap"]) {
+      expect(plainProfileName(homoglyph), homoglyph).toBeNull();
+    }
     for (const bad of ["", "   ", "https://acme.xyz", "ipfs://x", "registrai:github:o/r", "@handle", "a/b", "-dash", "x".repeat(49), "0xabc:1", "<b>hi</b>"]) {
       expect(plainProfileName(bad)).toBeNull();
     }
@@ -412,6 +490,13 @@ describe("sync gallery helpers", () => {
     ]);
   });
 
+  test("onboarded: verified, or the operator is its caretaker (a lapsed builder the multisig onboarded)", () => {
+    const withCaretakers = records.map((r) => ({ ...r, caretaker: r.builderId === 3 ? (OP.toLowerCase() as Address) : zeroAddress }));
+    expect(galleryRowsFromRecords(withCaretakers, new Map(), OP).map((r) => r.onboarded)).toEqual([true, false, true, false, false]);
+    // without an operator only a verified builder is known onboarded
+    expect(galleryRowsFromRecords(withCaretakers, new Map()).map((r) => r.onboarded)).toEqual([true, false, false, false, false]);
+  });
+
   test("snapshot round-trips and records its nextId", () => {
     const snap = buildGallerySnapshot({ network: "testnet", chainId: CHAIN, builderRegistry: REG, syncedAt: "2026-09-24T00:00:00Z", records, badges: new Map() });
     expect(snap.nextId).toBe(6);
@@ -450,12 +535,12 @@ describe("sync gallery helpers", () => {
       [5, "inactive", null, [[0, "github:acme/x", "inactive", false, null]]],
     ]);
     expect(snap.builders[0].profileURI).toBe("");
-    // and the old rows render like before: one card, one chip, same name
+    // and the old rows render like before: one card, one chip, same name — except
+    // a lapsed row, which an old snapshot cannot show was ever onboarded (hidden)
     const entries = mergeGallery(snap.builders, []);
     expect(entries.map((e) => [e.builder?.id, e.kind, e.name, e.chips.map((c) => c.kind)])).toEqual([
       [1, "verified", "registrai-multichain/oracle-primitives", ["verified"]],
       [2, "nominated", "app.example.org", ["nominated"]],
-      [3, "lapsed", "gone/repo", ["lapsed"]],
     ]);
   });
 
@@ -482,9 +567,9 @@ describe("sync gallery helpers", () => {
       { chainId: CHAIN, builderRegistry: REG },
     )!;
     expect(snap.builders).toEqual([
-      { id: 1, owner: B0, status: "verified", profileURI: "", projects: [], country: null, badge: null, createdAt: 0 },
+      { id: 1, owner: B0, status: "verified", profileURI: "", projects: [], country: null, badge: null, createdAt: 0, onboarded: true },
       {
-        id: 9, owner: B1, status: "pending", profileURI: "", country: "PL", badge: badge(4), createdAt: 5,
+        id: 9, owner: B1, status: "pending", profileURI: "", country: "PL", badge: badge(4), createdAt: 5, onboarded: false,
         projects: [
           { id: 4, source: GH, active: true, status: "verified", country: "PL", proofUrl: "https://ok" },
           { id: 0, source: "github:o/r", active: true, status: "lapsed", country: null, proofUrl: null },
@@ -519,52 +604,74 @@ describe("live overlay", () => {
     ...over,
   });
 
-  test("which projects need a browser proof check", () => {
-    const ids = (r: LiveChainRow, snap?: GalleryBuilder) => projectsNeedingCheck(r, snap).map((p) => p.id);
+  test("every active canonical project of an active builder is checked live, snapshot or not", () => {
+    const ids = (r: LiveChainRow) => projectsToCheck(r).map((p) => p.id);
     expect(ids(live(1))).toEqual([10]);
-    expect(ids(live(1), row(1))).toEqual([]);
-    expect(needsProofCheck(live(1), row(1))).toBe(false);
-    // a project added after the sync
     const added = live(1, { projects: [...live(1).projects, { id: 11, source: "domain:app.example.org", active: true, addedAt: 2 }] });
-    expect(ids(added, row(1))).toEqual([11]);
-    // an owner change voids every verdict (the proofs name the old wallet)
-    expect(ids(live(1, { owner: B1 }), row(1))).toEqual([10]);
-    // the snapshot never checked an inactive builder
-    expect(ids(live(1), row(1, { status: "inactive" }))).toEqual([10]);
+    expect(ids(added)).toEqual([10, 11]);
     // removed project, deactivated builder, non-canonical source: nothing to check
     expect(ids(live(1, { projects: [{ id: 10, source: "github:acme/p1", active: false, addedAt: 1 }] }))).toEqual([]);
     expect(ids(live(1, { active: false }))).toEqual([]);
     expect(ids(live(1, { projects: [{ id: 10, source: "github:Acme/P1", active: true, addedAt: 1 }] }))).toEqual([]);
   });
 
-  test("snapshot rows take live caretaker, badge, flags and projects; new builders are added", () => {
-    const snapshot = [row(1, { status: "pending" }), row(2, { status: "verified", badge: badge(1) }), row(3)];
+  test("the live check decides; the snapshot only stands in for a proof the live check could not read", () => {
+    const snapshot = [
+      row(1, { status: "pending" }),
+      row(2, { status: "verified", badge: badge(1), onboarded: true }),
+      row(3),
+      row(7, { status: "lapsed", onboarded: true }),
+    ];
     const rows = [
-      live(1, { caretaker: OP }), // onboarded after the sync
-      live(2, { caretaker: OP, badge: badge(1, true) }), // keeper lapsed the badge
+      live(1, { caretaker: OP }), // onboarded after the sync; proof unreadable now -> the snapshot's "verified" stands in
+      live(2, { caretaker: OP, badge: badge(1, true) }), // snapshot said verified, the live check says invalid: lapsed
       live(3, { active: false }), // deactivated
       live(4), // new: github proof valid
-      live(5, { projects: [{ id: 50, source: "domain:app.example.org", active: true, addedAt: 1 }] }), // new: domain, CORS-blocked
-      live(6), // new: proof missing
+      live(5, { projects: [{ id: 50, source: "domain:app.example.org", active: true, addedAt: 1 }] }), // new, unreadable, no snapshot
+      live(6), // new: proof missing, never onboarded -> hidden
+      live(7, { caretaker: OP }), // snapshot said lapsed, the proof is back: verified
     ];
     const proofs = new Map<number, LiveProof>([
+      [10, { state: "unchecked" }],
+      [20, { state: "invalid" }],
       [40, { state: "valid", country: "PL" }],
       [50, { state: "unchecked" }],
       [60, { state: "invalid" }],
+      [70, { state: "valid", country: "DE" }],
     ]);
     const out = overlayLive(snapshot, rows, proofs, OP);
     expect(out.map((b) => [b.id, b.status, b.country, displayKind(b)])).toEqual([
       [1, "verified", "PL", "verified"],
-      [2, "verified", "PL", "lapsed"],
+      [2, "lapsed", null, "lapsed"],
       [3, "inactive", null, null],
       [4, "pending", "PL", "nominated"],
-      [5, "pending", null, "nominated"],
-      [6, "lapsed", null, "lapsed"],
+      [5, "unconfirmed", null, "unconfirmed"],
+      [6, "lapsed", null, null],
+      [7, "verified", "DE", "verified"],
     ]);
-    expect(out.find((b) => b.id === 5)?.proofUnchecked).toBe(true);
-    expect(out.find((b) => b.id === 4)?.proofUnchecked).toBeUndefined();
-    expect(out.find((b) => b.id === 4)?.projects[0].proofUrl).toBe("https://raw.githubusercontent.com/acme/p4/HEAD/.registrai.json");
-    expect(out.find((b) => b.id === 3)?.projects[0].status).toBe("inactive");
+    expect(out[0].projects[0].proofUnchecked).toBe(true);
+    expect(out[0].proofUnchecked).toBe(true);
+    expect(out[3].proofUnchecked).toBeUndefined();
+    expect(out[3].projects[0].proofUrl).toBe("https://raw.githubusercontent.com/acme/p4/HEAD/.registrai.json");
+    expect(out[2].projects[0].status).toBe("inactive");
+    expect(out[4].projects[0]).toMatchObject({ status: "unconfirmed", proofUnchecked: true, country: null });
+    expect(out.map((b) => b.onboarded)).toEqual([true, true, false, false, false, false, true]);
+  });
+
+  test("a stale snapshot verdict never wins: a snapshot 'lapsed' is not kept when the live proof is valid, nor 'verified' when it is not", () => {
+    const snap = [row(1, { status: "lapsed", onboarded: true }), row(2, { status: "verified", onboarded: true })];
+    const out = overlayLive(
+      snap,
+      [live(1, { caretaker: OP }), live(2, { caretaker: OP })],
+      new Map<number, LiveProof>([
+        [10, { state: "valid", country: "PL" }],
+        [20, { state: "invalid" }],
+      ]),
+      OP,
+    );
+    expect(out.map((b) => b.status)).toEqual(["verified", "lapsed"]);
+    // without a live answer, the snapshot's lapsed verdict is the fallback (never "unconfirmed" when it knows)
+    expect(overlayLive(snap, [live(1, { caretaker: OP })], new Map(), OP)[0].status).toBe("lapsed");
   });
 
   test("a project added live joins the builder's card; a removed one turns inactive", () => {
@@ -592,28 +699,71 @@ describe("live overlay", () => {
     expect(only[0].projects).toEqual([]);
   });
 
-  test("an owner change lapses the builder until its proofs are re-signed", () => {
+  test("an owner change voids the snapshot's verdicts (the proofs name the old wallet)", () => {
     const snap = [row(1, { status: "verified" })];
     const moved = overlayLive(snap, [live(1, { owner: B1, caretaker: OP })], new Map([[10, { state: "invalid" } as LiveProof]]), OP);
     expect(moved[0].status).toBe("lapsed");
     expect(moved[0].owner).toBe(B1);
+    // unreadable after the move: unconfirmed, not the old owner's "verified"
+    expect(overlayLive(snap, [live(1, { owner: B1, caretaker: OP })], new Map(), OP)[0].status).toBe("unconfirmed");
   });
 
-  test("a new builder the Safe already onboarded is verified even when unchecked", () => {
-    const out = overlayLive([], [live(1, { caretaker: OP, projects: [{ id: 10, source: "domain:app.example.org", active: true, addedAt: 1 }] })], new Map(), OP);
-    expect(out[0].status).toBe("verified");
-    expect(out[0].proofUnchecked).toBe(true);
+  test("an onboarded builder whose proof nobody could read is unconfirmed (grey), never verified — even with a badge", () => {
+    const domain = [{ id: 10, source: "domain:app.example.org", active: true, addedAt: 1 }];
+    const out = overlayLive([], [live(1, { caretaker: OP, projects: domain })], new Map(), OP);
+    expect(out[0].status).toBe("unconfirmed");
+    expect(displayKind(out[0])).toBe("unconfirmed");
+    const withBadge = overlayLive([], [live(1, { caretaker: OP, projects: domain, badge: badge(3) })], new Map(), OP);
+    expect(displayKind(withBadge[0])).toBe("unconfirmed");
+    expect(greyReason(withBadge[0])).toMatch(/unconfirmed/);
   });
 
-  test("a builder with one checked and one unchecked verified project is not flagged unchecked", () => {
+  test("one validated project is enough: the unreadable one beside it is unconfirmed", () => {
     const out = overlayLive(
       [],
       [live(1, { projects: [{ id: 10, source: "github:acme/p1", active: true, addedAt: 1 }, { id: 11, source: "domain:d.org", active: true, addedAt: 2 }] })],
       new Map<number, LiveProof>([[10, { state: "valid", country: "PL" }], [11, { state: "unchecked" }]]),
       OP,
     );
-    expect(out[0].proofUnchecked).toBeUndefined();
-    expect(out[0].projects[1].proofUnchecked).toBe(true);
+    expect(out[0].status).toBe("pending");
+    expect(out[0].projects.map((p) => p.status)).toEqual(["verified", "unconfirmed"]);
+    expect(projectChips(out[0]).map((c) => c.kind)).toEqual(["nominated", "unconfirmed"]);
+  });
+
+  test("checkLiveProofs: at most 6 at a time, within the budget; unfinished checks stay unchecked", async () => {
+    const rows = Array.from({ length: 5 }, (_, i) =>
+      live(i + 1, {
+        projects: [
+          { id: (i + 1) * 10, source: `github:acme/p${i + 1}`, active: true, addedAt: 1 },
+          { id: (i + 1) * 10 + 1, source: `domain:s${i + 1}.example.org`, active: true, addedAt: 2 },
+        ],
+      }),
+    );
+    let running = 0;
+    let peak = 0;
+    const done = await checkLiveProofs(rows, async (p) => {
+      running++;
+      peak = Math.max(peak, running);
+      await new Promise((r) => setTimeout(r, 5));
+      running--;
+      return p.source.startsWith("github:") ? { state: "valid", country: "PL" } : { state: "invalid" };
+    });
+    expect(peak).toBe(6);
+    expect(done.size).toBe(10);
+    expect(done.get(10)).toEqual({ state: "valid", country: "PL" });
+    expect(done.get(11)).toEqual({ state: "invalid" });
+
+    // a check that hangs past the budget is left out; one that throws too
+    const partial = await checkLiveProofs(
+      [live(1), live(2), live(3)],
+      async (p) => {
+        if (p.source.endsWith("p2")) return new Promise<LiveProof>(() => undefined);
+        if (p.source.endsWith("p3")) throw new Error("boom");
+        return { state: "valid", country: "PL" };
+      },
+      { budgetMs: 30 },
+    );
+    expect([...partial.keys()]).toEqual([10]);
   });
 
   test("snapshot rows the live read did not reach are kept", () => {
@@ -658,8 +808,7 @@ describe("live overlay", () => {
 
 describe("browserProofCheck", () => {
   const GH_VALID = vectors.proofs.find((p) => p.name === "valid github claim")!.file;
-  const res = (status: number, body: unknown) =>
-    ({ ok: status >= 200 && status < 300, status, text: async () => (typeof body === "string" ? body : JSON.stringify(body)) }) as Response;
+  const res = (status: number, body: unknown) => new Response(typeof body === "string" ? body : JSON.stringify(body), { status });
 
   test("a valid file is valid, with its country", async () => {
     const r = await browserProofCheck({ owner: B0, source: GH }, { chainId: CHAIN, fetchImpl: async () => res(200, GH_VALID) });
@@ -678,7 +827,7 @@ describe("browserProofCheck", () => {
     expect(await browserProjectProof({ owner: B0, source: GH }, { chainId: CHAIN, fetchImpl: async () => res(404, "") })).toEqual({ state: "missing" });
     const bad = await browserProjectProof({ owner: B0, source: GH }, { chainId: 5042, fetchImpl: async () => res(200, GH_VALID) });
     expect(bad.state).toBe("invalid");
-    expect(await browserProjectProof({ owner: B0, source: GH }, { chainId: CHAIN, fetchImpl: async () => res(503, "") })).toEqual({ state: "unchecked" });
+    expect(await browserProjectProof({ owner: B0, source: GH }, { chainId: CHAIN, fetchImpl: async () => res(503, "") })).toEqual({ state: "unchecked", reason: "HTTP 503" });
   });
 
   test("a read the browser may not make (CORS) or a server error is unchecked, never invalid", async () => {

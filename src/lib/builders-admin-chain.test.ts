@@ -27,14 +27,16 @@ const B0 = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 const badge = (serial: number, lapsed = false): BadgeInfo => ({ serial, lapsed, issuedAt: 1, image: "" });
 /** A builder with one project `source` (id = builder id * 10) whose status follows the builder's. */
 const b = (id: number, status: GalleryBuilder["status"], source: string | null, extra: Partial<GalleryBuilder> = {}): GalleryBuilder => {
-  const ps: GalleryProject["status"] = status === "verified" || status === "pending" ? "verified" : status === "lapsed" ? "lapsed" : "inactive";
+  const ps: GalleryProject["status"] =
+    status === "verified" || status === "pending" ? "verified" : status === "lapsed" ? "lapsed" : status === "unconfirmed" ? "unconfirmed" : "inactive";
+  const unchecked = extra.proofUnchecked || status === "unconfirmed";
   return {
     id,
     owner: B0,
     status,
     profileURI: "",
     projects: source
-      ? [{ id: id * 10, source, active: ps !== "inactive", status: ps, country: null, proofUrl: null, ...(extra.proofUnchecked ? { proofUnchecked: true } : {}) }]
+      ? [{ id: id * 10, source, active: ps !== "inactive", status: ps, country: null, proofUrl: null, ...(unchecked ? { proofUnchecked: true } : {}) }]
       : [],
     country: null,
     badge: null,
@@ -59,6 +61,9 @@ describe("inviteChainStatus", () => {
     ).toEqual({ kind: "verified", builderId: 5, serial: 7 });
     // a lapsed badge shows the builder as lapsed
     expect(inviteChainStatus("github:a/b", [b(5, "verified", "github:a/b", { badge: badge(7, true) })])).toEqual({ kind: "lapsed", builderId: 5 });
+    // unreadable proof: unconfirmed (the gallery keeps the invite open); a verified claim still wins
+    expect(inviteChainStatus("github:a/b", [b(6, "unconfirmed", "github:a/b"), b(3, "lapsed", "github:a/b")])).toEqual({ kind: "unconfirmed", builderId: 6 });
+    expect(inviteChainStatus("github:a/b", [b(6, "unconfirmed", "github:a/b"), b(4, "pending", "github:a/b")])).toMatchObject({ kind: "nominated", builderId: 4 });
   });
 
   test("per project: the invited source among a builder's several projects", () => {
@@ -101,18 +106,20 @@ describe("onboardingQueue (per builder)", () => {
     b(2, "pending", "github:o/r"),
     b(3, "verified", "github:v/v"), // no badge -> issue
     b(4, "lapsed", "domain:gone.example"),
-    b(5, "pending", "domain:cors.example", { proofUnchecked: true }),
+    b(5, "unconfirmed", "domain:cors.example"), // never onboarded, proof unreadable
     b(6, "verified", "github:has/badge", { badge: badge(1) }),
-    b(7, "verified", "domain:v.example", { proofUnchecked: true }), // no badge, unchecked
+    b(7, "unconfirmed", "domain:v.example", { onboarded: true }), // onboarded, no badge, proof unreadable
     b(8, "inactive", "github:off/line"),
+    b(9, "unconfirmed", "domain:done.example", { onboarded: true, badge: badge(2) }), // nothing left to do
   ];
   const decode = (t: { to: Address; data: `0x${string}` }) =>
     t.to === BADGE ? decodeFunctionData({ abi: badgeAbi, data: t.data }) : decodeFunctionData({ abi: verifiedBuilderAbi, data: t.data });
 
-  test("setCaretaker then issue for pending, issue for verified without a badge; unchecked proofs excluded", () => {
-    const q = onboardingQueue(builders, { builderRegistry: REG, caretakerRegistry: CARE, operator: OP, badge: BADGE });
+  test("setCaretaker then issue for pending, issue for verified without a badge; unconfirmed proofs excluded", () => {
+    const q = onboardingQueue(builders, { builderRegistry: REG, caretakerRegistry: CARE, operator: OP, badge: BADGE, revoked: new Set() });
     expect(q.included.map((x) => x.id)).toEqual([2, 3]);
     expect(q.excluded.map((x) => x.id)).toEqual([5, 7]);
+    expect(q.revoked).toEqual([]);
     expect(q.plan.txs.map((t) => [t.kind, t.to])).toEqual([
       ["setCaretaker", CARE],
       ["issue", BADGE],
@@ -139,9 +146,9 @@ describe("onboardingQueue (per builder)", () => {
     expect(q.plan.txs[0].label).toContain("# o/r, o.org");
   });
 
-  test("a builder with one checked and one CORS-blocked project is included", () => {
+  test("a builder with one checked and one unreadable project is included", () => {
     const mixed = b(2, "pending", "github:o/r");
-    mixed.projects.push({ id: 21, source: "domain:cors.example", active: true, status: "verified", country: null, proofUrl: null, proofUnchecked: true });
+    mixed.projects.push({ id: 21, source: "domain:cors.example", active: true, status: "unconfirmed", country: null, proofUrl: null, proofUnchecked: true });
     const q = onboardingQueue([mixed], { builderRegistry: REG, caretakerRegistry: CARE, operator: OP, badge: null });
     expect(q.included.map((x) => x.id)).toEqual([2]);
     expect(q.plan.txs[0].label).toContain("# o/r");
@@ -154,18 +161,48 @@ describe("onboardingQueue (per builder)", () => {
     expect(q.excluded.map((x) => x.id)).toEqual([5]);
     expect(q.plan.txs.map(decode)).toEqual([{ functionName: "setCaretaker", args: [2n, OP] }]);
   });
+
+  test("a revoked badge is never re-issued: the builder leaves the queue (and says why)", () => {
+    const q = onboardingQueue(builders, { builderRegistry: REG, caretakerRegistry: CARE, operator: OP, badge: BADGE, revoked: new Set([3, 7]) });
+    expect(q.included.map((x) => x.id)).toEqual([2]);
+    expect(q.revoked.map((r) => [r.builder.id, r.reason])).toEqual([[3, "badge revoked; not reactivated since"]]);
+    // a revoked builder whose proof is unreadable is not listed as "excluded" either
+    expect(q.excluded.map((x) => x.id)).toEqual([5]);
+    expect(q.plan.txs.map(decode)).toEqual([
+      { functionName: "setCaretaker", args: [2n, OP] },
+      { functionName: "issue", args: [2n] },
+    ]);
+  });
+
+  test("revocation history unknown: verified builders without a badge are held back, pending ones go ahead", () => {
+    const q = onboardingQueue(builders, { builderRegistry: REG, caretakerRegistry: CARE, operator: OP, badge: BADGE, revoked: null });
+    expect(q.included.map((x) => x.id)).toEqual([2]);
+    expect(q.revoked.map((r) => r.builder.id)).toEqual([3]);
+    expect(q.revoked[0].reason).toMatch(/could not be read/);
+  });
+
+  test("a deactivated builder (revoke + setActive(false)) is never a candidate", () => {
+    const q = onboardingQueue([b(4, "inactive", "github:x/y", { onboarded: true })], { builderRegistry: REG, caretakerRegistry: CARE, operator: OP, badge: BADGE, revoked: null });
+    expect([q.included, q.excluded, q.revoked]).toEqual([[], [], []]);
+  });
 });
 
 describe("revokeSafeFile", () => {
-  test("one revoke(builderId) to the badge contract", () => {
-    const safe = revokeSafeFile({ badge: BADGE, builderId: 12, serial: 7, chainId: 5042, createdAt: 99 });
+  test("revoke(builderId) on the badge AND setActive(builderId, false) on the registry, in one batch", () => {
+    const safe = revokeSafeFile({ badge: BADGE, registry: REG, builderId: 12, serial: 7, chainId: 5042, createdAt: 99 });
     expect(safe.chainId).toBe("5042");
-    expect(safe.meta.name).toBe("Registrai: revoke badge No. 007");
+    expect(safe.meta.name).toBe("Registrai: revoke badge No. 007 and deactivate builder #12");
     expect(safe.meta.description).toContain("revoke(12)");
-    expect(safe.transactions).toEqual([{ to: BADGE, value: "0", data: expect.stringMatching(/^0x/) }]);
+    expect(safe.meta.description).toContain("setActive(12, false)");
+    expect(safe.transactions).toEqual([
+      { to: BADGE, value: "0", data: expect.stringMatching(/^0x/) },
+      { to: REG, value: "0", data: expect.stringMatching(/^0x/) },
+    ]);
     expect(decodeFunctionData({ abi: badgeAbi, data: safe.transactions[0].data })).toEqual({ functionName: "revoke", args: [12n] });
-    // selector of revoke(uint256)
+    expect(decodeFunctionData({ abi: verifiedBuilderAbi, data: safe.transactions[1].data })).toEqual({ functionName: "setActive", args: [12n, false] });
+    // selectors of revoke(uint256) and setActive(uint256,bool)
     expect(safe.transactions[0].data.slice(0, 10)).toBe("0x20c5429b");
+    expect(safe.transactions[1].data.slice(0, 10)).toBe("0xe60a955d");
   });
 
   test("file name", () => {
@@ -210,7 +247,7 @@ describe("readAdminChain", () => {
     expect(fetched).toHaveLength(2);
     expect(out.map((x) => [x.id, x.status, Boolean(x.proofUnchecked)])).toEqual([
       [1, "lapsed", false],
-      [2, "pending", true],
+      [2, "unconfirmed", true],
       [3, "unverified", false],
       [4, "inactive", false],
     ]);

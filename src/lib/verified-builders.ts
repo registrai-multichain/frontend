@@ -425,7 +425,7 @@ export function builderStatus(b: {
  * order. When they disagree the most common wins; a tie goes to the one that
  * appears first (the earliest project). null without a verified project.
  */
-export function builderCountry(projects: readonly { status: ProjectStatus; country: string | null }[]): string | null {
+export function builderCountry(projects: readonly { status: string; country: string | null }[]): string | null {
   const counts = new Map<string, number>(); // insertion order = first appearance
   for (const p of projects) {
     if (p.status !== "verified" || !p.country) continue;

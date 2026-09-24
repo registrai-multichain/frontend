@@ -37,6 +37,8 @@ export const verifiedBuilderAbi = parseAbi([
   "function registerBuilder(string profileURI) returns (uint256 id)",
   "function updateProfile(string profileURI)",
   "function registerFor(address builder, string profileURI) returns (uint256 id)",
+  "function setActive(uint256 id, bool active)",
+  "event BuilderStatusSet(uint256 indexed id, bool active)",
   // projects
   "function nextProjectId() view returns (uint256)",
   "function projects(uint256) view returns (uint256 builderId, string source, bool active, uint64 addedAt)",

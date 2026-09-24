@@ -11,9 +11,11 @@ import {
   FILTERS,
   browserProofCheck,
   builderAnchor,
+  checkLiveProofs,
   claimHref,
   filterGallery,
   galleryCounts,
+  greyReason,
   initialOf,
   labelOf,
   mergeGallery,
@@ -21,7 +23,6 @@ import {
   overlayLive,
   parsePublicInvites,
   projectChipKind,
-  projectsNeedingCheck,
   proofHref,
   readLiveGallery,
   sourceHref,
@@ -33,7 +34,6 @@ import {
   type GalleryProject,
   type GalleryReader,
   type GallerySnapshot,
-  type LiveProof,
   type Nominee,
   type ProjectChip,
 } from "@/lib/builders-gallery";
@@ -61,20 +61,13 @@ const regionName = (() => {
   }
 })();
 
-/** Run `fn` over `items`, at most `limit` at a time. */
-async function eachLimited<T>(items: T[], limit: number, fn: (t: T) => Promise<void>): Promise<void> {
-  const queue = [...items];
-  await Promise.all(
-    Array.from({ length: Math.min(limit, queue.length) }, async () => {
-      for (let t = queue.shift(); t !== undefined; t = queue.shift()) await fn(t);
-    }),
-  );
-}
-
 /**
- * The snapshot, then the chain: builders and projects added after the sync
- * appear (their proofs checked in the browser), caretakers, badges and project
- * flags refreshed. Any RPC failure leaves the snapshot on screen, silently.
+ * The snapshot first, then the chain, which is authoritative: every active
+ * project's proof is re-checked now (GET /api/proof on builder.registrai.cc,
+ * directly elsewhere; 6 at a time, 20 s in all), caretakers, badges and
+ * project flags read live. The snapshot's verdict only stands in for a proof
+ * that could not be read; with neither, the project is unconfirmed (grey).
+ * Any RPC failure leaves the snapshot on screen, silently.
  */
 function useLiveBuilders(snapshot: GallerySnapshot | null): GalleryBuilder[] {
   const base = useMemo(() => snapshot?.builders ?? [], [snapshot]);
@@ -91,12 +84,7 @@ function useLiveBuilders(snapshot: GallerySnapshot | null): GalleryBuilder[] {
         badge: BUILDERS.badgesOn ? BADGE : null,
         imageBase: badgeImageBase(BUILDERS.badgeNetwork ?? "arc"),
       });
-      const snapById = new Map(base.map((b) => [b.id, b]));
-      const proofs = new Map<number, LiveProof>();
-      const checks = rows.flatMap((r) => projectsNeedingCheck(r, snapById.get(r.id)).map((p) => ({ owner: r.owner, id: p.id, source: p.source })));
-      await eachLimited(checks, 4, async (c) => {
-        proofs.set(c.id, await browserProofCheck({ owner: c.owner, source: c.source }, { chainId: BUILDERS.chainId }));
-      });
+      const proofs = await checkLiveProofs(rows, (p) => browserProofCheck(p, { chainId: BUILDERS.chainId }));
       return overlayLive(base, rows, proofs, BUILDERS.operator);
     },
     { revalidateOnFocus: false, shouldRetryOnError: false, dedupingInterval: 60_000 },
@@ -154,9 +142,10 @@ const CHIP_TITLE: Record<ProjectChip["kind"], string> = {
   verified: "verified project",
   nominated: "verified project · builder awaiting onboarding",
   lapsed: "proof missing or no longer valid",
+  unconfirmed: "proof couldn't be read right now",
 };
 
-/** The builder's active projects as chips: verified / nominated in colour, lapsed greyed. */
+/** The builder's active projects as chips: verified / nominated in colour, lapsed and unconfirmed greyed. */
 function ProjectChips({ chips }: { chips: ProjectChip[] }) {
   if (!chips.length) return null;
   return (
@@ -169,7 +158,7 @@ function ProjectChips({ chips }: { chips: ProjectChip[] }) {
             href={sourceHref(c.source)}
             target="_blank"
             rel="noreferrer"
-            title={`${c.source}: ${CHIP_TITLE[c.kind]}${c.unchecked ? " (proof check at next sync)" : ""}`}
+            title={`${c.source}: ${CHIP_TITLE[c.kind]}${c.unchecked && c.kind !== "unconfirmed" ? " (last known status: the live re-check couldn't read the proof)" : ""}`}
           >
             {c.label}
           </a>
@@ -182,9 +171,8 @@ function ProjectChips({ chips }: { chips: ProjectChip[] }) {
 /** What a card and the detail view both say about a builder's state. */
 function StatusNote({ e }: { e: GalleryEntry }) {
   const b = e.builder;
-  if (e.kind === "nominated")
-    return <p className="bld-note">{b?.proofUnchecked ? "Nominated · proof check at next sync" : "Claimed and registered · awaiting onboarding"}</p>;
-  if (e.kind === "lapsed") return <p className="bld-note">No project proof checks out right now</p>;
+  if (e.kind === "nominated") return <p className="bld-note">Claimed and registered · awaiting onboarding</p>;
+  if ((e.kind === "lapsed" || e.kind === "unconfirmed") && b) return <p className="bld-note">{greyReason(b)}</p>;
   if (e.kind === "invited") return <p className="bld-note">Invited · not claimed yet</p>;
   return null;
 }
@@ -273,7 +261,7 @@ function BuilderCard({ e, highlighted }: { e: GalleryEntry; highlighted: boolean
   );
 }
 
-const PROJECT_STATUS_LABEL = { verified: "Verified", nominated: "Nominated", lapsed: "Lapsed" } as const;
+const PROJECT_STATUS_LABEL = { verified: "Verified", nominated: "Nominated", lapsed: "Lapsed", unconfirmed: "Unconfirmed" } as const;
 
 /** Every project of a builder (removed ones too): source, proof, status. */
 function ProjectList({ b }: { b: GalleryBuilder }) {
@@ -304,7 +292,7 @@ function ProjectList({ b }: { b: GalleryBuilder }) {
             <span role="cell">
               <span className="bld-pchip" data-kind={kind ?? "inactive"}>
                 {kind ? PROJECT_STATUS_LABEL[kind] : "Removed"}
-                {p.proofUnchecked ? " · unchecked" : ""}
+                {p.proofUnchecked && kind !== "unconfirmed" ? " · last known" : ""}
               </span>
             </span>
           </div>
@@ -484,7 +472,7 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
         <>
           <div className="bld-toolbar">
             <div className="bld-chips" role="group" aria-label="Filter builders">
-              {FILTERS.map((f) => (
+              {FILTERS.filter((f) => f !== "unconfirmed" || counts.unconfirmed > 0).map((f) => (
                 <button key={f} type="button" aria-pressed={filter === f} data-kind={f} onClick={() => setFilter(f)}>
                   {f === "all" ? "All" : labelOf(f)} <span className="tnum">{chipCount(f)}</span>
                 </button>
@@ -530,9 +518,11 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
       {openEntry && <BuilderDetail e={openEntry} onClose={closeDetail} />}
 
       <p className="bld-legend">
-        In colour: claimed builders (verified, or nominated and awaiting the multisig&apos;s onboarding batch). In
-        grayscale: builders with no project proof that checks out, and invited projects that haven&apos;t claimed yet.
-        Project chips: verified, nominated, or greyed when that project&apos;s proof has lapsed.
+        In colour: claimed builders (verified, or nominated and awaiting the multisig&apos;s onboarding batch), each
+        project proof re-checked as this page loads. In grayscale: builders with no project proof that checks out,
+        builders whose proof couldn&apos;t be read right now (unconfirmed, not counted), and invited projects that
+        haven&apos;t claimed yet. Project chips: verified, nominated, or greyed when that project&apos;s proof has
+        lapsed or couldn&apos;t be read.
         {snapshot?.syncedAt ? ` Snapshot ${snapshot.syncedAt.slice(0, 10)}, updated live from ${BUILDERS.label}.` : ""}
       </p>
     </>

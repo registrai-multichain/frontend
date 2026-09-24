@@ -1287,6 +1287,7 @@ async function main(): Promise<void> {
       syncedAt,
       records: testnetRecords!,
       badges: testnetBadges,
+      operator: BUILDERS.operator,
     });
   } else if (plan === "read") {
     try {
@@ -1325,6 +1326,7 @@ async function main(): Promise<void> {
         syncedAt,
         records,
         badges: held,
+        operator: BUILDERS.operator,
       });
     } catch (e) {
       console.warn(`  gallery read failed, keeping the previous snapshot: ${(e as Error).message.split("\n")[0]}`);

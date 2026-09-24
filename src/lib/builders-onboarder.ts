@@ -17,7 +17,7 @@
 import { keccak256, parseAbi, toBytes, zeroAddress, type Address } from "viem";
 import { verifiedBuilderAbi } from "./verified-builders-chain";
 import { badgeAbi } from "./verified-builder-badge";
-import type { GalleryReader } from "./builders-gallery";
+import { readLiveProjects, type GalleryReader, type LiveProof } from "./builders-gallery";
 
 export const ISSUER_ROLE = keccak256(toBytes("ISSUER_ROLE"));
 export const GOVERNOR_ROLE = keccak256(toBytes("GOVERNOR_ROLE"));
@@ -103,12 +103,29 @@ export type OnboardPlan = { ok: true; steps: OnboardStep[] } | { ok: false; reas
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 /**
+ * Re-check a builder's proofs right before sending (GET /api/proof, else
+ * directly): every active project, against the owner as read NOW. The
+ * sources whose proof checks out; empty = nothing may be onboarded.
+ */
+export async function recheckOnboardingProofs(
+  client: GalleryReader,
+  o: { registry: Address; builderId: number; owner: string },
+  check: (p: { owner: string; source: string }) => Promise<LiveProof>,
+): Promise<string[]> {
+  const projects = (await readLiveProjects(client, o.registry, o.builderId)).filter((p) => p.active);
+  const results = await Promise.all(projects.map(async (p) => ({ p, r: await check({ owner: o.owner, source: p.source }).catch(() => null) })));
+  return results.filter((x) => x.r?.state === "valid").map((x) => x.p.source);
+}
+
+/**
  * Pure: what is left to onboard one builder, in order: setCaretaker while its
  * caretaker is not the operator, then issue while it holds no badge (serial 0)
  * and has an active project. Refuses an unregistered or deactivated builder,
- * one without an active project, and one whose owner changed since its proof
- * was checked (`expectedOwner`: the proof names the old wallet). Idempotent:
- * once both are done the plan is empty.
+ * one without an active project, one whose owner changed since its proof
+ * was checked (`expectedOwner`: the proof names the old wallet), one whose
+ * badge was revoked (`revoked`), and — when the proofs were re-checked at send
+ * time (`validProofs`: recheckOnboardingProofs) — one none of whose proofs
+ * checks out any more. Idempotent: once both are done the plan is empty.
  */
 export function planOnboardSteps(o: {
   builderId: number;
@@ -119,6 +136,10 @@ export function planOnboardSteps(o: {
   serial: number;
   owner?: string;
   expectedOwner?: string;
+  /** Its badge was revoked and it was not reactivated since. */
+  revoked?: boolean;
+  /** The sources whose proof checked out just now; undefined = not re-checked. */
+  validProofs?: readonly string[];
 }): OnboardPlan {
   const id = o.builderId;
   if (!o.operator || same(o.operator, zeroAddress)) return { ok: false, reason: "No operator is configured for this network." };
@@ -127,7 +148,11 @@ export function planOnboardSteps(o: {
     return { ok: false, reason: `Builder #${id} changed owner since its proof was checked: re-read the chain first.` };
   }
   if (!o.active) return { ok: false, reason: `Builder #${id} is deactivated on the registry.` };
+  if (o.revoked) return { ok: false, reason: `Builder #${id}'s badge was revoked: it is not onboarded again unless the Safe reactivates it.` };
   if (o.activeProjectCount <= 0) return { ok: false, reason: `Builder #${id} has no active project.` };
+  if (o.validProofs !== undefined && o.validProofs.length === 0) {
+    return { ok: false, reason: `Builder #${id}: no project proof checks out any more (re-checked just now). Nothing sent.` };
+  }
   const steps: OnboardStep[] = [];
   if (!same(o.caretaker, o.operator)) steps.push({ kind: "setCaretaker", builderId: id, operator: o.operator });
   if (o.serial === 0) steps.push({ kind: "issue", builderId: id });
