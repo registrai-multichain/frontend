@@ -174,6 +174,8 @@ export async function buildVerifiedBuilderVectors() {
     "  owner/my.repo_name-1  ",
     "https://github.com/owner",
     "owner/repo/extra",
+    "owner//repo",
+    "owner/repo/",
     "-bad/repo",
     "https://App.Example.org:8443/path?q=1",
     "app.example.org",

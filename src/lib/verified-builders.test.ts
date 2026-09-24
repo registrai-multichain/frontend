@@ -81,7 +81,7 @@ describe("normalizeSource", () => {
     expect(normalizeSource(input)).toBe(out);
   });
 
-  test.each(["", "example", "https://github.com/owner", "owner/repo/extra", "-bad/repo", "domain:app.example.org:443", "ftp://example.org", "https://user@example.org", "10.0.0.1"])(
+  test.each(["", "example", "https://github.com/owner", "owner/repo/extra", "owner//repo", "-bad/repo", "domain:app.example.org:443", "ftp://example.org", "https://user@example.org", "10.0.0.1"])(
     "rejects %j",
     (input) => {
       expect(normalizeSource(input)).toBeNull();

@@ -94,6 +94,14 @@
       "expected": null
     },
     {
+      "input": "owner//repo",
+      "expected": null
+    },
+    {
+      "input": "owner/repo/",
+      "expected": "github:owner/repo"
+    },
+    {
       "input": "-bad/repo",
       "expected": null
     },

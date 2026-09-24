@@ -131,7 +131,7 @@ export function normalizeSource(input: string): string | null {
   }
   if (!scheme && !host.includes(".") && !LOCAL_HOSTS.has(host)) {
     // `owner/repo` shorthand.
-    const parts = s.split("/").filter(Boolean);
+    const parts = s.replace(/\/$/, "").split("/");
     return parts.length === 2 ? githubSource(parts[0], parts[1]) : null;
   }
   return validHost(host) ? `domain:${host}` : null;
