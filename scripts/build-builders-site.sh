@@ -2,8 +2,9 @@
 # Package the standalone builders site (builder.registrai.cc): the /builders
 # gallery, /verify and the badge art ONLY — no market page is served there.
 # "/" goes to the gallery; every other app route bounces to registrai.cc.
-# Run after `next build` (out/). Deployed as the Worker `registrai-builders`
-# (static assets; wrangler.builders.jsonc) — Pages no longer creates new projects.
+# Run after `next build` (out/). Deployed to the Pages project
+# `registrai-builders` (npm run deploy:builders); builder.registrai.cc is its
+# custom domain.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 D=dist-builders
