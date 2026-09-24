@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Address, Hex, PublicClient } from "viem";
 import { useWallet } from "./WalletProvider";
-import { CONTRACTS, txUrl } from "@/lib/chain";
+import { CONTRACTS, EXPLORER, txUrl } from "@/lib/chain";
+import { DEFAULT_CHAIN } from "@/lib/chains";
 import { nanoLedgerAbi, marketsV4Abi } from "@/lib/abi";
 import { humanizeError } from "@/lib/humanize-error";
 import type { NanoMarket } from "@/lib/nano-markets";
@@ -35,6 +36,7 @@ import {
   type HolderSettlementViews,
   type MarketSettlementViews,
 } from "@/lib/market-fees-chain";
+import { AgentBadge, CaughtAgentBanner, useAgentReputation } from "./AgentBadge";
 
 // Trade a MarketsV4 common market that settles entirely on NanoLedger. Buying
 // pulls collateral from your ledger balance (deposit on this page first). On the
@@ -55,6 +57,7 @@ type MarketState = {
   yesWon: boolean;
   expiry: bigint;
   agent: Address;
+  feedId: Hex;
   yesReserve: bigint;
   noReserve: bigint;
   lpPot: bigint;
@@ -99,7 +102,7 @@ export function NanoMarketPanel({ market }: { market: NanoMarket }) {
       if (!feeModel) setFeeModel(fm);
       const [m, lpPot, totalLpShares, block] = await Promise.all([
         client.readContract({ address: mv4, abi: marketsV4Abi, functionName: "getMarket", args: [market.marketId] }) as Promise<{
-          phase: number; yesWon: boolean; expiry: bigint; agent: Address; yesReserve: bigint; noReserve: bigint; createdAt: bigint;
+          phase: number; yesWon: boolean; expiry: bigint; agent: Address; feedId: Hex; yesReserve: bigint; noReserve: bigint; createdAt: bigint;
         }>,
         client.readContract({ address: mv4, abi: marketsV4Abi, functionName: "lpPotAtResolution", args: [market.marketId] }) as Promise<bigint>,
         client.readContract({ address: mv4, abi: marketsV4Abi, functionName: "totalLpShares", args: [market.marketId] }) as Promise<bigint>,
@@ -109,7 +112,7 @@ export function NanoMarketPanel({ market }: { market: NanoMarket }) {
       const v3 = fm.kind === "trade";
       const settle = v3 ? await readMarketSettlement(client, mv4, market.marketId, phase) : {};
       setMkt({
-        createdAt: m.createdAt, phase, yesWon: m.yesWon, expiry: m.expiry, agent: m.agent, yesReserve: m.yesReserve, noReserve: m.noReserve,
+        createdAt: m.createdAt, phase, yesWon: m.yesWon, expiry: m.expiry, agent: m.agent, feedId: m.feedId, yesReserve: m.yesReserve, noReserve: m.noReserve,
         lpPot, totalLpShares, chainNow: block.timestamp, ...settle,
       });
       if (address) {
@@ -129,6 +132,20 @@ export function NanoMarketPanel({ market }: { market: NanoMarket }) {
   }, [nl, mv4, market.marketId, client, address, feeModel]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  // The market's agent: snapshot reputation + live bond / coverage on its feed.
+  // Soft warnings only — nothing here blocks a trade.
+  const exists = mkt !== undefined && mkt.createdAt !== 0n;
+  const agentRep = useAgentReputation({
+    client,
+    chainId: DEFAULT_CHAIN.id,
+    market: mv4,
+    flavor: "v4",
+    marketId: market.marketId,
+    agent: exists ? mkt.agent : undefined,
+    feed: exists ? mkt.feedId : undefined,
+    fallback: { registry: CONTRACTS.RegistryV2, attestation: CONTRACTS.AttestationV2, dispute: CONTRACTS.DisputeV2 },
+  });
   useEffect(() => { const id = setInterval(() => void refresh(), 6_000); return () => clearInterval(id); }, [refresh]);
 
   const busy = status === "approving" || status === "submitting";
@@ -231,6 +248,7 @@ export function NanoMarketPanel({ market }: { market: NanoMarket }) {
         <span className="text-2xs text-fg-dim text-right">{statusLabel}</span>
       </div>
       <p className="text-2xs text-fg-dim mb-3">{market.hint}</p>
+      {exists && <AgentBadge agent={mkt.agent} rep={agentRep} className="mb-3" />}
 
       <div className="mb-3">
         <div className="flex items-center justify-between text-2xs mb-1">
@@ -242,6 +260,8 @@ export function NanoMarketPanel({ market }: { market: NanoMarket }) {
           <div className="bg-up/80 h-full transition-all" style={{ width: `${Number(yesPrice) / 1e16}%` }} />
         </div>
       </div>
+
+      {exists && <CaughtAgentBanner rep={agentRep} explorer={EXPLORER} className="mb-2" />}
 
       {trading && address && isOnSupportedChain && (
         <>

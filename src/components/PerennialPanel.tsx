@@ -51,6 +51,7 @@ import {
   type Overview,
 } from "@/lib/perennial-chain";
 import { BuilderProfile, findDigest } from "./BuilderProfile";
+import { AgentBadge, CaughtAgentBanner, useAgentReputation } from "./AgentBadge";
 
 // Perennial end-to-end: bettors trade builder-milestone markets (a 1% fee on
 // every trade: 30% creator, 20% agent held until settlement, 50% builder commons);
@@ -246,6 +247,29 @@ function PerennialLive() {
   const selBuilder = builderById(selected?.builderId);
   const selStatus = selected ? statusOf(selected) : undefined;
   const pos: Position = (selected && acct?.positions[selected.id]) || { yes: 0n, no: 0n, lp: 0n };
+
+  // The selected market's agent: snapshot reputation + live bond / coverage on
+  // its feed. Soft warnings only — nothing here blocks a trade.
+  const agentCandidates = useMemo(
+    () =>
+      selected
+        ? markets
+            .filter((m) => same(m.agent, selected.agent) && same(m.feedId, selected.feedId))
+            .map((m) => ({ id: m.id, phase: m.phase, agent: m.agent, feed: m.feedId, collateral: m.collateral }))
+        : [],
+    [markets, selected],
+  );
+  const agentRep = useAgentReputation({
+    client: publicClient,
+    chainId: CHAIN.id,
+    market: mp,
+    flavor: "perennial",
+    marketId: selected?.id,
+    agent: selected?.agent,
+    feed: selected?.feedId,
+    candidates: agentCandidates,
+    fallback: { attestation: ov?.attestation },
+  });
 
   const subjectFor = (m: ChainMarket) => builderById(m.builderId)?.name ?? `Builder #${m.builderId}`;
   const isMilestoneMarket = (m: ChainMarket) => {
@@ -661,6 +685,8 @@ function PerennialLive() {
               <div className="pp-trading-grid">
                 <div className="pp-action-card pp-order-ticket">
                   <div className="pp-panel-heading"><span>Order ticket</span><b>USDC</b></div>
+                  {selected && <AgentBadge agent={selected.agent} rep={agentRep} className="mb-3" />}
+                  {selected && <CaughtAgentBanner rep={agentRep} explorer={CHAIN.explorer.url} className="mb-3" />}
                   {needsConnect ? connectPrompt : !selected ? (
                     <button onClick={() => setShowCreate(true)} className="pp-submit-order">open a market</button>
                   ) : !selStatus?.canTrade ? (
