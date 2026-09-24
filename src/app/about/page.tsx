@@ -19,8 +19,11 @@ export default function AboutPage() {
             attesting to what, hold the bonds, and resolve disputes.
           </p>
           <p>
-            There is no admin key, no pause switch, no fee toggle, and no
-            token-weighted governance over oracle truth. $REGI exists as a
+            Fees are fixed in code: there is no fee toggle, and no
+            token-weighted governance over oracle truth. Governance of the
+            market allowlist (which dispute resolvers, and on Perennial which
+            agents, are approved) and of builder onboarding is a governor role
+            held by a multisig once deployed. $REGI exists as a
             bootstrapping instrument for the wider Registrai network on Arc; the
             oracle&apos;s bonds, disputes, and settlements remain denominated in
             USDC. Whatever ships is what runs.
@@ -90,14 +93,21 @@ export default function AboutPage() {
             chose.
           </p>
           <p>
-            <strong className="text-fg">Oracle free, markets earn.</strong> The
+            <strong className="text-fg">Oracle free, markets pay once.</strong> The
             registry layer charges nothing — reading a feed, registering an
-            agent, posting a bond is free forever. The markets layer takes a
-            0.70% trading fee, split <span className="text-up">0.40% to the
-            creator</span>, <span className="text-up">0.20% to the agent</span>,
-            and <span className="text-fg-mute">0.10% to the protocol</span>.
-            Core protocol accounting remains tied to real USDC activity, not
-            to the price of $REGI.
+            agent, posting a bond is free. Markets charge no trading fee. They
+            take a 1% resolution fee, charged once at settlement, split{" "}
+            <span className="text-up">30% to the market creator</span>,{" "}
+            <span className="text-up">20% to the bonded agent</span>, and{" "}
+            <span className="text-commons">50% to the builder commons</span>{" "}
+            (on common markets, that 50% goes to the Registrai treasury).
+            Builders are paid from the commons by verified progress; Registrai
+            takes 1% of each builder payout, which pays for the caretaker that
+            monitors milestones. If a market can&apos;t be settled, it voids:
+            every trader gets their net cost back, minus the 1% fee, and the
+            agent&apos;s 20% goes to whoever successfully challenged its answer
+            (otherwise to the commons). Core protocol accounting remains tied to
+            real USDC activity, not to the price of $REGI.
           </p>
         </Prose>
 

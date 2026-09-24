@@ -33,8 +33,9 @@ function TopNav() {
         </Link>
         <nav className="flex items-center gap-4 sm:gap-5 text-[12px] tracking-wide text-fg-mute shrink-0">
           {/* The two market surfaces sit together and are colour-coded by where
-              their rake goes: perennial in commons teal, common markets in
-              paper ink. Same fee, same pool — different subject matter. */}
+              the 50% leg of the 1% resolution fee goes: perennial in commons
+              teal (builder commons), common markets in paper ink (Registrai
+              treasury). Same fee, same 30/20/50 split. */}
           <Link
             href="/perennial"
             className="hidden sm:inline text-commons font-medium hover:opacity-70 transition-opacity"
@@ -91,7 +92,7 @@ function Footer() {
             </a>
           </div>
           <div className="flex items-center gap-4">
-            <span>no admin keys</span>
+            <span>fees fixed in code</span>
             <span className="text-fg-dim/60">·</span>
             <span>oracle layer free</span>
             <span className="text-fg-dim/60">·</span>
