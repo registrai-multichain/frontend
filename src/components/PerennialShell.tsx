@@ -4,6 +4,15 @@ import { BrandLockup } from "./Brand";
 import { WalletButton } from "./WalletButton";
 import { PERENNIAL } from "@/lib/perennial-network";
 
+const SETTLES_IN = PERENNIAL.network === "mainnet" ? "USDC" : "test USDC";
+// Keep the server-to-client prop JSON-safe. WalletChain also carries viem's
+// chain object, whose formatter/serializer functions cannot cross this boundary.
+const WALLET_CHAIN = {
+  id: PERENNIAL.chain.id,
+  name: PERENNIAL.chain.name,
+  shortName: PERENNIAL.chain.shortName,
+};
+
 export function PerennialShell({ children }: { children: ReactNode }) {
   return (
     <div className="perennial-theme flex min-h-screen flex-col">
@@ -17,15 +26,15 @@ export function PerennialShell({ children }: { children: ReactNode }) {
           </Link>
 
           <div className="hidden items-center gap-2 font-mono text-[9px] uppercase tracking-[0.14em] text-fg-dim sm:flex">
-            <i className="h-1.5 w-1.5 rounded-full bg-up" />
-            Arc testnet markets
+            <i className={`h-1.5 w-1.5 rounded-full ${PERENNIAL.deployed ? "bg-up" : "bg-fg-dim"}`} />
+            {PERENNIAL.deployed ? `${PERENNIAL.label} markets` : `${PERENNIAL.label} · not deployed`}
           </div>
 
           <nav className="flex items-center justify-self-end gap-3">
             <Link href="/bridge" className="hidden font-mono text-[9px] uppercase tracking-[0.13em] text-fg-dim transition-colors hover:text-fg md:inline">
               bridge
             </Link>
-            <WalletButton chain={PERENNIAL.chain} />
+            <WalletButton chain={WALLET_CHAIN} />
           </nav>
         </div>
       </header>
@@ -34,7 +43,7 @@ export function PerennialShell({ children }: { children: ReactNode }) {
 
       <footer className="mt-14 border-t border-line">
         <div className="mx-auto grid w-full max-w-[1280px] items-center gap-5 px-5 py-7 text-[9px] uppercase tracking-[0.12em] text-fg-dim sm:grid-cols-[1fr_auto] sm:px-10">
-          <span>Perennial / Arc testnet / test USDC</span>
+          <span>Perennial / {PERENNIAL.label} / {SETTLES_IN}</span>
           <div className="flex flex-wrap gap-4">
             <Link href="/" className="transition-colors hover:text-accent">home ↗</Link>
             <a href="https://github.com/registrai-multichain" target="_blank" rel="noreferrer" className="transition-colors hover:text-accent">github ↗</a>

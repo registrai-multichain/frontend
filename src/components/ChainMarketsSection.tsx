@@ -102,8 +102,9 @@ export function ChainMarketsSection() {
               createdAt: bigint;
             };
             if (m.createdAt === 0n) continue;
-            // Skip resolved markets in the live list — they belong to history.
-            if (m.phase === 1) continue;
+            // Only trading markets are live. Resolved (1) and Voided (2) markets
+            // belong to history — a voided market must never read as open.
+            if (m.phase !== 0) continue;
             found.push({
               id,
               feedId: m.feedId,

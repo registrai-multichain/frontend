@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PerennialShell } from "@/components/PerennialShell";
 import { PerennialViews } from "@/components/PerennialViews";
 import { Atlas } from "@/components/Atlas";
+import { PERENNIAL, SNAPSHOT_MATCHES_NETWORK, networkStatusLine } from "@/lib/perennial-network";
 
 export const metadata: Metadata = {
   title: "Builder Atlas · Perennial",
@@ -35,7 +36,7 @@ export default function AtlasPage() {
         <header className="perennial-app-header">
           <div>
             <div className="perennial-app-status">
-              <i /> Arc testnet · live
+              <i /> {networkStatusLine(PERENNIAL)}
             </div>
             <h1>Builder atlas</h1>
             <p>Where the grind is — by country, by builder, by season.</p>
@@ -43,7 +44,16 @@ export default function AtlasPage() {
           <PerennialViews />
         </header>
 
-        <Atlas />
+        {/* The atlas is baked from a synced snapshot; never show one network's
+            snapshot under another network's label. */}
+        {PERENNIAL.deployed && SNAPSHOT_MATCHES_NETWORK ? (
+          <Atlas />
+        ) : (
+          <div className="pp-notice border border-line bg-bg-elev p-5 text-[13px] text-fg-dim">
+            No {PERENNIAL.label} atlas yet — Perennial is not deployed there, or this build has no{" "}
+            {PERENNIAL.label} snapshot.
+          </div>
+        )}
       </article>
     </PerennialShell>
   );
