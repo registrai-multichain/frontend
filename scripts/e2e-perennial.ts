@@ -193,7 +193,9 @@ async function main() {
       const feed = (args.feedId as Hex | undefined) ?? b!.milestoneFeedId;
       if (!feed) die("builder has no milestone feed in the overview");
       const latest = await readLatestValue(pc, ov.attestation, feed!, D.operator!);
-      const threshold = nextMilestoneThreshold(latest?.value ?? null);
+      // Mirror the panel: no on-chain reading -> no market (the count is unknown).
+      if (!latest) die("no on-chain reading of this feed yet — the create form refuses");
+      const threshold = nextMilestoneThreshold(latest.value);
       const now = BigInt((await pc.getBlock()).timestamp);
       const expiry = now + BigInt(Number(args.expiryIn));
       const liq = BigInt(String(args.liquidity));

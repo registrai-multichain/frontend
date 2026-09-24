@@ -445,7 +445,9 @@ function PerennialLive() {
     async () => (await publicClient.readContract({ address: mp, abi: probeAbi, functionName: "isApprovedFeed", args: [cFeed!, D.operator!] })) as boolean,
     { revalidateOnFocus: false },
   );
-  const cThreshold = latest === undefined ? undefined : nextMilestoneThreshold(latest?.value ?? null);
+  // Only from a real on-chain reading: with nothing attested the builder's count is
+  // unknown, and guessing 0 would offer ">= 1", a market that may already be won.
+  const cThreshold = latest ? nextMilestoneThreshold(latest.value) : undefined;
   const createBlocker: string | undefined = !ov
     ? "Loading…"
     : !ov.supportsSettlement
@@ -460,9 +462,11 @@ function PerennialLive() {
               ? "This builder's milestone feed is not approved for new markets."
               : latestError
                 ? `Could not read the latest attested count: ${humanizeError(latestError, HUMAN)}`
-                : cThreshold === undefined
-                  ? "Reading the latest attested count…"
-                  : undefined;
+                : latest === null
+                  ? `Waiting for the milestone agent's first reading of ${createBuilder!.name}'s count. Markets open once it is on-chain.`
+                  : cThreshold === undefined
+                    ? "Reading the latest attested count…"
+                    : undefined;
 
   async function doCreate() {
     if (createBlocker || !ov || !createBuilder || !cFeed || !D.operator || cThreshold === undefined) return fail(createBlocker ?? "Not ready.");
