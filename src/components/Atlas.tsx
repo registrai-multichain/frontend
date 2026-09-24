@@ -1,19 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import live from "@/lib/live-data.json";
-import meta from "@/lib/builder-meta.json";
 import { Globe } from "@/components/Globe";
 import { SeasonBoards } from "@/components/SeasonBoards";
+import { MilestoneDisclosure, VerifiedBadge } from "@/components/VerifiedBadge";
 import {
   aggregateByCountry,
   impliedYes,
   marketsForBuilders,
-  mergeDeclaredMeta,
   MIN_BUILDERS_PER_CELL,
   UNATTRIBUTED,
 } from "@/lib/atlas";
-import type { BuilderAggregate, DeclaredMeta, PerennialMarket } from "@/lib/atlas";
+import type { BuilderAggregate, PerennialMarket } from "@/lib/atlas";
+import { milestoneMetric, snapshotBuilders, verificationFor } from "@/lib/builder-verification";
+import { sourceLabel } from "@/lib/verified-builders";
 import type { Season, SeasonProgress } from "@/lib/seasons";
 
 type SeasonBoardData = { traders: Array<[string, string]>; builders: Array<[string, number]> };
@@ -23,6 +25,8 @@ type RawBuilder = {
   address: string;
   lifetimeProgress: number;
   volume: string;
+  /** From the builder's signed claim (verified builders only). */
+  country?: string | null;
 };
 
 const usdc = (base: bigint | number) => (Number(base) / 1e6).toFixed(2);
@@ -43,18 +47,19 @@ export function Atlas() {
   );
   const season = seasons.find((s) => s.id === seasonId) ?? null;
 
-  const builders = mergeDeclaredMeta(
-    ((live as { builders?: RawBuilder[] }).builders ?? []).map(
-      (b): BuilderAggregate => ({
-        builderId: b.builderId,
-        address: b.address,
-        lifetimeProgress: b.lifetimeProgress,
-        volume: BigInt(b.volume),
-        country: null,
-      }),
-    ),
-    meta as DeclaredMeta,
+  // The sync writes verified builders only, each with its claim's country.
+  const builders = ((live as { builders?: RawBuilder[] }).builders ?? []).map(
+    (b): BuilderAggregate => ({
+      builderId: b.builderId,
+      address: b.address,
+      lifetimeProgress: b.lifetimeProgress,
+      volume: BigInt(b.volume),
+      country: b.country && /^[A-Z]{2}$/.test(b.country) ? b.country : null,
+    }),
   );
+  const snap = snapshotBuilders();
+  const verification = (b: BuilderAggregate) => verificationFor(snap, { builderId: b.builderId, owner: b.address });
+  const milestoneFeed = (id: number) => snap.find((r) => r.builderId === id)?.milestoneFeedId?.toLowerCase();
 
   const markets = (live as { perennialMarkets?: PerennialMarket[] }).perennialMarkets ?? [];
 
@@ -167,8 +172,12 @@ export function Atlas() {
                       className="atlas-builder-row"
                       onClick={() => setOpenBuilder(b.builderId)}
                     >
-                      <span className="atlas-builder-id">builder #{b.builderId}</span>
-                      <span className="atlas-builder-addr tnum">{b.address}</span>
+                      <span className="atlas-builder-id">
+                        builder #{b.builderId} <VerifiedBadge verification={verification(b)} link={false} />
+                      </span>
+                      <span className="atlas-builder-addr tnum">
+                        {verification(b) ? sourceLabel(verification(b)!.source) : b.address}
+                      </span>
                       <span className="atlas-builder-stats tnum">
                         <b>{b.lifetimeProgress}</b> progress · {usdc(b.volume)} USDC
                       </span>
@@ -182,10 +191,17 @@ export function Atlas() {
                   const b = inCell.find((x) => x.builderId === openBuilder);
                   if (!b) return null;
                   const mine = marketsForBuilders(cellMarkets, [b.builderId]);
+                  const v = verification(b);
+                  const feed = milestoneFeed(b.builderId);
+                  const hasMilestone = mine.some((m) => feed && m.feedId?.toLowerCase() === feed);
                   return (
                     <div className="atlas-builder">
                       <div className="flex items-baseline justify-between gap-4 flex-wrap">
-                        <span className="text-2xs text-fg-dim tnum">{b.address}</span>
+                        <span className="text-2xs text-fg-dim tnum flex items-center gap-2 flex-wrap">
+                          {v && <span className="text-fg">{sourceLabel(v.source)}</span>}
+                          <VerifiedBadge verification={v} />
+                          {b.address}
+                        </span>
                         <span className="text-2xs text-fg-dim tnum">
                           {b.lifetimeProgress} progress · {usdc(b.volume)} USDC volume
                         </span>
@@ -199,7 +215,10 @@ export function Atlas() {
                             const p = impliedYes(BigInt(m.yesReserve), BigInt(m.noReserve));
                             return (
                               <li key={m.marketId}>
-                                <span className="tnum text-fg-mute">{m.marketId.slice(0, 14)}…</span>
+                                <span className="tnum text-fg-mute">
+                                  {feed && m.feedId?.toLowerCase() === feed ? "milestone · " : ""}
+                                  {m.marketId.slice(0, 14)}…
+                                </span>
                                 <span className="atlas-odds" style={{ ["--p" as string]: p }}>
                                   <i />
                                 </span>
@@ -217,6 +236,11 @@ export function Atlas() {
                             );
                           })}
                         </ul>
+                      )}
+                      {hasMilestone && (
+                        <p className="mt-3">
+                          <MilestoneDisclosure metric={milestoneMetric(v?.source)} />
+                        </p>
                       )}
                     </div>
                   );
@@ -255,7 +279,8 @@ export function Atlas() {
           beside the globe rather than on it. */}
       {totalBuilders === 0 && (
         <p className="atlas-empty">
-          No builders registered yet. Countries light up as builders opt in.
+          No verified builders yet. Countries light up as builders{" "}
+          <Link href="/verify" className="text-accent hover:underline">verify their projects</Link>.
         </p>
       )}
 
@@ -279,10 +304,11 @@ export function Atlas() {
       )}
 
       <p className="atlas-note">
-        Country is self-declared, opt-in and unverified — it decides which cell a builder sits
-        in and nothing else. Progress and volume are read from chain. Countries with fewer
-        than {MIN_BUILDERS_PER_CELL} builders are grouped as unattributed, so the map never
-        narrows down to one person.
+        Only verified builders are shown. Country comes from each builder&rsquo;s signed claim:
+        self-declared and never checked, it decides which cell a builder sits in and nothing
+        else. Progress and volume are read from chain. Countries with fewer than{" "}
+        {MIN_BUILDERS_PER_CELL} builders are grouped as unattributed, so the map never narrows
+        down to one person.
       </p>
     </section>
   );

@@ -139,8 +139,8 @@ export function SeasonBoards({
         on-chain events over the season&rsquo;s block range ({season.startBlock.toLocaleString()} –{" "}
         {season.endBlock === null ? "now" : season.endBlock.toLocaleString()}), so anyone can
         recompute it. Trader P&amp;L books a result when a position is sold or its market resolves,
-        at average cost, fees included. Country is self-declared and unverified, so it can never
-        decide a reward.
+        at average cost, fees included. Only verified builders are ranked; country comes from their
+        signed claim, self-declared and never checked, so it can never decide a reward.
       </p>
     </div>
   );

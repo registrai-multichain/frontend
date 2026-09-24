@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import directory from "@/lib/directory.json";
+import type { Verification } from "@/lib/builder-verification";
+import { VerifiedBadge } from "./VerifiedBadge";
 
 // The keeper's per-builder digest (directory.json) shape. Declared explicitly
 // because empty arrays in the JSON widen to `never[]`, which would drop the
@@ -56,9 +58,12 @@ export function findDigest(chainId: number, address: string): DigestEntry | unde
 export function BuilderProfile({
   digest,
   milestone,
+  verification,
 }: {
   digest: DigestEntry;
   milestone?: ReactNode;
+  /** Verified mark, linking to the builder's proof file. */
+  verification?: Verification | null;
 }) {
   const progress = digest.progress ?? [];
   const challenges = digest.challenges ?? [];
@@ -70,7 +75,10 @@ export function BuilderProfile({
       <div>
         <div className="caption text-[10px] text-fg-dim mb-1">builder profile</div>
         <div className="flex items-baseline justify-between gap-3 flex-wrap">
-          <h3 className="font-serif text-[18px]">{digest.name}</h3>
+          <h3 className="font-serif text-[18px] flex items-center gap-2">
+            {digest.name}
+            <VerifiedBadge verification={verification} />
+          </h3>
           {digest.latestRelease && (
             <span className="text-2xs text-up">release {digest.latestRelease}</span>
           )}

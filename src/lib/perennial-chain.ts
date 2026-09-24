@@ -17,6 +17,8 @@ import { PERENNIAL_BUILDERS } from "./perennial";
 import { blockChunks } from "./perennial-market";
 import { SNAPSHOT_MATCHES_NETWORK, type PerennialDeployment } from "./perennial-network";
 import { isRevert, readFeeModel, readMarketSettlement } from "./market-fees-chain";
+import { snapshotBuilders, verificationFor, type Verification } from "./builder-verification";
+import { sourceFromProfileURI, sourceLabel } from "./verified-builders";
 import type { FeeModel } from "./market-fees";
 
 export { isRevert };
@@ -206,6 +208,10 @@ export interface BuilderRow {
   profileURI: string;
   /** The builder's own milestone feed (count of verified artifacts), if any. */
   milestoneFeedId?: Hex;
+  /** Canonical source from a `registrai:` profile link, else null. */
+  source: string | null;
+  /** Verified mark (synced snapshot, still matching the live profile link). */
+  verification: Verification | null;
 }
 
 export interface Overview {
@@ -234,6 +240,8 @@ type RawMarket = Pick<
 >;
 
 function repoFromURI(uri: string): string {
+  const source = sourceFromProfileURI(uri);
+  if (source) return sourceLabel(source);
   return uri.replace(/^ipfs:\/\//, "").replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, "").replace(/\/$/, "");
 }
 
@@ -338,6 +346,7 @@ export async function readOverview(client: PublicClient, d: PerennialDeployment)
 
   // Builders straight from the registry; names from the static directory.
   const snapFeeds = snapshotMilestoneFeeds();
+  const snapRows = snapshotBuilders();
   const ids = Array.from({ length: Math.max(0, Number(nextId) - 1) }, (_, i) => i + 1);
   const builders = await pool(ids, 6, async (id) => {
     const [owner, profileURI, , , active] = (await client.readContract({
@@ -353,6 +362,8 @@ export async function readOverview(client: PublicClient, d: PerennialDeployment)
       repo,
       profileURI,
       milestoneFeedId: meta?.milestoneFeedId ?? snapFeeds[String(id)] ?? milestoneFeedFromMarkets(markets, id, d.operator),
+      source: sourceFromProfileURI(profileURI),
+      verification: verificationFor(snapRows, { builderId: id, owner, profileURI }),
     } satisfies BuilderRow;
   });
 

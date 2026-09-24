@@ -4,7 +4,6 @@ import {
   densityBucket,
   impliedYes,
   marketsForBuilders,
-  mergeDeclaredMeta,
   MIN_BUILDERS_PER_CELL,
 } from "./atlas";
 import type { BuilderAggregate, PerennialMarket } from "./atlas";
@@ -71,34 +70,6 @@ describe("densityBucket", () => {
 describe("MIN_BUILDERS_PER_CELL", () => {
   it("is 3", () => {
     expect(MIN_BUILDERS_PER_CELL).toBe(3);
-  });
-});
-
-describe("mergeDeclaredMeta", () => {
-  const base: BuilderAggregate[] = [
-    { builderId: 1, address: "0xAbC", lifetimeProgress: 5, volume: 1n, country: null },
-  ];
-
-  it("attaches a declared country, matching address case-insensitively", () => {
-    const out = mergeDeclaredMeta(base, { "0xabc": { country: "DE" } });
-    expect(out[0].country).toBe("DE");
-  });
-
-  it("leaves country null when the builder has not declared one", () => {
-    expect(mergeDeclaredMeta(base, {})[0].country).toBeNull();
-  });
-
-  it("does not mutate the input", () => {
-    mergeDeclaredMeta(base, { "0xabc": { country: "DE" } });
-    expect(base[0].country).toBeNull();
-  });
-
-  it("ignores a declared country that is not two letters", () => {
-    expect(mergeDeclaredMeta(base, { "0xabc": { country: "Germany" } })[0].country).toBeNull();
-  });
-
-  it("normalises a lowercase declared code to uppercase", () => {
-    expect(mergeDeclaredMeta(base, { "0xabc": { country: "de" } })[0].country).toBe("DE");
   });
 });
 

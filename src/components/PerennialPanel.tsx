@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { createPublicClient, createWalletClient, custom, type Address, type Hex, type PublicClient } from "viem";
 import useSWR from "swr";
 import { useWallet } from "./WalletProvider";
@@ -52,6 +53,8 @@ import {
 } from "@/lib/perennial-chain";
 import { BuilderProfile, findDigest } from "./BuilderProfile";
 import { AgentBadge, CaughtAgentBanner, useAgentReputation } from "./AgentBadge";
+import { MilestoneDisclosure, VerifiedBadge } from "./VerifiedBadge";
+import { milestoneMetric } from "@/lib/builder-verification";
 
 // Perennial end-to-end: bettors trade builder-milestone markets (a 1% fee on
 // every trade: 30% creator, 20% agent held until settlement, 50% builder commons);
@@ -143,7 +146,6 @@ function PerennialLive() {
   const [amount, setAmount] = useState("");
   const [slippage, setSlippage] = useState("1");
   const [depAmt, setDepAmt] = useState("");
-  const [repo, setRepo] = useState("");
 
   const [showCreate, setShowCreate] = useState(false);
   const [cBuilder, setCBuilder] = useState<number>();
@@ -495,13 +497,6 @@ function PerennialLive() {
     );
   }
 
-  async function doRegister() {
-    const link = repo.trim();
-    if (!link) return fail("Add your repo / project link.");
-    // Only clear the field once registration actually landed.
-    const ok = await run("register", () => walletClient!.writeContract({ address: reg, abi: builderRegistryAbi, functionName: "registerBuilder", args: [link], ...w() }));
-    if (ok) setRepo("");
-  }
   async function doClaim(e: number) {
     await run(`claim-${e}`, () => walletClient!.writeContract({ address: pool, abi: progressPoolAbi, functionName: "claim", args: [BigInt(e)], ...w() }));
   }
@@ -647,7 +642,7 @@ function PerennialLive() {
               {sortedBuilders.length ? sortedBuilders.map((b, index) => (
                 <button key={b.builderId} onClick={() => selectBuilder(b)} className={`pp-builder-compact ${selBuilder?.builderId === b.builderId ? "is-selected" : ""}`}>
                   <span className="pp-builder-rank">{String(index + 1).padStart(2, "0")}</span>
-                  <span className="pp-builder-name"><b>{b.name}</b><small>{b.active ? b.repo : `${b.repo} · inactive`}</small></span>
+                  <span className="pp-builder-name"><b>{b.name} <VerifiedBadge verification={b.verification} link={false} /></b><small>{b.active ? b.repo : `${b.repo} · inactive`}</small></span>
                   <span className="pp-builder-weight">{stat((ov?.weights[b.owner.toLowerCase()] ?? 0n).toString())}<small>pts</small></span>
                 </button>
               )) : <div className="pp-empty-row">{ov ? "No builders registered yet." : "—"}</div>}
@@ -663,7 +658,7 @@ function PerennialLive() {
                   <div>
                     <div className="pp-card-label">{selected ? `${selStatus?.label} · builder #${selected.builderId}` : "Market"}</div>
                     <h2>{selected ? questionFor(selected) : ov ? "No market selected" : "Loading…"}</h2>
-                    {selBuilder && <button className="pp-builder-link" onClick={() => setRole("build")}>{selBuilder.name} <span>↗</span></button>}
+                    {selBuilder && <div className="flex items-center gap-2"><button className="pp-builder-link" onClick={() => setRole("build")}>{selBuilder.name} <span>↗</span></button><VerifiedBadge verification={selBuilder.verification} /></div>}
                   </div>
                   <div className="pp-market-price"><strong>{selected ? `${yp}¢` : "—"}</strong><span>YES price</span></div>
                 </div>
@@ -682,6 +677,7 @@ function PerennialLive() {
                     {ov?.supportsSettlement ? settlementRuleText(ov.settlementWindow !== undefined ? Number(ov.settlementWindow) : undefined, feeModel) : null}
                     {feeLine && <span className="block mt-1">Fees: {feeLine}.</span>}
                     {disclosure && <span className="block mt-1 text-down">Disclosure: {disclosure}</span>}
+                    {isMilestoneMarket(selected) && <MilestoneDisclosure metric={milestoneMetric(selBuilder?.source)} className="block mt-1" />}
                   </p>
                 )}
               </div>
@@ -778,7 +774,7 @@ function PerennialLive() {
               </div>
 
               {digest && selected && (
-                <BuilderProfile digest={digest} milestone={<><span className="caption text-2xs text-fg-dim block mb-1">{questionFor(selected)}</span><MarketOdds yes={yp} /></>} />
+                <BuilderProfile digest={digest} verification={selBuilder?.verification} milestone={<><span className="caption text-2xs text-fg-dim block mb-1">{questionFor(selected)}</span><MarketOdds yes={yp} /></>} />
               )}
 
               {!needsConnect && (
@@ -803,6 +799,7 @@ function PerennialLive() {
                         {" "}Agent: the caretaker operator{D.operator ? ` ${D.operator.slice(0, 6)}…${D.operator.slice(-4)}` : ""}.{" "}
                         {settlementRuleText(ov?.settlementWindow !== undefined ? Number(ov.settlementWindow) : undefined, feeModel)}
                       </p>
+                      {createBuilder && <p><MilestoneDisclosure metric={milestoneMetric(createBuilder.source)} /></p>}
                       {ov && feeLine && (
                         <p className="text-2xs text-fg-dim">
                           {isV3
@@ -833,7 +830,7 @@ function PerennialLive() {
                   {!acct ? (
                     <p className="text-2xs text-fg-dim">{acctError ? `Couldn't read your builder status: ${humanizeError(acctError, HUMAN)}` : "Reading your builder status…"}</p>
                   ) : !acct.registered ? (
-                    <><h3>Register your project</h3><p className="text-2xs text-fg-dim mb-3">Add your repository. The keeper detects releases and tags and credits verified progress.</p><div className="flex flex-col gap-2 sm:flex-row"><input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="github.com/you/project" className="flex-1 bg-bg border border-line px-3 py-2 text-[14px] outline-none focus:border-accent/60" /><button onClick={doRegister} disabled={busy} className="px-4 bg-accent/90 text-bg text-[14px] disabled:opacity-50">{pending === "register" ? "…" : "register"}</button></div></>
+                    <><h3>Claim your project</h3><p className="text-2xs text-fg-dim mb-3">Builders join by claim: sign a proof with this wallet, publish it in your repo or on your domain, then register. Nothing about you is public until you do.</p><Link href="/verify" className="inline-block px-4 py-2 bg-accent/90 text-bg text-[13px] hover:bg-accent transition-colors">verify your project →</Link></>
                   ) : (
                     <><div className="flex items-center justify-between mb-3"><h3>Your progress</h3><span className="text-2xs px-2 py-0.5 bg-up/10 text-up border border-up/25">registered</span></div><div className="pp-progress-total"><strong>{acct.myWeight.toString()}</strong><span>progress points · epoch {stat((ov?.epoch ?? 0n).toString())}</span></div>{acct.claims.length === 0 ? <p className="text-2xs text-fg-dim border-t border-line pt-3">Nothing to claim yet. Progress becomes claimable when the epoch closes.</p> : acct.claims.map((claim) => <div key={claim.epoch} className="pp-claim-row"><span>epoch {claim.epoch} · ${fmt(claim.amount)}</span><button onClick={() => doClaim(claim.epoch)} disabled={busy}>{pending === `claim-${claim.epoch}` ? "…" : "claim"}</button></div>)}</>
                   )}

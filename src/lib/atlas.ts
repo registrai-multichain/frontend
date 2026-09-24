@@ -2,9 +2,10 @@
  * Atlas aggregation. Pure functions only — no chain access, no fetch — so the
  * density and scaling rules are testable without a node.
  *
- * Country is SELF-DECLARED and unverified. Everything here treats it as
- * decoration: it never gates a payout and it lives in its own field so the UI
- * can label it differently from the verified on-chain numbers beside it.
+ * Country comes from a verified builder's signed claim: self-declared, never
+ * checked. Everything here treats it as decoration: it never gates a payout and
+ * it lives in its own field so the UI can label it differently from the
+ * on-chain numbers beside it.
  */
 
 export type BuilderAggregate = {
@@ -14,7 +15,7 @@ export type BuilderAggregate = {
   lifetimeProgress: number;
   /** Trade notional across every market tagged to this builder, in USDC base units (6dp). */
   volume: bigint;
-  /** ISO-3166-1 alpha-2, or null when the builder has not declared one. */
+  /** ISO-3166-1 alpha-2 from the builder's claim, or null. */
   country: string | null;
 };
 
@@ -97,27 +98,6 @@ export function densityBucket(builders: number, max: number): number {
   return Math.max(0, Math.min(4, Math.round(scaled * 4)));
 }
 
-export type DeclaredMeta = Record<string, { country?: string }>;
-
-/**
- * Overlay self-declared metadata onto chain-derived aggregates. Returns new
- * objects — callers hold chain-derived data that must not be mutated.
- *
- * A country is accepted only as a two-letter code; anything else is dropped
- * rather than guessed at, because a wrong flag is worse than no flag.
- */
-export function mergeDeclaredMeta(
-  builders: BuilderAggregate[],
-  meta: DeclaredMeta,
-): BuilderAggregate[] {
-  return builders.map((b) => {
-    const declared = meta[b.address.toLowerCase()]?.country;
-    const country =
-      declared && /^[A-Za-z]{2}$/.test(declared) ? declared.toUpperCase() : null;
-    return { ...b, country };
-  });
-}
-
 export type PerennialMarket = {
   marketId: string;
   builderId: number;
@@ -127,6 +107,8 @@ export type PerennialMarket = {
   /** CPMM reserves, USDC base units, as decimal strings (bigint is not JSON-safe). */
   yesReserve: string;
   noReserve: string;
+  /** The market's feed (a builder's milestone feed for milestone markets). */
+  feedId?: string;
 };
 
 /**
