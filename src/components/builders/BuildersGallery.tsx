@@ -42,6 +42,7 @@ import { BuilderBadgeSection } from "@/components/BuilderBadgeSection";
 import type { BadgeNet } from "@/components/BuilderBadgeCard";
 import { useWallet } from "@/components/WalletProvider";
 import { sourceLabel } from "@/lib/verified-builders";
+import { BuilderEconomyFacts } from "@/components/builders/BuilderEconomyFacts";
 
 const REG = BUILDERS.contracts.BuilderRegistry;
 const BADGE = BUILDERS.contracts.VerifiedBuilderBadge;
@@ -390,6 +391,8 @@ function BuilderDetail({ e, onClose }: { e: GalleryEntry; onClose: () => void })
             </div>
           )}
         </dl>
+
+        <BuilderEconomyFacts builderId={b.id} />
 
         <StatusNote e={e} />
 
