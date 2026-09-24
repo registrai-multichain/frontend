@@ -10,6 +10,53 @@ interface Entry {
 
 const ENTRIES: Entry[] = [
   {
+    date: "2026-09-24",
+    title: "New fee & settlement model · 1% once, at settlement",
+    body: (
+      <>
+        <p>
+          One fee model for every market we run from here on. Markets charge{" "}
+          <strong>no trading fee</strong>. They take a{" "}
+          <strong>1% resolution fee, charged once at settlement</strong>, split{" "}
+          <strong>30% market creator · 20% bonded agent · 50% builder commons</strong>.
+          The numbers are constants in the contracts, not a governance knob.
+        </p>
+        <h3>Two kinds of market, one split</h3>
+        <p>
+          Perennial builder markets are settled by the protocol&apos;s bonded
+          milestone agent (the caretaker operator), and their 50% goes to the
+          builder commons. Common markets use the same 1% and the same split,
+          except the 50% goes to the Registrai treasury. Common markets are
+          open to any bonded agent paired with an approved, independent
+          dispute resolver: an agent earns 20% of the resolution fee on every
+          market it settles correctly.
+        </p>
+        <h3>Voids and challengers</h3>
+        <p>
+          If a market can&apos;t be settled, it voids: every trader gets their
+          net cost back, minus the 1% fee. The fee is still split 30/20/50, but
+          the agent&apos;s 20% goes to whoever successfully challenged its
+          answer (dispute ruled Invalid) inside the settlement window;
+          otherwise it goes to the commons, or the treasury on common markets.
+        </p>
+        <h3>Registrai&apos;s own take from the commons</h3>
+        <p>
+          Registrai takes 1% of each builder payout from the commons. It pays
+          for the caretaker that monitors builders&apos; milestones. This
+          replaces the earlier idea of Registrai drawing from the commons under
+          a per-epoch cap, which was never built.
+        </p>
+        <p>
+          This is the model the contracts are being updated to; markets already
+          on testnet keep the terms they were created with until the redeploy.
+          The older Markets testnet contracts (0.70% per trade) are legacy and
+          are not going to mainnet. None of these market contracts are on
+          mainnet yet, and nothing here is a promise of returns.
+        </p>
+      </>
+    ),
+  },
+  {
     date: "2026-06-10",
     title: "Suffix pools live · $ai, $xyz, $fun · memecoins with a floor",
     body: (
