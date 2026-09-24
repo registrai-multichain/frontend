@@ -80,10 +80,17 @@ export default function VerifyPage() {
                 Not funding. Registrai does not pay builders to verify, and nothing here promises you a
                 return.
               </li>
-              <li>
-                {MARKETS_OPEN ? "We don't open markets on you." : "When markets open, we won't open markets on you."}{" "}
-                The community may; a market&apos;s creator earns 30% of its trading fees, and 50% is your income, taxed progressively per epoch.
-              </li>
+              {MARKETS_OPEN ? (
+                <li>
+                  We don&apos;t open markets on you. The community may; a market&apos;s creator earns 30% of its trading
+                  fees, and 50% is your income, taxed progressively per epoch.
+                </li>
+              ) : (
+                <li>
+                  Markets open later. When they do, we won&apos;t open markets on you; the community may, and part of their
+                  trading fees becomes your income.
+                </li>
+              )}
               <li>
                 Milestone markets are builder-triggered: you decide when to ship, so every milestone
                 market says so to its traders.
@@ -92,9 +99,9 @@ export default function VerifyPage() {
             <div className="pp-card-label">What becomes public</div>
             <p>
               Your wallet address, the repo or domain, the deployer addresses you list, and the country
-              you declare. Country is self-declared and never decides a reward. Removing the proof file
-              marks that project lapsed at the next sync; with no verified project left your builder
-              lapses{MARKETS_OPEN ? " and leaves the atlas" : ""}. Moving to a new wallet means re-signing
+              you declare. Country is self-declared and never decides a reward. Every proof is re-checked
+              whenever the gallery loads: removing the proof file marks that project lapsed; with no verified
+              project left your builder lapses{MARKETS_OPEN ? " and leaves the atlas" : ""}. Moving to a new wallet means re-signing
               every project&apos;s proof with it.
             </p>
           </aside>

@@ -76,3 +76,32 @@ export function pendingFor(who: string | null | undefined, pending: ReadonlyMap<
   const w = who.toLowerCase();
   return [...pending].filter(([, a]) => a && a.toLowerCase() === w && a.toLowerCase() !== zeroAddress).map(([id]) => id).sort((a, b) => a - b);
 }
+
+/** Pure: the builders whose pending RECOVERY moves them to `who` (from recoveryOf reads, id -> {newOwner, readyAt}). */
+export function recoveriesFor(
+  who: string | null | undefined,
+  recoveries: ReadonlyMap<number, { newOwner: string; readyAt: number }>,
+): { builderId: number; readyAt: number }[] {
+  if (!who) return [];
+  const w = who.toLowerCase();
+  return [...recoveries]
+    .filter(([, r]) => r.newOwner && r.newOwner.toLowerCase() !== zeroAddress && r.newOwner.toLowerCase() === w)
+    .map(([builderId, r]) => ({ builderId, readyAt: r.readyAt }))
+    .sort((a, b) => a.builderId - b.builderId);
+}
+
+/**
+ * Pure: show the public "Finish recovery" button (finishRecovery is
+ * permissionless) to this viewer? Only to the builder's current (old) owner and
+ * to the recovery's new owner, and only once `readyAt` has passed.
+ */
+export function showFinishRecovery(
+  o: { viewer: string | null | undefined; owner: string | null | undefined; recovery: { newOwner: string; readyAt: number } | null | undefined },
+  nowS: number,
+): boolean {
+  if (!o.viewer || !o.recovery) return false;
+  const v = recoveryView(o.recovery, nowS);
+  if (v.kind !== "ready") return false;
+  const w = o.viewer.toLowerCase();
+  return w === v.newOwner.toLowerCase() || (Boolean(o.owner) && w === o.owner!.toLowerCase());
+}

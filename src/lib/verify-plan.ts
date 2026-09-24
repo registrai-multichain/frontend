@@ -49,7 +49,30 @@ export function projectSlots(b: Pick<MyBuilder, "projects"> | null): { used: num
 /** Why a typed display name cannot be the profile, or null (empty is fine: no name). */
 export function displayNameError(name: string): string | null {
   if (!name.trim()) return null;
-  return plainProfileName(name) ? null : `Up to ${MAX_NAME_LEN} letters, digits, spaces and . , ' & + _ ( ) ! - (no links).`;
+  return plainProfileName(name) ? null : `Up to ${MAX_NAME_LEN} Latin letters, digits, spaces and . , ' & + _ ( ) ! - (no links, no other scripts).`;
+}
+
+/** BuilderRegistry.MAX_PROFILE_LEN: the profile (display name), in UTF-8 bytes. */
+export const MAX_PROFILE_LEN = 256;
+
+/**
+ * Pure: an owner's new display name (`updateProfile`), as /verify previews it.
+ * The registry takes up to MAX_PROFILE_LEN bytes of anything; the gallery only
+ * ever SHOWS a plain name (plainProfileName) and only once the builder is
+ * onboarded, so the preview says what will actually appear. Empty clears it.
+ */
+export function profileEdit(name: string): { ok: boolean; bytes: number; value: string; shownAs: string | null; error: string | null } {
+  const value = name.trim();
+  const bytes = byteLength(value);
+  if (bytes > MAX_PROFILE_LEN) return { ok: false, bytes, value, shownAs: null, error: `${bytes} bytes: the registry takes at most ${MAX_PROFILE_LEN}.` };
+  const shownAs = value ? plainProfileName(value) : null;
+  return { ok: true, bytes, value, shownAs, error: null };
+}
+
+/** Pure: may the owner remove this project (`removeProject`)? Its slot stays used. */
+export function removeProjectNote(b: Pick<MyBuilder, "projects">): string {
+  const s = projectSlots(b);
+  return `A removed project keeps its slot (${s.used} of ${s.max} used, still ${s.used} after); adding it again later takes a new one.`;
 }
 
 /** Why a canonical source cannot be registered as it is, or null. */

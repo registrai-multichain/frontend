@@ -11,7 +11,7 @@ import {
   type GalleryReader,
   type ProjectProofState,
 } from "@/lib/builders-gallery";
-import { pendingFor } from "@/lib/builder-ownership";
+import { pendingFor, recoveriesFor } from "@/lib/builder-ownership";
 import { verifiedBuilderAbi } from "@/lib/verified-builders-chain";
 import { badgeAbi, readBadgeHolder, type BadgeReader } from "@/lib/verified-builder-badge";
 import type { MyBuilder } from "@/lib/verify-plan";
@@ -38,6 +38,8 @@ export interface MyBuilderState {
   badge: { serial: number; holder: Address | null } | null;
   /** Builders this (unregistered) wallet was proposed as the new owner of. */
   acceptable: number[];
+  /** Builders a pending REGISTRAR recovery moves to this (unregistered) wallet. */
+  recovering: { builderId: number; readyAt: number }[];
 }
 
 async function readMe(address: Address): Promise<MyBuilderState> {
@@ -46,14 +48,28 @@ async function readMe(address: Address): Promise<MyBuilderState> {
     c.readContract({ address: REG!, abi: verifiedBuilderAbi, functionName: functionName as never, args: args as never });
   const id = Number(await read("builderIdOf", [address]));
   if (!id) {
-    // Not registered: is this wallet someone's proposed new owner? A scan of
-    // pendingOwner over every builder (batched), fine at phase-1 sizes.
+    // Not registered: is this wallet someone's proposed new owner, or the
+    // target of a recovery? A scan of pendingOwner and recoveryOf over every
+    // builder (batched, at most LIVE_MAX_BUILDERS), fine at phase-1 sizes.
     const nextId = Number(await read("nextId"));
     const ids = Array.from({ length: Math.max(0, Math.min(nextId - 1, LIVE_MAX_BUILDERS)) }, (_, i) => i + 1);
-    const pending = new Map<number, string>(
-      await Promise.all(ids.map(async (i) => [i, (await read("pendingOwner", [BigInt(i)])) as string] as [number, string])),
-    );
-    return { builder: null, pendingOwner: null, recovery: null, badge: null, acceptable: pendingFor(address, pending) };
+    const [pending, recoveries] = await Promise.all([
+      Promise.all(ids.map(async (i) => [i, (await read("pendingOwner", [BigInt(i)])) as string] as [number, string])),
+      Promise.all(
+        ids.map(async (i) => {
+          const [newOwner, readyAt] = (await read("recoveryOf", [BigInt(i)])) as readonly [string, bigint];
+          return [i, { newOwner, readyAt: Number(readyAt) }] as [number, { newOwner: string; readyAt: number }];
+        }),
+      ),
+    ]);
+    return {
+      builder: null,
+      pendingOwner: null,
+      recovery: null,
+      badge: null,
+      acceptable: pendingFor(address, new Map(pending)),
+      recovering: recoveriesFor(address, new Map(recoveries)),
+    };
   }
   const [row, projects, pendingOwner, recovery, serial] = await Promise.all([
     read("builders", [BigInt(id)]) as Promise<readonly [Address, string, Hex, bigint, boolean]>,
@@ -70,6 +86,7 @@ async function readMe(address: Address): Promise<MyBuilderState> {
     recovery: recovery[0].toLowerCase() === zeroAddress ? null : { newOwner: recovery[0], readyAt: Number(recovery[1]) },
     badge: serial ? { serial: Number(serial), holder } : null,
     acceptable: [],
+    recovering: [],
   };
 }
 
@@ -80,7 +97,7 @@ export function useMyBuilder(address: string | undefined) {
   });
 }
 
-/** Each active project's proof as the browser sees it, for this owner. */
+/** Each active project's proof as this page sees it (GET /api/proof, else directly), for this owner. */
 export function useProjectProofs(b: MyBuilder | null | undefined) {
   const active = (b?.projects ?? []).filter((p) => p.active);
   return useSWR(

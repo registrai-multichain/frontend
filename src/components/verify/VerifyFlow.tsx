@@ -11,7 +11,7 @@ import { shortAddr } from "@/lib/format";
 import { humanizeError } from "@/lib/humanize-error";
 import { PERENNIAL_WRITES_ENABLED } from "@/lib/perennial";
 import { BUILDERS, MARKETS_OPEN_ON_BUILDERS_NETWORK } from "@/lib/builders-network";
-import { parseSourceParam } from "@/lib/builders-gallery";
+import { browserProjectProof, parseSourceParam } from "@/lib/builders-gallery";
 import {
   MAX_PROJECTS_PER_BUILDER,
   MAX_SOURCE_LEN,
@@ -21,7 +21,6 @@ import {
   proofLocation,
   proofUrl,
   sourceLabel,
-  validateProof,
   type Claim,
   type ProofFile,
 } from "@/lib/verified-builders";
@@ -46,7 +45,7 @@ type Check =
   | { state: "ok" }
   | { state: "invalid"; detail: string }
   | { state: "missing"; detail: string }
-  | { state: "unreachable" };
+  | { state: "unreachable"; detail: string };
 
 const regionName = (() => {
   try {
@@ -307,26 +306,22 @@ export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
   }
 
   // ───────── live check ─────────
+  // Read through the builders site's proof API (server-side: a domain's CORS
+  // does not matter), else directly with the cache-buster. Only a file that
+  // was read AND validates counts as live; a read that failed never does.
   async function runCheck() {
     if (!claim || !url) return;
     setCheck({ state: "checking" });
-    let body: unknown;
     try {
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) {
-        setCheck({ state: "missing", detail: `${res.status} at ${url}` });
-        return;
-      }
-      body = JSON.parse(await res.text());
+      const r = await browserProjectProof({ owner: claim.builder, source: claim.source }, { chainId: CHAIN.id });
+      if (r.state === "valid") setCheck({ state: "ok" });
+      else if (r.state === "missing") setCheck({ state: "missing", detail: `nothing at ${url}` });
+      else if (r.state === "unchecked") setCheck({ state: "unreachable", detail: r.reason ?? "no answer" });
+      else if (r.state === "resign") setCheck({ state: "invalid", detail: `it is signed by ${shortAddr(r.signer)}, not this builder wallet` });
+      else setCheck({ state: "invalid", detail: r.reason });
     } catch (e) {
-      // GitHub raw allows cross-origin reads; a domain may not. A blocked read is
-      // not a failure — the sync reads it server-side.
-      if (claim.source.startsWith("domain:") && e instanceof TypeError) setCheck({ state: "unreachable" });
-      else setCheck({ state: "missing", detail: e instanceof SyntaxError ? "the file is not valid JSON" : humanizeError(e, HUMAN) });
-      return;
+      setCheck({ state: "unreachable", detail: humanizeError(e, HUMAN) });
     }
-    const r = await validateProof(body, { expectedSource: claim.source, onchainOwner: claim.builder, chainId: CHAIN.id });
-    setCheck(r.valid ? { state: "ok" } : { state: "invalid", detail: r.reason });
   }
 
   // ───────── registration ─────────
@@ -368,7 +363,7 @@ export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
   }
 
   // ───────── view ─────────
-  const proofLive = check.state === "ok" || check.state === "unreachable";
+  const proofLive = check.state === "ok";
   const [s1, s2, s3, s4, s5] = stepStates({
     connected: Boolean(address),
     claimFrozen: Boolean(claim),
@@ -622,9 +617,12 @@ export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
               </p>
             )}
             {check.state === "unreachable" && (
-              <p className="vf-hint">
-                Your domain doesn&apos;t let this page read the file (CORS), so we can&apos;t check it from here. That&apos;s fine:
-                it is checked server-side, and you&apos;ll show as verified at the next sync.
+              <p className="vf-error">
+                Couldn&apos;t read the file ({check.detail}), so it doesn&apos;t count as live yet. Make sure it is served at the
+                address above over https, then check again.
+                {claim.source.startsWith("domain:")
+                  ? " Optional: serve it with the header Access-Control-Allow-Origin: * so browsers can read it directly too."
+                  : " GitHub can take a few minutes to serve a new push."}
               </p>
             )}
           </>
@@ -669,7 +667,7 @@ export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
               {claim?.source} is already project #{onBuilder} of your builder #{myBuilder?.id}. Nothing to send: publishing
               the proof you just signed is all it needs.
             </p>
-            <p className="vf-note">It shows as verified again at the next sync (or right away in the gallery, if the proof is readable from the browser).</p>
+            <p className="vf-note">The gallery re-checks every proof when it loads, so the project counts again there right away.</p>
             {myBuilder && <Link className="vf-link" href={`/builders?builder=${myBuilder.id}`}>see your card in the gallery →</Link>}
           </>
         ) : (

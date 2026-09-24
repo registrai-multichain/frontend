@@ -1,7 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { encodeFunctionData } from "viem";
 import {
+  MAX_PROFILE_LEN,
   displayNameError,
+  profileEdit,
+  removeProjectNote,
   finalStepTitle,
   myProjectStatus,
   planClaim,
@@ -112,5 +115,31 @@ describe("stepStates", () => {
     const signed = { ...base, claimFrozen: true, inputsOk: true, signed: true, target: resign };
     expect(stepStates(signed)[4]).toBe("active");
     expect(stepStates({ ...signed, proofLive: true })[4]).toBe("done");
+  });
+});
+
+describe("owner actions: display name and project removal", () => {
+  test("profileEdit: ≤ 256 bytes; the preview is what the gallery will show (a plain Latin name) or nothing", () => {
+    expect(MAX_PROFILE_LEN).toBe(256);
+    expect(profileEdit("  Acme Labs ")).toEqual({ ok: true, bytes: 9, value: "Acme Labs", shownAs: "Acme Labs", error: null });
+    expect(profileEdit("")).toMatchObject({ ok: true, bytes: 0, value: "", shownAs: null });
+    // stored, but never shown: a link, a look-alike, too long for a name
+    expect(profileEdit("https://acme.xyz")).toMatchObject({ ok: true, shownAs: null });
+    expect(profileEdit("Unisw\u0430p")).toMatchObject({ ok: true, shownAs: null });
+    expect(profileEdit("x".repeat(60))).toMatchObject({ ok: true, shownAs: null });
+    // bytes, not characters: 128 × "ż" (2 bytes each) = 256 fits, one more does not
+    expect(profileEdit("ż".repeat(128))).toMatchObject({ ok: true, bytes: 256 });
+    const over = profileEdit("ż".repeat(129));
+    expect(over).toMatchObject({ ok: false, bytes: 258 });
+    expect(over.error).toMatch(/at most 256/);
+  });
+
+  test("displayNameError says Latin only", () => {
+    expect(displayNameError("\u0410cme")).toMatch(/Latin/);
+  });
+
+  test("removeProjectNote: a removed project keeps its slot (the 16 count removed ones)", () => {
+    const b = { projects: [{ id: 1, source: "github:a/b", active: true }, { id: 2, source: "github:c/d", active: false }] };
+    expect(removeProjectNote(b)).toBe("A removed project keeps its slot (2 of 16 used, still 2 after); adding it again later takes a new one.");
   });
 });

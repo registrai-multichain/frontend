@@ -1,6 +1,15 @@
 import { describe, expect, test } from "vitest";
 import { zeroAddress } from "viem";
-import { RECOVERY_DELAY_S, formatCountdown, pendingFor, recoveryView, transferTargetError, utcMinute } from "./builder-ownership";
+import {
+  RECOVERY_DELAY_S,
+  formatCountdown,
+  pendingFor,
+  recoveriesFor,
+  recoveryView,
+  showFinishRecovery,
+  transferTargetError,
+  utcMinute,
+} from "./builder-ownership";
 
 const NEW = "0x90F79bf6EB2c4f870365E785982E1f101E93b906";
 const OWNER = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
@@ -48,5 +57,40 @@ describe("transfer target", () => {
     expect(pendingFor(NEW, pending)).toEqual([2, 5]);
     expect(pendingFor(undefined, pending)).toEqual([]);
     expect(pendingFor(zeroAddress, pending)).toEqual([]);
+  });
+});
+
+describe("recovery on /verify", () => {
+  const T = 1_800_000_000;
+  const OTHER = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
+
+  test("recoveriesFor: the builders a pending recovery moves to this wallet (any case), in id order", () => {
+    const reads = new Map([
+      [3, { newOwner: NEW.toLowerCase(), readyAt: T }],
+      [1, { newOwner: NEW, readyAt: T + 5 }],
+      [2, { newOwner: OTHER, readyAt: T }],
+      [4, { newOwner: zeroAddress, readyAt: 0 }],
+    ]);
+    expect(recoveriesFor(NEW, reads)).toEqual([
+      { builderId: 1, readyAt: T + 5 },
+      { builderId: 3, readyAt: T },
+    ]);
+    expect(recoveriesFor(null, reads)).toEqual([]);
+    expect(recoveriesFor(zeroAddress, reads)).toEqual([]);
+  });
+
+  test("the public Finish recovery button: old or new owner only, once readyAt has passed", () => {
+    const recovery = { newOwner: NEW, readyAt: T };
+    // before readyAt: nobody
+    expect(showFinishRecovery({ viewer: NEW, owner: OWNER, recovery }, T - 1)).toBe(false);
+    expect(showFinishRecovery({ viewer: OWNER, owner: OWNER, recovery }, T - 1)).toBe(false);
+    // at / after readyAt: the new owner and the old owner (any case)
+    expect(showFinishRecovery({ viewer: NEW.toLowerCase(), owner: OWNER, recovery }, T)).toBe(true);
+    expect(showFinishRecovery({ viewer: OWNER.toUpperCase().replace("0X", "0x"), owner: OWNER, recovery }, T + 60)).toBe(true);
+    // anyone else, no wallet, no recovery: hidden
+    expect(showFinishRecovery({ viewer: OTHER, owner: OWNER, recovery }, T + 60)).toBe(false);
+    expect(showFinishRecovery({ viewer: null, owner: OWNER, recovery }, T + 60)).toBe(false);
+    expect(showFinishRecovery({ viewer: OWNER, owner: OWNER, recovery: null }, T + 60)).toBe(false);
+    expect(showFinishRecovery({ viewer: NEW, owner: null, recovery: { newOwner: zeroAddress, readyAt: 0 } }, T)).toBe(false);
   });
 });

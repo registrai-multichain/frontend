@@ -10,11 +10,19 @@ import { shortAddr } from "@/lib/format";
 import { humanizeError } from "@/lib/humanize-error";
 import { PERENNIAL_WRITES_ENABLED } from "@/lib/perennial";
 import { plainProfileName, sourceHref } from "@/lib/builders-gallery";
-import { formatCountdown, recoveryView, transferTargetError, utcMinute } from "@/lib/builder-ownership";
+import { formatCountdown, recoveryView, showFinishRecovery, transferTargetError, utcMinute } from "@/lib/builder-ownership";
 import { MAX_PROJECTS_PER_BUILDER, MAX_SOURCE_LEN, sourceLabel } from "@/lib/verified-builders";
 import { verifiedBuilderAbi } from "@/lib/verified-builders-chain";
 import { badgeAbi, badgeNeedsSync, serialLabel } from "@/lib/verified-builder-badge";
-import { myProjectStatus, projectSlots, type MyBuilder, type MyProjectStatus } from "@/lib/verify-plan";
+import {
+  MAX_PROFILE_LEN,
+  myProjectStatus,
+  profileEdit,
+  projectSlots,
+  removeProjectNote,
+  type MyBuilder,
+  type MyProjectStatus,
+} from "@/lib/verify-plan";
 import type { ProjectProofState } from "@/lib/builders-gallery";
 import { HUMAN, sendBuildersTx } from "./sendTx";
 import { buildersClient, useMyBuilder, useProjectProofs } from "./useMyBuilder";
@@ -74,7 +82,7 @@ const STATUS_TEXT: Record<MyProjectStatus, string> = {
   lapsed: "lapsed",
   missing: "no proof file",
   resign: "re-sign needed",
-  unchecked: "checked at next sync",
+  unchecked: "couldn't be read",
   checking: "checking…",
   removed: "removed",
 };
@@ -84,11 +92,24 @@ function statusDetail(st: MyProjectStatus, proof: ProjectProofState | undefined)
     return `Its proof names ${shortAddr(proof.signer)}, not this wallet. Re-sign this project's proof with your current wallet.`;
   if (st === "lapsed" && proof?.state === "invalid") return `The proof does not check out: ${proof.reason}.`;
   if (st === "missing") return "No proof file where this project's proof belongs. Sign one and publish it.";
-  if (st === "unchecked") return "This domain doesn't let the page read the file (CORS); the sync checks it server-side.";
+  if (st === "unchecked")
+    return `The proof couldn't be read just now${proof?.state === "unchecked" && proof.reason ? ` (${proof.reason})` : ""}. Until it can be, the gallery shows this project as unconfirmed. Check the file is served at its address; a domain can also send Access-Control-Allow-Origin: * on /.well-known/registrai.json so browsers read it directly.`;
   return null;
 }
 
-function ProjectRows({ b, proofs, onPick }: { b: MyBuilder; proofs: ReadonlyMap<number, ProjectProofState> | undefined; onPick: (source: string) => void }) {
+function ProjectRows({
+  b,
+  proofs,
+  onPick,
+  onRemove,
+  busy,
+}: {
+  b: MyBuilder;
+  proofs: ReadonlyMap<number, ProjectProofState> | undefined;
+  onPick: (source: string) => void;
+  onRemove: (p: MyBuilder["projects"][number]) => void;
+  busy: boolean;
+}) {
   if (!b.projects.length) return <p className="vf-hint">No projects yet. Add one below.</p>;
   return (
     <ul className="vf-projects">
@@ -112,10 +133,62 @@ function ProjectRows({ b, proofs, onPick }: { b: MyBuilder; proofs: ReadonlyMap<
                 {st === "resign" ? "re-sign this proof" : "sign a new proof"}
               </button>
             )}
+            {p.active && (
+              <button type="button" className="vf-mini" onClick={() => onRemove(p)} disabled={busy}>
+                remove project
+              </button>
+            )}
           </li>
         );
       })}
     </ul>
+  );
+}
+
+/** Owner: set the builder's display name (updateProfile), previewed as the gallery will show it. */
+function EditName({ b, run, busy }: { b: MyBuilder; run: ReturnType<typeof useAction>["run"]; busy: boolean }) {
+  const [name, setName] = useState(b.profileURI);
+  const edit = profileEdit(name);
+  const unchanged = edit.value === b.profileURI.trim();
+  return (
+    <details className="vf-details">
+      <summary>Edit display name</summary>
+      <p className="vf-note">
+        Stored on the registry (<code>updateProfile</code>, at most {MAX_PROFILE_LEN} bytes). The gallery shows it only once
+        the multisig has onboarded your builder, only if it is a plain name, and never over a name Registrai curated for
+        your project.
+      </p>
+      <label className="vf-field">
+        <span>Display name</span>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="empty clears it" spellCheck={false} />
+        <em className="tnum">
+          {edit.bytes}/{MAX_PROFILE_LEN} bytes
+        </em>
+      </label>
+      {edit.error ? (
+        <p className="vf-error">{edit.error}</p>
+      ) : (
+        <p className="vf-hint">
+          {!edit.value
+            ? "Empty: the gallery names your builder after its project."
+            : edit.shownAs
+              ? `Shown as “${edit.shownAs}” once onboarded.`
+              : "Not a plain name (a link, another script, or longer than 48 characters): the gallery names your builder after its project instead."}
+        </p>
+      )}
+      <button
+        type="button"
+        className="vf-primary"
+        disabled={busy || !edit.ok || unchanged}
+        onClick={() =>
+          run("saving…", edit.value ? `Display name set to “${edit.value}”.` : "Display name cleared.", {
+            address: REG!, abi: verifiedBuilderAbi as Abi, functionName: "updateProfile", args: [edit.value],
+          })
+        }
+      >
+        save name
+      </button>
+    </details>
   );
 }
 
@@ -194,10 +267,39 @@ export function MyBuilderPanel({ onPick }: { onPick: (source: string) => void })
   if (!REG || !address || !me.data) return null;
 
   if (!b) {
-    if (!me.data.acceptable.length) return null;
+    const recovering = me.data.recovering;
+    if (!me.data.acceptable.length && !recovering.length) return null;
     return (
       <section className="pp-action-card vf-me" aria-label="Accept ownership">
-        <div className="pp-card-label">A builder was proposed to this wallet</div>
+        {recovering.map((r) => {
+          const view = recoveryView({ newOwner: address, readyAt: r.readyAt }, now);
+          return (
+            <div key={`rec-${r.builderId}`} className="vf-banner" role="status">
+              <strong>Recovery to this wallet: builder #{r.builderId}</strong>
+              <p>
+                The Registrai multisig started moving builder #{r.builderId} to this wallet.{" "}
+                {view.kind === "waiting"
+                  ? `Its current owner can cancel it until ${utcMinute(r.readyAt)} (in ${formatCountdown(view.secondsLeft)}); after that anyone can complete it.`
+                  : "Its waiting period is over: complete it now. Afterwards re-sign each project's proof with this wallet and sync the badge."}
+              </p>
+              {showFinishRecovery({ viewer: address, owner: null, recovery: { newOwner: address, readyAt: r.readyAt } }, now) && (
+                <button
+                  type="button"
+                  className="vf-primary"
+                  disabled={act.busy}
+                  onClick={() =>
+                    act.run("finishing…", `Builder #${r.builderId} now belongs to this wallet. Re-sign its projects' proofs and sync its badge below.`, {
+                      address: REG!, abi: verifiedBuilderAbi as Abi, functionName: "finishRecovery", args: [BigInt(r.builderId)],
+                    })
+                  }
+                >
+                  finish recovery
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {me.data.acceptable.length > 0 && <div className="pp-card-label">A builder was proposed to this wallet</div>}
         {me.data.acceptable.map((id) => (
           <div key={id} className="vf-copyline">
             <code>Builder #{id}</code>
@@ -243,26 +345,58 @@ export function MyBuilderPanel({ onPick }: { onPick: (source: string) => void })
               : "Its waiting period is over: anyone can complete it now."}{" "}
             If you did not ask for this, cancel it.
           </p>
-          <button
-            type="button"
-            className="vf-primary"
-            disabled={act.busy}
-            onClick={() =>
-              act.run("cancelling…", "Recovery cancelled.", { address: REG!, abi: verifiedBuilderAbi as Abi, functionName: "cancelRecovery", args: [BigInt(b.id)] })
-            }
-          >
-            cancel recovery
-          </button>
+          <span className="adm-actions">
+            <button
+              type="button"
+              className="vf-primary"
+              disabled={act.busy}
+              onClick={() =>
+                act.run("cancelling…", "Recovery cancelled.", { address: REG!, abi: verifiedBuilderAbi as Abi, functionName: "cancelRecovery", args: [BigInt(b.id)] })
+              }
+            >
+              cancel recovery
+            </button>
+            {showFinishRecovery({ viewer: address, owner: b.owner, recovery: me.data.recovery }, now) && (
+              <button
+                type="button"
+                className="vf-mini"
+                disabled={act.busy}
+                onClick={() =>
+                  act.run("finishing…", `Recovery finished: builder #${b.id} moved to ${shortAddr(rec.newOwner)}.`, {
+                    address: REG!, abi: verifiedBuilderAbi as Abi, functionName: "finishRecovery", args: [BigInt(b.id)],
+                  })
+                }
+              >
+                finish recovery
+              </button>
+            )}
+          </span>
         </div>
       )}
 
       {!b.active && <p className="vf-error">This builder is deactivated on the registry; it cannot add projects.</p>}
 
       <p className="vf-hint">
-        {slots.used} of {MAX_PROJECTS_PER_BUILDER} project slots used (a removed project keeps its slot). A project source is at
-        most {MAX_SOURCE_LEN} bytes.
+        {slots.used} of {MAX_PROJECTS_PER_BUILDER} project slots used: a removed project keeps its slot, so the 16 count every
+        project ever added. A project source is at most {MAX_SOURCE_LEN} bytes.
       </p>
-      <ProjectRows b={b} proofs={proofs.data} onPick={onPick} />
+      <ProjectRows
+        b={b}
+        proofs={proofs.data}
+        onPick={onPick}
+        busy={act.busy}
+        onRemove={(p) => {
+          if (
+            !window.confirm(
+              `Remove ${sourceLabel(p.source)} (project #${p.id}) from builder #${b.id}? It leaves the gallery. ${removeProjectNote(b)}`,
+            )
+          )
+            return;
+          act.run("removing…", `${sourceLabel(p.source)} removed.`, {
+            address: REG!, abi: verifiedBuilderAbi as Abi, functionName: "removeProject", args: [BigInt(p.id)],
+          });
+        }}
+      />
       {b.active && slots.left > 0 && (
         <button type="button" className="vf-mini" onClick={() => onPick("")}>
           + add a project
@@ -288,6 +422,8 @@ export function MyBuilderPanel({ onPick }: { onPick: (source: string) => void })
           </button>
         </div>
       )}
+
+      <EditName key={b.profileURI} b={b} run={act.run} busy={act.busy} />
 
       <MoveWallet b={b} pendingOwner={me.data.pendingOwner} run={act.run} busy={act.busy} />
 
