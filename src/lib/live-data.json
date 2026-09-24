@@ -1,23 +1,27 @@
 {
-  "syncedAt": "2026-09-24T11:30:20.382Z",
-  "builders": [
-    {
-      "builderId": 1,
-      "address": "0xa9fa24e1147e8337c3d25b084890121be10a132b",
-      "lifetimeProgress": 0,
-      "volume": "0",
-      "country": null
-    }
-  ],
+  "syncedAt": "2026-09-24T16:42:09.557Z",
+  "builders": [],
   "perennialBuilders": [
     {
       "builderId": 1,
-      "address": "0xA9Fa24e1147E8337C3D25b084890121BE10a132B",
-      "name": "oracle-primitives",
-      "repo": "registrai-multichain/oracle-primitives",
-      "milestoneFeedId": "0xc1fb8a8d61edd9ec459f49f6db49242f24ece104817b9c8da38e08e0374f49a6"
+      "owner": "0xa9fa24e1147e8337c3d25b084890121be10a132b",
+      "source": null,
+      "status": "unverified",
+      "country": null,
+      "proofUrl": null,
+      "milestoneFeedId": "0xc1fb8a8d61edd9ec459f49f6db49242f24ece104817b9c8da38e08e0374f49a6",
+      "badge": null
     }
   ],
+  "builderFeeds": {
+    "chainId": 5042002,
+    "registry": "0xb4BE6114a5103aBFfaBB053b740AD6Dc2aF27652",
+    "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
+    "lastScannedBlock": "63792506",
+    "feeds": {
+      "registrai-multichain/oracle-primitives-ships-release": "0xc1fb8a8d61edd9ec459f49f6db49242f24ece104817b9c8da38e08e0374f49a6"
+    }
+  },
   "perennialMarkets": [
     {
       "marketId": "0x2530a3b549ae3337a6add0a7de6b48234598b72a92464a2c277e55b7932e0adf",
@@ -35,7 +39,7 @@
     }
   ],
   "atlas": {
-    "lastScannedBlock": "63757145",
+    "lastScannedBlock": "63792506",
     "progressByBuilder": {},
     "volumeByBuilderId": {},
     "marketToBuilder": {
@@ -81,7 +85,7 @@
         "Dispute": "0x3eefde8ecc78457ab715f1b9a7c82fbcd416c329"
       },
       "fromBlock": "63752157",
-      "lastScannedBlock": "63757145",
+      "lastScannedBlock": "63792506",
       "state": {
         "agents": {},
         "open": {
@@ -94,6 +98,12 @@
       },
       "challenges": {},
       "attesters": {}
+    }
+  },
+  "badges": {
+    "arc-testnet": {
+      "address": "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c",
+      "maxSerial": 0
     }
   },
   "chainId": 5042002,
@@ -147,7 +157,8 @@
     "ProgressArbiter_retired": "0x7b588ce1b65a4f46d34Ae92472aF7dFc6356C959",
     "Registry_v3": "0xb4BE6114a5103aBFfaBB053b740AD6Dc2aF27652",
     "Attestation_v3": "0xE75961E281A83EB5368fFF43330f0E815b9b3B41",
-    "Dispute_v3": "0x3eEfdE8ecc78457aB715f1b9A7C82fBCd416c329"
+    "Dispute_v3": "0x3eEfdE8ecc78457aB715f1b9A7C82fBCd416c329",
+    "VerifiedBuilderBadge": "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c"
   },
   "feed": {
     "id": "0xf4968db834c4e03f9c2e10bb883fe74f84c850cfacac058a1b520a8d8fa37c0b",
@@ -569,7 +580,7 @@
         "bond": "10000000",
         "lockedBond": "0",
         "registeredAt": 1778768861,
-        "lastAttestationAt": 1790172065,
+        "lastAttestationAt": 1790258442,
         "active": true,
         "slashed": false
       },
@@ -987,6 +998,14 @@
           "value": 410,
           "timestamp": 1790172065,
           "finalizedAt": 1790258465,
+          "inputHash": "0x07372378aa8681ff8081922ccd02ddd2cf75904af132aab27070048b74391978",
+          "status": 0
+        },
+        {
+          "id": "0x0b9db840675b43d6f82e27b284b385f1739a2c009b127335fb1bd251c57b24dc",
+          "value": 410,
+          "timestamp": 1790258442,
+          "finalizedAt": 1790344842,
           "inputHash": "0x07372378aa8681ff8081922ccd02ddd2cf75904af132aab27070048b74391978",
           "status": 0
         }
