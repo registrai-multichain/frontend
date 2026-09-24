@@ -29,6 +29,12 @@ export default function CreateMarketPage() {
             market is live. Resolution is automatic against the agent&apos;s
             attestation at expiry — no human in the loop.
           </p>
+          <p className="text-2xs text-fg-dim mt-3 max-w-[64ch] leading-relaxed">
+            Legacy testnet markets: this form creates a market on an older
+            Markets testnet contract (0.70% per trade, 0.40% of each trade to you as
+            creator). That contract is not going to mainnet; new markets charge
+            1% once, at settlement, 30% of it to the creator.
+          </p>
         </div>
 
         <div className="border-t border-line pt-10">

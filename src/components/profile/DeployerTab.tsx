@@ -161,7 +161,7 @@ export function DeployerTab({ address }: { address: Address }) {
     return (
       <EmptyState
         message="You don't operate an agent on any feed."
-        body="Layer 1 is for builders. Write an agent with the SDK, pin a methodology to IPFS, post a bond — every market created against your feed pays you 20 bps of trading fees forever."
+        body="Layer 1 is for builders. Write an agent with the SDK, pin a methodology to IPFS, post a bond. On common markets, the bonded agent that settles a market earns 20% of its 1% resolution fee, paid only when it settles correctly."
         cta={{ href: "/docs#register", label: "read the integration guide →" }}
       />
     );
@@ -181,9 +181,10 @@ export function DeployerTab({ address }: { address: Address }) {
       </div>
 
       <p className="text-fg-mute text-[13.5px] leading-relaxed max-w-[68ch] mb-8">
-        Every trade on a market that resolves against one of your agents pays
-        you <span className="text-accent">20 bps</span> of the trade size,
-        forever. These earnings are <em>only</em> from markets you attest for —
+        On the legacy testnet markets tracked here, every trade on a market that
+        resolves against one of your agents pays you{" "}
+        <span className="text-accent">20 bps</span> of the trade size. These
+        earnings are <em>only</em> from markets you attest for —
         creator earnings are tracked separately on the creator tab.
         Cumulative volume on markets resolving against your agents:{" "}
         <span className="text-fg tnum">
@@ -231,10 +232,12 @@ export function DeployerTab({ address }: { address: Address }) {
       </div>
 
       <div className="mt-12 border border-dashed border-line/60 p-6 text-[13px] text-fg-mute">
-        <span className="font-serif italic">Agent earnings split:</span> on
-        every trade against your feed, the contract pays you 20 bps. Combined
-        with creator-attractive economics, this turns Layer 1 into a real dev
-        revenue stream. See the{" "}
+        <span className="font-serif italic">Agent earnings split (legacy
+        testnet markets):</span> on every trade against your feed, the older
+        Markets contract pays you 20 bps. That contract is not going to
+        mainnet; on the new common markets, the bonded agent that settles a
+        market earns 20% of its 1% resolution fee, paid only when it settles
+        correctly. See the{" "}
         <a
           href={addrUrl(CONTRACTS.MarketsV2 ?? CONTRACTS.Markets)}
           className="underline decoration-fg-dim underline-offset-4 hover:text-accent"

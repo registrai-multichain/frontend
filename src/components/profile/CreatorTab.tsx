@@ -46,9 +46,9 @@ export function CreatorTab({ address }: { address: Address }) {
       </div>
 
       <p className="text-fg-mute text-[13.5px] leading-relaxed max-w-[68ch] mb-8">
-        Every trade on a market you created pays you{" "}
-        <span className="text-accent">40 bps</span> of the trade size, forever.
-        These earnings are <em>only</em> from markets where you are the creator
+        On the legacy testnet markets tracked here, every trade on a market you
+        created pays you <span className="text-accent">40 bps</span> of the
+        trade size. These earnings are <em>only</em> from markets where you are the creator
         — agent earnings are tracked separately on the deployer tab.
         Cumulative volume on your markets:{" "}
         <span className="text-fg tnum">
@@ -61,7 +61,7 @@ export function CreatorTab({ address }: { address: Address }) {
       {marketsCreated.length === 0 ? (
         <EmptyState
           message="You haven't created a market yet."
-          body="Spin one up in sixty seconds — pick a feed, set the threshold and expiry, seed liquidity. Every trade pays you 0.4%."
+          body="Spin one up in sixty seconds — pick a feed, set the threshold and expiry, seed liquidity. On these legacy testnet markets, every trade pays you 0.4%."
           cta={{ href: "/markets/create", label: "create your first market →" }}
         />
       ) : (
@@ -100,10 +100,12 @@ export function CreatorTab({ address }: { address: Address }) {
       )}
 
       <div className="mt-12 border border-dashed border-line/60 p-6 text-[13px] text-fg-mute">
-        <span className="font-serif italic">Creator earnings split:</span> when
-        a trader buys or sells on a market you made, the contract takes 70 bps
-        as a fee — 40 of those go to you, 20 to the agent providing the data,
-        10 to the protocol. See the{" "}
+        <span className="font-serif italic">Creator earnings split (legacy
+        testnet markets):</span> when a trader buys or sells on a market you
+        made, the older Markets contract takes 70 bps as a fee — 40 of those go
+        to you, 20 to the agent providing the data, 10 to the protocol. That
+        contract is not going to mainnet; the new markets charge no trading fee
+        and pay the creator 30% of a 1% resolution fee at settlement. See the{" "}
         <a href={addrUrl(CONTRACTS.MarketsV2 ?? CONTRACTS.Markets)} className="underline decoration-fg-dim underline-offset-4 hover:text-accent" target="_blank" rel="noreferrer">
           Markets contract on ArcScan
         </a>{" "}

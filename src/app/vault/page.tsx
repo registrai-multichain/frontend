@@ -35,7 +35,7 @@ export default function VaultPage() {
           <Card title="how trades route"
             body="Only the registered operator (currently us) can submit trades through the vault. Every buy, sell, and addLiquidity call emits an event onchain and is verifiable on ArcScan. Operator rotation is owner-gated; the operator cannot withdraw user funds, only route them into Markets contract calls." />
           <Card title="how revenue accrues"
-            body="The vault pays the standard 70 bps trading fee on every buy. For markets where the operator is also the agent and creator, those fees flow back to the same wallet — fee-neutral. Net PnL = winning shares redeemed at $1 each + LP residuals at resolution, minus losing positions." />
+            body="The vault trades legacy testnet markets (older Markets contracts, not going to mainnet), so it pays that contract's 70 bps trading fee on every buy. For markets where the operator is also the agent and creator, those fees flow back to the same wallet — fee-neutral. Net PnL = winning shares redeemed at $1 each + LP residuals at resolution, minus losing positions." />
         </div>
 
         {/* Forward hint — v0.5 cirBTC × USDC lending pool with atomic
