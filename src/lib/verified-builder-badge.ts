@@ -31,6 +31,8 @@ export function badgeNetworkKey(chainId: number): string | null {
 
 /** Where the site serves a network's badge art (the contract's imageBase). */
 export const BADGE_ORIGIN = "https://registrai.cc";
+/** The standalone builders site (the /builders gallery, /verify, badge art). */
+export const BUILDERS_ORIGIN = "https://builder.registrai.cc";
 export function badgeImageBase(network: string, origin = BADGE_ORIGIN): string {
   return `${origin}/badge/${network}/`;
 }
@@ -52,7 +54,7 @@ export function badgeTokenUrl(explorer: string, badge: string, serial: number): 
 
 /** The token's external_url: the builders gallery, scrolled to this builder
  *  (DeployBuilders.s.sol BADGE_EXTERNAL_BASE). */
-export function builderDeepLink(builderId: number, origin = BADGE_ORIGIN): string {
+export function builderDeepLink(builderId: number, origin = BUILDERS_ORIGIN): string {
   return `${origin}/builders/?builder=${builderId}`;
 }
 

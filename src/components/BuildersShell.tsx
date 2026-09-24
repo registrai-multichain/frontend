@@ -45,7 +45,7 @@ export function BuildersShell({ children, wallet = false }: { children: ReactNod
         <div className="mx-auto grid w-full max-w-[1280px] items-center gap-5 px-4 py-7 text-[9px] uppercase tracking-[0.12em] text-fg-dim sm:grid-cols-[1fr_auto] sm:px-10">
           <span>Verified builders / {BUILDERS.label}</span>
           <div className="flex flex-wrap gap-4">
-            <Link href="/" className="transition-colors hover:text-accent">home ↗</Link>
+            <a href="https://registrai.cc" className="transition-colors hover:text-accent">registrai.cc ↗</a>
             <a href="https://github.com/registrai-multichain" target="_blank" rel="noreferrer" className="transition-colors hover:text-accent">github ↗</a>
           </div>
         </div>

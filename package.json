@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "sync": "tsx scripts/sync.ts",
-    "deploy": "python3 scripts/render-badges.py && next build && wrangler pages deploy out --project-name=registrai-web --branch=main"
+    "deploy": "python3 scripts/render-badges.py && next build && wrangler pages deploy out --project-name=registrai-web --branch=main",
+    "deploy:builders": "python3 scripts/render-badges.py && next build && bash scripts/build-builders-site.sh && wrangler deploy -c wrangler.builders.jsonc"
   },
   "dependencies": {
     "@circle-fin/adapter-solana-kit": "^1.6.3",

@@ -39,7 +39,7 @@ describe("names and URLs", () => {
     expect(serialLabel(7)).toBe("No. 007");
     expect(serialLabel(1234)).toBe("No. 1234");
     expect(badgeTokenUrl("https://testnet.arcscan.app/", BADGE, 7)).toBe(`https://testnet.arcscan.app/token/${BADGE}/instance/7`);
-    expect(builderDeepLink(3)).toBe("https://registrai.cc/builders/?builder=3");
+    expect(builderDeepLink(3)).toBe("https://builder.registrai.cc/builders/?builder=3");
   });
 
   test("?builder= accepts positive integers only", () => {

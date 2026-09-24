@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-09-24T17:14:09.096Z",
+  "syncedAt": "2026-09-24T17:26:25.290Z",
   "builders": [],
   "perennialBuilders": [
     {
@@ -17,7 +17,7 @@
     "chainId": 5042002,
     "registry": "0xb4BE6114a5103aBFfaBB053b740AD6Dc2aF27652",
     "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
-    "lastScannedBlock": "63796386",
+    "lastScannedBlock": "63797827",
     "feeds": {
       "registrai-multichain/oracle-primitives-ships-release": "0xc1fb8a8d61edd9ec459f49f6db49242f24ece104817b9c8da38e08e0374f49a6"
     }
@@ -39,7 +39,7 @@
     }
   ],
   "atlas": {
-    "lastScannedBlock": "63796386",
+    "lastScannedBlock": "63797827",
     "progressByBuilder": {},
     "volumeByBuilderId": {},
     "marketToBuilder": {
@@ -85,7 +85,7 @@
         "Dispute": "0x3eefde8ecc78457ab715f1b9a7c82fbcd416c329"
       },
       "fromBlock": "63752157",
-      "lastScannedBlock": "63796386",
+      "lastScannedBlock": "63797827",
       "state": {
         "agents": {},
         "open": {
@@ -110,7 +110,7 @@
     "network": "testnet",
     "chainId": 5042002,
     "builderRegistry": "0x10F8D6D5905E2C4dc565a1894c102B25E9d21DF4",
-    "syncedAt": "2026-09-24T17:14:09.096Z",
+    "syncedAt": "2026-09-24T17:26:25.290Z",
     "nextId": 2,
     "builders": [
       {
