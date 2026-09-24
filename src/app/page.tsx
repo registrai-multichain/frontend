@@ -3,8 +3,8 @@ import { REGI_CONTRACT, REGI_DEXSCREENER_URL, REGI_EXPLORER_URL } from "@/lib/re
 import Link from "next/link";
 
 const feeRoutes = [
-  { value: "30", label: "Market creator", note: "Earns 30% of the fee when the market settles.", className: "lp-route--creator" },
-  { value: "20", label: "Bonded agent", note: "Paid only when it settles correctly. On a void it goes to the successful challenger, otherwise the commons.", className: "lp-route--resolver" },
+  { value: "30", label: "Market creator", note: "Earns 30% of the fee on every trade, paid as it happens.", className: "lp-route--creator" },
+  { value: "20", label: "Bonded agent", note: "Held until the market settles, then paid to the agent. On a void it goes to the successful challenger, otherwise the commons.", className: "lp-route--resolver" },
   { value: "50", label: "Builder commons", note: "Paid to builders by verified progress, never popularity.", className: "lp-route--commons" },
 ];
 
@@ -12,7 +12,7 @@ const safeguards = [
   ["01", "Bond the answer", "The agent locks USDC behind every answer it attests."],
   ["02", "Open challenge", "Anyone can match the bond and dispute the answer. An independent resolver rules."],
   ["03", "Slash the miss", "If the resolver rules the answer Invalid, the agent's bond is slashed to the challenger."],
-  ["04", "Void, don't guess", "If the market then can't settle, it voids: traders get their net cost back minus 1%, and the challenger also receives the agent's 20% share."],
+  ["04", "Void, don't guess", "If the market then can't settle, it voids: traders get their net cost back (what they put in after fees, minus what they took out), and the challenger receives the agent's held 20%."],
 ];
 
 export default function Home() {
@@ -107,14 +107,14 @@ function FeeFlow() {
   return (
     <section className="lp-fees">
       <div className="lp-frame">
-        <div className="lp-section-head"><p className="lp-kicker">Funding without fundraising</p><h2>Launchpads fund promises.<br />Markets can fund proof.</h2><p>One percent, charged once at settlement. No trading fee. Visible, fixed in code, and routed to the people doing the work.</p></div>
+        <div className="lp-section-head"><p className="lp-kicker">Funding without fundraising</p><h2>Launchpads fund promises.<br />Markets can fund proof.</h2><p>One percent on every buy and sell. Nothing is charged at settlement. Visible, fixed in code, and routed to the people doing the work.</p></div>
         <div className="lp-flow" aria-label="One percent fee distribution">
-          <div className="lp-flow-source"><span>RESOLUTION FEE</span><strong>100<sup>bps</sup></strong><small>charged once</small></div>
+          <div className="lp-flow-source"><span>TRADING FEE</span><strong>100<sup>bps</sup></strong><small>on every trade</small></div>
           <div className="lp-flow-line" aria-hidden="true"><i /><i /><i /></div>
           <div className="lp-routes">{feeRoutes.map((route) => <article className={`lp-route ${route.className}`} key={route.label}><div className="lp-route-number">{route.value}<sup>bps</sup></div><h3>{route.label}</h3><p>{route.note}</p></article>)}</div>
         </div>
         <p className="lp-fineprint">Registrai takes 1% of each builder payout from the commons. It pays for the caretaker that monitors milestones.</p>
-        <p className="lp-fineprint">Common markets charge the same 1% with the same split, except the 50% goes to the Registrai treasury. They are open to any bonded agent paired with an approved, independent dispute resolver, and that agent earns 20% of the fee on every market it settles correctly. <Link href="/agents">Run an agent →</Link></p>
+        <p className="lp-fineprint">Common markets charge the same 1% with the same split, except the 50% goes to the Registrai treasury. They are open to any bonded agent paired with an approved, independent dispute resolver, and that agent earns 20% of the trading fees on every market it settles correctly. <Link href="/agents">Run an agent →</Link></p>
       </div>
     </section>
   );

@@ -93,20 +93,22 @@ export default function AboutPage() {
             chose.
           </p>
           <p>
-            <strong className="text-fg">Oracle free, markets pay once.</strong> The
+            <strong className="text-fg">Oracle free, trades pay 1%.</strong> The
             registry layer charges nothing — reading a feed, registering an
-            agent, posting a bond is free. Markets charge no trading fee. They
-            take a 1% resolution fee, charged once at settlement, split{" "}
+            agent, posting a bond is free. Markets take a 1% trading fee on
+            every buy and sell, and nothing at settlement, split{" "}
             <span className="text-up">30% to the market creator</span>,{" "}
-            <span className="text-up">20% to the bonded agent</span>, and{" "}
+            <span className="text-up">20% to the bonded agent</span> (held
+            until the market settles), and{" "}
             <span className="text-commons">50% to the builder commons</span>{" "}
             (on common markets, that 50% goes to the Registrai treasury).
             Builders are paid from the commons by verified progress; Registrai
             takes 1% of each builder payout, which pays for the caretaker that
             monitors milestones. If a market can&apos;t be settled, it voids:
-            every trader gets their net cost back, minus the 1% fee, and the
-            agent&apos;s 20% goes to whoever successfully challenged its answer
-            (otherwise to the commons). Core protocol accounting remains tied to
+            every trader gets their net cost back (what they put in after fees,
+            minus what they took out), and the agent&apos;s held 20% goes to
+            whoever successfully challenged its answer (otherwise to the
+            commons). Core protocol accounting remains tied to
             real USDC activity, not to the price of $REGI.
           </p>
         </Prose>

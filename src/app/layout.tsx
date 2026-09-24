@@ -30,7 +30,7 @@ const serif = Instrument_Serif({
 
 const TITLE = "Registrai · The anti-launchpad";
 const DESCRIPTION =
-  "$REGI bootstraps Registrai on Arc. Perennial markets settle in USDC and route half of a 1% settlement fee to builders who prove they shipped.";
+  "$REGI bootstraps Registrai on Arc. Perennial markets settle in USDC and route half of a 1% trading fee to builders who prove they shipped.";
 
 export const viewport: Viewport = {
   themeColor: "#0d0d0c",

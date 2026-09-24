@@ -34,7 +34,7 @@ function TopNav() {
         </Link>
         <nav className="flex items-center gap-4 sm:gap-5 text-[12px] tracking-wide text-fg-mute shrink-0">
           {/* The two market surfaces sit together and are colour-coded by where
-              the 50% leg of the 1% resolution fee goes: perennial in commons
+              the 50% leg of the 1% trading fee goes: perennial in commons
               teal (builder commons), common markets in paper ink (Registrai
               treasury). Same fee, same 30/20/50 split. */}
           <Link
