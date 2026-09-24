@@ -13,6 +13,7 @@ import {
   COMPARATOR,
   OUTCOME,
   PHASE,
+  bpsPct,
   formatUsdc,
   marketStatus,
   maxDeposit,
@@ -25,11 +26,23 @@ import {
   questionText,
   quoteBuy,
   quoteSell,
-  redeemPayout,
   settlementRuleText,
   splitFee,
   type MarketStatus,
 } from "@/lib/perennial-market";
+import {
+  feeHeadline,
+  feeSummary,
+  mirrorClaimLP,
+  mirrorRedeem,
+  netCostMinusFee,
+  tradeFeeBps,
+  ticketFeeLabel,
+  voidIsProRata,
+  voidRefundText,
+  type FeeModel,
+} from "@/lib/resolution-fee";
+import { readHolderSettlement } from "@/lib/resolution-fee-chain";
 import {
   marketIdFromLogs,
   probeAbi,
@@ -42,15 +55,24 @@ import {
 } from "@/lib/perennial-chain";
 import { BuilderProfile, findDigest } from "./BuilderProfile";
 
-// Perennial end-to-end: bettors trade builder-milestone markets (fees pool into
-// the commons); builders register, accrue progress from verified artifacts, and
-// claim a progress-weighted share. The hype pays for the grind.
+// Perennial end-to-end: bettors trade builder-milestone markets (no trading fee;
+// 1% of each market's pot at settlement, half of it to the builder commons);
+// builders register, accrue progress from verified artifacts, and claim a
+// progress-weighted share. The hype pays for the grind.
 
 type Status = "idle" | "approving" | "submitting" | "success" | "error";
 type Role = "bet" | "build";
 type MarketView = "new" | "trending" | "featured" | "closing";
 type BuilderView = "new" | "star" | "veteran";
-type Position = { yes: bigint; no: bigint; lp: bigint };
+type Position = {
+  yes: bigint;
+  no: bigint;
+  lp: bigint;
+  /** v2 views — undefined on the legacy contract. */
+  netCost?: bigint;
+  redeemable?: bigint;
+  claimableLP?: bigint;
+};
 type Account = {
   ledgerBal: bigint;
   walletBal: bigint;
@@ -171,12 +193,16 @@ function PerennialLive() {
         amount: (await publicClient.readContract({ address: pool, abi: progressPoolAbi, functionName: "claimable", args: [e, address!] })) as bigint,
       }))),
       Promise.all(markets.map(async (m) => {
-        const [yes, no, lp] = (await Promise.all([
-          publicClient.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "yesBalance", args: [m.id, address!] }),
-          publicClient.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "noBalance", args: [m.id, address!] }),
-          publicClient.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "lpShares", args: [m.id, address!] }),
-        ])) as bigint[];
-        return [m.id, { yes, no, lp }] as const;
+        const [[yes, no, lp], v2] = await Promise.all([
+          Promise.all([
+            publicClient.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "yesBalance", args: [m.id, address!] }),
+            publicClient.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "noBalance", args: [m.id, address!] }),
+            publicClient.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "lpShares", args: [m.id, address!] }),
+          ]) as Promise<bigint[]>,
+          // netCost / redeemable / claimableLP exist only on the v2 contract.
+          ov!.feeModel.kind === "resolution" ? readHolderSettlement(publicClient, mp, m.id, address!, m.phase) : Promise.resolve({}),
+        ]);
+        return [m.id, { yes, no, lp, ...v2 } satisfies Position] as const;
       })),
     ]);
     return {
@@ -207,7 +233,7 @@ function PerennialLive() {
   const statusOf = (m: ChainMarket): MarketStatus =>
     marketStatus({
       phase: m.phase, yesWon: m.yesWon, expiry: m.expiry, chainNow,
-      settlement: m.settlement, supportsSettlement: Boolean(ov?.supportsSettlement),
+      settlement: m.settlement, supportsSettlement: Boolean(ov?.supportsSettlement), feeModel: ov?.feeModel,
     });
 
   // Default selection: first tradeable market, else the newest.
@@ -258,7 +284,8 @@ function PerennialLive() {
   };
 
   // ─────────────── quote ───────────────
-  const feeBps = ov?.fees.total;
+  // v2: no trading fee (0). Legacy testnet contract: its per-trade fee.
+  const feeBps = tradeFeeBps(ov?.feeModel);
   const slip = parseSlippagePct(slippage);
   const outcome = side === "Yes" ? OUTCOME.Yes : OUTCOME.No;
   const held = side === "Yes" ? pos.yes : pos.no;
@@ -269,9 +296,13 @@ function PerennialLive() {
   const sellQ = selected && feeBps !== undefined && mode === "sell" && amt?.ok ? quoteSell(selected, outcome, amt.value, feeBps) : null;
   const expectedOut = buyQ?.sharesOut ?? sellQ?.collateralOut;
   const minOut = expectedOut !== undefined && slip.ok ? minOutWithSlippage(expectedOut, slip.value) : undefined;
-  const feeParts = ov && (buyQ || sellQ)
-    ? splitFee((buyQ ?? sellQ)!.fee, { creatorBps: ov.fees.creator, treasuryBps: ov.fees.treasury, agentBps: ov.fees.agent })
+  const legacySplit = ov?.feeModel.kind === "legacy" ? ov.feeModel.split : undefined;
+  const feeParts = legacySplit && (buyQ || sellQ)
+    ? splitFee((buyQ ?? sellQ)!.fee, { creatorBps: legacySplit.creatorBps, treasuryBps: legacySplit.commonsBps, agentBps: legacySplit.agentBps })
     : undefined;
+  const feeModel: FeeModel | undefined = ov?.feeModel;
+  const isV2 = feeModel?.kind === "resolution";
+  const feeLine = feeSummary(feeModel);
 
   // ─────────────── tx plumbing ───────────────
   const busy = status === "approving" || status === "submitting" || !PERENNIAL_WRITES_ENABLED;
@@ -487,8 +518,11 @@ function PerennialLive() {
 
   const digest = selBuilder ? findDigest(CHAIN.id, selBuilder.owner) : undefined;
   const yp = selected ? yesPct(selected) : 50;
-  const redeemable = selected ? redeemPayout(selected, pos.yes, pos.no) : 0n;
-  const lpPreview = selected && selected.seeded > 0n ? (pos.lp * selected.lpPot) / selected.seeded : 0n;
+  // Previews: the contract's own `redeemable` / `claimableLP` views when the
+  // deployment has them (v2), else the local mirror of the payout math.
+  const snapshot = selected ? { ...selected, totalLpShares: selected.seeded } : undefined;
+  const redeemable = selected ? pos.redeemable ?? mirrorRedeem(snapshot!, pos, feeModel) ?? 0n : 0n;
+  const lpPreview = selected ? pos.claimableLP ?? mirrorClaimLP(snapshot!, pos) : 0n;
   const disclosure = selected ? agentDisclosure(selected) : undefined;
 
   const Chip = ({ v, set, label }: { v: string; set: (s: string) => void; label?: string }) => (
@@ -538,7 +572,7 @@ function PerennialLive() {
         <div><span>commons balance</span><strong>${stat(fmt(ov?.pendingPot ?? 0n))}</strong></div>
         <div><span>open markets</span><strong>{stat(String(openCount))}</strong></div>
         <div><span>epoch</span><strong>{stat((ov?.epoch ?? 0n).toString())}</strong></div>
-        <div><span>market fee</span><strong>{ov ? `${ov.fees.total} bps` : stat("")}</strong></div>
+        <div><span>market fee</span><strong>{ov ? feeHeadline(ov.feeModel) ?? "—" : stat("")}</strong></div>
         <div><span>network</span><strong>{D.label}</strong></div>
       </div>
 
@@ -616,14 +650,15 @@ function PerennialLive() {
                   <div className="pp-market-facts">
                     <span><b>Status</b>{selStatus?.label}</span>
                     <span><b>{selStatus?.canTrade ? "Closes" : "Expiry"}</b>{selStatus?.canTrade ? remaining(selected.expiry) : new Date(Number(selected.expiry) * 1000).toISOString().slice(0, 16).replace("T", " ")}</span>
-                    <span><b>Liquidity</b>${fmt(selected.seeded)} seeded</span>
+                    <span><b>Liquidity</b>${fmt(selected.seeded)} seeded{selected.collateral !== undefined ? ` · pot $${fmt(selected.collateral)}` : ""}</span>
                     <span><b>Resolution</b>bonded oracle{disclosure ? " ⚠" : ""}</span>
                   </div>
                 )}
                 {selected && (
                   <p className="mt-3 text-2xs text-fg-dim">
                     {selStatus?.detail}{" "}
-                    {ov?.supportsSettlement ? settlementRuleText(ov.settlementWindow !== undefined ? Number(ov.settlementWindow) : undefined) : null}
+                    {ov?.supportsSettlement ? settlementRuleText(ov.settlementWindow !== undefined ? Number(ov.settlementWindow) : undefined, feeModel) : null}
+                    {feeLine && <span className="block mt-1">Fees: {feeLine}.</span>}
                     {disclosure && <span className="block mt-1 text-down">Disclosure: {disclosure}</span>}
                   </p>
                 )}
@@ -639,6 +674,7 @@ function PerennialLive() {
                       status={selStatus!}
                       market={selected}
                       pos={pos}
+                      feeModel={feeModel}
                       redeemable={redeemable}
                       lpPreview={lpPreview}
                       busy={busy}
@@ -673,9 +709,11 @@ function PerennialLive() {
                         <div className="mt-2 space-y-0.5 font-mono text-[10px] text-fg-mute">
                           {buyQ && <div className="flex justify-between"><span>Shares out</span><span>{fmt(buyQ.sharesOut, 4)} {side}</span></div>}
                           {sellQ && <div className="flex justify-between"><span>You receive</span><span>${fmt(sellQ.collateralOut, 4)}</span></div>}
-                          <div className="flex justify-between"><span>Avg price (incl. fee)</span><span>{cents((buyQ ?? sellQ)!.avgPrice)}</span></div>
+                          <div className="flex justify-between"><span>{isV2 ? "Avg price" : "Avg price (incl. fee)"}</span><span>{cents((buyQ ?? sellQ)!.avgPrice)}</span></div>
                           <div className="flex justify-between"><span>Price impact</span><span className={(buyQ ?? sellQ)!.priceImpact > 0.05 ? "text-down" : ""}>{pct((buyQ ?? sellQ)!.priceImpact, 2)}</span></div>
-                          <div className="flex justify-between"><span>Fee ({ov.fees.total.toString()} bps)</span><span>${fmt((buyQ ?? sellQ)!.fee, 4)}{feeParts ? ` · creator ${fmt(feeParts.creator, 4)} / commons ${fmt(feeParts.commons, 4)} / agent ${fmt(feeParts.agent, 4)}` : ""}</span></div>
+                          {isV2
+                            ? <div className="flex justify-between"><span>Fee</span><span>{ticketFeeLabel(feeModel)}</span></div>
+                            : <div className="flex justify-between"><span>Fee ({ticketFeeLabel(feeModel)})</span><span>${fmt((buyQ ?? sellQ)!.fee, 4)}{feeParts ? ` · creator ${fmt(feeParts.creator, 4)} / commons ${fmt(feeParts.commons, 4)} / agent ${fmt(feeParts.agent, 4)}` : ""}</span></div>}
                           {minOut !== undefined && <div className="flex justify-between"><span>Minimum {mode === "buy" ? "shares" : "received"}</span><span>{mode === "buy" ? fmt(minOut, 4) : `$${fmt(minOut, 4)}`}</span></div>}
                         </div>
                       )}
@@ -687,7 +725,7 @@ function PerennialLive() {
                       <button onClick={doTrade} disabled={busy || !(buyQ || sellQ) || !slip.ok} className="pp-submit-order">
                         {pending === mode ? (mode === "buy" ? "placing order…" : "selling…") : `${mode} ${side}`}
                       </button>
-                      <div className="pp-order-foot"><span>Shares Y {fmt(pos.yes)} · N {fmt(pos.no)}</span><span>Chain time gates expiry</span></div>
+                      <div className="pp-order-foot"><span>Shares Y {fmt(pos.yes)} · N {fmt(pos.no)}{pos.netCost !== undefined ? ` · net cost $${fmt(pos.netCost)}` : ""}</span><span>Chain time gates expiry</span></div>
                     </>
                   )}
                 </div>
@@ -740,11 +778,14 @@ function PerennialLive() {
                         <b className="text-fg">{cThreshold !== undefined ? `≥ ${cThreshold}` : "latest + 1"}</b>
                         {latest ? ` (latest attested: ${latest.value}${latest.finalized ? "" : ", not yet final"})` : latest === null ? " (nothing attested yet)" : ""}.
                         {" "}Agent: the caretaker operator{D.operator ? ` ${D.operator.slice(0, 6)}…${D.operator.slice(-4)}` : ""}.{" "}
-                        {settlementRuleText(ov?.settlementWindow !== undefined ? Number(ov.settlementWindow) : undefined)}
+                        {settlementRuleText(ov?.settlementWindow !== undefined ? Number(ov.settlementWindow) : undefined, feeModel)}
                       </p>
-                      {ov && (
+                      {ov && feeLine && (
                         <p className="text-2xs text-fg-dim">
-                          Fee {ov.fees.total.toString()} bps per trade: creator {ov.fees.creator.toString()} (you) · commons {ov.fees.treasury.toString()} · agent {ov.fees.agent.toString()} (escrowed until settlement, forfeited if the market voids). Your liquidity is returned through Claim LP after settlement.
+                          {isV2
+                            ? `No trading fee. Fees: ${feeLine} — the creator's share is yours. `
+                            : `Fees: ${feeLine}. `}
+                          Your liquidity is returned through Claim LP after settlement.
                         </p>
                       )}
                       <div className="grid gap-2 sm:grid-cols-[1fr_90px_110px]">
@@ -792,6 +833,7 @@ function SettlementCard(props: {
   status: MarketStatus;
   market: ChainMarket;
   pos: Position;
+  feeModel: FeeModel | undefined;
   redeemable: bigint;
   lpPreview: bigint;
   busy: boolean;
@@ -801,28 +843,41 @@ function SettlementCard(props: {
   onRedeem: () => void;
   onClaimLP: () => void;
 }) {
-  const { status: s, market: m, pos, redeemable, lpPreview, busy, pending } = props;
+  const { status: s, market: m, pos, feeModel, redeemable, lpPreview, busy, pending } = props;
   const btn = "pp-submit-order";
+  const v2 = feeModel?.kind === "resolution" ? feeModel : undefined;
+  const winning = m.yesWon ? pos.yes : pos.no;
+  const redeemLine = (() => {
+    if (m.phase === PHASE.Voided) {
+      if (!v2) return `Your shares: YES ${formatUsdc(pos.yes)} + NO ${formatUsdc(pos.no)} × $0.50 = $${formatUsdc(redeemable)}`;
+      if (pos.netCost === undefined) return `Voided — your refund is $${formatUsdc(redeemable)}`;
+      const proRata = m.voidTraderPool !== undefined && m.voidNetCostTotal !== undefined && voidIsProRata(m.voidTraderPool, m.voidNetCostTotal, v2.resolutionFeeBps);
+      return `Voided — ${voidRefundText(pos.netCost, redeemable, v2.resolutionFeeBps, proRata)}`;
+    }
+    if (!v2) return `${m.yesWon ? "YES" : "NO"} won · your winning shares pay $${formatUsdc(redeemable)}`;
+    return `${m.yesWon ? "YES" : "NO"} won · your ${formatUsdc(winning)} winning shares pay $${formatUsdc(redeemable)} (after the ${bpsPct(v2.resolutionFeeBps)} resolution fee)`;
+  })();
   return (
     <div className="space-y-2">
       <div className="font-mono text-[11px] text-fg">{s.label}</div>
       <p className="text-2xs text-fg-dim">{s.detail}</p>
       {s.canResolve && <button onClick={props.onResolve} disabled={busy} className={btn}>{pending === "resolve" ? "resolving…" : "resolve market"}</button>}
-      {s.canVoid && <button onClick={props.onVoid} disabled={busy} className={btn}>{pending === "void" ? "voiding…" : "void market ($0.50 / share)"}</button>}
+      {s.canVoid && v2 && pos.netCost !== undefined && pos.netCost > 0n && (
+        <div className="font-mono text-[10px] text-fg-mute">
+          If voided: {voidRefundText(pos.netCost, netCostMinusFee(pos.netCost, v2.resolutionFeeBps), v2.resolutionFeeBps)}
+        </div>
+      )}
+      {s.canVoid && <button onClick={props.onVoid} disabled={busy} className={btn}>{pending === "void" ? "voiding…" : v2 ? `void market (refunds net cost − ${bpsPct(v2.resolutionFeeBps)})` : "void market ($0.50 / share)"}</button>}
       {s.canRedeem && (
         <>
-          <div className="font-mono text-[10px] text-fg-mute">
-            {m.phase === PHASE.Voided
-              ? `Your shares: YES ${formatUsdc(pos.yes)} + NO ${formatUsdc(pos.no)} × $0.50 = $${formatUsdc(redeemable)}`
-              : `${m.yesWon ? "YES" : "NO"} won · your winning shares pay $${formatUsdc(redeemable)}`}
-          </div>
+          <div className="font-mono text-[10px] text-fg-mute">{redeemLine}</div>
           <button onClick={props.onRedeem} disabled={busy || redeemable === 0n} className={btn}>{pending === "redeem" ? "redeeming…" : redeemable === 0n ? "nothing to redeem" : `redeem $${formatUsdc(redeemable)}`}</button>
         </>
       )}
       {s.canClaimLP && pos.lp > 0n && (
-        <button onClick={props.onClaimLP} disabled={busy} className={btn}>{pending === "claimLP" ? "claiming…" : `claim LP ≈ $${formatUsdc(lpPreview)}`}</button>
+        <button onClick={props.onClaimLP} disabled={busy} className={btn}>{pending === "claimLP" ? "claiming…" : `claim LP ${pos.claimableLP !== undefined ? "" : "≈ "}$${formatUsdc(lpPreview)}`}</button>
       )}
-      <div className="pp-order-foot"><span>Shares Y {formatUsdc(pos.yes)} · N {formatUsdc(pos.no)}</span><span>LP {formatUsdc(pos.lp)}</span></div>
+      <div className="pp-order-foot"><span>Shares Y {formatUsdc(pos.yes)} · N {formatUsdc(pos.no)}{pos.netCost !== undefined ? ` · net cost $${formatUsdc(pos.netCost)}` : ""}</span><span>LP {formatUsdc(pos.lp)}</span></div>
     </div>
   );
 }

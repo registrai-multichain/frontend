@@ -4,8 +4,6 @@
  * network's official RPC. Pure logic lives in perennial-market.ts.
  */
 import {
-  BaseError,
-  ContractFunctionRevertedError,
   decodeEventLog,
   parseAbi,
   type Address,
@@ -18,6 +16,10 @@ import live from "./live-data.json";
 import { PERENNIAL_BUILDERS } from "./perennial";
 import { blockChunks } from "./perennial-market";
 import { SNAPSHOT_MATCHES_NETWORK, type PerennialDeployment } from "./perennial-network";
+import { isRevert, readFeeModel, readMarketSettlement } from "./resolution-fee-chain";
+import type { FeeModel } from "./resolution-fee";
+
+export { isRevert };
 
 /** Views that are not in every deployed ABI yet — probed, never assumed. */
 export const probeAbi = parseAbi([
@@ -35,12 +37,6 @@ export const attestationViewsAbi = parseAbi([
 const MARKET_CREATED = marketsPerennialAbi.find(
   (e) => e.type === "event" && e.name === "MarketCreated",
 )!;
-
-/** True when a call failed because the contract reverted (vs. a transport error). */
-export function isRevert(e: unknown): boolean {
-  if (!(e instanceof BaseError)) return false;
-  return Boolean(e.walk((x) => x instanceof ContractFunctionRevertedError));
-}
 
 // ───────────────────────────── discovery ─────────────────────────────
 
@@ -193,6 +189,13 @@ export interface ChainMarket {
   settlement?: number;
   /** isApprovedFeed(feed, agent) — undefined when the view does not exist. */
   approved?: boolean;
+  /** v2 only (undefined on legacy): collateralOf while trading; the settlement
+   *  snapshot (settledNet/Gross or voidTraderPool/voidNetCostTotal) after. */
+  collateral?: bigint;
+  settledNet?: bigint;
+  settledGross?: bigint;
+  voidTraderPool?: bigint;
+  voidNetCostTotal?: bigint;
 }
 
 export interface BuilderRow {
@@ -213,7 +216,8 @@ export interface Overview {
   supportsSettlement: boolean;
   settlementWindow?: bigint;
   approvalView: boolean;
-  fees: { total: bigint; creator: bigint; treasury: bigint; agent: bigint };
+  /** Probed: v2 resolution fee, else the legacy per-trade fee, else unknown. */
+  feeModel: FeeModel;
   minLiquidity: bigint;
   attestation: Address;
   markets: ChainMarket[];
@@ -225,7 +229,10 @@ export interface Overview {
   weights: Record<string, bigint>;
 }
 
-type RawMarket = Omit<ChainMarket, "id" | "seeded" | "lpPot" | "settlement" | "approved">;
+type RawMarket = Pick<
+  ChainMarket,
+  "feedId" | "agent" | "threshold" | "comparator" | "expiry" | "creator" | "builderId" | "yesReserve" | "noReserve" | "phase" | "yesWon" | "createdAt"
+>;
 
 function repoFromURI(uri: string): string {
   return uri.replace(/^ipfs:\/\//, "").replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, "").replace(/\/$/, "");
@@ -246,12 +253,9 @@ export async function readOverview(client: PublicClient, d: PerennialDeployment)
   const pp = d.contracts.ProgressPool!;
   const read = <T,>(p: Promise<unknown>) => p as Promise<T>;
 
-  const [block, total, creator, treasury, agent, minLiquidity, attestation, pendingPot, epoch, nextId] = await Promise.all([
+  const [block, feeModel, minLiquidity, attestation, pendingPot, epoch, nextId] = await Promise.all([
     client.getBlock({ blockTag: "latest" }),
-    read<bigint>(client.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "FEE_BPS_TOTAL" })),
-    read<bigint>(client.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "creatorBps" })),
-    read<bigint>(client.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "treasuryBps" })),
-    read<bigint>(client.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "agentBps" })),
+    readFeeModel(client, mp, "perennial"),
     read<bigint>(client.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "MIN_LIQUIDITY" })),
     read<Address>(client.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "ATTESTATION" })),
     read<bigint>(client.readContract({ address: pp, abi: progressPoolAbi, functionName: "pendingPot" })),
@@ -271,6 +275,14 @@ export async function readOverview(client: PublicClient, d: PerennialDeployment)
     return { ...m, id, comparator: Number(m.comparator), phase: Number(m.phase), seeded, lpPot } as ChainMarket;
   });
   let markets = raws.filter((m) => m.createdAt > 0n);
+
+  // v2 accounting: the pot while trading, the settlement snapshot once settled
+  // (for the local payout mirror). Skipped on legacy, where these revert.
+  if (feeModel.kind === "resolution") {
+    await pool(markets, 6, async (m) => {
+      Object.assign(m, await readMarketSettlement(client, mp, m.id, m.phase));
+    });
+  }
 
   // Capability probe 1: SettlementPolicy. settlementState reverts on the legacy
   // contract (Arc testnet today) — then settle/void are hidden, not guessed.
@@ -358,7 +370,7 @@ export async function readOverview(client: PublicClient, d: PerennialDeployment)
     supportsSettlement,
     settlementWindow,
     approvalView,
-    fees: { total, creator, treasury, agent },
+    feeModel,
     minLiquidity,
     attestation,
     markets,
