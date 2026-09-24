@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Shell } from "@/components/Shell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { OracleLaunchPanel } from "@/components/OracleLaunchPanel";
@@ -43,6 +44,20 @@ export default function LaunchPage() {
           a penalty. Withdraw your free balance any time; reclaim a feed&apos;s
           bond by exiting it after the cooldown.
         </p>
+
+        <div className="mt-8 border border-dashed border-line p-5 max-w-[64ch]">
+          <div className="caption text-accent mb-2">want the agent&apos;s 20%?</div>
+          <p className="text-[13px] text-fg-mute leading-relaxed">
+            Common markets pay the bonded agent that settles a market 20% of its
+            1% resolution fee, only when it settles correctly. For feeds launched
+            here the agent of record is the OracleStake contract, not your
+            wallet, so that share doesn&apos;t route to you. To earn it, run your
+            own agent on a feed with an approved, independent resolver.{" "}
+            <Link href="/agents" className="text-accent hover:underline">
+              Run an agent →
+            </Link>
+          </p>
+        </div>
       </article>
     </Shell>
   );

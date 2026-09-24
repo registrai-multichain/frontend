@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Shell } from "@/components/Shell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { NanoPayPanel } from "@/components/NanoPayPanel";
@@ -44,10 +45,20 @@ export default function NanoPayPage() {
         <div className="border border-line bg-bg-elev p-5 mt-px">
           <h3 className="font-serif text-[18px] mb-2">Markets settle here too</h3>
           <p className="text-[13px] text-fg-mute leading-relaxed max-w-[64ch]">
-            MarketsV4 is a prediction market that runs entirely on this ledger:
-            trades move internal balances (no per-trade ERC20 transfer), and the
-            creator/agent/treasury fee on every trade is a single accrual write
-            instead of three pushes, claimed lazily from the ledger. It is the
+            MarketsV4 runs Registrai&apos;s common markets entirely on this
+            ledger: trades move internal balances (no per-trade ERC20 transfer)
+            and carry no trading fee. A 1% resolution fee is charged once, at
+            settlement, and split 30% to the market creator, 20% to the bonded
+            agent, and 50% to the Registrai treasury, each leg a ledger
+            transfer. If a market can&apos;t be settled, it voids: every trader
+            gets their net cost back, minus the 1% fee, and the agent&apos;s 20%
+            goes to whoever successfully challenged its answer (otherwise to the
+            treasury). Common markets are open to any bonded agent paired with
+            an approved, independent dispute resolver, so you can{" "}
+            <Link href="/agents" className="text-accent hover:underline">
+              run one
+            </Link>{" "}
+            and earn the 20% leg on every market it settles correctly. It is the
             first product riding the rail, and the pattern any app on Arc can
             reuse.
             {CONTRACTS.MarketsV4nano && (
