@@ -16,8 +16,8 @@ import live from "./live-data.json";
 import { PERENNIAL_BUILDERS } from "./perennial";
 import { blockChunks } from "./perennial-market";
 import { SNAPSHOT_MATCHES_NETWORK, type PerennialDeployment } from "./perennial-network";
-import { isRevert, readFeeModel, readMarketSettlement } from "./resolution-fee-chain";
-import type { FeeModel } from "./resolution-fee";
+import { isRevert, readFeeModel, readMarketSettlement } from "./market-fees-chain";
+import type { FeeModel } from "./market-fees";
 
 export { isRevert };
 
@@ -189,11 +189,10 @@ export interface ChainMarket {
   settlement?: number;
   /** isApprovedFeed(feed, agent) — undefined when the view does not exist. */
   approved?: boolean;
-  /** v2 only (undefined on legacy): collateralOf while trading; the settlement
-   *  snapshot (settledNet/Gross or voidTraderPool/voidNetCostTotal) after. */
+  /** v3 only (undefined on legacy): the pot and the agent's held 20% while
+   *  unsettled; the void snapshot once voided. */
   collateral?: bigint;
-  settledNet?: bigint;
-  settledGross?: bigint;
+  agentEscrow?: bigint;
   voidTraderPool?: bigint;
   voidNetCostTotal?: bigint;
 }
@@ -216,7 +215,7 @@ export interface Overview {
   supportsSettlement: boolean;
   settlementWindow?: bigint;
   approvalView: boolean;
-  /** Probed: v2 resolution fee, else the legacy per-trade fee, else unknown. */
+  /** Probed: v3 1% trading fee, else the legacy per-trade fee, else unknown. */
   feeModel: FeeModel;
   minLiquidity: bigint;
   attestation: Address;
@@ -276,9 +275,9 @@ export async function readOverview(client: PublicClient, d: PerennialDeployment)
   });
   let markets = raws.filter((m) => m.createdAt > 0n);
 
-  // v2 accounting: the pot while trading, the settlement snapshot once settled
-  // (for the local payout mirror). Skipped on legacy, where these revert.
-  if (feeModel.kind === "resolution") {
+  // v3 accounting: the pot and agent escrow while unsettled, the void snapshot
+  // once voided (for the local payout mirror). Skipped on legacy.
+  if (feeModel.kind === "trade") {
     await pool(markets, 6, async (m) => {
       Object.assign(m, await readMarketSettlement(client, mp, m.id, m.phase));
     });

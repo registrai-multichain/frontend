@@ -21,49 +21,47 @@ import {
   isqrtCeil,
   redeemPayout,
   settlementRuleText,
-  splitFee,
   voidPayout,
 } from "./perennial-market";
 
 const seeded = { yesReserve: 5_000_000n, noReserve: 5_000_000n };
 
-describe("fee-free quotes mirror the v2 contracts (no trading fee)", () => {
-  test("buy mints all of collateralIn as complete sets, then swaps — to the unit", () => {
-    const q = quoteBuy(seeded, OUTCOME.Yes, 2_000_000n)!;
-    // yes = no = 5 + 2 = 7; k = 25e12; ceil(25e12 / 7e6) = 3,571,429
-    expect(q.fee).toBe(0n);
-    expect(q.sharesOut).toBe(3_428_571n);
-    expect(q.reservesAfter).toEqual({ yesReserve: 3_571_429n, noReserve: 7_000_000n });
-    expect(quoteBuy(seeded, OUTCOME.Yes, 2_000_000n, 0n)).toEqual(q);
+describe("v3 quotes: 1% trading fee, exact to the unit", () => {
+  test("buy: 1% of collateralIn is the fee, the rest enters the curve", () => {
+    const q = quoteBuy(seeded, OUTCOME.Yes, 2_000_000n, 100n)!;
+    // effective 1,980,000: yes = no = 6,980,000; k = 25e12; ceil(25e12 / 6.98e6) = 3,581,662
+    expect(q.fee).toBe(20_000n);
+    expect(q.sharesOut).toBe(3_398_338n);
+    expect(q.reservesAfter).toEqual({ yesReserve: 3_581_662n, noReserve: 6_980_000n });
   });
-  test("each side's supply equals the pot afterwards (YES = NO = C)", () => {
-    const q = quoteBuy(seeded, OUTCOME.No, 3_000_000n)!;
-    const C = 5_000_000n + 3_000_000n;
+  test("each side's supply equals the pot C = liquidity + (collateralIn − fee)", () => {
+    const q = quoteBuy(seeded, OUTCOME.No, 3_000_000n, 100n)!;
+    const C = 5_000_000n + 3_000_000n - q.fee;
+    expect(q.fee).toBe(30_000n);
     expect(q.reservesAfter.yesReserve).toBe(C);
     expect(q.reservesAfter.noReserve + q.sharesOut).toBe(C);
   });
-  test("no fee: avg price equals the ex-fee average", () => {
-    const q = quoteBuy(seeded, OUTCOME.Yes, 2_000_000n)!;
-    expect(q.avgPrice).toBeCloseTo(2_000_000 / 3_428_571, 12);
-    expect(q.priceImpact).toBeCloseTo(q.avgPrice / 0.5 - 1, 12);
+  test("avg price includes the fee; impact is measured ex-fee", () => {
+    const q = quoteBuy(seeded, OUTCOME.Yes, 2_000_000n, 100n)!;
+    expect(q.avgPrice).toBeCloseTo(2_000_000 / 3_398_338, 12);
+    expect(q.priceImpact).toBeCloseTo(1_980_000 / 3_398_338 / 0.5 - 1, 12);
   });
-  test("sell pays the whole curve output (collateralOut == grossOut), ceil-sqrt kept", () => {
-    const q = quoteSell({ yesReserve: 8_313_962n, noReserve: 12_027_961n }, OUTCOME.Yes, 6_627_759n)!;
-    expect(q.fee).toBe(0n);
+  test("sell: ceil-sqrt grossOut, fee = 1% of grossOut, seller gets grossOut − fee", () => {
+    const q = quoteSell({ yesReserve: 8_313_962n, noReserve: 12_027_961n }, OUTCOME.Yes, 6_627_759n, 100n)!;
     expect(q.grossOut).toBe(3_379_272n);
-    expect(q.collateralOut).toBe(3_379_272n);
+    expect(q.fee).toBe(33_792n);
+    expect(q.collateralOut).toBe(3_345_480n);
+    expect(q.reservesAfter).toEqual({ yesReserve: 11_562_449n, noReserve: 8_648_689n });
   });
-  test("round trip loses only rounding — never a fee, never a gain", () => {
-    for (const amt of [1_000n, 1_000_000n, 3_000_000n, 25_000_000n]) {
-      const b = quoteBuy(seeded, OUTCOME.No, amt)!;
-      const s = quoteSell(b.reservesAfter, OUTCOME.No, b.sharesOut)!;
-      expect(s.collateralOut).toBeLessThanOrEqual(amt);
-      expect(amt - s.collateralOut).toBeLessThanOrEqual(2n);
-    }
+  test("round trip pays the two fees and never creates value", () => {
+    const b = quoteBuy(seeded, OUTCOME.Yes, 2_000_000n, 100n)!;
+    const s = quoteSell(b.reservesAfter, OUTCOME.Yes, b.sharesOut, 100n)!;
+    expect([s.grossOut, s.fee, s.collateralOut]).toEqual([1_979_999n, 19_799n, 1_960_200n]);
+    expect(s.collateralOut + s.fee + b.fee).toBeLessThanOrEqual(2_000_000n);
   });
-  test("slippage floor applies to fee-free quotes the same way", () => {
-    const q = quoteBuy(seeded, OUTCOME.Yes, 2_000_000n)!;
-    expect(minOutWithSlippage(q.sharesOut, 100n)).toBe(3_394_285n);
+  test("slippage floor on the fee-inclusive quote", () => {
+    const q = quoteBuy(seeded, OUTCOME.Yes, 2_000_000n, 100n)!;
+    expect(minOutWithSlippage(q.sharesOut, 100n)).toBe(3_364_354n);
   });
 });
 
@@ -105,7 +103,7 @@ describe("LEGACY quoteBuy mirrors the testnet MarketsPerennial.buy (70 bps per t
   });
 });
 
-describe("LEGACY quoteSell mirrors the testnet MarketsPerennial.sell", () => {
+describe("LEGACY quoteSell mirrors the testnet MarketsPerennial.sell (70 bps)", () => {
   test("gross out solves the constant product exactly (floor)", () => {
     const r = { yesReserve: 3_578_586n, noReserve: 6_986_000n };
     const q = quoteSell(r, OUTCOME.Yes, 1_000_000n, 70n)!;
@@ -147,11 +145,6 @@ describe("slippage and fees", () => {
     expect(parseSlippagePct("51").ok).toBe(false);
     expect(parseSlippagePct("abc").ok).toBe(false);
     expect(parseSlippagePct("0.001").ok).toBe(false);
-  });
-  test("fee split by governable bps, remainder to commons", () => {
-    const s = splitFee(14_000n, { creatorBps: 20n, treasuryBps: 35n, agentBps: 15n });
-    expect(s).toEqual({ creator: 4_000n, agent: 3_000n, commons: 7_000n });
-    expect(s.creator + s.agent + s.commons).toBe(14_000n);
   });
 });
 

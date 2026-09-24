@@ -13,7 +13,6 @@ import {
   COMPARATOR,
   OUTCOME,
   PHASE,
-  bpsPct,
   formatUsdc,
   marketStatus,
   maxDeposit,
@@ -27,7 +26,6 @@ import {
   quoteBuy,
   quoteSell,
   settlementRuleText,
-  splitFee,
   type MarketStatus,
 } from "@/lib/perennial-market";
 import {
@@ -35,14 +33,13 @@ import {
   feeSummary,
   mirrorClaimLP,
   mirrorRedeem,
-  netCostMinusFee,
+  splitTradeFee,
   tradeFeeBps,
-  ticketFeeLabel,
   voidIsProRata,
   voidRefundText,
   type FeeModel,
-} from "@/lib/resolution-fee";
-import { readHolderSettlement } from "@/lib/resolution-fee-chain";
+} from "@/lib/market-fees";
+import { readHolderSettlement } from "@/lib/market-fees-chain";
 import {
   marketIdFromLogs,
   probeAbi,
@@ -55,8 +52,8 @@ import {
 } from "@/lib/perennial-chain";
 import { BuilderProfile, findDigest } from "./BuilderProfile";
 
-// Perennial end-to-end: bettors trade builder-milestone markets (no trading fee;
-// 1% of each market's pot at settlement, half of it to the builder commons);
+// Perennial end-to-end: bettors trade builder-milestone markets (a 1% fee on
+// every trade: 30% creator, 20% agent held until settlement, 50% builder commons);
 // builders register, accrue progress from verified artifacts, and claim a
 // progress-weighted share. The hype pays for the grind.
 
@@ -68,7 +65,7 @@ type Position = {
   yes: bigint;
   no: bigint;
   lp: bigint;
-  /** v2 views — undefined on the legacy contract. */
+  /** v3 views — undefined on the legacy contract. */
   netCost?: bigint;
   redeemable?: bigint;
   claimableLP?: bigint;
@@ -193,16 +190,16 @@ function PerennialLive() {
         amount: (await publicClient.readContract({ address: pool, abi: progressPoolAbi, functionName: "claimable", args: [e, address!] })) as bigint,
       }))),
       Promise.all(markets.map(async (m) => {
-        const [[yes, no, lp], v2] = await Promise.all([
+        const [[yes, no, lp], v3] = await Promise.all([
           Promise.all([
             publicClient.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "yesBalance", args: [m.id, address!] }),
             publicClient.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "noBalance", args: [m.id, address!] }),
             publicClient.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "lpShares", args: [m.id, address!] }),
           ]) as Promise<bigint[]>,
-          // netCost / redeemable / claimableLP exist only on the v2 contract.
-          ov!.feeModel.kind === "resolution" ? readHolderSettlement(publicClient, mp, m.id, address!, m.phase) : Promise.resolve({}),
+          // netCost / redeemable / claimableLP exist only on the v3 contract.
+          ov!.feeModel.kind === "trade" ? readHolderSettlement(publicClient, mp, m.id, address!, m.phase) : Promise.resolve({}),
         ]);
-        return [m.id, { yes, no, lp, ...v2 } satisfies Position] as const;
+        return [m.id, { yes, no, lp, ...v3 } satisfies Position] as const;
       })),
     ]);
     return {
@@ -284,7 +281,7 @@ function PerennialLive() {
   };
 
   // ─────────────── quote ───────────────
-  // v2: no trading fee (0). Legacy testnet contract: its per-trade fee.
+  // TRADE_FEE_BPS (v3, 1%) or the legacy contract's per-trade fee; unknown -> no quote.
   const feeBps = tradeFeeBps(ov?.feeModel);
   const slip = parseSlippagePct(slippage);
   const outcome = side === "Yes" ? OUTCOME.Yes : OUTCOME.No;
@@ -296,12 +293,9 @@ function PerennialLive() {
   const sellQ = selected && feeBps !== undefined && mode === "sell" && amt?.ok ? quoteSell(selected, outcome, amt.value, feeBps) : null;
   const expectedOut = buyQ?.sharesOut ?? sellQ?.collateralOut;
   const minOut = expectedOut !== undefined && slip.ok ? minOutWithSlippage(expectedOut, slip.value) : undefined;
-  const legacySplit = ov?.feeModel.kind === "legacy" ? ov.feeModel.split : undefined;
-  const feeParts = legacySplit && (buyQ || sellQ)
-    ? splitFee((buyQ ?? sellQ)!.fee, { creatorBps: legacySplit.creatorBps, treasuryBps: legacySplit.commonsBps, agentBps: legacySplit.agentBps })
-    : undefined;
   const feeModel: FeeModel | undefined = ov?.feeModel;
-  const isV2 = feeModel?.kind === "resolution";
+  const feeParts = buyQ || sellQ ? splitTradeFee((buyQ ?? sellQ)!.fee, feeModel) : undefined;
+  const isV3 = feeModel?.kind === "trade";
   const feeLine = feeSummary(feeModel);
 
   // ─────────────── tx plumbing ───────────────
@@ -519,7 +513,7 @@ function PerennialLive() {
   const digest = selBuilder ? findDigest(CHAIN.id, selBuilder.owner) : undefined;
   const yp = selected ? yesPct(selected) : 50;
   // Previews: the contract's own `redeemable` / `claimableLP` views when the
-  // deployment has them (v2), else the local mirror of the payout math.
+  // deployment has them (v3), else the local mirror of the payout math.
   const snapshot = selected ? { ...selected, totalLpShares: selected.seeded } : undefined;
   const redeemable = selected ? pos.redeemable ?? mirrorRedeem(snapshot!, pos, feeModel) ?? 0n : 0n;
   const lpPreview = selected ? pos.claimableLP ?? mirrorClaimLP(snapshot!, pos) : 0n;
@@ -650,7 +644,7 @@ function PerennialLive() {
                   <div className="pp-market-facts">
                     <span><b>Status</b>{selStatus?.label}</span>
                     <span><b>{selStatus?.canTrade ? "Closes" : "Expiry"}</b>{selStatus?.canTrade ? remaining(selected.expiry) : new Date(Number(selected.expiry) * 1000).toISOString().slice(0, 16).replace("T", " ")}</span>
-                    <span><b>Liquidity</b>${fmt(selected.seeded)} seeded{selected.collateral !== undefined ? ` · pot $${fmt(selected.collateral)}` : ""}</span>
+                    <span><b>Liquidity</b>${fmt(selected.seeded)} seeded{selected.collateral !== undefined ? ` · pot $${fmt(selected.collateral)}` : ""}{selected.agentEscrow !== undefined ? ` · agent fee held $${fmt(selected.agentEscrow)}` : ""}</span>
                     <span><b>Resolution</b>bonded oracle{disclosure ? " ⚠" : ""}</span>
                   </div>
                 )}
@@ -709,11 +703,10 @@ function PerennialLive() {
                         <div className="mt-2 space-y-0.5 font-mono text-[10px] text-fg-mute">
                           {buyQ && <div className="flex justify-between"><span>Shares out</span><span>{fmt(buyQ.sharesOut, 4)} {side}</span></div>}
                           {sellQ && <div className="flex justify-between"><span>You receive</span><span>${fmt(sellQ.collateralOut, 4)}</span></div>}
-                          <div className="flex justify-between"><span>{isV2 ? "Avg price" : "Avg price (incl. fee)"}</span><span>{cents((buyQ ?? sellQ)!.avgPrice)}</span></div>
+                          <div className="flex justify-between"><span>Avg price (incl. fee)</span><span>{cents((buyQ ?? sellQ)!.avgPrice)}</span></div>
                           <div className="flex justify-between"><span>Price impact</span><span className={(buyQ ?? sellQ)!.priceImpact > 0.05 ? "text-down" : ""}>{pct((buyQ ?? sellQ)!.priceImpact, 2)}</span></div>
-                          {isV2
-                            ? <div className="flex justify-between"><span>Fee</span><span>{ticketFeeLabel(feeModel)}</span></div>
-                            : <div className="flex justify-between"><span>Fee ({ticketFeeLabel(feeModel)})</span><span>${fmt((buyQ ?? sellQ)!.fee, 4)}{feeParts ? ` · creator ${fmt(feeParts.creator, 4)} / commons ${fmt(feeParts.commons, 4)} / agent ${fmt(feeParts.agent, 4)}` : ""}</span></div>}
+                          <div className="flex justify-between"><span>Fee ({feeHeadline(feeModel)})</span><span>${fmt((buyQ ?? sellQ)!.fee, 4)}{feeParts ? ` · creator ${fmt(feeParts.creator, 4)} / agent${isV3 ? " (held)" : ""} ${fmt(feeParts.agent, 4)} / commons ${fmt(feeParts.commons, 4)}` : ""}</span></div>
+                          {feeLine && <div className="text-fg-dim">{feeLine}</div>}
                           {minOut !== undefined && <div className="flex justify-between"><span>Minimum {mode === "buy" ? "shares" : "received"}</span><span>{mode === "buy" ? fmt(minOut, 4) : `$${fmt(minOut, 4)}`}</span></div>}
                         </div>
                       )}
@@ -782,8 +775,8 @@ function PerennialLive() {
                       </p>
                       {ov && feeLine && (
                         <p className="text-2xs text-fg-dim">
-                          {isV2
-                            ? `No trading fee. Fees: ${feeLine} — the creator's share is yours. `
+                          {isV3
+                            ? `Fees: ${feeLine}. Nothing is charged at settlement; the creator's share is yours. `
                             : `Fees: ${feeLine}. `}
                           Your liquidity is returned through Claim LP after settlement.
                         </p>
@@ -845,29 +838,31 @@ function SettlementCard(props: {
 }) {
   const { status: s, market: m, pos, feeModel, redeemable, lpPreview, busy, pending } = props;
   const btn = "pp-submit-order";
-  const v2 = feeModel?.kind === "resolution" ? feeModel : undefined;
-  const winning = m.yesWon ? pos.yes : pos.no;
+  const v3 = feeModel?.kind === "trade" ? feeModel : undefined;
   const redeemLine = (() => {
     if (m.phase === PHASE.Voided) {
-      if (!v2) return `Your shares: YES ${formatUsdc(pos.yes)} + NO ${formatUsdc(pos.no)} × $0.50 = $${formatUsdc(redeemable)}`;
+      if (!v3) return `Your shares: YES ${formatUsdc(pos.yes)} + NO ${formatUsdc(pos.no)} × $0.50 = $${formatUsdc(redeemable)}`;
       if (pos.netCost === undefined) return `Voided — your refund is $${formatUsdc(redeemable)}`;
-      const proRata = m.voidTraderPool !== undefined && m.voidNetCostTotal !== undefined && voidIsProRata(m.voidTraderPool, m.voidNetCostTotal, v2.resolutionFeeBps);
-      return `Voided — ${voidRefundText(pos.netCost, redeemable, v2.resolutionFeeBps, proRata)}`;
+      const proRata = m.voidTraderPool !== undefined && m.voidNetCostTotal !== undefined && voidIsProRata(m.voidTraderPool, m.voidNetCostTotal);
+      return `Voided — ${voidRefundText(pos.netCost, redeemable, proRata)}`;
     }
-    if (!v2) return `${m.yesWon ? "YES" : "NO"} won · your winning shares pay $${formatUsdc(redeemable)}`;
-    return `${m.yesWon ? "YES" : "NO"} won · your ${formatUsdc(winning)} winning shares pay $${formatUsdc(redeemable)} (after the ${bpsPct(v2.resolutionFeeBps)} resolution fee)`;
+    return `${m.yesWon ? "YES" : "NO"} won · your winning shares pay $${formatUsdc(redeemable)} ($1.00 each)`;
   })();
   return (
     <div className="space-y-2">
       <div className="font-mono text-[11px] text-fg">{s.label}</div>
       <p className="text-2xs text-fg-dim">{s.detail}</p>
+      {s.canResolve && m.agentEscrow !== undefined && m.agentEscrow > 0n && (
+        <div className="font-mono text-[10px] text-fg-mute">Resolving releases the agent&apos;s held ${formatUsdc(m.agentEscrow)} to it.</div>
+      )}
       {s.canResolve && <button onClick={props.onResolve} disabled={busy} className={btn}>{pending === "resolve" ? "resolving…" : "resolve market"}</button>}
-      {s.canVoid && v2 && pos.netCost !== undefined && pos.netCost > 0n && (
+      {s.canVoid && v3 && pos.netCost !== undefined && pos.netCost > 0n && (
         <div className="font-mono text-[10px] text-fg-mute">
-          If voided: {voidRefundText(pos.netCost, netCostMinusFee(pos.netCost, v2.resolutionFeeBps), v2.resolutionFeeBps)}
+          If voided: your net cost ${formatUsdc(pos.netCost)} back (pro rata only if the pool is short)
+          {m.agentEscrow !== undefined ? ` · the agent's held $${formatUsdc(m.agentEscrow)} goes to its successful challenger, else the ${v3.commonsLabel}` : ""}
         </div>
       )}
-      {s.canVoid && <button onClick={props.onVoid} disabled={busy} className={btn}>{pending === "void" ? "voiding…" : v2 ? `void market (refunds net cost − ${bpsPct(v2.resolutionFeeBps)})` : "void market ($0.50 / share)"}</button>}
+      {s.canVoid && <button onClick={props.onVoid} disabled={busy} className={btn}>{pending === "void" ? "voiding…" : v3 ? "void market (refunds net cost)" : "void market ($0.50 / share)"}</button>}
       {s.canRedeem && (
         <>
           <div className="font-mono text-[10px] text-fg-mute">{redeemLine}</div>

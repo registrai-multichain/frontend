@@ -22,25 +22,25 @@ import {
   feeSummary,
   mirrorClaimLP,
   mirrorRedeem,
-  ticketFeeLabel,
+  feeHeadline,
   tradeFeeBps,
   voidIsProRata,
   voidRefundText,
   type FeeModel,
-} from "@/lib/resolution-fee";
+} from "@/lib/market-fees";
 import {
   readFeeModel,
   readHolderSettlement,
   readMarketSettlement,
   type HolderSettlementViews,
   type MarketSettlementViews,
-} from "@/lib/resolution-fee-chain";
+} from "@/lib/market-fees-chain";
 
 // Trade a MarketsV4 common market that settles entirely on NanoLedger. Buying
 // pulls collateral from your ledger balance (deposit on this page first). On the
-// v2 contract trades carry no fee; 1% of the pot is charged once at settlement
-// (30% creator · 20% agent · 50% Registrai treasury). Testnet still runs the
-// legacy contract (a per-trade fee), so the fee model is probed, never assumed.
+// v3 contract every buy and sell pays 1% (30% creator · 20% agent, held until
+// settlement · 50% Registrai treasury); nothing is charged at settlement. Testnet
+// still runs the legacy contract (70 bps), so the fee model is probed.
 
 type Status = "idle" | "approving" | "submitting" | "success" | "error";
 type Side = "Yes" | "No";
@@ -67,7 +67,7 @@ type HolderState = {
   no: bigint;
   lp: bigint;
   ledgerBal: bigint;
-  /** Legacy fee-pool accrual (NanoLedger.claimablePool); 0 on v2. */
+  /** Legacy fee-pool accrual (NanoLedger.claimablePool); 0 on v3. */
   feeClaimable: bigint;
 } & HolderSettlementViews;
 
@@ -94,7 +94,7 @@ export function NanoMarketPanel({ market }: { market: NanoMarket }) {
   const refresh = useCallback(async () => {
     if (!nl || !mv4) return;
     try {
-      // Probe once: v2 (RESOLUTION_FEE_BPS) or the legacy per-trade fee.
+      // Probe once: v3 (TRADE_FEE_BPS) or the legacy per-trade fee.
       const fm = feeModel ?? (await readFeeModel(client, mv4, "v4"));
       if (!feeModel) setFeeModel(fm);
       const [m, lpPot, totalLpShares, block] = await Promise.all([
@@ -106,8 +106,8 @@ export function NanoMarketPanel({ market }: { market: NanoMarket }) {
         client.getBlock({ blockTag: "latest" }),
       ]);
       const phase = Number(m.phase);
-      const v2 = fm.kind === "resolution";
-      const settle = v2 ? await readMarketSettlement(client, mv4, market.marketId, phase) : {};
+      const v3 = fm.kind === "trade";
+      const settle = v3 ? await readMarketSettlement(client, mv4, market.marketId, phase) : {};
       setMkt({
         createdAt: m.createdAt, phase, yesWon: m.yesWon, expiry: m.expiry, agent: m.agent, yesReserve: m.yesReserve, noReserve: m.noReserve,
         lpPot, totalLpShares, chainNow: block.timestamp, ...settle,
@@ -119,7 +119,7 @@ export function NanoMarketPanel({ market }: { market: NanoMarket }) {
           client.readContract({ address: mv4, abi: marketsV4Abi, functionName: "lpShares", args: [market.marketId, address] }) as Promise<bigint>,
           client.readContract({ address: nl, abi: nanoLedgerAbi, functionName: "balanceOf", args: [address] }) as Promise<bigint>,
           client.readContract({ address: nl, abi: nanoLedgerAbi, functionName: "claimablePool", args: [market.marketId, address] }) as Promise<bigint>,
-          v2 ? readHolderSettlement(client, mv4, market.marketId, address, phase) : Promise.resolve({}),
+          v3 ? readHolderSettlement(client, mv4, market.marketId, address, phase) : Promise.resolve({}),
         ]);
         setMe({ yes, no, lp, ledgerBal, feeClaimable, ...views });
       } else {
@@ -132,7 +132,7 @@ export function NanoMarketPanel({ market }: { market: NanoMarket }) {
   useEffect(() => { const id = setInterval(() => void refresh(), 6_000); return () => clearInterval(id); }, [refresh]);
 
   const busy = status === "approving" || status === "submitting";
-  const v2 = feeModel?.kind === "resolution" ? feeModel : undefined;
+  const v3 = feeModel?.kind === "trade" ? feeModel : undefined;
   const phase = mkt?.phase ?? PHASE.Trading;
   const missing = mkt !== undefined && mkt.createdAt === 0n;
   const trading = !missing && phase === PHASE.Trading && (!mkt || mkt.chainNow < mkt.expiry);
@@ -146,7 +146,7 @@ export function NanoMarketPanel({ market }: { market: NanoMarket }) {
   const buyQ = mkt && parsed?.ok && feeBps !== undefined ? quoteBuy(mkt, outcome, parsed.value, feeBps) : null;
   const sellQ = mkt && parsed?.ok && feeBps !== undefined && parsed.value <= held ? quoteSell(mkt, outcome, parsed.value, feeBps) : null;
 
-  // Settlement previews: the contract's views on v2, else the local mirror.
+  // Settlement previews: the contract's views on v3, else the local mirror.
   const redeemable = mkt && me ? me.redeemable ?? mirrorRedeem(mkt, me, feeModel) ?? 0n : 0n;
   const lpClaim = mkt && me ? me.claimableLP ?? mirrorClaimLP(mkt, me) : 0n;
 
@@ -157,8 +157,8 @@ export function NanoMarketPanel({ market }: { market: NanoMarket }) {
       : phase === PHASE.Resolved
       ? (mkt.yesWon ? "resolved YES" : "resolved NO")
       : phase === PHASE.Voided
-        ? v2
-          ? `voided — refunds net cost minus ${bpsPct(v2.resolutionFeeBps)}; agent's ${bpsPct(v2.agentShareBps)} to its successful challenger`
+        ? v3
+          ? `voided — refunds net cost; agent's held ${bpsPct(v3.agentShareBps)} to its successful challenger`
           : "voided"
         : trading ? "trading" : "trading closed · awaiting settlement";
 
@@ -212,15 +212,13 @@ export function NanoMarketPanel({ market }: { market: NanoMarket }) {
   const redeemLine = (() => {
     if (!me || !mkt) return undefined;
     if (phase === PHASE.Voided) {
-      if (!v2) return `your shares: YES ${fmt(me.yes, 2)} + NO ${fmt(me.no, 2)} × $0.50 = $${fmt(redeemable, 2)}`;
+      if (!v3) return `your shares: YES ${fmt(me.yes, 2)} + NO ${fmt(me.no, 2)} × $0.50 = $${fmt(redeemable, 2)}`;
       if (me.netCost === undefined) return `your refund: $${fmt(redeemable, 2)}`;
-      const proRata = mkt.voidTraderPool !== undefined && mkt.voidNetCostTotal !== undefined && voidIsProRata(mkt.voidTraderPool, mkt.voidNetCostTotal, v2.resolutionFeeBps);
-      return voidRefundText(me.netCost, redeemable, v2.resolutionFeeBps, proRata);
+      const proRata = mkt.voidTraderPool !== undefined && mkt.voidNetCostTotal !== undefined && voidIsProRata(mkt.voidTraderPool, mkt.voidNetCostTotal);
+      return voidRefundText(me.netCost, redeemable, proRata);
     }
     if (phase === PHASE.Resolved) {
-      return v2
-        ? `your winning shares pay $${fmt(redeemable, 2)} (after the ${bpsPct(v2.resolutionFeeBps)} resolution fee)`
-        : `your winning shares pay $${fmt(redeemable, 2)}`;
+      return `your winning shares pay $${fmt(redeemable, 2)} ($1.00 each)`;
     }
     return undefined;
   })();
@@ -261,10 +259,10 @@ export function NanoMarketPanel({ market }: { market: NanoMarket }) {
           </div>
           {parsed?.ok && (buyQ || sellQ) && (
             <div className="caption text-2xs text-fg-dim mt-1">
-              {buyQ && `buy ≈ ${fmt(buyQ.sharesOut)} ${side}`}
+              {buyQ && `buy ≈ ${fmt(buyQ.sharesOut)} ${side} (fee $${fmt(buyQ.fee)})`}
               {buyQ && sellQ && " · "}
-              {sellQ && `sell ≈ $${fmt(sellQ.collateralOut)}`}
-              {" · "}fee: {ticketFeeLabel(feeModel)} · 1% slippage floor
+              {sellQ && `sell ≈ $${fmt(sellQ.collateralOut)} (fee $${fmt(sellQ.fee)})`}
+              {" · "}fee {feeHeadline(feeModel)} · 1% slippage floor
             </div>
           )}
           <div className="caption text-2xs text-fg-dim mt-1">
@@ -306,13 +304,14 @@ export function NanoMarketPanel({ market }: { market: NanoMarket }) {
       )}
 
       <div className="mt-3 space-y-1 text-2xs text-fg-dim">
-        {feeLine && <p>Fees: {v2 ? `no trading fee · ${feeLine}` : `${feeLine} (legacy testnet contract)`}.</p>}
-        {v2 && (
+        {feeLine && <p>Fees: {v3 ? `${feeLine}. Nothing is charged at settlement` : feeLine}.</p>}
+        {v3 && (
           <p>
             Who settles: any bonded agent can settle a common market (with an approved independent resolver) and earns{" "}
-            {bpsPct(v2.agentShareBps)} of the resolution fee. If the market voids, every trader gets their net cost back minus{" "}
-            {bpsPct(v2.resolutionFeeBps)}, and the agent&apos;s {bpsPct(v2.agentShareBps)} goes to whoever successfully challenged its
-            answer (otherwise to the Registrai treasury).
+            {bpsPct(v3.agentShareBps)} of the trading fees, held until the market settles
+            {mkt?.agentEscrow !== undefined ? ` ($${fmt(mkt.agentEscrow, 2)} held now)` : ""}. If the market voids, every trader gets
+            their net cost back (what they put in after fees, minus what they took out), and the agent&apos;s held{" "}
+            {bpsPct(v3.agentShareBps)} goes to whoever successfully challenged its answer, otherwise to the Registrai treasury.
             {mkt ? ` This market's agent: ${shortAddr(mkt.agent)}.` : ""}
           </p>
         )}
