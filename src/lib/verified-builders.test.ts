@@ -3,6 +3,7 @@ import { getContractAddress, type Address, type Hex } from "viem";
 import vectors from "./__fixtures__/verified-builder-vectors.json";
 import { buildVerifiedBuilderVectors } from "./verified-builder-vectors";
 import {
+  freshProofUrl,
   MAX_PROJECTS_PER_BUILDER,
   MAX_SOURCE_LEN,
   builderCountry,
