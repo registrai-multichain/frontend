@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { PerennialShell } from "@/components/PerennialShell";
 import { VerifyFlow } from "@/components/verify/VerifyFlow";
+import { MyBadge } from "@/components/verify/MyBadge";
 import { PERENNIAL, networkStatusLine } from "@/lib/perennial-network";
 
 export const metadata: Metadata = {
@@ -31,7 +32,10 @@ export default function VerifyPage() {
         </header>
 
         <div className="vf-layout">
-          <VerifyFlow />
+          <div className="vf-main">
+            <MyBadge />
+            <VerifyFlow />
+          </div>
 
           <aside className="vf-aside" aria-label="What verifying means">
             <div className="pp-card-label">What this is</div>

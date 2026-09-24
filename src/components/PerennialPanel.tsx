@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { createPublicClient, createWalletClient, custom, type Address, type Hex, type PublicClient } from "viem";
 import useSWR from "swr";
 import { useWallet } from "./WalletProvider";
@@ -55,6 +56,8 @@ import { BuilderProfile, findDigest } from "./BuilderProfile";
 import { AgentBadge, CaughtAgentBanner, useAgentReputation } from "./AgentBadge";
 import { MilestoneDisclosure, VerifiedBadge } from "./VerifiedBadge";
 import { milestoneMetric } from "@/lib/builder-verification";
+import { parseBuilderParam } from "@/lib/verified-builder-badge";
+import { BuilderBadgeSection } from "./BuilderBadgeSection";
 
 // Perennial end-to-end: bettors trade builder-milestone markets (a 1% fee on
 // every trade: 30% creator, 20% agent held until settlement, 50% builder commons);
@@ -114,6 +117,18 @@ function PerennialNotDeployed() {
   );
 }
 
+/**
+ * `?builder=<id>` (the badge's on-chain external_url). useSearchParams needs a
+ * Suspense boundary in a static export, so it lives in this leaf and reports up.
+ */
+function BuilderParam({ onBuilder }: { onBuilder: (id: number) => void }) {
+  const id = parseBuilderParam(useSearchParams()?.get("builder"));
+  useEffect(() => {
+    if (id) onBuilder(id);
+  }, [id, onBuilder]);
+  return null;
+}
+
 function PerennialLive() {
   const { address, walletChainId, connect, switchChain } = useWallet();
   const nl = P.NanoLedger!;
@@ -149,6 +164,9 @@ function PerennialLive() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [cBuilder, setCBuilder] = useState<number>();
+  /** A builder picked from the list (or the ?builder= link); else the selected market's builder. */
+  const [focusId, setFocusId] = useState<number>();
+  const [linkedId, setLinkedId] = useState<number>();
   const [cDays, setCDays] = useState("7");
   const [cLiq, setCLiq] = useState("5");
 
@@ -528,10 +546,26 @@ function PerennialLive() {
 
   const selectBuilder = (b: BuilderRow) => {
     setCBuilder(b.builderId);
+    setFocusId(b.builderId);
     const mine = markets.filter((m) => m.builderId === BigInt(b.builderId)).sort((x, y) => Number(y.createdAt - x.createdAt));
     if (mine[0]) setSelectedId(mine[0].id);
     setRole("bet");
   };
+
+  const focusBuilder = focusId !== undefined ? builderById(focusId) : selBuilder;
+
+  // The deep link selects its builder once the registry has been read.
+  useEffect(() => {
+    if (linkedId === undefined || !ov) return;
+    const b = ov.builders.find((x) => x.builderId === linkedId);
+    setLinkedId(undefined);
+    if (!b) return;
+    setCBuilder(b.builderId);
+    setFocusId(b.builderId);
+    const mine = ov.markets.filter((m) => m.builderId === BigInt(b.builderId)).sort((x, y) => Number(y.createdAt - x.createdAt));
+    if (mine[0]) setSelectedId(mine[0].id);
+    setRole("bet");
+  }, [linkedId, ov]);
 
   const digest = selBuilder ? findDigest(CHAIN.id, selBuilder.owner) : undefined;
   const yp = selected ? yesPct(selected) : 50;
@@ -567,6 +601,7 @@ function PerennialLive() {
 
   return (
     <div className="perennial-panel space-y-3">
+      <Suspense fallback={null}><BuilderParam onBuilder={setLinkedId} /></Suspense>
       {!PERENNIAL_WRITES_ENABLED && (
         <div className="pp-notice border border-down/35 bg-down/5 p-3 text-2xs text-down">
           Perennial transactions are paused. Live data remains available.
@@ -613,7 +648,7 @@ function PerennialLive() {
               {sortedMarkets.length ? sortedMarkets.map((m) => {
                 const st = statusOf(m);
                 return (
-                  <button key={m.id} onClick={() => { setSelectedId(m.id); setRole("bet"); }} className={`pp-market-row ${m.id === selectedId ? "is-selected" : ""}`}>
+                  <button key={m.id} onClick={() => { setSelectedId(m.id); setFocusId(undefined); setRole("bet"); }} className={`pp-market-row ${m.id === selectedId ? "is-selected" : ""}`}>
                     <div className="pp-market-row-top">
                       <span>{subjectFor(m)}</span>
                       <strong>{yesPct(m)}¢</strong>
@@ -640,7 +675,7 @@ function PerennialLive() {
             </div>
             <div className="pp-builder-list">
               {sortedBuilders.length ? sortedBuilders.map((b, index) => (
-                <button key={b.builderId} onClick={() => selectBuilder(b)} className={`pp-builder-compact ${selBuilder?.builderId === b.builderId ? "is-selected" : ""}`}>
+                <button key={b.builderId} onClick={() => selectBuilder(b)} className={`pp-builder-compact ${focusBuilder?.builderId === b.builderId ? "is-selected" : ""}`}>
                   <span className="pp-builder-rank">{String(index + 1).padStart(2, "0")}</span>
                   <span className="pp-builder-name"><b>{b.name} <VerifiedBadge verification={b.verification} link={false} /></b><small>{b.active ? b.repo : `${b.repo} · inactive`}</small></span>
                   <span className="pp-builder-weight">{stat((ov?.weights[b.owner.toLowerCase()] ?? 0n).toString())}<small>pts</small></span>
@@ -772,6 +807,17 @@ function PerennialLive() {
                   ) : <p className="pp-read-only-copy">Market data stays live without a wallet. Connect from the order ticket when you are ready to trade.</p>}
                 </div>
               </div>
+
+              {focusBuilder && (
+                <BuilderBadgeSection
+                  builderId={focusBuilder.builderId}
+                  owner={focusBuilder.owner}
+                  name={focusBuilder.name}
+                  source={focusBuilder.source}
+                  snapshot={focusBuilder.badge}
+                  viewer={address}
+                />
+              )}
 
               {digest && selected && (
                 <BuilderProfile digest={digest} verification={selBuilder?.verification} milestone={<><span className="caption text-2xs text-fg-dim block mb-1">{questionFor(selected)}</span><MarketOdds yes={yp} /></>} />
