@@ -409,7 +409,7 @@ describe("live overlay", () => {
       { id: 2, owner: B1, profileURI: "registrai:github:acme/p2", active: true, createdAt: 1002, caretaker: zeroAddress, badge: null },
     ]);
     // Nothing market-related is ever read.
-    expect(new Set(calls)).toEqual(new Set(["nextId", "builders", "caretakerOf", "serialOf", "lapsed", "issuedAt"]));
+    expect(new Set(calls)).toEqual(new Set(["nextId", "builders", "caretakerOf", "serialOf", "isLapsed", "lapsed", "issuedAt"]));
   });
 });
 

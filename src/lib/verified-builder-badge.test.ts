@@ -10,6 +10,7 @@ import {
   parseBuilderParam,
   parseSnapshotBadge,
   readBuilderBadges,
+  readShownLapsed,
   serialLabel,
   type BadgeReader,
 } from "./verified-builder-badge";
@@ -128,5 +129,24 @@ describe("network config", () => {
 
   test("mainnet ships without a badge", () => {
     expect(resolvePerennialDeployment("mainnet", mainnet).contracts.VerifiedBuilderBadge).toBeNull();
+  });
+});
+
+describe("readShownLapsed", () => {
+  const B = "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c" as const;
+  test("prefers the contract's combined isLapsed (profile changed / deactivated)", async () => {
+    const reader: BadgeReader = {
+      readContract: async ({ functionName }) => (functionName === "isLapsed" ? true : functionName === "lapsed" ? false : 0n),
+    };
+    expect(await readShownLapsed(reader, B, 1)).toBe(true);
+  });
+  test("falls back to the keeper flag on badges without isLapsed", async () => {
+    const reader: BadgeReader = {
+      readContract: async ({ functionName }) => {
+        if (functionName === "isLapsed") throw new Error("reverted");
+        return functionName === "lapsed" ? true : 0n;
+      },
+    };
+    expect(await readShownLapsed(reader, B, 1)).toBe(true);
   });
 });

@@ -12,6 +12,7 @@ export const badgeAbi = parseAbi([
   "function serialOf(uint256 builderId) view returns (uint256)",
   "function builderOf(uint256 serial) view returns (uint256)",
   "function lapsed(uint256 serial) view returns (bool)",
+  "function isLapsed(uint256 serial) view returns (bool)",
   "function issuedAt(uint256 serial) view returns (uint64)",
   "function nextSerial() view returns (uint256)",
   "function ownerOf(uint256 serial) view returns (address)",
@@ -92,9 +93,23 @@ export interface BadgeReader {
   readContract(args: {
     address: Address;
     abi: typeof badgeAbi;
-    functionName: "serialOf" | "lapsed" | "issuedAt" | "nextSerial";
+    functionName: "serialOf" | "lapsed" | "isLapsed" | "issuedAt" | "nextSerial";
     args?: readonly unknown[];
   }): Promise<unknown>;
+}
+
+/**
+ * What the badge shows: `isLapsed` = the keeper's flag OR the builder no longer
+ * standing where it was verified (profile link changed / deactivated). Badge
+ * contracts deployed before that view existed (the first testnet badge) only
+ * have the keeper's `lapsed` flag.
+ */
+export async function readShownLapsed(client: BadgeReader, badge: Address, serial: number): Promise<boolean> {
+  try {
+    return (await client.readContract({ address: badge, abi: badgeAbi, functionName: "isLapsed", args: [BigInt(serial)] })) as boolean;
+  } catch {
+    return (await client.readContract({ address: badge, abi: badgeAbi, functionName: "lapsed", args: [BigInt(serial)] })) as boolean;
+  }
 }
 
 /** One builder's badge, live. null = none (never issued, or revoked). */
@@ -109,7 +124,7 @@ export async function readBadge(
   );
   if (!serial) return null;
   const [lapsed, issuedAt] = await Promise.all([
-    client.readContract({ address: badge, abi: badgeAbi, functionName: "lapsed", args: [BigInt(serial)] }) as Promise<boolean>,
+    readShownLapsed(client, badge, serial),
     client.readContract({ address: badge, abi: badgeAbi, functionName: "issuedAt", args: [BigInt(serial)] }),
   ]);
   return { serial, lapsed, issuedAt: Number(issuedAt), image: badgeImageUrl(imageBase, serial, lapsed) };
