@@ -11,7 +11,7 @@ import {
   type Log,
   type PublicClient,
 } from "viem";
-import { marketsPerennialAbi, progressPoolAbi } from "./abi";
+import { marketsPerennialAbi } from "./abi";
 import live from "./live-data.json";
 import { PERENNIAL_BUILDERS } from "./perennial";
 import { blockChunks } from "./perennial-market";
@@ -21,6 +21,7 @@ import { snapshotBadgeFor, snapshotBuilders, snapshotRowFor, verificationFor, ty
 import type { BadgeInfo } from "./verified-builder-badge";
 import { sourceFromProfileURI, sourceLabel } from "./verified-builders";
 import type { FeeModel } from "./market-fees";
+import { readEconomy, readIncomes, readMarketsFund, type EconomyOverview } from "./economy-chain";
 
 export { isRevert };
 
@@ -210,15 +211,33 @@ export interface BuilderRow {
   /** The builder's own milestone feed (count of verified artifacts), if any. */
   milestoneFeedId?: Hex;
   /** The builder's lead project source from the synced snapshot (its first
-   *  verified project), else a legacy `registrai:` profile link, else null.
-   *  TODO(spec 2026-09-24-builder-projects-design.md "Phase 2"): builders have
-   *  several projects and markets name one project's feed; show them all. */
+   *  verified project), else a legacy `registrai:` profile link, else null. */
   source: string | null;
+  /** Every project with its own milestone feed (synced snapshot; spec
+   *  2026-09-24-builder-projects-design.md "Phase 2": a market names the
+   *  builder and one project's feed). Empty for legacy single-source builders. */
+  projects: BuilderProject[];
   /** Verified mark (synced snapshot, same builder id and owner). */
   verification: Verification | null;
   /** Verified Builder Badge as of the last sync; the UI refreshes it live. */
   badge: BadgeInfo | null;
 }
+
+export interface BuilderProject {
+  id: number;
+  source: string;
+  status: string;
+  milestoneFeedId: Hex | null;
+}
+
+/**
+ * Whether the builder-economy reads run:
+ *  - "not-deployed": no BuilderFund / SeasonPool configured for this network;
+ *  - "unlinked": configured, but the deployed MarketsPerennial predates the fund
+ *    (no FUND()) or pays another fund — its numbers would not be these markets';
+ *  - "live": the markets pay this fund.
+ */
+export type FundStatus = "not-deployed" | "unlinked" | "live";
 
 export interface Overview {
   chainNow: bigint;
@@ -235,9 +254,11 @@ export interface Overview {
   hiddenUnapproved: number;
   discovery: Discovery;
   builders: BuilderRow[];
-  pendingPot: bigint;
-  epoch: bigint;
-  weights: Record<string, bigint>;
+  fundStatus: FundStatus;
+  /** BuilderFund + SeasonPool views; null unless fundStatus is "live". */
+  economy: EconomyOverview | null;
+  /** builderId -> income credited this epoch (empty unless the fund is live). */
+  incomeThisEpoch: Record<number, bigint>;
 }
 
 type RawMarket = Pick<
@@ -263,18 +284,17 @@ function snapshotMilestoneFeeds(): Record<string, Hex> {
 export async function readOverview(client: PublicClient, d: PerennialDeployment): Promise<Overview> {
   const mp = d.contracts.MarketsPerennial!;
   const reg = d.contracts.BuilderRegistry!;
-  const pp = d.contracts.ProgressPool!;
   const read = <T,>(p: Promise<unknown>) => p as Promise<T>;
 
-  const [block, feeModel, minLiquidity, attestation, pendingPot, epoch, nextId] = await Promise.all([
+  const [block, feeModel, minLiquidity, attestation, nextId, fundStatus] = await Promise.all([
     client.getBlock({ blockTag: "latest" }),
     readFeeModel(client, mp, "perennial"),
     read<bigint>(client.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "MIN_LIQUIDITY" })),
     read<Address>(client.readContract({ address: mp, abi: marketsPerennialAbi, functionName: "ATTESTATION" })),
-    read<bigint>(client.readContract({ address: pp, abi: progressPoolAbi, functionName: "pendingPot" })),
-    read<bigint>(client.readContract({ address: pp, abi: progressPoolAbi, functionName: "currentEpoch" })),
     read<bigint>(client.readContract({ address: reg, abi: builderViewsAbi, functionName: "nextId" })),
+    readFundStatus(client, d),
   ]);
+  const economy = fundStatus === "live" ? await readEconomy(client, d.contracts.BuilderFund!, d.contracts.SeasonPool!) : null;
   const readAt = Math.floor(Date.now() / 1000);
 
   const discovery = await discoverMarkets(client, d, block.number);
@@ -369,17 +389,17 @@ export async function readOverview(client: PublicClient, d: PerennialDeployment)
       profileURI,
       milestoneFeedId: meta?.milestoneFeedId ?? snapFeeds[String(id)] ?? milestoneFeedFromMarkets(markets, id, d.operator),
       source: snapshotRowFor(snapRows, { builderId: id, owner })?.source ?? sourceFromProfileURI(profileURI),
+      projects: (snapshotRowFor(snapRows, { builderId: id, owner })?.projects ?? []).map((p) => ({
+        id: p.id, source: p.source, status: p.status, milestoneFeedId: (p.milestoneFeedId as Hex | null) ?? null,
+      })),
       verification: verificationFor(snapRows, { builderId: id, owner }),
       badge: snapshotBadgeFor(snapRows, { builderId: id, owner }),
     } satisfies BuilderRow;
   });
 
-  const weights: Record<string, bigint> = {};
-  await pool(builders, 6, async (b) => {
-    weights[b.owner.toLowerCase()] = (await client.readContract({
-      address: pp, abi: progressPoolAbi, functionName: "progressWeight", args: [epoch, b.owner],
-    })) as bigint;
-  });
+  const incomeThisEpoch = economy
+    ? await readIncomes(client, economy.fund, economy.epoch, builders.map((b) => b.builderId))
+    : {};
 
   return {
     chainNow: block.timestamp,
@@ -394,10 +414,22 @@ export async function readOverview(client: PublicClient, d: PerennialDeployment)
     hiddenUnapproved,
     discovery,
     builders,
-    pendingPot,
-    epoch,
-    weights,
+    fundStatus,
+    economy,
+    incomeThisEpoch,
   };
+}
+
+/** Is the configured BuilderFund the one these markets pay? (See FundStatus.) */
+export async function readFundStatus(client: PublicClient, d: PerennialDeployment): Promise<FundStatus> {
+  if (!d.fundDeployed) return "not-deployed";
+  const paid = await readMarketsFund(client, d.contracts.MarketsPerennial!);
+  return paid && paid.toLowerCase() === d.contracts.BuilderFund!.toLowerCase() ? "live" : "unlinked";
+}
+
+/** The builder's project whose milestone feed a market names (per-project feeds). */
+export function projectForFeed(b: Pick<BuilderRow, "projects"> | undefined, feedId: Hex): BuilderProject | undefined {
+  return b?.projects.find((p) => p.milestoneFeedId && p.milestoneFeedId.toLowerCase() === feedId.toLowerCase());
 }
 
 /** The caretaker opens each builder's milestone markets on that builder's own

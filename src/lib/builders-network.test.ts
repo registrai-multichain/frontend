@@ -74,7 +74,7 @@ describe("resolveBuildersDeployment", () => {
 describe("phase 2 reuses the phase-1 registries", () => {
   test("mainnet market record falls back to the builders block", () => {
     const src = mainnetPerennialSource({
-      contracts: { NanoLedger: A, ProgressPool: A, MarketsPerennial: A, BuilderRegistry: null, CaretakerRegistry: null, VerifiedBuilderBadge: null },
+      contracts: { NanoLedger: A, BuilderFund: A, SeasonPool: A, MarketsPerennial: A, BuilderRegistry: null, CaretakerRegistry: null, VerifiedBuilderBadge: null },
       operator: null,
       deployBlock: 5,
       builders: { BuilderRegistry: B, CaretakerRegistry: B, VerifiedBuilderBadge: B, operator: A },

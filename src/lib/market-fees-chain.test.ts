@@ -20,31 +20,41 @@ function fakeClient(answers: Record<string, bigint>, calls: string[] = []) {
 }
 
 describe("readFeeModel capability probing", () => {
-  test("v3 Perennial: reads the fixed constants, never the legacy fee reads", async () => {
+  test("v3 Perennial with the BuilderFund: BUILDER_SHARE_BPS, never the legacy fee reads", async () => {
     const calls: string[] = [];
     const m = await readFeeModel(
-      fakeClient({ TRADE_FEE_BPS: 100n, CREATOR_SHARE_BPS: 3_000n, AGENT_SHARE_BPS: 2_000n, COMMONS_SHARE_BPS: 5_000n }, calls),
+      fakeClient({ TRADE_FEE_BPS: 100n, CREATOR_SHARE_BPS: 3_000n, AGENT_SHARE_BPS: 2_000n, BUILDER_SHARE_BPS: 5_000n }, calls),
       ADDR,
       "perennial",
     );
-    expect(m).toMatchObject({ kind: "trade", tradeFeeBps: 100n, commonsShareBps: 5_000n, commonsLabel: "builder commons" });
+    expect(m).toMatchObject({ kind: "trade", tradeFeeBps: 100n, payeeShareBps: 5_000n, payee: "builder" });
+    expect(calls).not.toContain("COMMONS_SHARE_BPS");
     expect(calls).not.toContain("FEE_BPS_TOTAL");
     expect(calls).not.toContain("creatorBps");
+  });
+  test("v3 Perennial from before the BuilderFund: COMMONS_SHARE_BPS -> the commons payee", async () => {
+    const m = await readFeeModel(
+      fakeClient({ TRADE_FEE_BPS: 100n, CREATOR_SHARE_BPS: 3_000n, AGENT_SHARE_BPS: 2_000n, COMMONS_SHARE_BPS: 5_000n }),
+      ADDR,
+      "perennial",
+    );
+    expect(m).toMatchObject({ kind: "trade", payeeShareBps: 5_000n, payee: "commons" });
   });
   test("v3 MarketsV4 names the 50% leg TREASURY_SHARE_BPS", async () => {
     const calls: string[] = [];
     const m = await readFeeModel(fakeClient({ TRADE_FEE_BPS: 100n, TREASURY_SHARE_BPS: 5_000n }, calls), ADDR, "v4");
     expect(calls).toContain("TREASURY_SHARE_BPS");
+    expect(calls).not.toContain("BUILDER_SHARE_BPS");
     expect(calls).not.toContain("COMMONS_SHARE_BPS");
-    expect(m).toMatchObject({ kind: "trade", creatorShareBps: 3_000n, agentShareBps: 2_000n, commonsLabel: "Registrai treasury" });
+    expect(m).toMatchObject({ kind: "trade", creatorShareBps: 3_000n, agentShareBps: 2_000n, payee: "treasury" });
   });
   test("legacy testnet Perennial: TRADE_FEE_BPS reverts -> 70 bps via the old reads", async () => {
     const m = await readFeeModel(fakeClient({ FEE_BPS_TOTAL: 70n, creatorBps: 20n, treasuryBps: 35n, agentBps: 15n }), ADDR, "perennial");
-    expect(m).toEqual({ kind: "legacy", tradeFeeBps: 70n, split: { creatorBps: 20n, agentBps: 15n, commonsBps: 35n }, commonsLabel: "builder commons" });
+    expect(m).toEqual({ kind: "legacy", tradeFeeBps: 70n, split: { creatorBps: 20n, agentBps: 15n, payeeBps: 35n }, payee: "commons" });
   });
   test("legacy testnet MarketsV4 reads its immutables", async () => {
     const m = await readFeeModel(fakeClient({ FEE_BPS_TOTAL: 70n, FEE_BPS_CREATOR: 40n, FEE_BPS_AGENT: 20n, FEE_BPS_TREASURY: 10n }), ADDR, "v4");
-    expect(m).toEqual({ kind: "legacy", tradeFeeBps: 70n, split: { creatorBps: 40n, agentBps: 20n, commonsBps: 10n }, commonsLabel: "Registrai treasury" });
+    expect(m).toEqual({ kind: "legacy", tradeFeeBps: 70n, split: { creatorBps: 40n, agentBps: 20n, payeeBps: 10n }, payee: "treasury" });
   });
   test("neither -> unknown", async () => {
     expect(await readFeeModel(fakeClient({}), ADDR, "perennial")).toEqual({ kind: "unknown" });

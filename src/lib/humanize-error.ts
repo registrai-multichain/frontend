@@ -7,11 +7,11 @@ import {
   type Hex,
   type PublicClient,
 } from "viem";
-import { builderRegistryAbi, marketsPerennialAbi, marketsV4Abi, nanoLedgerAbi, progressPoolAbi } from "./abi";
+import { builderFundAbi, builderRegistryAbi, marketsPerennialAbi, marketsV4Abi, nanoLedgerAbi, seasonPoolAbi } from "./abi";
 
 /**
  * Custom errors we know how to explain, by name. Covers MarketsPerennial /
- * MarketsV4 (incl. SettlementPolicy), NanoLedger, BuilderRegistry, ProgressPool,
+ * MarketsV4 (incl. SettlementPolicy), NanoLedger, BuilderRegistry, BuilderFund, SeasonPool,
  * plus errors the next contract release adds (AgentNotApproved,
  * ResolverNotApproved) so they read well before abi.ts is regenerated.
  *
@@ -45,7 +45,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   NoLPShares: "This address has no liquidity to claim in this market (already claimed, or never provided).",
   BadExpiry: "Expiry must be in the future.",
   // markets: who may create
-  BuilderInactive: "That builder is not active on the registry, so markets about it can't be opened.",
+  BuilderInactive:
+    "That builder is not active on the registry: markets about it can't be opened, and its income and season rewards can't be paid until it is reactivated.",
   AgentNotRegistered: "That agent is not an active, bonded agent on this feed. Register and bond it on the feed first.",
   AgentNotApproved: "That feed/agent pair is not approved for new markets.",
   ResolverNotApproved: "That feed's dispute resolver is not approved for new markets.",
@@ -56,14 +57,19 @@ const ERROR_MESSAGES: Record<string, string> = {
   InsufficientBalance: "Not enough balance in your trading account. Deposit first.",
   InsufficientAllowance: "Trading-account allowance too low. Try again — the approval step runs first.",
   ZeroAmount: "Enter an amount above zero.",
-  // builders / pool
+  // builders
   AlreadyRegistered: "This address is already registered.",
   NotRegistered: "This address is not registered.",
   NotOwner: "Only the builder's owner can do that.",
-  AlreadyClaimed: "Already claimed for this epoch.",
-  EpochNotClosed: "That epoch has not closed yet.",
-  EpochNotOver: "That epoch is not over yet.",
-  NoProgress: "No verified progress in that epoch, so there is nothing to claim.",
+  // builder income (BuilderFund) and the season pool (SeasonPool)
+  AlreadyClaimed: "Already claimed (this epoch's income, or this season's reward, was paid).",
+  EpochNotEnded: "That epoch has not ended yet: its income becomes claimable once it does.",
+  NoIncome: "This builder earned no income in that epoch, so there is nothing to claim.",
+  UnknownSeason: "That season has not been published.",
+  SeasonClosed: "That season's claim deadline has passed.",
+  AboveCap: "That amount is above the season's 20% per-builder cap.",
+  InvalidProof: "The merkle proof does not match the season's published root.",
+  ExceedsSeason: "That claim would pay out more than the season's total.",
   // builder projects, ownership, recovery (BuilderRegistry) and the badge
   TooLong: "That text is too long for the registry (a project source is at most 128 bytes).",
   EmptySource: "The project source is empty.",
@@ -100,7 +106,8 @@ const DECODE_ABIS: Abi[] = [
   marketsV4Abi as Abi,
   nanoLedgerAbi as Abi,
   builderRegistryAbi as Abi,
-  progressPoolAbi as Abi,
+  builderFundAbi as Abi,
+  seasonPoolAbi as Abi,
   EXTRA_ERRORS as Abi,
 ];
 

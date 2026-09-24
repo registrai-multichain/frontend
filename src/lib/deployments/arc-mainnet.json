@@ -7,9 +7,10 @@
   "contracts": {
     "NanoLedger": null,
     "BuilderRegistry": null,
-    "ProgressPool": null,
     "CaretakerRegistry": null,
     "MarketsPerennial": null,
+    "BuilderFund": null,
+    "SeasonPool": null,
     "VerifiedBuilderBadge": null
   },
   "builders": {

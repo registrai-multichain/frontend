@@ -93,10 +93,12 @@ export interface ChainContracts {
   /** MarketsV4 — binary prediction market settled entirely on NanoLedger:
    *  trades move internal balances, the per-trade fee is one accrual write. */
   MarketsV4nano?: Address;
-  /** Perennial — fund builders by betting on their progress. Market fees pool
-   *  into a commons, distributed to builders by oracle/GitHub-verified progress. */
+  /** Perennial — fund builders by betting on their progress. 50% of every
+   *  market fee is the income of the builder the market is about (BuilderFund),
+   *  taxed progressively per epoch into the SeasonPool. */
   BuilderRegistry?: Address;
-  ProgressPool?: Address;
+  BuilderFund?: Address;
+  SeasonPool?: Address;
   CaretakerRegistry?: Address;
   MarketsPerennial?: Address;
 }
@@ -230,8 +232,10 @@ export const ARC_TESTNET: ChainEntry = {
     // Perennial (deployed 2026-06-29). Builder funding via betting markets.
     BuilderRegistry: (live.contracts as { BuilderRegistry?: string })
       .BuilderRegistry as Address | undefined,
-    ProgressPool: (live.contracts as { ProgressPool?: string })
-      .ProgressPool as Address | undefined,
+    BuilderFund: (live.contracts as { BuilderFund?: string })
+      .BuilderFund as Address | undefined,
+    SeasonPool: (live.contracts as { SeasonPool?: string })
+      .SeasonPool as Address | undefined,
     CaretakerRegistry: (live.contracts as { CaretakerRegistry?: string })
       .CaretakerRegistry as Address | undefined,
     MarketsPerennial: (live.contracts as { MarketsPerennial?: string })

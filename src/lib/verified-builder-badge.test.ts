@@ -122,7 +122,7 @@ describe("readBuilderBadges", () => {
 describe("network config", () => {
   test("the badge is optional: absent or malformed = null, deployment unaffected", () => {
     const a = "0x71Ea02b2E75e6C65A41DF9E3c78E14F9ae2232D9";
-    const full = { NanoLedger: a, BuilderRegistry: a, ProgressPool: a, MarketsPerennial: a };
+    const full = { NanoLedger: a, BuilderRegistry: a, BuilderFund: a, SeasonPool: a, MarketsPerennial: a };
     expect(resolvePerennialDeployment("testnet", { contracts: full }).contracts.VerifiedBuilderBadge).toBeNull();
     expect(resolvePerennialDeployment("testnet", { contracts: { ...full, VerifiedBuilderBadge: "0x12" } }).contracts.VerifiedBuilderBadge).toBeNull();
     const d = resolvePerennialDeployment("testnet", { contracts: { ...full, VerifiedBuilderBadge: BADGE } });

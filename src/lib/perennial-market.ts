@@ -5,6 +5,7 @@
  * so all of it is unit-tested. Fee split & settlement payouts: market-fees.ts.
  */
 import type { FeeModel } from "./market-fees";
+import { PAYEE } from "./fee-payee";
 
 export const BPS = 10_000n;
 export const USDC_DECIMALS = 6;
@@ -257,7 +258,7 @@ export function marketStatus(s: StatusInput): MarketStatus {
       key: "voided",
       label: "Voided",
       detail: v3
-        ? `Voided — every trader gets their net cost back (what they put in after fees, minus what they took out); the agent's held ${bpsPct(v3.agentShareBps)} goes to its successful challenger (otherwise to the ${v3.commonsLabel}).`
+        ? `Voided — every trader gets their net cost back (what they put in after fees, minus what they took out); the agent's held ${bpsPct(v3.agentShareBps)} goes to its successful challenger (otherwise to the ${PAYEE[v3.payee].voidSink}).`
         : "No valid attestation settled it. Every YES and NO share redeems for $0.50.",
       canRedeem: true,
       canClaimLP: true,
@@ -366,7 +367,7 @@ export function settlementRuleText(windowSecs: number | undefined, feeModel?: Fe
     return (
       head +
       `If none arrives in that window, the market voids: every trader gets their net cost back (what they put in after fees, minus what they took out). ` +
-      `The agent's held ${bpsPct(feeModel.agentShareBps)} goes to whoever successfully challenged its answer, otherwise to the ${feeModel.commonsLabel}.`
+      `The agent's held ${bpsPct(feeModel.agentShareBps)} goes to whoever successfully challenged its answer, otherwise to the ${PAYEE[feeModel.payee].voidSink}.`
     );
   }
   return head + `If none arrives in that window, the market voids and every YES and NO share pays $0.50.`;

@@ -11,12 +11,17 @@ import { BaseError, ContractFunctionRevertedError, parseAbi, type Address, type 
 import { PHASE } from "./perennial-market";
 import { feeModelFromProbe, type FeeFlavor, type FeeModel, type FeeProbe } from "./market-fees";
 
-/** v3 constants, accounting and preview views, and fee events (both contracts;
- *  MarketsV4 names the 50% leg TREASURY_SHARE_BPS). */
+/** v3 constants, accounting and preview views, and fee events (both contracts).
+ *  The 50% leg: MarketsPerennial BUILDER_SHARE_BPS (BuilderFund), or
+ *  COMMONS_SHARE_BPS on a MarketsPerennial from before the fund; MarketsV4
+ *  TREASURY_SHARE_BPS. The event fragments name the third FeesPaid field
+ *  `payeeFee` (BuilderFund: `builderFee`, earlier: `commonsFee`, V4:
+ *  `treasuryFee` — the same event signature, so any of them decodes). */
 export const marketFeesAbi = parseAbi([
   "function TRADE_FEE_BPS() view returns (uint256)",
   "function CREATOR_SHARE_BPS() view returns (uint256)",
   "function AGENT_SHARE_BPS() view returns (uint256)",
+  "function BUILDER_SHARE_BPS() view returns (uint256)",
   "function COMMONS_SHARE_BPS() view returns (uint256)",
   "function TREASURY_SHARE_BPS() view returns (uint256)",
   "function agentEscrow(bytes32 marketId) view returns (uint256)",
@@ -29,9 +34,9 @@ export const marketFeesAbi = parseAbi([
   "function claimableLP(bytes32 marketId, address who) view returns (uint256)",
   "event Bought(bytes32 indexed marketId, address indexed buyer, uint8 outcome, uint256 collateralIn, uint256 sharesOut, uint256 fee)",
   "event Sold(bytes32 indexed marketId, address indexed seller, uint8 outcome, uint256 sharesIn, uint256 collateralOut, uint256 fee)",
-  "event FeesPaid(bytes32 indexed marketId, uint256 creatorFee, uint256 commonsFee, uint256 agentFee)",
+  "event FeesPaid(bytes32 indexed marketId, uint256 creatorFee, uint256 payeeFee, uint256 agentFee)",
   "event AgentFeeReleased(bytes32 indexed marketId, address indexed agent, uint256 amount)",
-  "event VoidFeesPaid(bytes32 indexed marketId, uint256 creatorFee, uint256 commonsFee, uint256 challengerReward, address challenger)",
+  "event VoidFeesPaid(bytes32 indexed marketId, uint256 creatorFee, uint256 sinkAmount, uint256 challengerReward, address challenger)",
 ]);
 
 /** LEGACY MarketsPerennial fee reads (called only after the v3 probe reverts). */
@@ -69,29 +74,32 @@ async function tryView<T>(p: Promise<unknown>): Promise<T | undefined> {
 
 /** Probe the fee model: v3 when TRADE_FEE_BPS answers, else the legacy fee reads. */
 export async function readFeeModel(client: PublicClient, address: Address, flavor: FeeFlavor): Promise<FeeModel> {
-  const view = (functionName: "TRADE_FEE_BPS" | "CREATOR_SHARE_BPS" | "AGENT_SHARE_BPS" | "COMMONS_SHARE_BPS" | "TREASURY_SHARE_BPS") =>
+  const view = (functionName: "TRADE_FEE_BPS" | "CREATOR_SHARE_BPS" | "AGENT_SHARE_BPS" | "BUILDER_SHARE_BPS" | "COMMONS_SHARE_BPS" | "TREASURY_SHARE_BPS") =>
     tryView<bigint>(client.readContract({ address, abi: marketFeesAbi, functionName }));
   const probe: FeeProbe = { v3: null, legacy: null };
   const feeBps = await view("TRADE_FEE_BPS");
   if (feeBps !== undefined) {
-    const [creator, agent, commons] = await Promise.all([
+    const [creator, agent, leg] = await Promise.all([
       view("CREATOR_SHARE_BPS"),
       view("AGENT_SHARE_BPS"),
-      view(flavor === "v4" ? "TREASURY_SHARE_BPS" : "COMMONS_SHARE_BPS"),
+      view(flavor === "v4" ? "TREASURY_SHARE_BPS" : "BUILDER_SHARE_BPS"),
     ]);
-    probe.v3 = { feeBps, creator, agent, commons };
+    // A MarketsPerennial without BUILDER_SHARE_BPS predates the BuilderFund:
+    // its 50% went to the progress commons.
+    const commons = flavor === "perennial" && leg === undefined ? await view("COMMONS_SHARE_BPS") : undefined;
+    probe.v3 = { feeBps, creator, agent, payee: leg ?? commons, commonsLeg: commons !== undefined };
     return feeModelFromProbe(probe, flavor);
   }
   if (flavor === "perennial") {
     const legacy = (functionName: "FEE_BPS_TOTAL" | "creatorBps" | "treasuryBps" | "agentBps") =>
       tryView<bigint>(client.readContract({ address, abi: legacyPerennialFeeAbi, functionName }));
-    const [total, creator, commons, agent] = await Promise.all([legacy("FEE_BPS_TOTAL"), legacy("creatorBps"), legacy("treasuryBps"), legacy("agentBps")]);
-    if (total !== undefined) probe.legacy = { totalBps: total, creator, agent, commons };
+    const [total, creator, payee, agent] = await Promise.all([legacy("FEE_BPS_TOTAL"), legacy("creatorBps"), legacy("treasuryBps"), legacy("agentBps")]);
+    if (total !== undefined) probe.legacy = { totalBps: total, creator, agent, payee };
   } else {
     const legacy = (functionName: "FEE_BPS_TOTAL" | "FEE_BPS_CREATOR" | "FEE_BPS_AGENT" | "FEE_BPS_TREASURY") =>
       tryView<bigint>(client.readContract({ address, abi: legacyV4FeeAbi, functionName }));
-    const [total, creator, agent, commons] = await Promise.all([legacy("FEE_BPS_TOTAL"), legacy("FEE_BPS_CREATOR"), legacy("FEE_BPS_AGENT"), legacy("FEE_BPS_TREASURY")]);
-    if (total !== undefined) probe.legacy = { totalBps: total, creator, agent, commons };
+    const [total, creator, agent, payee] = await Promise.all([legacy("FEE_BPS_TOTAL"), legacy("FEE_BPS_CREATOR"), legacy("FEE_BPS_AGENT"), legacy("FEE_BPS_TREASURY")]);
+    if (total !== undefined) probe.legacy = { totalBps: total, creator, agent, payee };
   }
   return feeModelFromProbe(probe, flavor);
 }

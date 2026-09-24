@@ -21,8 +21,12 @@ export interface PerennialContracts {
   USDC: Address | null;
   NanoLedger: Address | null;
   BuilderRegistry: Address | null;
-  ProgressPool: Address | null;
   MarketsPerennial: Address | null;
+  /** Builder income (the 50% fee leg), taxed per epoch. Optional: a network
+   *  whose MarketsPerennial predates it shows the markets without the fund parts. */
+  BuilderFund: Address | null;
+  /** The shared season pool (the tax, frozen income, unchallenged void escrows). */
+  SeasonPool: Address | null;
   CaretakerRegistry: Address | null;
   /** Optional: the soulbound Verified Builder Badge. null = badges off. */
   VerifiedBuilderBadge: Address | null;
@@ -32,7 +36,6 @@ const REQUIRED: (keyof PerennialContracts)[] = [
   "USDC",
   "NanoLedger",
   "BuilderRegistry",
-  "ProgressPool",
   "MarketsPerennial",
 ];
 
@@ -50,6 +53,9 @@ export interface PerennialDeployment {
   deployed: boolean;
   /** Required contracts that have no address on this network. */
   missing: (keyof PerennialContracts)[];
+  /** BuilderFund and SeasonPool both have an address (the builder economy
+   *  reads run; otherwise its parts render a not-deployed state). */
+  fundDeployed: boolean;
 }
 
 export interface DeploymentSource {
@@ -72,8 +78,9 @@ export function resolvePerennialDeployment(
     USDC: addr(source.contracts.USDC) ?? chain.usdc.address,
     NanoLedger: addr(source.contracts.NanoLedger),
     BuilderRegistry: addr(source.contracts.BuilderRegistry),
-    ProgressPool: addr(source.contracts.ProgressPool),
     MarketsPerennial: addr(source.contracts.MarketsPerennial),
+    BuilderFund: addr(source.contracts.BuilderFund),
+    SeasonPool: addr(source.contracts.SeasonPool),
     CaretakerRegistry: addr(source.contracts.CaretakerRegistry),
     VerifiedBuilderBadge: addr(source.contracts.VerifiedBuilderBadge),
   };
@@ -90,6 +97,7 @@ export function resolvePerennialDeployment(
         : null,
     deployed: missing.length === 0,
     missing,
+    fundDeployed: missing.length === 0 && contracts.BuilderFund !== null && contracts.SeasonPool !== null,
   };
 }
 
@@ -133,8 +141,11 @@ function sourceFor(network: PerennialNetwork): DeploymentSource {
       USDC: c.USDC,
       NanoLedger: c.NanoLedger,
       BuilderRegistry: c.BuilderRegistry,
-      ProgressPool: c.ProgressPool,
       MarketsPerennial: c.MarketsPerennial,
+      // Testnet v4 (BuilderFund + SeasonPool) is not deployed yet: null until a
+      // sync writes them, or the extras file names them.
+      BuilderFund: c.BuilderFund ?? testnetExtras.builderFund,
+      SeasonPool: c.SeasonPool ?? testnetExtras.seasonPool,
       CaretakerRegistry: c.CaretakerRegistry,
       // Deployed after the last sync may have run: the extras file carries it too.
       VerifiedBuilderBadge: c.VerifiedBuilderBadge ?? testnetExtras.verifiedBuilderBadge,

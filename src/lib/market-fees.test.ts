@@ -8,22 +8,28 @@ import {
   mirrorClaimLP,
   mirrorRedeem,
   mirrorVoid,
+  payeeLabel,
+  payeeShort,
   splitTradeFee,
   tradeFeeBps,
   voidIsProRata,
   voidRefund,
   voidRefundText,
+  voidSinkLabel,
   type FeeModel,
 } from "./market-fees";
 
-const V3: FeeModel = feeModelFromProbe({ v3: { feeBps: 100n, creator: 3_000n, agent: 2_000n, commons: 5_000n }, legacy: null }, "perennial");
-const V4: FeeModel = feeModelFromProbe({ v3: { feeBps: 100n, creator: 3_000n, agent: 2_000n, commons: 5_000n }, legacy: null }, "v4");
-const LEGACY: FeeModel = feeModelFromProbe({ v3: null, legacy: { totalBps: 70n, creator: 20n, agent: 15n, commons: 35n } }, "perennial");
+const V3: FeeModel = feeModelFromProbe({ v3: { feeBps: 100n, creator: 3_000n, agent: 2_000n, payee: 5_000n }, legacy: null }, "perennial");
+/** A MarketsPerennial from before the BuilderFund (COMMONS_SHARE_BPS). */
+const PRE_FUND: FeeModel = feeModelFromProbe({ v3: { feeBps: 100n, creator: 3_000n, agent: 2_000n, payee: 5_000n, commonsLeg: true }, legacy: null }, "perennial");
+const V4: FeeModel = feeModelFromProbe({ v3: { feeBps: 100n, creator: 3_000n, agent: 2_000n, payee: 5_000n }, legacy: null }, "v4");
+const LEGACY: FeeModel = feeModelFromProbe({ v3: null, legacy: { totalBps: 70n, creator: 20n, agent: 15n, payee: 35n } }, "perennial");
 const seeded = { yesReserve: 5_000_000n, noReserve: 5_000_000n };
 
 describe("fee split display", () => {
   test("the ticket line, exactly", () => {
-    expect(feeSummary(V3)).toBe("1% trading fee · 30% creator · 20% agent (held until settlement) · 50% builder commons");
+    expect(feeSummary(V3)).toBe("1% trading fee · 30% creator · 20% agent (held until settlement) · 50% builder (income, taxed per epoch)");
+    expect(feeSummary(PRE_FUND)).toBe("1% trading fee · 30% creator · 20% agent (held until settlement) · 50% builder commons (contract from before the BuilderFund)");
     expect(feeSummary(V4)).toBe("1% trading fee · 30% creator · 20% agent (held until settlement) · 50% Registrai treasury");
     expect(feeHeadline(V3)).toBe("1% per trade");
   });
@@ -42,12 +48,21 @@ describe("fee split display", () => {
   });
 });
 
+describe("payee labels", () => {
+  test("where the 50% leg and an unchallenged void escrow go", () => {
+    expect([payeeLabel(V3), payeeShort(V3), voidSinkLabel(V3)]).toEqual(["builder (income, taxed per epoch)", "builder", "season pool"]);
+    expect([payeeLabel(PRE_FUND), payeeShort(PRE_FUND), voidSinkLabel(PRE_FUND)]).toEqual(["builder commons", "commons", "builder commons"]);
+    expect([payeeLabel(V4), payeeShort(V4), voidSinkLabel(V4)]).toEqual(["Registrai treasury", "treasury", "Registrai treasury"]);
+    expect(payeeLabel({ kind: "unknown" })).toBeUndefined();
+  });
+});
+
 describe("capability fallback", () => {
   test("v3 when TRADE_FEE_BPS answers; missing shares fall back to the fixed constants", () => {
     const m = feeModelFromProbe({ v3: { feeBps: 100n }, legacy: null }, "v4");
     expect(m).toEqual({
-      kind: "trade", tradeFeeBps: 100n, creatorShareBps: 3_000n, agentShareBps: 2_000n, commonsShareBps: 5_000n,
-      commonsLabel: "Registrai treasury",
+      kind: "trade", tradeFeeBps: 100n, creatorShareBps: 3_000n, agentShareBps: 2_000n, payeeShareBps: 5_000n,
+      payee: "treasury",
     });
     expect(tradeFeeBps(m)).toBe(100n);
   });
@@ -69,20 +84,20 @@ describe("per-trade fee split", () => {
   test("v3: 30/20/50 of the 1%", () => {
     const q = quoteBuy(seeded, OUTCOME.Yes, 10_000_000n, tradeFeeBps(V3)!)!;
     expect(q.fee).toBe(100_000n);
-    expect(splitTradeFee(q.fee, V3)).toEqual({ creator: 30_000n, agent: 20_000n, commons: 50_000n });
+    expect(splitTradeFee(q.fee, V3)).toEqual({ creator: 30_000n, agent: 20_000n, payee: 50_000n });
   });
-  test("v3 rounding: creator and agent floor, commons takes the remainder", () => {
+  test("v3 rounding: creator and agent floor, the builder takes the remainder", () => {
     const s = splitTradeFee(12_345n, V3)!;
-    expect(s).toEqual({ creator: 3_703n, agent: 2_469n, commons: 6_173n });
-    expect(s.creator + s.agent + s.commons).toBe(12_345n);
+    expect(s).toEqual({ creator: 3_703n, agent: 2_469n, payee: 6_173n });
+    expect(s.creator + s.agent + s.payee).toBe(12_345n);
   });
   test("a sell's fee splits the same way", () => {
     const q = quoteSell({ yesReserve: 8_313_962n, noReserve: 12_027_961n }, OUTCOME.Yes, 6_627_759n, 100n)!;
     const s = splitTradeFee(q.fee, V3)!;
-    expect(s).toEqual({ creator: 10_137n, agent: 6_758n, commons: 16_897n });
+    expect(s).toEqual({ creator: 10_137n, agent: 6_758n, payee: 16_897n });
   });
   test("legacy: by the governable bps of the trade", () => {
-    expect(splitTradeFee(14_000n, LEGACY)).toEqual({ creator: 4_000n, agent: 3_000n, commons: 7_000n });
+    expect(splitTradeFee(14_000n, LEGACY)).toEqual({ creator: 4_000n, agent: 3_000n, payee: 7_000n });
   });
 });
 
@@ -146,7 +161,7 @@ describe("status and rule copy follow the fee model", () => {
   test("void copy: net cost back; the agent's held 20% to its successful challenger", () => {
     const v = marketStatus({ ...live, phase: PHASE.Voided, feeModel: V3 });
     expect(v.detail).toContain("net cost back");
-    expect(v.detail).toContain("held 20% goes to its successful challenger");
+    expect(v.detail).toContain("held 20% goes to its successful challenger (otherwise to the season pool)");
     expect(v.detail).not.toMatch(/\$0\.50|minus 1%/);
     const vv = marketStatus({ ...live, phase: 0, settlement: SETTLEMENT.Voidable, feeModel: V3 });
     expect(vv.detail).toContain("net cost back");
@@ -159,6 +174,8 @@ describe("status and rule copy follow the fee model", () => {
     expect(t).toContain("net cost back (what they put in after fees, minus what they took out)");
     expect(t).toContain("held 20% goes to whoever successfully challenged");
     expect(t).not.toContain("$0.50");
+    expect(t).toContain("otherwise to the season pool");
+    expect(settlementRuleText(86_400, PRE_FUND)).toContain("otherwise to the builder commons");
     expect(settlementRuleText(86_400, V4)).toContain("otherwise to the Registrai treasury");
     expect(settlementRuleText(86_400, LEGACY)).toContain("$0.50");
   });

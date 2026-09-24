@@ -7,7 +7,7 @@ import { createPublicClient, createWalletClient, custom, type Address, type Hex,
 import useSWR from "swr";
 import { useWallet } from "./WalletProvider";
 import { transportFor, txUrl as txUrlFor } from "@/lib/chains";
-import { usdcAbi, nanoLedgerAbi, builderRegistryAbi, progressPoolAbi, marketsPerennialAbi } from "@/lib/abi";
+import { usdcAbi, nanoLedgerAbi, builderRegistryAbi, builderFundAbi, marketsPerennialAbi } from "@/lib/abi";
 import { explainMinedRevert, humanizeError } from "@/lib/humanize-error";
 import { PERENNIAL_WRITES_ENABLED } from "@/lib/perennial";
 import { PERENNIAL } from "@/lib/perennial-network";
@@ -35,16 +35,19 @@ import {
   feeSummary,
   mirrorClaimLP,
   mirrorRedeem,
+  payeeShort,
   splitTradeFee,
   tradeFeeBps,
   voidIsProRata,
   voidRefundText,
+  voidSinkLabel,
   type FeeModel,
 } from "@/lib/market-fees";
 import { readHolderSettlement } from "@/lib/market-fees-chain";
 import {
   marketIdFromLogs,
   probeAbi,
+  projectForFeed,
   readLatestValue,
   readOverview,
   rememberMarket,
@@ -57,12 +60,17 @@ import { AgentBadge, CaughtAgentBanner, useAgentReputation } from "./AgentBadge"
 import { MilestoneDisclosure, VerifiedBadge } from "./VerifiedBadge";
 import { milestoneMetric } from "@/lib/builder-verification";
 import { parseBuilderParam } from "@/lib/verified-builder-badge";
+import { sourceLabel } from "@/lib/verified-builders";
 import { BuilderBadgeSection } from "./BuilderBadgeSection";
+import { BuilderIncomeCard, fundStatusNote } from "./BuilderIncome";
+import { durationText } from "@/lib/builder-economy";
 
 // Perennial end-to-end: bettors trade builder-milestone markets (a 1% fee on
-// every trade: 30% creator, 20% agent held until settlement, 50% builder commons);
-// builders register, accrue progress from verified artifacts, and claim a
-// progress-weighted share. The hype pays for the grind.
+// every trade: 30% creator, 20% agent held until settlement, 50% to the builder
+// the market is about, credited as that builder's income per epoch in the
+// BuilderFund); after an epoch ends anyone claims it for the builder: the
+// progressive tax feeds the season pool, 1% goes to Registrai, the net to the
+// builder's payout address.
 
 type Status = "idle" | "approving" | "submitting" | "success" | "error";
 type Role = "bet" | "build";
@@ -81,12 +89,9 @@ type Account = {
   ledgerBal: bigint;
   walletBal: bigint;
   registered: boolean;
-  myWeight: bigint;
-  claims: { epoch: number; amount: bigint }[];
   positions: Record<string, Position>;
 };
 
-const CLAIM_SCAN_LIMIT = 52n;
 const D = PERENNIAL;
 const P = D.contracts;
 const CHAIN = D.chain;
@@ -132,7 +137,6 @@ function BuilderParam({ onBuilder }: { onBuilder: (id: number) => void }) {
 function PerennialLive() {
   const { address, walletChainId, connect, switchChain } = useWallet();
   const nl = P.NanoLedger!;
-  const pool = P.ProgressPool!;
   const reg = P.BuilderRegistry!;
   const mp = P.MarketsPerennial!;
   const usdc = P.USDC!;
@@ -164,6 +168,8 @@ function PerennialLive() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [cBuilder, setCBuilder] = useState<number>();
+  /** The milestone feed (one per project) the new market settles on. */
+  const [cFeedPick, setCFeedPick] = useState<Hex>();
   /** A builder picked from the list (or the ?builder= link); else the selected market's builder. */
   const [focusId, setFocusId] = useState<number>();
   const [linkedId, setLinkedId] = useState<number>();
@@ -198,18 +204,10 @@ function PerennialLive() {
   const marketIdsKey = markets.map((m) => m.id).join(",");
 
   const readAccount = async (): Promise<Account> => {
-    const epoch = ov!.epoch;
-    const firstEpoch = epoch > CLAIM_SCAN_LIMIT ? epoch - CLAIM_SCAN_LIMIT : 0n;
-    const claimEpochs = Array.from({ length: Number(epoch - firstEpoch) }, (_, i) => firstEpoch + BigInt(i));
-    const [ledgerBal, walletBal, registered, myWeight, claimRows, posRows] = await Promise.all([
+    const [ledgerBal, walletBal, registered, posRows] = await Promise.all([
       publicClient.readContract({ address: nl, abi: nanoLedgerAbi, functionName: "balanceOf", args: [address!] }) as Promise<bigint>,
       publicClient.readContract({ address: usdc, abi: usdcAbi, functionName: "balanceOf", args: [address!] }) as Promise<bigint>,
       publicClient.readContract({ address: reg, abi: builderRegistryAbi, functionName: "isRegistered", args: [address!] }) as Promise<boolean>,
-      publicClient.readContract({ address: pool, abi: progressPoolAbi, functionName: "progressWeight", args: [epoch, address!] }) as Promise<bigint>,
-      Promise.all(claimEpochs.map(async (e) => ({
-        epoch: Number(e),
-        amount: (await publicClient.readContract({ address: pool, abi: progressPoolAbi, functionName: "claimable", args: [e, address!] })) as bigint,
-      }))),
       Promise.all(markets.map(async (m) => {
         const [[yes, no, lp], v3] = await Promise.all([
           Promise.all([
@@ -223,18 +221,14 @@ function PerennialLive() {
         return [m.id, { yes, no, lp, ...v3 } satisfies Position] as const;
       })),
     ]);
-    return {
-      ledgerBal, walletBal, registered, myWeight,
-      claims: claimRows.filter((r) => r.amount > 0n),
-      positions: Object.fromEntries(posRows),
-    };
+    return { ledgerBal, walletBal, registered, positions: Object.fromEntries(posRows) };
   };
   const {
     data: acct,
     error: acctError,
     mutate: mutateAccount,
   } = useSWR<Account>(
-    ov && address ? ["perennial-account", CHAIN.id, address, ov.epoch.toString(), marketIdsKey] : null,
+    ov && address ? ["perennial-account", CHAIN.id, address, marketIdsKey] : null,
     readAccount,
     { refreshInterval: 30_000, dedupingInterval: 10_000, revalidateOnFocus: false },
   );
@@ -292,10 +286,15 @@ function PerennialLive() {
   });
 
   const subjectFor = (m: ChainMarket) => builderById(m.builderId)?.name ?? `Builder #${m.builderId}`;
+  // Milestones are per project: a market on any of the builder's project feeds
+  // (or its legacy single feed), resolved by the operator, is a milestone market.
   const isMilestoneMarket = (m: ChainMarket) => {
     const b = builderById(m.builderId);
-    return Boolean(b?.milestoneFeedId && same(b.milestoneFeedId, m.feedId) && same(m.agent, D.operator));
+    const onFeed = Boolean(projectForFeed(b, m.feedId)) || Boolean(b?.milestoneFeedId && same(b.milestoneFeedId, m.feedId));
+    return onFeed && same(m.agent, D.operator);
   };
+  /** The project a market's feed belongs to, else the builder's lead source. */
+  const sourceFor = (m: ChainMarket) => projectForFeed(builderById(m.builderId), m.feedId)?.source ?? builderById(m.builderId)?.source;
   const questionFor = (m: ChainMarket) =>
     questionText({
       subject: subjectFor(m),
@@ -454,7 +453,11 @@ function PerennialLive() {
   const activeBuilders = builders.filter((b) => b.active);
   const createBuilder: BuilderRow | undefined =
     activeBuilders.find((b) => b.builderId === cBuilder) ?? activeBuilders[0];
-  const cFeed = createBuilder?.milestoneFeedId;
+  // Milestones are per project: pick one of the builder's project feeds (the
+  // verified ones first); a legacy builder without projects keeps its one feed.
+  const cProjects = (createBuilder?.projects ?? []).filter((p) => p.milestoneFeedId).sort((a, b) => Number(b.status === "verified") - Number(a.status === "verified"));
+  const cProject = cProjects.find((p) => same(p.milestoneFeedId, cFeedPick)) ?? cProjects[0];
+  const cFeed = cProject?.milestoneFeedId ?? createBuilder?.milestoneFeedId;
   const { data: latest, error: latestError } = useSWR(
     ov && cFeed && D.operator ? ["perennial-latest", ov.attestation, cFeed, D.operator] : null,
     () => readLatestValue(publicClient, ov!.attestation, cFeed!, D.operator!),
@@ -477,7 +480,7 @@ function PerennialLive() {
         : !D.operator
           ? `No milestone operator is configured for ${D.label}.`
           : !cFeed
-            ? `${createBuilder!.name} has no milestone feed yet. The caretaker provisions one per builder; markets open on it once it exists.`
+            ? `${createBuilder!.name} has no milestone feed yet. The caretaker provisions one per verified project; markets open on it once it exists.`
             : ov.approvalView && cApproved === false
               ? "This builder's milestone feed is not approved for new markets."
               : latestError
@@ -515,11 +518,22 @@ function PerennialLive() {
     );
   }
 
-  async function doClaim(e: number) {
-    await run(`claim-${e}`, () => walletClient!.writeContract({ address: pool, abi: progressPoolAbi, functionName: "claim", args: [BigInt(e)], ...w() }));
+  /** BuilderFund.claimFor — permissionless; the net goes to the builder's payout address. */
+  async function doClaim(builderId: number, e: bigint) {
+    const fund = ov?.economy?.fund;
+    if (!fund) return fail("The BuilderFund is not live on this network.");
+    await run(`claim-${e}`, async () => {
+      await publicClient.simulateContract({ address: fund, abi: builderFundAbi, functionName: "claimFor", args: [e, BigInt(builderId)], account: address! });
+      return walletClient!.writeContract({ address: fund, abi: builderFundAbi, functionName: "claimFor", args: [e, BigInt(builderId)], ...w() });
+    });
   }
 
   // ─────────────── view model ───────────────
+  /** Income credited to a builder this epoch (0 when the fund isn't live). */
+  const incomeOf = (id: bigint | number) => ov?.incomeThisEpoch[Number(id)] ?? 0n;
+  const econ = ov?.economy ?? null;
+  const fundNote = ov ? fundStatusNote(ov.fundStatus, D.label) : undefined;
+  const myBuilder = address ? builders.find((b) => same(b.owner, address)) : undefined;
   const sortedMarkets = [...markets].sort((a, b) => {
     if (marketView === "new") return Number(b.createdAt - a.createdAt);
     if (marketView === "closing") {
@@ -528,9 +542,10 @@ function PerennialLive() {
       return ao - bo || Number(a.expiry - b.expiry);
     }
     if (marketView === "featured") {
-      const aw = ov?.weights[builderById(a.builderId)?.owner.toLowerCase() ?? ""] ?? 0n;
-      const bw = ov?.weights[builderById(b.builderId)?.owner.toLowerCase() ?? ""] ?? 0n;
-      return Number(bw - aw) || Number(isMilestoneMarket(b)) - Number(isMilestoneMarket(a));
+      // Builders earning the most this epoch first, milestone markets first within.
+      const aw = incomeOf(a.builderId);
+      const bw = incomeOf(b.builderId);
+      return (bw > aw ? 1 : bw < aw ? -1 : 0) || Number(isMilestoneMarket(b)) - Number(isMilestoneMarket(a));
     }
     const ao = statusOf(a).canTrade ? 0 : 1;
     const bo = statusOf(b).canTrade ? 0 : 1;
@@ -541,7 +556,9 @@ function PerennialLive() {
   const sortedBuilders = [...builders].sort((a, b) => {
     if (builderView === "new") return b.builderId - a.builderId;
     if (builderView === "veteran") return a.builderId - b.builderId;
-    return Number((ov?.weights[b.owner.toLowerCase()] ?? 0n) - (ov?.weights[a.owner.toLowerCase()] ?? 0n));
+    const ai = incomeOf(a.builderId);
+    const bi = incomeOf(b.builderId);
+    return bi > ai ? 1 : bi < ai ? -1 : a.builderId - b.builderId;
   });
 
   const selectBuilder = (b: BuilderRow) => {
@@ -620,10 +637,18 @@ function PerennialLive() {
         </div>
       )}
 
+      {ov && fundNote && (
+        <div className="pp-notice border border-line bg-bg-elev p-3 text-2xs text-fg-dim">
+          {fundNote}{" "}
+          <Link href="/perennial/economy" className="text-accent hover:underline">How builder income works →</Link>
+        </div>
+      )}
+
       <div className="pp-market-status">
-        <div><span>commons balance</span><strong>${stat(fmt(ov?.pendingPot ?? 0n))}</strong></div>
+        <div title="Builder income credited and not yet claimed (BuilderFund.outstanding)"><span>builder income held</span><strong>{econ ? `$${fmt(econ.outstanding)}` : ov ? "—" : stat("")}</strong></div>
+        <div title="Season pool balance free for the next season (SeasonPool.unallocated)"><span>season pool</span><strong>{econ ? `$${fmt(econ.unallocated)}` : ov ? "—" : stat("")}</strong></div>
         <div><span>open markets</span><strong>{stat(String(openCount))}</strong></div>
-        <div><span>epoch</span><strong>{stat((ov?.epoch ?? 0n).toString())}</strong></div>
+        <div><span>epoch</span><strong>{econ ? `${econ.epoch} · ${chainNow ? durationText(econ.epochEndsAt - chainNow) : "…"} left` : ov ? "—" : stat("")}</strong></div>
         <div><span>market fee</span><strong>{ov ? feeHeadline(ov.feeModel) ?? "—" : stat("")}</strong></div>
         <div><span>network</span><strong>{D.label}</strong></div>
       </div>
@@ -678,7 +703,7 @@ function PerennialLive() {
                 <button key={b.builderId} onClick={() => selectBuilder(b)} className={`pp-builder-compact ${focusBuilder?.builderId === b.builderId ? "is-selected" : ""}`}>
                   <span className="pp-builder-rank">{String(index + 1).padStart(2, "0")}</span>
                   <span className="pp-builder-name"><b>{b.name} <VerifiedBadge verification={b.verification} link={false} /></b><small>{b.active ? b.repo : `${b.repo} · inactive`}</small></span>
-                  <span className="pp-builder-weight">{stat((ov?.weights[b.owner.toLowerCase()] ?? 0n).toString())}<small>pts</small></span>
+                  <span className="pp-builder-weight">{econ ? `$${fmt(incomeOf(b.builderId))}` : "—"}<small>this epoch</small></span>
                 </button>
               )) : <div className="pp-empty-row">{ov ? "No builders registered yet." : "—"}</div>}
             </div>
@@ -691,7 +716,7 @@ function PerennialLive() {
               <div className="pp-market-focus">
                 <div className="pp-market-focus-head">
                   <div>
-                    <div className="pp-card-label">{selected ? `${selStatus?.label} · builder #${selected.builderId}` : "Market"}</div>
+                    <div className="pp-card-label">{selected ? `${selStatus?.label} · builder #${selected.builderId}${projectForFeed(selBuilder, selected.feedId) ? ` · ${sourceLabel(projectForFeed(selBuilder, selected.feedId)!.source)}` : ""}` : "Market"}</div>
                     <h2>{selected ? questionFor(selected) : ov ? "No market selected" : "Loading…"}</h2>
                     {selBuilder && <div className="flex items-center gap-2"><button className="pp-builder-link" onClick={() => setRole("build")}>{selBuilder.name} <span>↗</span></button><VerifiedBadge verification={selBuilder.verification} /></div>}
                   </div>
@@ -712,7 +737,7 @@ function PerennialLive() {
                     {ov?.supportsSettlement ? settlementRuleText(ov.settlementWindow !== undefined ? Number(ov.settlementWindow) : undefined, feeModel) : null}
                     {feeLine && <span className="block mt-1">Fees: {feeLine}.</span>}
                     {disclosure && <span className="block mt-1 text-down">Disclosure: {disclosure}</span>}
-                    {isMilestoneMarket(selected) && <MilestoneDisclosure metric={milestoneMetric(selBuilder?.source)} className="block mt-1" />}
+                    {isMilestoneMarket(selected) && <MilestoneDisclosure metric={milestoneMetric(sourceFor(selected))} className="block mt-1" />}
                   </p>
                 )}
               </div>
@@ -766,7 +791,7 @@ function PerennialLive() {
                           {sellQ && <div className="flex justify-between"><span>You receive</span><span>${fmt(sellQ.collateralOut, 4)}</span></div>}
                           <div className="flex justify-between"><span>Avg price (incl. fee)</span><span>{cents((buyQ ?? sellQ)!.avgPrice)}</span></div>
                           <div className="flex justify-between"><span>Price impact</span><span className={(buyQ ?? sellQ)!.priceImpact > 0.05 ? "text-down" : ""}>{pct((buyQ ?? sellQ)!.priceImpact, 2)}</span></div>
-                          <div className="flex justify-between"><span>Fee ({feeHeadline(feeModel)})</span><span>${fmt((buyQ ?? sellQ)!.fee, 4)}{feeParts ? ` · creator ${fmt(feeParts.creator, 4)} / agent${isV3 ? " (held)" : ""} ${fmt(feeParts.agent, 4)} / commons ${fmt(feeParts.commons, 4)}` : ""}</span></div>
+                          <div className="flex justify-between"><span>Fee ({feeHeadline(feeModel)})</span><span>${fmt((buyQ ?? sellQ)!.fee, 4)}{feeParts ? ` · creator ${fmt(feeParts.creator, 4)} / agent${isV3 ? " (held)" : ""} ${fmt(feeParts.agent, 4)} / ${payeeShort(feeModel)} ${fmt(feeParts.payee, 4)}` : ""}</span></div>
                           {feeLine && <div className="text-fg-dim">{feeLine}</div>}
                           {minOut !== undefined && <div className="flex justify-between"><span>Minimum {mode === "buy" ? "shares" : "received"}</span><span>{mode === "buy" ? fmt(minOut, 4) : `$${fmt(minOut, 4)}`}</span></div>}
                         </div>
@@ -819,6 +844,23 @@ function PerennialLive() {
                 />
               )}
 
+              {focusBuilder && (
+                <BuilderIncomeCard
+                  client={publicClient}
+                  deployment={D}
+                  fundStatus={ov?.fundStatus}
+                  economy={econ}
+                  builderId={focusBuilder.builderId}
+                  name={focusBuilder.name}
+                  active={focusBuilder.active}
+                  chainNow={chainNow}
+                  canClaim={!needsConnect && PERENNIAL_WRITES_ENABLED}
+                  busy={busy}
+                  pending={pending}
+                  onClaim={(e) => doClaim(focusBuilder.builderId, e)}
+                />
+              )}
+
               {digest && selected && (
                 <BuilderProfile digest={digest} verification={selBuilder?.verification} milestone={<><span className="caption text-2xs text-fg-dim block mb-1">{questionFor(selected)}</span><MarketOdds yes={yp} /></>} />
               )}
@@ -833,8 +875,16 @@ function PerennialLive() {
                       {activeBuilders.length > 0 && (
                         <div>
                           <label className="caption text-[10px] text-fg-dim">builder</label>
-                          <select value={createBuilder?.builderId ?? ""} onChange={(e) => setCBuilder(Number(e.target.value))} className="w-full bg-bg border border-line px-3 py-2 text-[14px] outline-none focus:border-accent/60">
+                          <select value={createBuilder?.builderId ?? ""} onChange={(e) => { setCBuilder(Number(e.target.value)); setCFeedPick(undefined); }} className="w-full bg-bg border border-line px-3 py-2 text-[14px] outline-none focus:border-accent/60">
                             {activeBuilders.map((b) => <option key={b.builderId} value={b.builderId}>{b.name} (#{b.builderId})</option>)}
+                          </select>
+                        </div>
+                      )}
+                      {cProjects.length > 1 && (
+                        <div>
+                          <label className="caption text-[10px] text-fg-dim">project (its own milestone feed)</label>
+                          <select value={cProject?.milestoneFeedId ?? ""} onChange={(e) => setCFeedPick(e.target.value as Hex)} className="w-full bg-bg border border-line px-3 py-2 text-[14px] outline-none focus:border-accent/60">
+                            {cProjects.map((p) => <option key={p.id} value={p.milestoneFeedId!}>{sourceLabel(p.source)}{p.status === "verified" ? "" : ` (${p.status})`}</option>)}
                           </select>
                         </div>
                       )}
@@ -845,7 +895,7 @@ function PerennialLive() {
                         {" "}Agent: the caretaker operator{D.operator ? ` ${D.operator.slice(0, 6)}…${D.operator.slice(-4)}` : ""}.{" "}
                         {settlementRuleText(ov?.settlementWindow !== undefined ? Number(ov.settlementWindow) : undefined, feeModel)}
                       </p>
-                      {createBuilder && <p><MilestoneDisclosure metric={milestoneMetric(createBuilder.source)} /></p>}
+                      {createBuilder && <p><MilestoneDisclosure metric={milestoneMetric(cProject?.source ?? createBuilder.source)} /></p>}
                       {ov && feeLine && (
                         <p className="text-2xs text-fg-dim">
                           {isV3
@@ -868,19 +918,38 @@ function PerennialLive() {
             </>
           ) : (
             <div className="pp-build-workspace">
-              <div className="pp-workspace-title"><div className="pp-card-label">Builder workspace</div><h2>Ship work. Earn from verified progress.</h2></div>
+              <div className="pp-workspace-title"><div className="pp-card-label">Builder workspace</div><h2>Ship work. Earn from the markets about it.</h2></div>
               {needsConnect ? (
-                <div className="pp-connect-card"><div><span>Wallet required</span><p>Connect on {D.label} to register a project or claim an epoch.</p></div><button onClick={() => (address ? switchChain(CHAIN.id) : connect())}>{address ? `switch to ${D.label}` : "connect wallet"}</button></div>
+                <div className="pp-connect-card"><div><span>Wallet required</span><p>Connect on {D.label} to register a project or claim builder income. Anyone can claim an ended epoch for any builder from the Markets tab; the net always goes to the builder.</p></div><button onClick={() => (address ? switchChain(CHAIN.id) : connect())}>{address ? `switch to ${D.label}` : "connect wallet"}</button></div>
+              ) : !acct ? (
+                <div className="pp-action-card"><p className="text-2xs text-fg-dim">{acctError ? `Couldn't read your builder status: ${humanizeError(acctError, HUMAN)}` : "Reading your builder status…"}</p></div>
+              ) : !acct.registered || !myBuilder ? (
+                <div className="pp-action-card"><h3>Claim your project</h3><p className="text-2xs text-fg-dim mb-3">Builders join by claim: sign a proof with this wallet, publish it in your repo or on your domain, then register. Nothing about you is public until you do. Once verified, 50% of every trading fee on the markets about you is your income, paid per epoch after a progressive tax.</p><Link href="/verify" className="inline-block px-4 py-2 bg-accent/90 text-bg text-[13px] hover:bg-accent transition-colors">verify your project →</Link></div>
               ) : (
-                <div className="pp-action-card">
-                  {!acct ? (
-                    <p className="text-2xs text-fg-dim">{acctError ? `Couldn't read your builder status: ${humanizeError(acctError, HUMAN)}` : "Reading your builder status…"}</p>
-                  ) : !acct.registered ? (
-                    <><h3>Claim your project</h3><p className="text-2xs text-fg-dim mb-3">Builders join by claim: sign a proof with this wallet, publish it in your repo or on your domain, then register. Nothing about you is public until you do.</p><Link href="/verify" className="inline-block px-4 py-2 bg-accent/90 text-bg text-[13px] hover:bg-accent transition-colors">verify your project →</Link></>
-                  ) : (
-                    <><div className="flex items-center justify-between mb-3"><h3>Your progress</h3><span className="text-2xs px-2 py-0.5 bg-up/10 text-up border border-up/25">registered</span></div><div className="pp-progress-total"><strong>{acct.myWeight.toString()}</strong><span>progress points · epoch {stat((ov?.epoch ?? 0n).toString())}</span></div>{acct.claims.length === 0 ? <p className="text-2xs text-fg-dim border-t border-line pt-3">Nothing to claim yet. Progress becomes claimable when the epoch closes.</p> : acct.claims.map((claim) => <div key={claim.epoch} className="pp-claim-row"><span>epoch {claim.epoch} · ${fmt(claim.amount)}</span><button onClick={() => doClaim(claim.epoch)} disabled={busy}>{pending === `claim-${claim.epoch}` ? "…" : "claim"}</button></div>)}</>
-                  )}
-                </div>
+                <>
+                  <div className="pp-action-card">
+                    <div className="flex items-center justify-between mb-2"><h3>{myBuilder.name}</h3><span className="text-2xs px-2 py-0.5 bg-up/10 text-up border border-up/25">builder #{myBuilder.builderId}{myBuilder.active ? "" : " · inactive"}</span></div>
+                    <p className="text-2xs text-fg-dim">
+                      Your income is 50% of the 1% trading fee on every market about you, credited per epoch. After an epoch ends,
+                      a claim (yours, the keeper&apos;s or anyone&apos;s) pays the progressive tax to the season pool, 1% of the rest to
+                      Registrai, and the net to your payout address. <Link href="/perennial/economy" className="text-accent hover:underline">Builder economy →</Link>
+                    </p>
+                  </div>
+                  <BuilderIncomeCard
+                    client={publicClient}
+                    deployment={D}
+                    fundStatus={ov?.fundStatus}
+                    economy={econ}
+                    builderId={myBuilder.builderId}
+                    name={myBuilder.name}
+                    active={myBuilder.active}
+                    chainNow={chainNow}
+                    canClaim={!needsConnect && PERENNIAL_WRITES_ENABLED}
+                    busy={busy}
+                    pending={pending}
+                    onClaim={(e) => doClaim(myBuilder.builderId, e)}
+                  />
+                </>
               )}
             </div>
           )}
@@ -932,7 +1001,7 @@ function SettlementCard(props: {
       {s.canVoid && v3 && pos.netCost !== undefined && pos.netCost > 0n && (
         <div className="font-mono text-[10px] text-fg-mute">
           If voided: your net cost ${formatUsdc(pos.netCost)} back (pro rata only if the pool is short)
-          {m.agentEscrow !== undefined ? ` · the agent's held $${formatUsdc(m.agentEscrow)} goes to its successful challenger, else the ${v3.commonsLabel}` : ""}
+          {m.agentEscrow !== undefined ? ` · the agent's held $${formatUsdc(m.agentEscrow)} goes to its successful challenger, else the ${voidSinkLabel(v3)}` : ""}
         </div>
       )}
       {s.canVoid && <button onClick={props.onVoid} disabled={busy} className={btn}>{pending === "void" ? "voiding…" : v3 ? "void market (refunds net cost)" : "void market ($0.50 / share)"}</button>}

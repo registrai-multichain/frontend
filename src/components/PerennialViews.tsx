@@ -5,11 +5,13 @@ import { usePathname } from "next/navigation";
 
 /**
  * View switcher for the Perennial surface. The atlas is not a separate product
- * — it is the same markets seen geographically and by season — so it is reached
- * the same way any other view is, not through a different door.
+ * — it is the same markets seen geographically and by season — and the economy
+ * page explains where their fees go, so both are reached the same way any
+ * other view is, not through a different door.
  */
 const VIEWS = [
   { href: "/perennial", label: "markets" },
+  { href: "/perennial/economy", label: "economy" },
   { href: "/atlas", label: "atlas" },
 ] as const;
 
