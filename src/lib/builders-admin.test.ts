@@ -33,7 +33,11 @@ describe("sign-in message", () => {
     expect(parseAdminLoginMessage(m.replace("origin: ", "origin:  "))).toBeNull();
     expect(parseAdminLoginMessage(adminLoginMessage({ ...LOGIN, origin: "https://x.cc/path" }))).toBeNull();
     expect(parseAdminLoginMessage(adminLoginMessage({ ...LOGIN, nonce: "short" }))).toBeNull();
-    expect(parseAdminLoginMessage(adminLoginMessage({ ...LOGIN, nonce: LOGIN.nonce.toUpperCase() }))).toBeNull();
+    // the nonce is base64url (builders-site stateless nonces): no padding, no + or /
+    expect(parseAdminLoginMessage(adminLoginMessage({ ...LOGIN, nonce: `${LOGIN.nonce}==` }))).toBeNull();
+    expect(parseAdminLoginMessage(adminLoginMessage({ ...LOGIN, nonce: `${LOGIN.nonce.slice(0, 20)}+/x` }))).toBeNull();
+    expect(parseAdminLoginMessage(adminLoginMessage({ ...LOGIN, nonce: "A".repeat(129) }))).toBeNull();
+    expect(parseAdminLoginMessage(adminLoginMessage({ ...LOGIN, nonce: "Ab-_".repeat(18) + "xyz" }))).not.toBeNull();
     expect(parseAdminLoginMessage(adminLoginMessage({ ...LOGIN, issued: "yesterday" }))).toBeNull();
     expect(parseAdminLoginMessage(adminLoginMessage({ ...LOGIN, issued: "2026-13-45T99:00:00Z" }))).toBeNull();
   });

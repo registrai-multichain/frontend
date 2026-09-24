@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { InviteRecord } from "../../src/lib/builders-admin";
 import type { Env } from "../lib/env";
-import { INDEX_KEY, getInvite, handleAdminInvites, handleInviteOpen, handlePublicInvites } from "../lib/invites";
+import { INDEX_KEY, OPEN_DEBOUNCE_MS, getInvite, handleAdminInvites, handleInviteOpen, handlePublicInvites, invitesCacheKey } from "../lib/invites";
 import { MemoryKV } from "./memory-kv";
 
 const ORIGIN = "https://builder.registrai.cc";
@@ -141,5 +141,49 @@ describe("public invites", () => {
     expect((await open({ source: "https://github.com/foo/bar", code: inv.code }, T0 + 120_000)).status).toBe(204);
     const r = (await getInvite(env.INVITES, "github:foo/bar"))!;
     expect(r).toMatchObject({ opens: 2, firstOpenedAt: "2026-09-24T12:01:00.000Z", lastOpenedAt: "2026-09-24T12:02:00.000Z" });
+  });
+
+  test("open: cheap rejects (size, type, code / source format) never touch KV", async () => {
+    const { env, kv } = setup();
+    let reads = 0;
+    const get = kv.get.bind(kv);
+    kv.get = async (k: string) => {
+      reads++;
+      return get(k);
+    };
+    const raw = (body: string, headers: Record<string, string> = { "content-type": "application/json" }) =>
+      handleInviteOpen(new Request(`${ORIGIN}/api/invites/open`, { method: "POST", headers, body }), env, T0);
+    const code = "a".repeat(24);
+    for (const res of await Promise.all([
+      raw(JSON.stringify({ source: "foo/bar", code: "not-a-code" })),
+      raw(JSON.stringify({ source: "foo/bar" })),
+      raw(JSON.stringify({ source: "not a source", code })),
+      raw(JSON.stringify({ source: "x".repeat(400), code })),
+      raw(JSON.stringify({ source: "foo/bar", code, pad: "y".repeat(600) })),
+      raw(JSON.stringify({ source: "foo/bar", code }), { "content-type": "text/plain" }),
+      raw("{not json"),
+      raw(JSON.stringify({ source: "foo/bar", code }), { "content-type": "application/json", "content-length": "99999" }),
+    ])) {
+      expect(res.status).toBe(204);
+    }
+    expect(reads).toBe(0);
+    // a well-formed open does read (and finds nothing here)
+    await raw(JSON.stringify({ source: "foo/bar", code }));
+    expect(reads).toBe(1);
+  });
+
+  test("open: at most one write per invite a minute", async () => {
+    const { call, env, open } = setup();
+    const inv = (await call("POST", { source: "foo/bar" })).body.invite!;
+    await open({ source: "foo/bar", code: inv.code }, T0 + 1000);
+    await open({ source: "foo/bar", code: inv.code }, T0 + 1000 + OPEN_DEBOUNCE_MS - 1);
+    expect((await getInvite(env.INVITES, "github:foo/bar"))!.opens).toBe(1);
+    await open({ source: "foo/bar", code: inv.code }, T0 + 1000 + OPEN_DEBOUNCE_MS);
+    expect((await getInvite(env.INVITES, "github:foo/bar"))!.opens).toBe(2);
+  });
+
+  test("GET /api/invites: one edge cache key whatever the query string", () => {
+    expect(invitesCacheKey(`${ORIGIN}/api/invites?bust=1&x=2`)).toBe(`${ORIGIN}/api/invites`);
+    expect(invitesCacheKey(`${ORIGIN}/api/invites`)).toBe(`${ORIGIN}/api/invites`);
   });
 });

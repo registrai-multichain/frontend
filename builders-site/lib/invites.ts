@@ -4,8 +4,11 @@
  * PublicInvite[]) so the gallery's GET /api/invites is one KV read, never a
  * list: KV lists are slow to see new keys and scarce on the free plan.
  *
- *   GET    /api/invites                    public fields only, cached 60 s
- *   POST   /api/invites/open {source,code} claim-link open tracking; always 204
+ *   GET    /api/invites                    public fields only, cached 60 s (one edge key, query ignored)
+ *   POST   /api/invites/open {source,code} claim-link open tracking; always 204. Cheap
+ *                                          rejects first (size, type, code format)
+ *                                          before any KV read; at most one write per
+ *                                          invite a minute
  *   GET    /api/admin/invites              everything, with each claim link
  *   POST   /api/admin/invites              create (409 + the existing one if the source is taken)
  *   PATCH  /api/admin/invites              edit name / x / note
@@ -94,16 +97,44 @@ export async function handlePublicInvites(env: Env): Promise<Response> {
   return json({ invites }, 200, { "cache-control": "public, max-age=60" });
 }
 
-/** A claim link was opened. Wrong or missing codes are ignored silently: always 204. */
+/** The edge cache key for GET /api/invites: the path alone (a `?x=` cannot make it miss). */
+export function invitesCacheKey(requestUrl: string): string {
+  return `${new URL(requestUrl).origin}/api/invites`;
+}
+
+/** An open body is tiny: `{source, code}`. */
+export const OPEN_MAX_BODY = 512;
+/** Opens of the same invite closer together than this are not written again. */
+export const OPEN_DEBOUNCE_MS = 60_000;
+
+/**
+ * A claim link was opened. Wrong or missing codes are ignored silently: always
+ * 204. Everything that costs nothing is checked before the one KV read: the
+ * declared size, the content type, the body's shape, the code's format and the
+ * source's; the write is skipped when the same invite was opened in the last minute.
+ */
 export async function handleInviteOpen(req: Request, env: Env, nowMs = Date.now()): Promise<Response> {
-  const body = await readJson(req);
+  const declared = Number(req.headers.get("content-length") ?? "0");
+  if (declared > OPEN_MAX_BODY) return noContent();
+  if (!(req.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) return noContent();
+  const text = await req.text().catch(() => "");
+  if (!text || text.length > OPEN_MAX_BODY) return noContent();
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return noContent();
+  }
   if (typeof body !== "object" || body === null) return noContent();
   const { source: rawSource, code } = body as Record<string, unknown>;
-  if (typeof rawSource !== "string" || typeof code !== "string" || !INVITE_CODE_RE.test(code)) return noContent();
+  if (typeof code !== "string" || !INVITE_CODE_RE.test(code)) return noContent();
+  if (typeof rawSource !== "string" || rawSource.length > 300) return noContent();
   const source = normalizeSource(rawSource);
   if (!source) return noContent();
   const r = await getInvite(env.INVITES, source);
   if (!r || !safeEqual(r.code, code)) return noContent();
+  const last = r.lastOpenedAt ? Date.parse(r.lastOpenedAt) : NaN;
+  if (Number.isFinite(last) && nowMs - last >= 0 && nowMs - last < OPEN_DEBOUNCE_MS) return noContent();
   await putInvite(env.INVITES, recordOpen(r, new Date(nowMs).toISOString()));
   return noContent();
 }

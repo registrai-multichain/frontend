@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { privateKeyToAccount } from "viem/accounts";
 import { adminLoginMessage } from "../../src/lib/builders-admin";
-import { adminGate, handleLogin, handleLogout, handleMe, handleNonce, sessionAddress, verifyLogin } from "../lib/auth";
+import { adminGate, handleLogin, handleLogout, handleMe, handleNonce, makeNonce, nonceProblem, sessionAddress, verifyLogin } from "../lib/auth";
 import type { Env } from "../lib/env";
 import { csrfFailure, getCookie } from "../lib/http";
 import { MemoryKV } from "./memory-kv";
@@ -15,12 +15,17 @@ const NOW = Date.parse("2026-09-24T12:00:00.000Z");
 function setup() {
   let now = NOW;
   const kv = new MemoryKV(() => now);
-  const env: Env = { INVITES: kv, ADMIN_ADDRESSES: `${ADMIN.address.toLowerCase()}, 0x000000000000000000000000000000000000dead`, SITE_ORIGIN: ORIGIN };
+  const env: Env = {
+    INVITES: kv,
+    ADMIN_ADDRESSES: `${ADMIN.address.toLowerCase()}, 0x000000000000000000000000000000000000dead`,
+    SITE_ORIGIN: ORIGIN,
+    NONCE_SECRET: "test-secret-0123456789",
+  };
   return { kv, env, tick: (ms: number) => (now += ms), now: () => now };
 }
 
-async function nonceFrom(env: Env): Promise<string> {
-  return ((await (await handleNonce(env)).json()) as { nonce: string }).nonce;
+async function nonceFrom(env: Env, now = NOW): Promise<string> {
+  return ((await (await handleNonce(env, now)).json()) as { nonce: string }).nonce;
 }
 
 function post(path: string, body: unknown, headers: Record<string, string> = {}): Request {
@@ -38,16 +43,68 @@ async function signed(env: Env, o: { account?: typeof ADMIN; origin?: string; is
   return { message, signature, nonce };
 }
 
-describe("nonce", () => {
-  test("random, 16 bytes hex, stored with a 5-minute TTL", async () => {
-    const { env, kv, tick } = setup();
+describe("nonce (stateless)", () => {
+  test("base64url(ts | 16 random bytes | HMAC); issuing one writes nothing to KV", async () => {
+    const { env, kv } = setup();
     const a = await nonceFrom(env);
     const b = await nonceFrom(env);
-    expect(a).toMatch(/^[0-9a-f]{32}$/);
+    expect(a).toMatch(/^[A-Za-z0-9_-]{75}$/);
     expect(a).not.toBe(b);
-    expect(await kv.get(`nonce:${a}`)).toBe("1");
-    tick(5 * 60_000);
-    expect(await kv.get(`nonce:${a}`)).toBeNull();
+    expect(kv.store.size).toBe(0);
+    expect(await nonceProblem(a, env.NONCE_SECRET!, NOW)).toBeNull();
+  });
+
+  test("tampered, or made with another secret: refused", async () => {
+    const { env } = setup();
+    const n = await nonceFrom(env);
+    const flip = (s: string, i: number) => s.slice(0, i) + (s[i] === "A" ? "B" : "A") + s.slice(i + 1);
+    expect(await nonceProblem(flip(n, 3), env.NONCE_SECRET!, NOW)).toMatch(/unknown/); // the timestamp
+    expect(await nonceProblem(flip(n, 20), env.NONCE_SECRET!, NOW)).toMatch(/unknown/); // the random part
+    expect(await nonceProblem(flip(n, 70), env.NONCE_SECRET!, NOW)).toMatch(/unknown/); // the MAC
+    expect(await nonceProblem(await makeNonce("another secret", NOW), env.NONCE_SECRET!, NOW)).toMatch(/unknown/);
+    expect(await nonceProblem("0123456789abcdef0123456789abcdef", env.NONCE_SECRET!, NOW)).toMatch(/unknown/);
+    expect(await nonceProblem("", env.NONCE_SECRET!, NOW)).toMatch(/unknown/);
+    const body = await signed(env, { nonce: flip(n, 20) });
+    const res = await handleLogin(post("/api/auth/login", body), env, NOW);
+    expect(res.status).toBe(401);
+  });
+
+  test("older than 5 minutes (or from the future): refused", async () => {
+    const { env } = setup();
+    const n = await nonceFrom(env, NOW);
+    expect(await nonceProblem(n, env.NONCE_SECRET!, NOW + 5 * 60_000)).toBeNull();
+    expect(await nonceProblem(n, env.NONCE_SECRET!, NOW + 5 * 60_000 + 1)).toMatch(/expired/);
+    const future = await nonceFrom(env, NOW + 5 * 60_000);
+    expect(await nonceProblem(future, env.NONCE_SECRET!, NOW)).toMatch(/expired/);
+    // at login too, even with a fresh `issued` line
+    const old = await nonceFrom(env, NOW - 6 * 60_000);
+    const res = await handleLogin(post("/api/auth/login", await signed(env, { nonce: old })), env, NOW);
+    expect(res.status).toBe(401);
+    expect(((await res.json()) as { error: string }).error).toMatch(/expired/);
+  });
+
+  test("without NONCE_SECRET both endpoints fail closed with a clear 500", async () => {
+    const { env } = setup();
+    const body = await signed(env);
+    delete env.NONCE_SECRET;
+    const n = await handleNonce(env, NOW);
+    expect(n.status).toBe(500);
+    expect(((await n.json()) as { error: string }).error).toMatch(/NONCE_SECRET/);
+    const res = await handleLogin(post("/api/auth/login", body), env, NOW);
+    expect(res.status).toBe(500);
+    expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  test("a failed sign-in does not use the nonce up (nothing written); a successful one does", async () => {
+    const { env, kv } = setup();
+    const nonce = await nonceFrom(env);
+    const refused = await handleLogin(post("/api/auth/login", await signed(env, { nonce, account: OTHER })), env, NOW);
+    expect(refused.status).toBe(403);
+    expect(kv.store.size).toBe(0);
+    const ok = await handleLogin(post("/api/auth/login", await signed(env, { nonce })), env, NOW);
+    expect(ok.status).toBe(200);
+    expect(await kv.get(`used-nonce:${nonce}`)).toBe("1");
+    expect(kv.store.get(`used-nonce:${nonce}`)!.expiresAt).toBe(NOW + 300_000);
   });
 });
 
@@ -63,8 +120,8 @@ describe("login (real viem signatures)", () => {
     const token = /=([0-9a-f]{64});/.exec(cookie)![1];
     expect(await kv.get(`session:${token}`)).toBe(ADMIN.address.toLowerCase());
     expect(kv.store.get(`session:${token}`)!.expiresAt).toBe(NOW + 43_200_000);
-    // single use: the nonce is gone
-    expect(await kv.get(`nonce:${body.nonce}`)).toBeNull();
+    // single use: the nonce is recorded as used
+    expect(await kv.get(`used-nonce:${body.nonce}`)).toBe("1");
 
     const me = await handleMe(new Request(`${ORIGIN}/api/auth/me`, { headers: { cookie: `__Host-rb_admin=${token}` } }), env);
     expect(await me.json()).toEqual({ service: "registrai-builders-admin", address: ADMIN.address.toLowerCase() });
@@ -90,13 +147,13 @@ describe("login (real viem signatures)", () => {
     expect(r.ok).toBe(false);
   });
 
-  test("a nonce works once", async () => {
+  test("a nonce works once: replayed after a successful sign-in, it is refused", async () => {
     const { env } = setup();
     const body = await signed(env);
     expect((await handleLogin(post("/api/auth/login", body), env, NOW)).status).toBe(200);
-    const again = await handleLogin(post("/api/auth/login", body), env, NOW);
+    const again = await handleLogin(post("/api/auth/login", body), env, NOW + 1000);
     expect(again.status).toBe(401);
-    expect(((await again.json()) as { error: string }).error).toMatch(/nonce/);
+    expect(((await again.json()) as { error: string }).error).toMatch(/already used/);
   });
 
   test("an unknown nonce is refused", async () => {

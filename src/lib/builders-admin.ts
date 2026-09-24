@@ -17,7 +17,7 @@ export const ADMIN_LOGIN_TITLE = "Registrai builders admin sign-in";
 export const LOGIN_MAX_AGE_MS = 5 * 60_000;
 /** Clock skew tolerated for an `issued` time in the future. */
 export const LOGIN_MAX_SKEW_MS = 60_000;
-/** KV TTLs, seconds. */
+/** A nonce's lifetime (and its used-nonce KV record's TTL), seconds. */
 export const NONCE_TTL_S = 5 * 60;
 export const SESSION_TTL_S = 12 * 60 * 60;
 export const SESSION_COOKIE = "__Host-rb_admin";
@@ -31,7 +31,8 @@ export interface AdminLogin {
   issued: string;
 }
 
-const NONCE_RE = /^[0-9a-f]{32}$/;
+/** The builders site's stateless nonce (base64url; builders-site/lib/auth.ts). */
+const NONCE_RE = /^[A-Za-z0-9_-]{16,128}$/;
 const ORIGIN_RE = /^https?:\/\/[a-z0-9.-]+(?::\d{1,5})?$/;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 

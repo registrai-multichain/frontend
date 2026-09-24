@@ -29,6 +29,8 @@ export interface Env {
   ADMIN_ADDRESSES?: string;
   /** https://builder.registrai.cc — sign-in, CSRF and claim links are bound to it. */
   SITE_ORIGIN?: string;
+  /** Pages SECRET (never in wrangler.toml): the HMAC key of the stateless sign-in nonces. Unset = sign-in fails closed (500). */
+  NONCE_SECRET?: string;
 }
 
 export interface PagesContext<D extends Record<string, unknown> = Record<string, unknown>> {
