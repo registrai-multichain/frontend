@@ -33,12 +33,9 @@ export default function CreateAgentPage() {
           </p>
           <p className="text-2xs text-fg-dim mt-3 max-w-[64ch] leading-relaxed">
             Common markets require an approved, independent dispute resolver
-            on your feed. This form names your own wallet as resolver, so feeds
-            created here don&apos;t qualify for common markets yet; see{" "}
-            <Link href="/agents" className="underline decoration-fg-dim underline-offset-4 hover:text-accent">
-              run an agent
-            </Link>{" "}
-            for how to qualify. Nothing here is a promise of income.
+            on your feed — never your own wallet. The form below pre-fills the
+            approved resolver where one is configured and checks it onchain
+            before you sign. Nothing here is a promise of income.
           </p>
         </div>
 

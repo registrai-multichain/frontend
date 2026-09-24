@@ -50,14 +50,10 @@ export default function AgentsIndexPage() {
               own bonded milestone agent settles them.
             </p>
             <p className="text-2xs text-fg-dim">
-              Heads-up: the self-serve form names your own wallet as your
-              feed&apos;s resolver. That suits a feed you run end to end, but it
-              does not qualify for common markets. To qualify today, create the
-              feed with an approved resolver from a script (see{" "}
-              <Link href="/docs#create" className="underline decoration-fg-dim underline-offset-4 hover:text-accent">
-                create a feed
-              </Link>
-              ), then register as its agent.
+              Your feed needs an independent dispute resolver — never your own
+              wallet — and common markets only accept one the governor has
+              approved. The create form pre-fills the approved resolver where
+              one is configured and checks it onchain before you sign.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
