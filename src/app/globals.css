@@ -417,6 +417,7 @@ a:hover {
 .lp-regi-ca span { color: var(--lp-orange); }
 .lp-regi-ca code { min-width: 0; overflow-wrap: anywhere; color: var(--lp-paper); font-family: var(--font-mono), monospace; font-size: 11px; }
 .lp-regi-ca a { color: var(--lp-acid); white-space: nowrap; }
+.lp-regi-links { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .lp-regi-facts { display: grid; grid-template-columns: repeat(3, 1fr); margin: 14px 0 0; border: 1px solid rgba(241, 237, 220, .18); }
 .lp-regi-facts div { padding: 14px 16px; border-right: 1px solid rgba(241, 237, 220, .18); }
 .lp-regi-facts div:last-child { border-right: 0; }

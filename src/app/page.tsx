@@ -1,5 +1,5 @@
 import { BrandLockup, BrandMark } from "@/components/Brand";
-import { REGI_CONTRACT, REGI_EXPLORER_URL } from "@/lib/regi";
+import { REGI_CONTRACT, REGI_DEXSCREENER_URL, REGI_EXPLORER_URL } from "@/lib/regi";
 import Link from "next/link";
 
 const feeRoutes = [
@@ -87,7 +87,10 @@ function RegiBootstrap() {
           <div className="lp-regi-ca">
             <span>official contract · Arc</span>
             <code>{REGI_CONTRACT}</code>
-            <a href={REGI_EXPLORER_URL} target="_blank" rel="noreferrer">Arc explorer ↗</a>
+            <div className="lp-regi-links">
+              <a href={REGI_EXPLORER_URL} target="_blank" rel="noreferrer">Arc explorer ↗</a>
+              <a href={REGI_DEXSCREENER_URL} target="_blank" rel="noreferrer">DexScreener ↗</a>
+            </div>
           </div>
           <dl className="lp-regi-facts">
             <div><dt>Network</dt><dd>Arc mainnet</dd></div>
