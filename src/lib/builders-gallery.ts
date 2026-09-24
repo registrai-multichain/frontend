@@ -23,6 +23,10 @@
  * that builder, with its chain status (never twice); otherwise as Invited,
  * with only what the file says: name, source link, X handle. Never a country
  * or a wallet: an invitee has claimed nothing.
+ *
+ * On builder.registrai.cc the page also merges the invites the owner made in
+ * /admin (GET /api/invites, public fields only): parsePublicInvites +
+ * mergeNominees. Where that API does not exist the file alone is shown.
  */
 import { getAddress, isAddress, parseAbi, zeroAddress, type Address, type Hex } from "viem";
 import {
@@ -246,6 +250,42 @@ export function parseNominees(raw: unknown): Nominee[] {
     const x = typeof e.x === "string" ? X_HANDLE.exec(e.x.trim()) : null;
     if (x) n.x = `@${x[1]}`;
     if (typeof e.note === "string") n.note = e.note;
+    out.push(n);
+  }
+  return out;
+}
+
+/**
+ * Pure: the builders site's GET /api/invites (invites the owner made in /admin),
+ * as nominees. Same rules as the file; anything else (e.g. the HTML 404 page
+ * of a host without the API) is no invitees.
+ */
+export function parsePublicInvites(raw: unknown): Nominee[] {
+  if (!isObj(raw) || !Array.isArray(raw.invites)) return [];
+  // A public list never carries a note; drop one if it ever did.
+  return parseNominees(raw.invites).map((n) => ({ source: n.source, ...(n.name ? { name: n.name } : {}), ...(n.x ? { x: n.x } : {}) }));
+}
+
+/**
+ * Pure: the file's nominees plus the API's invitees, deduped by normalised
+ * source. File order first, then new invitees in API order; for a source in
+ * both, the API's name / X handle win (the admin record is the editable one).
+ * An on-chain claim still wins over either (mergeGallery).
+ */
+export function mergeNominees(file: Nominee[], api: Nominee[]): Nominee[] {
+  const fromApi = new Map<string, Nominee>();
+  for (const n of api) if (!fromApi.has(n.source)) fromApi.set(n.source, n);
+  const seen = new Set<string>();
+  const out: Nominee[] = [];
+  for (const n of file) {
+    if (seen.has(n.source)) continue;
+    seen.add(n.source);
+    const a = fromApi.get(n.source);
+    out.push(a ? { ...n, ...(a.name ? { name: a.name } : {}), ...(a.x ? { x: a.x } : {}) } : n);
+  }
+  for (const n of fromApi.values()) {
+    if (seen.has(n.source)) continue;
+    seen.add(n.source);
     out.push(n);
   }
   return out;

@@ -19,6 +19,7 @@ export const badgeAbi = parseAbi([
   "function imageBase() view returns (string)",
   "function BUILDERS() view returns (address)",
   "function issue(uint256 builderId) returns (uint256 serial)",
+  "function revoke(uint256 builderId)",
   "event Issued(uint256 indexed builderId, uint256 indexed serial, address indexed owner)",
 ]);
 

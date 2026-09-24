@@ -11,7 +11,7 @@ import { profileURIFor } from "./verified-builders";
 import { badgeAbi } from "./verified-builder-badge";
 
 export interface PlannedTx {
-  kind: "setCaretaker" | "registerFor" | "issue";
+  kind: "setCaretaker" | "registerFor" | "issue" | "revoke";
   to: Address;
   value: "0";
   data: Hex;
@@ -96,13 +96,13 @@ export function planOnboarding(opts: {
 }
 
 /** Safe Transaction Builder import format. */
-export function safeBatchJson(txs: PlannedTx[], opts: { chainId: number; createdAt: number; description?: string }) {
+export function safeBatchJson(txs: PlannedTx[], opts: { chainId: number; createdAt: number; description?: string; name?: string }) {
   return {
     version: "1.0",
     chainId: String(opts.chainId),
     createdAt: opts.createdAt,
     meta: {
-      name: "Registrai verified builders onboarding",
+      name: opts.name ?? "Registrai verified builders onboarding",
       description: opts.description ?? batchSummary(txs),
       createdFromSafeAddress: "",
       createdFromOwnerAddress: "",
@@ -111,10 +111,25 @@ export function safeBatchJson(txs: PlannedTx[], opts: { chainId: number; created
   };
 }
 
-/** "1 registerFor, 2 setCaretaker" (+ ", 2 issue" when the batch issues badges). */
+/** "1 registerFor, 2 setCaretaker" (+ ", 2 issue" / ", 1 revoke" when the batch has them). */
 export function batchSummary(txs: PlannedTx[]): string {
   const n = (k: PlannedTx["kind"]) => txs.filter((t) => t.kind === k).length;
-  return `${n("registerFor")} registerFor, ${n("setCaretaker")} setCaretaker${n("issue") ? `, ${n("issue")} issue` : ""}`;
+  const extra = (["issue", "revoke"] as const).map((k) => (n(k) ? `, ${n(k)} ${k}` : "")).join("");
+  return `${n("registerFor")} registerFor, ${n("setCaretaker")} setCaretaker${extra}`;
+}
+
+/**
+ * One badge revoke (VerifiedBuilderBadge.revoke, ISSUER_ROLE = the Safe): burns
+ * the soulbound token; its serial is retired for good.
+ */
+export function revokeBadgeTx(badge: Address, builderId: number, serial?: number): PlannedTx {
+  return {
+    kind: "revoke",
+    to: badge,
+    value: "0",
+    data: encodeFunctionData({ abi: badgeAbi, functionName: "revoke", args: [BigInt(builderId)] }),
+    label: `revoke(${builderId})  # burns badge${serial ? ` No. ${String(serial).padStart(3, "0")}` : ""} of builder #${builderId}`,
+  };
 }
 
 /** One call per paragraph: what it does, then to / value / data. */

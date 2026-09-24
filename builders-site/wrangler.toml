@@ -1,0 +1,32 @@
+# Cloudflare Pages project for the standalone builders site, builder.registrai.cc
+# (the /builders gallery, /verify, /admin and the badge art) plus its Pages
+# Functions in ./functions (the admin API: sign-in, invites, open tracking).
+#
+# Deploy from frontend/: `npm run deploy:builders` (next build, then
+# scripts/build-builders-site.sh packages ../dist-builders, then
+# scripts/deploy-builders-site.sh runs `wrangler pages deploy` from THIS
+# directory, which picks up ./functions and this file).
+#
+# The main site (registrai.cc, `npm run deploy`) deploys `out/` from frontend/
+# and never sees these functions.
+#
+# With a wrangler.toml, this file is the source of truth for the project's
+# bindings and variables: the dashboard shows them read-only.
+name = "registrai-builders"
+compatibility_date = "2026-05-01"
+pages_build_output_dir = "../dist-builders"
+
+# Invites, sign-in nonces and admin sessions.
+# REPLACE_WITH_KV_ID is a PLACEHOLDER: create the namespace with
+#   npx wrangler kv namespace create registrai-builders-invites
+# and put the id it prints here (the deploy script refuses the placeholder).
+[[kv_namespaces]]
+binding = "INVITES"
+id = "REPLACE_WITH_KV_ID"
+
+[vars]
+# Wallets allowed to sign in to /admin: comma-separated, lowercase.
+# Empty = nobody can sign in (the rest of the site works as before).
+ADMIN_ADDRESSES = ""
+# Sign-in messages, the CSRF Origin check and claim links are bound to it.
+SITE_ORIGIN = "https://builder.registrai.cc"

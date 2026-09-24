@@ -16,11 +16,13 @@ import {
   gallerySyncPlan,
   labelOf,
   mergeGallery,
+  mergeNominees,
   needsProofCheck,
   overlayLive,
   parseFilter,
   parseGallerySnapshot,
   parseNominees,
+  parsePublicInvites,
   parseSourceParam,
   avatarUrl,
   proofHref,
@@ -101,6 +103,48 @@ describe("nominees", () => {
       { source: "github:acme/other", x: "@ok" },
     ]);
     expect(parseNominees({ not: "an array" })).toEqual([]);
+  });
+});
+
+describe("invites from the admin API", () => {
+  test("parsePublicInvites: validated like the file; notes dropped; anything else is none", () => {
+    expect(
+      parsePublicInvites({
+        invites: [
+          { source: "github:foo/bar", name: "Foo", x: "@foo", createdAt: "2026-09-24T12:00:00.000Z" },
+          { source: "https://example.org/", x: "not a handle!", note: "leak" },
+          { source: "not a source" },
+          { source: "Foo/Bar", name: "dupe" },
+        ],
+      }),
+    ).toEqual([{ source: "github:foo/bar", name: "Foo", x: "@foo" }, { source: "domain:example.org" }]);
+    expect(parsePublicInvites("<!doctype html>")).toEqual([]);
+    expect(parsePublicInvites(null)).toEqual([]);
+    expect(parsePublicInvites({ invites: "x" })).toEqual([]);
+  });
+
+  test("mergeNominees: file first, deduped by normalised source, API name / X win", () => {
+    const file = parseNominees([{ source: "a/b", name: "File AB", note: "kept private" }, { source: "c.example", x: "@c" }]);
+    const api = parsePublicInvites({ invites: [{ source: "github:A/B", name: "Api AB", x: "@ab" }, { source: "e/f", name: "EF" }, { source: "e/f" }] });
+    expect(mergeNominees(file, api)).toEqual([
+      { source: "github:a/b", name: "Api AB", x: "@ab", note: "kept private" },
+      { source: "domain:c.example", x: "@c" },
+      { source: "github:e/f", name: "EF" },
+    ]);
+    expect(mergeNominees(file, [])).toEqual(file);
+    expect(mergeNominees([], api)).toEqual(api.slice(0, 2));
+  });
+
+  test("an on-chain claim still wins over an API invitee", () => {
+    const nominees = mergeNominees([], parsePublicInvites({ invites: [{ source: "github:o/r", name: "Claimed" }, { source: "github:x/y", name: "Open" }] }));
+    const builders: GalleryBuilder[] = [
+      { id: 1, owner: B0.toLowerCase(), status: "pending", source: "github:o/r", country: "DE", proofUrl: null, badge: null, createdAt: 0 },
+    ];
+    const merged = mergeGallery(builders, nominees);
+    expect(merged.map((e) => [e.kind, e.name])).toEqual([
+      ["nominated", "Claimed"],
+      ["invited", "Open"],
+    ]);
   });
 });
 

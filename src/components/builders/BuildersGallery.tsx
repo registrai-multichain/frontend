@@ -17,8 +17,10 @@ import {
   galleryCounts,
   labelOf,
   mergeGallery,
+  mergeNominees,
   needsProofCheck,
   overlayLive,
+  parsePublicInvites,
   proofHref,
   readLiveGallery,
   sourceHref,
@@ -99,6 +101,25 @@ function useLiveBuilders(snapshot: GallerySnapshot | null): GalleryBuilder[] {
     { revalidateOnFocus: false, shouldRetryOnError: false, dedupingInterval: 60_000 },
   );
   return data ?? base;
+}
+
+/**
+ * The invites the owner made in /admin (builder.registrai.cc's GET
+ * /api/invites, public fields only), merged into the file's nominees. Where
+ * the API does not exist (registrai.cc, a local static build) or fails, the
+ * file alone is shown, silently.
+ */
+function useNominees(file: Nominee[]): Nominee[] {
+  const { data } = useSWR(
+    "builders-api-invites",
+    async () => {
+      const res = await fetch("/api/invites", { headers: { accept: "application/json" } });
+      if (!res.ok || !(res.headers.get("content-type") ?? "").includes("application/json")) throw new Error(`invites ${res.status}`);
+      return parsePublicInvites(await res.json());
+    },
+    { revalidateOnFocus: false, shouldRetryOnError: false, dedupingInterval: 60_000 },
+  );
+  return useMemo(() => (data?.length ? mergeNominees(file, data) : file), [file, data]);
 }
 
 /** `?builder=<id>` (the badge's on-chain external_url): the open detail view. Suspense leaf for the static export. */
@@ -332,8 +353,9 @@ function BuilderDetail({ e, onClose }: { e: GalleryEntry; onClose: () => void })
   );
 }
 
-export function BuildersGallery({ snapshot, nominees }: { snapshot: GallerySnapshot | null; nominees: Nominee[] }) {
+export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot: GallerySnapshot | null; nominees: Nominee[] }) {
   const builders = useLiveBuilders(snapshot);
+  const nominees = useNominees(fileNominees);
   const entries = useMemo(() => mergeGallery(builders, nominees), [builders, nominees]);
   const counts = useMemo(() => galleryCounts(entries), [entries]);
 

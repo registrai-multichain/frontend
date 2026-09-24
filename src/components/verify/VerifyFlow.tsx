@@ -97,12 +97,34 @@ function CopyButton({ text, label = "copy" }: { text: string; label?: string }) 
  * this leaf and reports up.
  */
 function SourceParam({ onSource }: { onSource: (p: { source: string; path: Path }) => void }) {
-  const raw = useSearchParams()?.get("source");
+  const params = useSearchParams();
+  const raw = params?.get("source");
+  const invite = params?.get("invite");
   useEffect(() => {
     const p = parseSourceParam(raw);
     if (p) onSource(p);
   }, [raw, onSource]);
+  useEffect(() => {
+    if (raw && invite) reportInviteOpen(raw, invite);
+  }, [raw, invite]);
   return null;
+}
+
+let inviteOpenReported = false;
+/**
+ * A personal claim link (`?source=…&invite=<code>`, made in /admin) was
+ * opened: tell builder.registrai.cc once per page load. Fire and forget; the
+ * API ignores wrong codes, and where it does not exist nothing happens.
+ */
+function reportInviteOpen(source: string, code: string) {
+  if (inviteOpenReported) return;
+  inviteOpenReported = true;
+  fetch("/api/invites/open", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ source, code }),
+    keepalive: true,
+  }).catch(() => undefined);
 }
 
 function Step({ n, title, state, children }: { n: number; title: string; state: "done" | "active" | "todo"; children?: ReactNode }) {
