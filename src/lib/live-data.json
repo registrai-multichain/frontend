@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-09-24T10:53:22.030Z",
+  "syncedAt": "2026-09-24T11:20:22.305Z",
   "builders": [
     {
       "builderId": 1,
@@ -15,15 +15,32 @@
       "address": "0xA9Fa24e1147E8337C3D25b084890121BE10a132B",
       "name": "oracle-primitives",
       "repo": "registrai-multichain/oracle-primitives",
-      "milestoneFeedId": null
+      "milestoneFeedId": "0xc1fb8a8d61edd9ec459f49f6db49242f24ece104817b9c8da38e08e0374f49a6"
     }
   ],
-  "perennialMarkets": [],
+  "perennialMarkets": [
+    {
+      "marketId": "0x2530a3b549ae3337a6add0a7de6b48234598b72a92464a2c277e55b7932e0adf",
+      "builderId": 1,
+      "expiry": 1790852829,
+      "phase": "trading",
+      "yesWon": false,
+      "yesReserve": "5000000",
+      "noReserve": "5000000",
+      "feedId": "0xc1fb8a8d61edd9ec459f49f6db49242f24ece104817b9c8da38e08e0374f49a6",
+      "agent": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
+      "threshold": "2",
+      "comparator": 1,
+      "creator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263"
+    }
+  ],
   "atlas": {
-    "lastScannedBlock": "63752762",
+    "lastScannedBlock": "63755976",
     "progressByBuilder": {},
     "volumeByBuilderId": {},
-    "marketToBuilder": {},
+    "marketToBuilder": {
+      "0x2530a3b549ae3337a6add0a7de6b48234598b72a92464a2c277e55b7932e0adf": 1
+    },
     "pnl": {
       "positions": {},
       "realised": {}
@@ -64,10 +81,16 @@
         "Dispute": "0x3eefde8ecc78457ab715f1b9a7c82fbcd416c329"
       },
       "fromBlock": "63752157",
-      "lastScannedBlock": "63752762",
+      "lastScannedBlock": "63755976",
       "state": {
         "agents": {},
-        "open": {}
+        "open": {
+          "0x6a25d79d7664c284c0d130b0a385b9cadf3481c7:0x2530a3b549ae3337a6add0a7de6b48234598b72a92464a2c277e55b7932e0adf": {
+            "agent": "0xf26db19bc8dc33c9a72399128cf5cfb5ddc76263",
+            "feed": "0xc1fb8a8d61edd9ec459f49f6db49242f24ece104817b9c8da38e08e0374f49a6",
+            "volume": "0"
+          }
+        }
       },
       "challenges": {},
       "attesters": {}
