@@ -7,6 +7,7 @@
 import live from "./live-data.json";
 import { SNAPSHOT_MATCHES_NETWORK } from "./perennial-network";
 import { profileURIFor, type BuilderStatus } from "./verified-builders";
+import { parseSnapshotBadge, type BadgeInfo } from "./verified-builder-badge";
 
 export interface SnapshotBuilder {
   builderId: number;
@@ -16,6 +17,8 @@ export interface SnapshotBuilder {
   country: string | null;
   proofUrl: string | null;
   milestoneFeedId: string | null;
+  /** Raw; read it through snapshotBadgeFor. */
+  badge?: unknown;
 }
 
 export interface Verification {
@@ -39,6 +42,12 @@ export function verificationFor(
   if (!row || row.status !== "verified" || !row.source || !row.proofUrl) return null;
   if (b.profileURI !== undefined && b.profileURI !== profileURIFor(row.source)) return null;
   return { source: row.source, proofUrl: row.proofUrl };
+}
+
+/** Pure: the badge the snapshot recorded for this builder (same id AND owner), or null. */
+export function snapshotBadgeFor(rows: SnapshotBuilder[], b: { builderId: number; owner: string }): BadgeInfo | null {
+  const row = rows.find((r) => r.builderId === b.builderId && r.owner.toLowerCase() === b.owner.toLowerCase());
+  return row ? parseSnapshotBadge(row.badge) : null;
 }
 
 /** What a builder's milestone counts, for the disclosure line. */

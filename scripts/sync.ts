@@ -24,6 +24,13 @@ import {
   type RegistryReader,
 } from "../src/lib/verified-builders-chain";
 import perennialTestnet from "../src/lib/deployments/arc-testnet-perennial.json";
+import {
+  attachBadges,
+  badgeImageBase,
+  badgeNetworkKey,
+  readBuilderBadges,
+  type BadgeReader,
+} from "../src/lib/verified-builder-badge";
 
 /**
  * Bump when the season fold changes shape or semantics. A cursor written by an
@@ -685,6 +692,17 @@ async function main(): Promise<void> {
   };
   let builderFeedsCursor: BuilderFeedsCursor | null = null;
   let legacyKeeperBuilders: LegacyKeeperBuilder[] = [];
+  // The Verified Builder Badge: contracts.VerifiedBuilderBadge, or the
+  // perennial.verifiedBuilderBadge record the badge deploy writes. Absent = no
+  // badge reads, and live-data carries no `badges` entry (render-badges.py then
+  // renders nothing).
+  const badgeAddr = ((DEPLOYMENT.contracts as { VerifiedBuilderBadge?: string }).VerifiedBuilderBadge ??
+    (DEPLOYMENT.perennial as { verifiedBuilderBadge?: { address?: string } } | undefined)?.verifiedBuilderBadge?.address) as
+    | Address
+    | undefined;
+  const badgeNetwork = badgeNetworkKey(DEPLOYMENT.chainId);
+  /** live-data.json `badges`: { <network>: { address, maxSerial } } — scripts/render-badges.py. */
+  const badges: Record<string, { address: string; maxSerial: number }> = {};
   try {
     legacyKeeperBuilders = JSON.parse(readFileSync(resolve(__dirname, "../../keeper/builders.json"), "utf8"));
   } catch {
@@ -853,6 +871,20 @@ async function main(): Promise<void> {
       feeds,
     };
     perennialBuilders = perennialBuilderSnapshot(records, feeds, legacyKeeperBuilders);
+
+    // serialOf for every builder; lapsed + issuedAt for each issued serial.
+    if (badgeAddr && badgeNetwork) {
+      console.log(`reading verified builder badges (${badgeAddr})…`);
+      const r = await readBuilderBadges(client as unknown as BadgeReader, {
+        badge: badgeAddr,
+        builderIds: perennialBuilders.map((b) => b.builderId),
+        imageBase: badgeImageBase(badgeNetwork),
+        pace: async () => { await pace(); },
+      });
+      perennialBuilders = attachBadges(perennialBuilders, r.badges);
+      badges[badgeNetwork] = { address: badgeAddr, maxSerial: r.maxSerial };
+      console.log(`  ${r.badges.size} badge(s) held, highest serial ${r.maxSerial}`);
+    }
 
     // Only verified builders reach the atlas and the season boards; country is
     // the one in their signed claim.
@@ -1171,9 +1203,10 @@ async function main(): Promise<void> {
     seasons,
     seasonBoards,
     reputation,
+    badges,
     chainId: DEPLOYMENT.chainId,
     explorer: DEPLOYMENT.explorer,
-    contracts: DEPLOYMENT.contracts,
+    contracts: badgeAddr ? { ...DEPLOYMENT.contracts, VerifiedBuilderBadge: badgeAddr } : DEPLOYMENT.contracts,
     // Backwards-compat: the first feed exposes a flat `feed` / `agent` /
     // `attestations` shape for components that haven't migrated to the
     // multi-feed `feeds[]` array yet.

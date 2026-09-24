@@ -16,6 +16,9 @@
 # production
 /build
 
+# badge art, rendered on deploy by scripts/render-badges.py
+/public/badge/
+
 # misc
 .DS_Store
 *.pem

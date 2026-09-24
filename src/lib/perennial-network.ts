@@ -24,6 +24,8 @@ export interface PerennialContracts {
   ProgressPool: Address | null;
   MarketsPerennial: Address | null;
   CaretakerRegistry: Address | null;
+  /** Optional: the soulbound Verified Builder Badge. null = badges off. */
+  VerifiedBuilderBadge: Address | null;
 }
 
 const REQUIRED: (keyof PerennialContracts)[] = [
@@ -73,6 +75,7 @@ export function resolvePerennialDeployment(
     ProgressPool: addr(source.contracts.ProgressPool),
     MarketsPerennial: addr(source.contracts.MarketsPerennial),
     CaretakerRegistry: addr(source.contracts.CaretakerRegistry),
+    VerifiedBuilderBadge: addr(source.contracts.VerifiedBuilderBadge),
   };
   const missing = REQUIRED.filter((k) => contracts[k] === null);
   return {
@@ -109,6 +112,8 @@ function sourceFor(network: PerennialNetwork): DeploymentSource {
       ProgressPool: c.ProgressPool,
       MarketsPerennial: c.MarketsPerennial,
       CaretakerRegistry: c.CaretakerRegistry,
+      // Deployed after the last sync may have run: the extras file carries it too.
+      VerifiedBuilderBadge: c.VerifiedBuilderBadge ?? testnetExtras.verifiedBuilderBadge,
     },
     operator: testnetExtras.operator,
     deployBlock: testnetExtras.deployBlock,

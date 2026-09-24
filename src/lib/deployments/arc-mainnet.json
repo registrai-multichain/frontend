@@ -9,6 +9,7 @@
     "BuilderRegistry": null,
     "ProgressPool": null,
     "CaretakerRegistry": null,
-    "MarketsPerennial": null
+    "MarketsPerennial": null,
+    "VerifiedBuilderBadge": null
   }
 }

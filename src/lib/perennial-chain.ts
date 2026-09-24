@@ -17,7 +17,8 @@ import { PERENNIAL_BUILDERS } from "./perennial";
 import { blockChunks } from "./perennial-market";
 import { SNAPSHOT_MATCHES_NETWORK, type PerennialDeployment } from "./perennial-network";
 import { isRevert, readFeeModel, readMarketSettlement } from "./market-fees-chain";
-import { snapshotBuilders, verificationFor, type Verification } from "./builder-verification";
+import { snapshotBadgeFor, snapshotBuilders, verificationFor, type Verification } from "./builder-verification";
+import type { BadgeInfo } from "./verified-builder-badge";
 import { sourceFromProfileURI, sourceLabel } from "./verified-builders";
 import type { FeeModel } from "./market-fees";
 
@@ -212,6 +213,8 @@ export interface BuilderRow {
   source: string | null;
   /** Verified mark (synced snapshot, still matching the live profile link). */
   verification: Verification | null;
+  /** Verified Builder Badge as of the last sync; the UI refreshes it live. */
+  badge: BadgeInfo | null;
 }
 
 export interface Overview {
@@ -364,6 +367,7 @@ export async function readOverview(client: PublicClient, d: PerennialDeployment)
       milestoneFeedId: meta?.milestoneFeedId ?? snapFeeds[String(id)] ?? milestoneFeedFromMarkets(markets, id, d.operator),
       source: sourceFromProfileURI(profileURI),
       verification: verificationFor(snapRows, { builderId: id, owner, profileURI }),
+      badge: snapshotBadgeFor(snapRows, { builderId: id, owner }),
     } satisfies BuilderRow;
   });
 

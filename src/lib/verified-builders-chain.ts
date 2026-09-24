@@ -16,6 +16,7 @@ import {
   type Claim,
   type ProofFetchConfig,
 } from "./verified-builders";
+import type { BadgeInfo } from "./verified-builder-badge";
 
 export const verifiedBuilderAbi = parseAbi([
   "function nextId() view returns (uint256)",
@@ -151,6 +152,8 @@ export interface PerennialBuilderSnapshot {
   country: string | null;
   proofUrl: string | null;
   milestoneFeedId: string | null;
+  /** The builder's Verified Builder Badge (sync.ts attaches it when the contract is deployed). */
+  badge?: BadgeInfo | null;
 }
 
 /** keeper/builders.json — honoured only for legacy (non-`registrai:`) builders. */

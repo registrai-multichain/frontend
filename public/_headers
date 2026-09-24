@@ -14,3 +14,9 @@
 /atlas/opengraph-image
   Content-Type: image/png
   Cache-Control: public, max-age=3600
+
+# Verified Builder Badge art (scripts/render-badges.py, on deploy). The token's
+# on-chain image points here. A file only changes when the art or renderer
+# does, so an hour of caching; never immutable (the same URL gets new art).
+/badge/*
+  Cache-Control: public, max-age=3600
