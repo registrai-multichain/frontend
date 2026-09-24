@@ -1,18 +1,18 @@
 {
-  "network": "testnet",
-  "chainId": 5042002,
-  "note": "Perennial extras for Arc testnet. Contract addresses come from live-data.json (synced from contracts/deployments/arc-testnet.json). operator = keeper/config.arc.json operator_addr (the caretaker's bonded milestone agent); deployBlock = contracts/deployments/arc-testnet.json perennial.deployBlock (v3 stack, 2026-09-24). verifiedBuilderBadge = contracts/deployments/arc-testnet.json perennial.verifiedBuilderBadge.address (used until a sync writes contracts.VerifiedBuilderBadge). builderFund / seasonPool = contracts/deployments/arc-testnet.json perennial BuilderFund / SeasonPool once testnet v4 is deployed (null until then: the market pages show the builder-economy parts as not deployed; used until a sync writes contracts.BuilderFund / contracts.SeasonPool).",
-  "deployBlock": 63752157,
-  "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
-  "verifiedBuilderBadge": "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c",
-  "builderFund": null,
-  "seasonPool": null,
-  "builders": {
-    "note": "The builder registries on Arc testnet, used by /builders and /verify while the mainnet builders block is unset.",
-    "deployBlock": 63752157,
+    "network": "testnet",
+    "chainId": 5042002,
+    "note": "Perennial extras for Arc testnet. Contract addresses come from live-data.json (synced from contracts/deployments/arc-testnet.json). operator = keeper/config.arc.json operator_addr (the caretaker's bonded milestone agent); deployBlock = contracts/deployments/arc-testnet.json perennial.deployBlock (v4 stack, 2026-09-24). verifiedBuilderBadge = contracts/deployments/arc-testnet.json perennial.verifiedBuilderBadge.address (used until a sync writes contracts.VerifiedBuilderBadge). builderFund / seasonPool = contracts/deployments/arc-testnet.json perennial BuilderFund / SeasonPool (v4, deployed 2026-09-24; used until a sync writes contracts.BuilderFund / contracts.SeasonPool).",
+    "deployBlock": 63826822,
     "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
-    "BuilderRegistry": "0x10F8D6D5905E2C4dc565a1894c102B25E9d21DF4",
-    "CaretakerRegistry": "0x02CfdE88a97A56A7dbDC05F6c7BD3Dbc34393876",
-    "VerifiedBuilderBadge": "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c"
-  }
+    "verifiedBuilderBadge": "0xBF7FF680e0Ee7472E244cf2550EE016939cb6335",
+    "builderFund": "0x7e83096F8Ef50024e7bE106E47F1BD8ce2e882D1",
+    "seasonPool": "0x56b3Ffc1c5DA4F867C3Fd56Be5dA731d457E32aA",
+    "builders": {
+        "note": "The builder registries on Arc testnet, used by /builders and /verify while the mainnet builders block is unset.",
+        "deployBlock": 63826822,
+        "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
+        "BuilderRegistry": "0xB52FC2AB9b2457D8c56d3b4A624543aD61c70D9C",
+        "CaretakerRegistry": "0x7adDA1fe8c6F3A5D405dc1F1aF68B42f2F6CAa78",
+        "VerifiedBuilderBadge": "0xBF7FF680e0Ee7472E244cf2550EE016939cb6335"
+    }
 }

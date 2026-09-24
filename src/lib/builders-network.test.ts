@@ -11,7 +11,7 @@ import {
 import { mainnetPerennialSource, resolvePerennialDeployment } from "./perennial-network";
 
 const A = "0x71Ea02b2E75e6C65A41DF9E3c78E14F9ae2232D9";
-const B = "0x10F8D6D5905E2C4dc565a1894c102B25E9d21DF4";
+const B = "0xB52FC2AB9b2457D8c56d3b4A624543aD61c70D9C";
 
 describe("selectBuildersNetwork", () => {
   test("mainnet exactly when mainnet's BuilderRegistry is set", () => {
@@ -41,9 +41,9 @@ describe("resolveBuildersDeployment", () => {
     expect(BUILDERS.chainId).toBe(5042002);
     expect(BUILDERS.rpc).toBe("https://rpc.testnet.arc.io");
     expect(BUILDERS.contracts).toEqual({
-      BuilderRegistry: "0x10F8D6D5905E2C4dc565a1894c102B25E9d21DF4",
-      CaretakerRegistry: "0x02CfdE88a97A56A7dbDC05F6c7BD3Dbc34393876",
-      VerifiedBuilderBadge: "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c",
+      BuilderRegistry: "0xB52FC2AB9b2457D8c56d3b4A624543aD61c70D9C",
+      CaretakerRegistry: "0x7adDA1fe8c6F3A5D405dc1F1aF68B42f2F6CAa78",
+      VerifiedBuilderBadge: "0xBF7FF680e0Ee7472E244cf2550EE016939cb6335",
     });
     expect(BUILDERS.operator).toBe("0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263");
     expect(BUILDERS.deployBlock).toBe(BigInt(testnet.builders.deployBlock));
