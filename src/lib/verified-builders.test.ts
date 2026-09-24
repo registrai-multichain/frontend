@@ -241,3 +241,10 @@ describe("milestone feeds", () => {
     expect(milestoneFeedFor(feeds, "github:x/y")).toBeNull();
   });
 });
+
+describe("PROOF_DOMAIN_PORT (test-only)", () => {
+  test("applies only to http on a local host", () => {
+    expect(proofUrl("domain:127.0.0.1", { domainScheme: "http", domainPort: 8123 })).toBe("http://127.0.0.1:8123/.well-known/registrai.json");
+    expect(proofUrl("domain:example.com", { domainPort: 8123 })).toBe("https://example.com/.well-known/registrai.json");
+  });
+});

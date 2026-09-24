@@ -162,6 +162,9 @@ export interface ProofFetchConfig {
   githubBase?: string;
   /** PROOF_DOMAIN_SCHEME, default https (http only for localhost / 127.0.0.1). */
   domainScheme?: string;
+  /** PROOF_DOMAIN_PORT — test-only, honoured for localhost / 127.0.0.1 over http
+   *  (mirrors the keeper), so a local "domain" server can run unprivileged. */
+  domainPort?: number;
 }
 
 export const DEFAULT_GITHUB_BASE = "https://raw.githubusercontent.com";
@@ -171,6 +174,7 @@ export function proofConfigFromEnv(env: Record<string, string | undefined>): Pro
   return {
     githubBase: env.PROOF_GITHUB_BASE || undefined,
     domainScheme: env.PROOF_DOMAIN_SCHEME || undefined,
+    domainPort: env.PROOF_DOMAIN_PORT ? Number(env.PROOF_DOMAIN_PORT) : undefined,
   };
 }
 
@@ -187,7 +191,9 @@ export function proofUrl(source: string, cfg: ProofFetchConfig = {}): string {
   if (scheme !== "https" && !(scheme === "http" && LOCAL_HOSTS.has(host))) {
     throw new Error(`scheme ${scheme} is only allowed for localhost / 127.0.0.1`);
   }
-  return `${scheme}://${host}/.well-known/registrai.json`;
+  const port =
+    cfg.domainPort && scheme === "http" && LOCAL_HOSTS.has(host) && Number.isInteger(cfg.domainPort) ? `:${cfg.domainPort}` : "";
+  return `${scheme}://${host}${port}/.well-known/registrai.json`;
 }
 
 /** Where the builder puts the file, for copy. */

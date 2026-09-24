@@ -26,6 +26,7 @@ import { resolvePerennialDeployment } from "../src/lib/perennial-network";
 import { marketIdFromLogs, readLatestValue, readOverview, type ChainMarket } from "../src/lib/perennial-chain";
 import { readAgentBond, readOpenCollateral, resolveStack } from "../src/lib/reputation-chain";
 import { assessAgent, type AgentRecordJson } from "../src/lib/reputation";
+import { canonicalClaimMessage, validateProof, type Claim } from "../src/lib/verified-builders";
 import {
   BPS,
   COMPARATOR,
@@ -341,6 +342,22 @@ async function main() {
       const a = assessAgent({ record, indexed: record !== null, bond, openCollateral });
       return out({ ok: true, agent: m.agent, registry: stack.registry ?? null, bond: a.bond ?? null, openCollateral: a.openCollateral ?? null,
         recommended: a.recommended ?? null, level: a.level, coveragePct: a.coveragePct ?? null, tier: a.tier ?? null });
+    }
+    case "claim": {
+      // Build and sign a proof file exactly as /verify does (canonical message, personal_sign).
+      const c = args.claim as Claim;
+      const message = canonicalClaimMessage(c);
+      const builderSig = await privateKeyToAccount(args.builderKey as Hex).signMessage({ message });
+      const deployerSigs: Record<string, Hex> = {};
+      for (const k of (args.deployerKeys as Hex[] | undefined) ?? []) {
+        const a = privateKeyToAccount(k);
+        deployerSigs[a.address.toLowerCase()] = await a.signMessage({ message });
+      }
+      return out({ ok: true, message, file: { version: 1, claim: c, signatures: { builder: builderSig, deployers: deployerSigs } } });
+    }
+    case "validateProof": {
+      const r = await validateProof(args.file, { expectedSource: String(args.expectedSource), onchainOwner: String(args.onchainOwner), chainId: Number(args.chainId) } as never);
+      return out({ ok: true, result: r });
     }
     case "withdrawAll": {
       const bal = (await pc.readContract({ address: P.NanoLedger!, abi: nanoLedgerAbi, functionName: "balanceOf", args: [acct!.address] })) as bigint;
