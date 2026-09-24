@@ -7,6 +7,7 @@ import {
   drawShareCard,
   fitNameSize,
   nameTop,
+  baselineFor,
   projectName,
   shareText,
   subLine,
@@ -50,6 +51,11 @@ describe("geometry", () => {
     const seen: number[] = [];
     fitNameSize((s) => (seen.push(s), s > 60 ? 999 : 0));
     expect(seen).toEqual([64, 62, 60]);
+  });
+
+  test("baselines sit one ascender below the prototype's text tops", () => {
+    expect(baselineFor(318, 150)).toBe(471);
+    expect(baselineFor(352, 64)).toBe(417.3);
   });
 
   test("a shrunk name stays centred on the 64px line", () => {
@@ -98,16 +104,16 @@ describe("drawShareCard", () => {
 
     expect(calls[0]).toEqual({ op: "drawImage", args: [bg, 0, 0, CARD_W, CARD_H] });
     const texts = calls.filter((c) => c.op === "fillText");
-    expect(texts.every((c) => c.baseline === "top")).toBe(true);
+    expect(texts.every((c) => c.baseline === "alphabetic")).toBe(true);
 
     // "NO." glyph by glyph, 30px Medium, 10px tracking, centred on 706
     const no = texts.slice(0, 3);
     expect(no.map((c) => c.args[0])).toEqual(["N", "O", "."]);
-    expect(no.every((c) => c.font === "500 30px MONO" && c.args[2] === 285 && c.fill === "rgb(150,148,140)")).toBe(true);
+    expect(no.every((c) => c.font === "500 30px MONO" && c.args[2] === 315.6 && c.fill === "rgb(150,148,140)")).toBe(true);
     expect(no.map((c) => c.args[1])).toEqual([706 - 37, 706 - 37 + 28, 706 - 37 + 56]);
 
     const serial = texts[3];
-    expect(serial).toMatchObject({ args: ["007", 706, 318], font: "700 150px MONO", align: "center", fill: "rgb(236,232,220)" });
+    expect(serial).toMatchObject({ args: ["007", 706, 471], font: "700 150px MONO", align: "center", fill: "rgb(236,232,220)" });
 
     expect(calls.find((c) => c.op === "moveTo")?.args).toEqual([640, 520]);
     expect(calls.find((c) => c.op === "lineTo")?.args).toEqual([772, 520]);
@@ -117,10 +123,10 @@ describe("drawShareCard", () => {
     const name = texts[4];
     expect(name.args[0]).toBe("registrai-multichain/oracle-primitives");
     expect(name.font).toBe("700 30px MONO");
-    expect(name.args.slice(1)).toEqual([1012, 369]);
+    expect(name.args.slice(1)).toEqual([1012, 399.6]);
     expect(name.align).toBe("left");
 
-    expect(texts[5]).toMatchObject({ args: ["GITHUB · BUILDER #3 · VERIFIED 2026-09-24", 1014, 440], font: "500 24px MONO", fill: "rgb(150,148,140)" });
+    expect(texts[5]).toMatchObject({ args: ["GITHUB · BUILDER #3 · VERIFIED 2026-09-24", 1014, 464.5], font: "500 24px MONO", fill: "rgb(150,148,140)" });
     expect(CARD_LAYOUT.name.maxWidth).toBe(700);
   });
 });

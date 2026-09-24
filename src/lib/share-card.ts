@@ -6,8 +6,10 @@
  * talks to the 2D context it is handed, so the geometry is unit-testable with a
  * fake context.
  *
- * Coordinates are card pixels, from the approved prototype. Text is placed with
- * textBaseline "top", so every `top` below is the top of the em box.
+ * Coordinates are card pixels, from the approved prototype (drawn with Pillow,
+ * whose text origin is the font's ascender line). Canvas "top" is the em box,
+ * which sits higher, so text is placed on its alphabetic baseline instead:
+ * baseline = top + ASCENT x size, ASCENT being JetBrains Mono's hhea ascender.
  */
 import { builderDeepLink, serialDigits, serialLabel } from "./verified-builder-badge";
 import { sourceLabel } from "./verified-builders";
@@ -16,6 +18,13 @@ export const CARD_W = 1881;
 export const CARD_H = 836;
 
 const INK = "rgb(236,232,220)";
+/** JetBrains Mono ascender / em (1020/1000). */
+export const ASCENT = 1.02;
+
+/** Alphabetic baseline of text whose ascender line is at `top`. */
+export function baselineFor(top: number, size: number): number {
+  return Math.round((top + ASCENT * size) * 10) / 10;
+}
 const DIM = "rgb(150,148,140)";
 
 export const CARD_LAYOUT = {
@@ -105,7 +114,7 @@ export type CardContext = Pick<
 export function drawShareCard(ctx: CardContext, background: CanvasImageSource, d: ShareCardData, family: string): void {
   const L = CARD_LAYOUT;
   ctx.drawImage(background, 0, 0, CARD_W, CARD_H);
-  ctx.textBaseline = "top";
+  ctx.textBaseline = "alphabetic";
 
   // "NO." — letter-spaced by hand (canvas letterSpacing is not everywhere yet).
   ctx.textAlign = "left";
@@ -113,13 +122,13 @@ export function drawShareCard(ctx: CardContext, background: CanvasImageSource, d
   ctx.fillStyle = L.no.color;
   const glyphs = [..."NO."];
   const starts = trackedStarts(glyphs.map((g) => ctx.measureText(g).width), L.no.tracking, L.slotCenterX);
-  glyphs.forEach((g, i) => ctx.fillText(g, starts[i], L.no.top));
+  glyphs.forEach((g, i) => ctx.fillText(g, starts[i], baselineFor(L.no.top, L.no.size)));
 
   // The serial, three digits, centred.
   ctx.textAlign = "center";
   ctx.font = cardFont(L.serial.weight, L.serial.size, family);
   ctx.fillStyle = L.serial.color;
-  ctx.fillText(serialDigits(d.serial), L.slotCenterX, L.serial.top);
+  ctx.fillText(serialDigits(d.serial), L.slotCenterX, baselineFor(L.serial.top, L.serial.size));
 
   ctx.beginPath();
   ctx.strokeStyle = L.rule.color;
@@ -138,11 +147,11 @@ export function drawShareCard(ctx: CardContext, background: CanvasImageSource, d
   });
   ctx.font = cardFont(L.name.weight, size, family);
   ctx.fillStyle = L.name.color;
-  ctx.fillText(name, L.name.left, nameTop(size));
+  ctx.fillText(name, L.name.left, baselineFor(nameTop(size), size));
 
   ctx.font = cardFont(L.sub.weight, L.sub.size, family);
   ctx.fillStyle = L.sub.color;
-  ctx.fillText(subLine(d.source, d.builderId, d.issuedAt), L.sub.left, L.sub.top);
+  ctx.fillText(subLine(d.source, d.builderId, d.issuedAt), L.sub.left, baselineFor(L.sub.top, L.sub.size));
 }
 
 /** The post text; X attaches `url` itself. */
