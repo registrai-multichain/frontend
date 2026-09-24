@@ -1737,3 +1737,43 @@ a.vbadge:hover { background: rgba(215,255,86,.1); }
   .bld-grid { grid-template-columns: 1fr; }
   .bld-legend { text-align: left; }
 }
+
+
+/* ── Builders site (builder.registrai.cc): higher contrast ─────────────────
+   Scoped to BuildersShell so the market pages keep their palette. WCAG on the
+   card surface #171913: secondary text 6.3 -> 9.0, muted 10.6 -> 13.4, borders
+   2.0 -> 3.0; grayscale (lapsed / invited) cards 2.9 -> 6.4 (dimmed by colour,
+   not by transparency). Tiny mono labels move up to >= 9.5px. */
+.builders-theme {
+  --fg-mute: #e3e0d2;
+  --fg-dim: #b9baae;
+  --line: #62655a;
+  --line-strong: #93968a;
+}
+.builders-theme .bld-card { background: #1b1d17; }
+.builders-theme .bld-card[data-tone="grayscale"] { filter: grayscale(1); opacity: .82; }
+.builders-theme .bld-card[data-tone="grayscale"]:hover,
+.builders-theme .bld-card[data-tone="grayscale"]:focus-within { opacity: 1; }
+.builders-theme .bld-detail[data-tone="grayscale"] .bld-card-top,
+.builders-theme .bld-detail[data-tone="grayscale"] .bld-facts { opacity: 1; }
+.builders-theme .bld-stats dt,
+.builders-theme .bld-facts dt,
+.builders-theme .bld-chip { font-size: 9.5px; }
+.builders-theme .bld-chip:not([data-kind="verified"]):not([data-kind="nominated"]) { color: var(--fg-mute); }
+.builders-theme .bld-chips button,
+.builders-theme .bld-card-foot a,
+.builders-theme .bld-claim { font-size: 10.5px; }
+.builders-theme .bld-card-title > a { font-size: 11.5px; }
+.builders-theme .bld-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.builders-theme .bld-facts dd { font-size: 12px; color: var(--fg); }
+.builders-theme .bld-note { font-size: 11px; color: var(--fg-mute); }
+.builders-theme .bld-legend { color: var(--fg-dim); font-size: 11px; }
+.builders-theme .bld-deck { color: var(--fg-mute); }
+.builders-theme .bld-search input::placeholder { color: var(--fg-dim); opacity: 1; }
+.builders-theme .vf-mini,
+.builders-theme .vf-field span,
+.builders-theme .vf-done { font-size: 10px; }
+.builders-theme .vf-primary { font-size: 10.5px; }
+.builders-theme .vf-signers li > span:nth-child(2) { font-size: 10px; }
+.builders-theme .pp-card-label { color: var(--fg-mute); }
+.builders-theme .perennial-app-status { color: var(--fg-mute); font-size: 10px; }
