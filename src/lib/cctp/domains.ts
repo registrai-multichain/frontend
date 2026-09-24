@@ -130,7 +130,7 @@ export const CCTP_CHAINS: CctpChain[] = [
     explorer: "https://explorer.arc.io",
     gasSymbol: "USDC",
     usdcIsGas: true,
-    supportsFast: true,
+    supportsFast: false,
   },
   {
     key: "ethereum",
@@ -205,7 +205,7 @@ export const CCTP_CHAINS: CctpChain[] = [
     walletRpcUrl: "https://polygon.drpc.org",
     explorer: "https://polygonscan.com",
     gasSymbol: "POL",
-    supportsFast: true,
+    supportsFast: false,
   },
   {
     key: "avalanche",
@@ -220,7 +220,7 @@ export const CCTP_CHAINS: CctpChain[] = [
     walletRpcUrl: "https://api.avax.network/ext/bc/C/rpc",
     explorer: "https://snowtrace.io",
     gasSymbol: "AVAX",
-    supportsFast: true,
+    supportsFast: false,
   },
   {
     key: "unichain",
@@ -280,7 +280,7 @@ export const CCTP_CHAINS: CctpChain[] = [
     walletRpcUrl: "https://rpc.soniclabs.com",
     explorer: "https://sonicscan.org",
     gasSymbol: "S",
-    supportsFast: true,
+    supportsFast: false,
   },
 ];
 
@@ -309,6 +309,15 @@ export function isEvmChain(chain: BridgeChain): chain is CctpChain {
 }
 
 /** Names accepted by Circle's production Bridge Kit. */
+/**
+ * Circle Forwarding Service fee (USDC, 6 dec) for a destination, per Circle's
+ * docs: $1.25 into Ethereum, $0.20 elsewhere. Circle also charges the
+ * destination gas it spends, quoted dynamically, so treat this as a floor.
+ */
+export function forwardingServiceFee(to: BridgeChain): bigint {
+  return to.key === "ethereum" ? 1_250_000n : 200_000n;
+}
+
 export function bridgeKitChainName(chain: BridgeChain): string {
   if (isSolanaChain(chain)) return chain.bridgeKitName;
   const names: Record<string, string> = {

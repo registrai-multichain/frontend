@@ -11,6 +11,7 @@ import {
   bridgeKitChainName,
   chainByChainId,
   chainByKey,
+  forwardingServiceFee,
 } from "./domains";
 import { isSolanaAddress, validRecipient } from "./solanaBridge";
 
@@ -26,7 +27,9 @@ test("the EVM CCTP registry exposes every ordered cross-chain route", () => {
   assert.equal(new Set(routes).size, routes.length);
   assert.equal(new Set(CCTP_CHAINS.map((chain) => chain.chainId)).size, CCTP_CHAINS.length);
   assert.equal(new Set(CCTP_CHAINS.map((chain) => chain.domain)).size, CCTP_CHAINS.length);
-  assert.ok(CCTP_CHAINS.every((chain) => chain.supportsFast));
+  // Circle docs list Fast Transfer as N/A for chains whose standard transfer is already fast.
+  const noFastTier = ["arc", "avalanche", "polygon", "sonic"];
+  for (const chain of CCTP_CHAINS) assert.equal(chain.supportsFast, !noFastTier.includes(chain.key), chain.key);
 });
 
 test("Arc mainnet is registered as Circle CCTP domain 26", () => {
@@ -68,4 +71,10 @@ test("recipient validation rejects cross-ecosystem address mistakes", () => {
   assert.equal(validRecipient(SOLANA, evmAddress), false);
   assert.ok(validRecipient(ARC, evmAddress));
   assert.equal(validRecipient(ARC, solanaAddress), false);
+});
+
+test("forwarding fee follows Circle's published schedule", () => {
+  assert.equal(forwardingServiceFee(SOLANA), 200_000n);
+  assert.equal(forwardingServiceFee(CCTP_CHAINS.find((c) => c.key === "ethereum")!), 1_250_000n);
+  assert.equal(forwardingServiceFee(ARC), 200_000n);
 });

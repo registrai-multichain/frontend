@@ -31,6 +31,7 @@ import {
   isSolanaChain,
   type BridgeChain,
   type CctpChain,
+  forwardingServiceFee,
 } from "@/lib/cctp/domains";
 import {
   DIRECT_ROUTE,
@@ -236,6 +237,9 @@ export default function BridgePage() {
   const badRecipient = effectiveRecipient !== "" && !validRecipient(to, effectiveRecipient);
   const missingRecipient = effectiveRecipient === "";
   const solanaRoute = isSolanaChain(from) || isSolanaChain(to);
+  // Circle's Forwarding Service delivers Solana routes and charges for it; the
+  // amount out below is net of its published service fee (destination gas on top).
+  const forwardFee = solanaRoute ? forwardingServiceFee(to) : 0n;
   const connectSource = isSolanaChain(from) ? connectSolana : wallet.connect;
 
   const clearPending = useCallback((burnTx: Hex) => {
@@ -486,7 +490,7 @@ export default function BridgePage() {
                   {s === "fast"
                     ? from.supportsFast
                       ? "fast · seconds"
-                      : "fast · unavailable"
+                      : "fast · not needed"
                     : "standard · free"}
                 </button>
               ))}
@@ -574,7 +578,7 @@ export default function BridgePage() {
             <div className="bridge-card border border-line bg-bg-elev p-5">
               <span className="text-2xs uppercase tracking-[0.16em] text-fg-dim">you receive</span>
               <div className="tnum mt-3 text-4xl font-semibold leading-none tracking-[-0.05em]">
-                {quote ? fmt(quote.amountOut) : "—"}
+                {quote ? `${solanaRoute ? "≈ " : ""}${fmt(quote.amountOut > forwardFee ? quote.amountOut - forwardFee : 0n)}` : "—"}
               </div>
               <div className="mt-1 text-2xs text-fg-dim">on {to.name}</div>
               <div className="hr my-3" />
@@ -590,8 +594,12 @@ export default function BridgePage() {
                     label={`circle cctp · ${quote ? quote.cctpFeeBps : "—"} bps`}
                     value={quote ? fmt(quote.cctpFee) : "—"}
                   />
+                  {solanaRoute && <Row label="circle forwarding" value={`${fmt(forwardFee)} + gas`} />}
                   <Row label="settles" value={speed === "fast" ? "~seconds" : "on finality"} />
-                  {solanaRoute && <Row label="destination gas" value="Circle relayed" />}
+                  <Row
+                    label="destination gas"
+                    value={solanaRoute ? "Circle relayed" : isEvmChain(to) && to.usdcIsGas ? "Registrai relayed" : `you pay · ${to.gasSymbol}`}
+                  />
                 </dl>
               )}
             </div>
