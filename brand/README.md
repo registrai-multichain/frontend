@@ -1,6 +1,6 @@
 # Registrai brand kit
 
-Registrai is **the anti-launchpad**: prediction-market value is redirected into verified work instead of a token sale. The identity is editorial, infrastructural, and deliberately unlike a crypto coin mark.
+Registrai is **the anti-launchpad**: `$REGI` bootstraps the Registrai network on Arc, while Perennial redirects prediction-market value into verified builder work instead of making every builder launch a token. The identity is editorial and infrastructural; the mark should never collapse into generic memecoin art.
 
 ## The Cut-R
 

@@ -65,7 +65,7 @@ function Footer() {
             wordmarkClassName="text-[22px]"
           />
           <div className="flex items-center gap-4 text-2xs tracking-wide text-fg-dim">
-            <a href="/brand/registrai-brand-kit.zip" download className="hover:text-accent transition-colors">
+            <a href="/brand/registrai-brand-kit-regi.zip" download className="hover:text-accent transition-colors">
               brand kit ↓
             </a>
             <a
@@ -95,7 +95,7 @@ function Footer() {
             <span className="text-fg-dim/60">·</span>
             <span>oracle layer free</span>
             <span className="text-fg-dim/60">·</span>
-            <span>no token</span>
+            <Link href="/#regi" className="hover:text-accent transition-colors">$REGI bootstraps network</Link>
           </div>
         </div>
       </div>

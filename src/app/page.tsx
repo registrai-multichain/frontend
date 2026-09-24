@@ -1,4 +1,5 @@
 import { BrandLockup, BrandMark } from "@/components/Brand";
+import { REGI_CONTRACT, REGI_EXPLORER_URL } from "@/lib/regi";
 import Link from "next/link";
 
 const feeRoutes = [
@@ -20,8 +21,8 @@ export default function Home() {
       <Header />
       <main>
         <Hero />
+        <RegiBootstrap />
         <FeeFlow />
-        <Thesis />
         <Settlement />
         <Infrastructure />
       </main>
@@ -34,7 +35,7 @@ function Header() {
   return (
     <header className="lp-nav lp-frame">
       <a href="#top" className="lp-brand" aria-label="Registrai home"><BrandLockup markClassName="lp-brand-mark" wordmarkClassName="lp-brand-name" /></a>
-      <div className="lp-nav-center" aria-hidden="true"><span>The anti-launchpad</span><i /><span>Built on Arc</span></div>
+      <div className="lp-nav-center" aria-hidden="true"><span>Builder markets</span><i /><span>Built on Arc</span></div>
       <Link href="/bridge" className="lp-bridge-link">Bridge USDC <span>→</span></Link>
     </header>
   );
@@ -44,10 +45,10 @@ function Hero() {
   return (
     <section id="top" className="lp-hero lp-frame">
       <div className="lp-hero-copy">
-        <p className="lp-kicker lp-reveal">The anti-launchpad.</p>
+        <p className="lp-kicker lp-reveal">Markets for builders—not builder tokens.</p>
         <h1 className="lp-reveal lp-delay-1">Fund builders.<br /><em>Don&apos;t buy their bags.</em></h1>
-        <p className="lp-deck lp-reveal lp-delay-2">A prediction market that funds people who ship—without turning them into assets. No token sale. No insider allocation. No unlock waiting for your exit liquidity.</p>
-        <div className="lp-hero-meta lp-reveal lp-delay-3"><span><b>01</b> Trade outcomes</span><span><b>02</b> Fund verified work</span><span><b>03</b> Own no one&apos;s bag</span></div>
+        <p className="lp-deck lp-reveal lp-delay-2">Perennial turns prediction-market fees into funding for verified work. $REGI bootstraps Registrai on Arc; builders still issue nothing, and markets settle in USDC.</p>
+        <div className="lp-hero-meta lp-reveal lp-delay-3"><span><b>01</b> Trade outcomes</span><span><b>02</b> Fund verified work</span><span><b>03</b> Bootstrap the rails</span></div>
       </div>
       <MarketTicket />
     </section>
@@ -59,7 +60,7 @@ function MarketTicket() {
     <aside className="lp-ticket lp-reveal lp-delay-2" aria-label="Example market">
       <div className="lp-ticket-top"><span>LIVE MARKET / 0027</span><span className="lp-live"><i /> OPEN</span></div>
       <div className="lp-ticket-body">
-        <p className="lp-ticket-label">Outcome market · not a token sale</p>
+        <p className="lp-ticket-label">Outcome market · builder stays tokenless</p>
         <h2>Will an Arc-native consumer app reach 10k weekly users by Dec. 31?</h2>
         <div className="lp-chart" aria-hidden="true">
           <svg viewBox="0 0 500 160" preserveAspectRatio="none"><defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#ff5a1f" stopOpacity=".34" /><stop offset="1" stopColor="#ff5a1f" stopOpacity="0" /></linearGradient></defs><path className="lp-area" d="M0 146 C35 136 43 117 79 123 S128 144 158 108 208 116 238 95 281 104 315 72 358 93 389 51 440 64 500 17 V160 H0Z" /><path className="lp-line" d="M0 146 C35 136 43 117 79 123 S128 144 158 108 208 116 238 95 281 104 315 72 358 93 389 51 440 64 500 17" /></svg>
@@ -68,8 +69,34 @@ function MarketTicket() {
         <div className="lp-outcomes"><div><span>YES</span><strong>67¢</strong></div><div><span>NO</span><strong>33¢</strong></div></div>
       </div>
       <div className="lp-ticket-foot"><span>VOLUME <b>$84,720</b></span><span>RESOLVER BOND <b>$5,000</b></span></div>
-      <div className="lp-stamp">NO TOKEN</div>
+      <div className="lp-stamp">USDC MARKET</div>
     </aside>
+  );
+}
+
+function RegiBootstrap() {
+  return (
+    <section id="regi" className="lp-regi">
+      <div className="lp-frame lp-regi-grid">
+        <div>
+          <p className="lp-kicker">$REGI / bootstrap token</p>
+          <h2>Bootstrap the network.<br /><em>Don&apos;t tokenize the builders.</em></h2>
+        </div>
+        <div className="lp-regi-copy">
+          <p>$REGI is Registrai&apos;s Arc-native bootstrapping instrument: a way to coordinate attention, liquidity, and early network growth. It is separate from builder funding. Builders sell no token; market collateral, bonds, and payouts remain in USDC; verified progress determines commons payouts.</p>
+          <div className="lp-regi-ca">
+            <span>official contract · Arc</span>
+            <code>{REGI_CONTRACT}</code>
+            <a href={REGI_EXPLORER_URL} target="_blank" rel="noreferrer">Arc explorer ↗</a>
+          </div>
+          <dl className="lp-regi-facts">
+            <div><dt>Network</dt><dd>Arc mainnet</dd></div>
+            <div><dt>Symbol</dt><dd>$REGI</dd></div>
+            <div><dt>Supply</dt><dd>1,000,000,000</dd></div>
+          </dl>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -89,15 +116,6 @@ function FeeFlow() {
   );
 }
 
-function Thesis() {
-  return (
-    <section className="lp-thesis lp-frame">
-      <div className="lp-thesis-title"><p className="lp-kicker">Anti-launchpad by design</p><h2>No presale.<br />No unlock.<br /><em>No exit bag.</em></h2></div>
-      <div className="lp-thesis-copy"><p className="lp-pullquote">“Trade the outcome. Never the builder.”</p><div className="lp-copy-columns"><p>A launchpad makes funding depend on selling the next buyer a more expensive token. Price becomes the project&apos;s fate, and every holder starts talking their book.</p><p>Registrai separates the trade from the funding. Traders forecast verifiable outcomes. Builders sell nothing and earn from the shared commons only after they ship.</p></div></div>
-    </section>
-  );
-}
-
 function Settlement() {
   return (
     <section className="lp-settlement"><div className="lp-frame"><div className="lp-settlement-head"><div><p className="lp-kicker">Honest by construction</p><h2>Settlement with<br />something to lose.</h2></div><p>Access is free. The answer is bonded. That makes the resolver the one party the protocol can punish for being wrong.</p></div><div className="lp-steps">{safeguards.map(([number, title, copy]) => <article key={number}><span>{number}</span><div><h3>{title}</h3><p>{copy}</p></div></article>)}</div></div></section>
@@ -112,6 +130,6 @@ function Infrastructure() {
 
 function Footer() {
   return (
-    <footer className="lp-footer lp-frame"><div><BrandMark className="lp-footer-mark" /><p>The anti-launchpad.<br />Fund builders without buying their bags.</p></div><div className="lp-footer-links"><Link href="/bridge">Bridge USDC →</Link><a href="/brand/registrai-brand-kit.zip" download>Brand kit ↓</a><a href="https://github.com/registrai-multichain" target="_blank" rel="noreferrer">GitHub ↗</a></div><div className="lp-footer-status"><i /> Building in public<br /><span>Warsaw / 2026</span></div></footer>
+    <footer className="lp-footer lp-frame"><div><BrandMark className="lp-footer-mark" /></div><div className="lp-footer-links"><Link href="/bridge">Bridge USDC →</Link><a href={REGI_EXPLORER_URL} target="_blank" rel="noreferrer">$REGI on Arc ↗</a><a href="/brand/registrai-brand-kit-regi.zip" download>Brand kit ↓</a><a href="https://github.com/registrai-multichain" target="_blank" rel="noreferrer">GitHub ↗</a></div><div className="lp-footer-status"><i /> Building in public<br /><span>Warsaw / 2026</span></div></footer>
   );
 }

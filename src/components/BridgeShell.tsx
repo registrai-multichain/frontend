@@ -89,7 +89,7 @@ export function BridgeShell({
             registrai bridge // circle cctp // burn-and-mint, no custody
           </span>
           <span className="flex items-center gap-3">
-            <a href="/brand/registrai-brand-kit.zip" download className="transition-colors hover:text-accent">
+            <a href="/brand/registrai-brand-kit-regi.zip" download className="transition-colors hover:text-accent">
               brand kit ↓
             </a>
             <Link href="/" className="transition-colors hover:text-accent">

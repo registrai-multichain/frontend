@@ -1,4 +1,5 @@
 import { Shell } from "@/components/Shell";
+import { REGI_CONTRACT, REGI_EXPLORER_URL } from "@/lib/regi";
 
 export default function AboutPage() {
   return (
@@ -18,9 +19,11 @@ export default function AboutPage() {
             attesting to what, hold the bonds, and resolve disputes.
           </p>
           <p>
-            There is no admin key, no pause switch, no fee toggle, no
-            governance, no token. The deployer is the first agent registering
-            the first feed, nothing more. Whatever ships is what runs.
+            There is no admin key, no pause switch, no fee toggle, and no
+            token-weighted governance over oracle truth. $REGI exists as a
+            bootstrapping instrument for the wider Registrai network on Arc; the
+            oracle&apos;s bonds, disputes, and settlements remain denominated in
+            USDC. Whatever ships is what runs.
           </p>
           <p>
             The model is optimistic. Anyone can post an attestation if they
@@ -70,10 +73,15 @@ export default function AboutPage() {
             slashing surface has one of each.
           </p>
           <p>
-            <strong className="text-fg">USDC, not protocol token.</strong>{" "}
-            Bonds in USDC are denominated in the same units consumers price
-            risk in. A token would add launch theatre and dilute the trust
-            signal. No $REGI, ever.
+            <strong className="text-fg">USDC for truth. $REGI for bootstrapping.</strong>{" "}
+            Bonds, market collateral, and builder payouts stay in USDC—the
+            units consumers already use to price risk. $REGI coordinates early
+            attention, liquidity, and network growth; it does not decide which
+            attestation is true or replace the protocol&apos;s economic security.
+            The official contract is{" "}
+            <a href={REGI_EXPLORER_URL} target="_blank" rel="noreferrer" className="text-accent underline decoration-accent/40 underline-offset-4">
+              {REGI_CONTRACT}
+            </a>.
           </p>
           <p>
             <strong className="text-fg">Per-feed resolver, not global.</strong>{" "}
@@ -88,8 +96,8 @@ export default function AboutPage() {
             0.70% trading fee, split <span className="text-up">0.40% to the
             creator</span>, <span className="text-up">0.20% to the agent</span>,
             and <span className="text-fg-mute">0.10% to the protocol</span>.
-            Every layer is paid by real economic activity, not by token
-            speculation.
+            Core protocol accounting remains tied to real USDC activity, not
+            to the price of $REGI.
           </p>
         </Prose>
 

@@ -30,7 +30,7 @@ const serif = Instrument_Serif({
 
 const TITLE = "Registrai · The anti-launchpad";
 const DESCRIPTION =
-  "Fund builders without buying their bags. Registrai routes prediction-market fees to verified work across any chain—with no token sale, insider allocation, or unlock.";
+  "$REGI bootstraps Registrai on Arc. Perennial markets remain USDC-denominated and route fees to builders who prove they shipped.";
 
 export const viewport: Viewport = {
   themeColor: "#0d0d0c",
@@ -50,13 +50,13 @@ export const metadata: Metadata = {
     url: "https://registrai.cc/",
     title: TITLE,
     description: DESCRIPTION,
-    images: [{ url: "/social/registrai-landing.png", width: 1200, height: 630, alt: "Registrai · The anti-launchpad" }],
+    images: [{ url: "/social/registrai-landing-regi.png", width: 1200, height: 630, alt: "Registrai · $REGI bootstraps the network while builders stay tokenless" }],
   },
   twitter: {
     card: "summary_large_image",
     title: TITLE,
     description: DESCRIPTION,
-    images: ["/social/registrai-landing.png"],
+    images: ["/social/registrai-landing-regi.png"],
   },
 };
 
