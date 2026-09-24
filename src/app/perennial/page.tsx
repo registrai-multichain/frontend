@@ -52,10 +52,14 @@ export default function PerennialPage() {
         <PerennialPanel />
 
         <p className="perennial-app-note">
-          {PERENNIAL.chain.testnet ? "Testnet: test USDC only. " : ""}Markets resolve through the bonded
-          oracle on the first valid attestation after expiry; incorrect attestations are challengeable
-          and slashable, and a market no attestation settles voids at $0.50 per share. GitHub releases
-          and tags are keeper-detected in this MVP.
+          {PERENNIAL.chain.testnet ? "Testnet: test USDC only. " : ""}Markets are settled by the
+          protocol&apos;s bonded milestone agent (the caretaker operator) on the first valid attestation
+          after expiry. No trading fee: a 1% resolution fee is charged once at settlement, 30% to the
+          market creator, 20% to the bonded agent, 50% to the builder commons. Builders are paid from the
+          commons by verified progress, minus Registrai&apos;s 1% monitoring fee. An incorrect attestation
+          can be challenged and its bond slashed; a market that can&apos;t be settled voids, and every
+          trader gets their net cost back, minus the 1% fee. GitHub releases and tags are
+          keeper-detected in this MVP.
         </p>
       </article>
     </PerennialShell>
