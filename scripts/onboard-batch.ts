@@ -15,14 +15,25 @@
  *                                    Badge, for every PENDING builder (right after
  *                                    its setCaretaker) and every VERIFIED builder
  *                                    whose serialOf(id) == 0 — only while it has
- *                                    an active project (activeProjectCount > 0)
+ *                                    an active project (activeProjectCount > 0).
+ *                                    On --network mainnet the badge is on by
+ *                                    default (builders.VerifiedBuilderBadge);
+ *                                    --no-badge turns it off.
+ *
+ * A builder whose badge was REVOKED (a Revoked event with no
+ * BuilderStatusSet(id, true) after it) is never onboarded or issued again: the
+ * logs are read from the deploy block (--from-block overrides) whenever a
+ * badge is in play.
+ *
+ * Mainnet phase 1 fills only the `builders` block of
+ * src/lib/deployments/arc-mainnet.json; every default falls back to it.
  *
  * A wallet registered by this batch gets its project (addProjectFor), then its
  * caretaker, in the NEXT batches (its id exists only after registration): run
  * the script again, with the same --register, once this one executes.
  *
  *   npx tsx scripts/onboard-batch.ts [--network testnet|mainnet|local] [--rpc URL]
- *     [--register <source> ...] [--badge 0x..] [--out <dir>]
+ *     [--register <source> ...] [--badge 0x.. | --no-badge] [--from-block N] [--out <dir>]
  *     [--builder-registry 0x..] [--caretaker-registry 0x..] [--operator 0x..] [--chain-id N]
  *
  * <source> is anything /verify accepts: github.com/owner/repo, owner/repo,
@@ -39,7 +50,16 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { createPublicClient, defineChain, getAddress, http, isAddress, type Address } from "viem";
-import { calldataList, planOnboarding, safeBatchJson, verifiedSourcesOf, type RegistrationCandidate } from "../src/lib/onboard-batch";
+import {
+  calldataList,
+  mainnetOnboardDefaults,
+  planOnboarding,
+  safeBatchJson,
+  verifiedSourcesOf,
+  type OnboardNetworkDefaults,
+  type RegistrationCandidate,
+} from "../src/lib/onboard-batch";
+import { readRevokedBuilders, type LogReader } from "../src/lib/badge-revocations";
 import { makeFetchJson, readBuilderRecords, verifiedBuilderAbi, type RegistryReader } from "../src/lib/verified-builders-chain";
 import { normalizeSource, proofConfigFromEnv, proofUrl, validateProof } from "../src/lib/verified-builders";
 import { badgeAbi, serialLabel } from "../src/lib/verified-builder-badge";
@@ -63,6 +83,8 @@ const { values, positionals } = parseArgs({
     operator: { type: "string" },
     "chain-id": { type: "string" },
     badge: { type: "string" },
+    "no-badge": { type: "boolean" },
+    "from-block": { type: "string" },
     help: { type: "boolean", short: "h" },
   },
 });
@@ -78,18 +100,11 @@ if (!["testnet", "mainnet", "local"].includes(network)) die(`--network must be t
 const readJson = (p: string) => JSON.parse(readFileSync(resolve(__dirname, p), "utf8"));
 
 /** Defaults per network; every one can be overridden on the command line. */
-function defaults(n: Network): { rpc: string; chainId: number; builderRegistry?: string | null; caretakerRegistry?: string | null; operator?: string | null } {
-  if (n === "local") return { rpc: "http://127.0.0.1:8545", chainId: 31337 };
-  if (n === "mainnet") {
-    const d = readJson("../src/lib/deployments/arc-mainnet.json");
-    return {
-      rpc: "https://rpc.mainnet.arc.io",
-      chainId: 5042,
-      builderRegistry: d.contracts?.BuilderRegistry,
-      caretakerRegistry: d.contracts?.CaretakerRegistry,
-      operator: d.operator,
-    };
+function defaults(n: Network): OnboardNetworkDefaults {
+  if (n === "local") {
+    return { rpc: "http://127.0.0.1:8545", chainId: 31337, builderRegistry: null, caretakerRegistry: null, operator: null, badge: null, deployBlock: 0 };
   }
+  if (n === "mainnet") return mainnetOnboardDefaults(readJson("../src/lib/deployments/arc-mainnet.json"));
   const extras = readJson("../src/lib/deployments/arc-testnet-perennial.json");
   const deploymentPath = resolve(__dirname, "../../contracts/deployments/arc-testnet.json");
   const c = existsSync(deploymentPath)
@@ -98,9 +113,12 @@ function defaults(n: Network): { rpc: string; chainId: number; builderRegistry?:
   return {
     rpc: "https://rpc.testnet.arc.io",
     chainId: 5042002,
-    builderRegistry: c?.BuilderRegistry,
-    caretakerRegistry: c?.CaretakerRegistry,
-    operator: extras.operator,
+    builderRegistry: c?.BuilderRegistry ?? null,
+    caretakerRegistry: c?.CaretakerRegistry ?? null,
+    operator: extras.operator ?? null,
+    // Opt-in on testnet (--badge), as before.
+    badge: null,
+    deployBlock: extras.builders?.deployBlock ?? extras.deployBlock ?? null,
   };
 }
 
@@ -118,8 +136,9 @@ async function main() {
   const builderRegistry = addressArg("builder-registry", values["builder-registry"] ?? d.builderRegistry);
   const caretakerRegistry = addressArg("caretaker-registry", values["caretaker-registry"] ?? d.caretakerRegistry);
   const operator = addressArg("operator", values.operator ?? d.operator);
-  // Opt-in only: without --badge the batch is exactly what it always was.
-  const badge = values.badge !== undefined ? addressArg("badge", values.badge) : undefined;
+  // Mainnet: the phase-1 badge by default (--no-badge turns it off). Elsewhere opt-in with --badge.
+  const badgeRaw = values["no-badge"] ? undefined : (values.badge ?? d.badge ?? undefined);
+  const badge = badgeRaw !== undefined ? addressArg("badge", badgeRaw) : undefined;
 
   const chain = defineChain({
     id: chainId,
@@ -195,6 +214,20 @@ async function main() {
     });
   }
 
+  // Revoked badges: never re-onboarded (a Revoked event not followed by a reactivation).
+  let revoked: Set<number> | undefined;
+  if (badge) {
+    const from = values["from-block"] !== undefined ? Number(values["from-block"]) : d.deployBlock;
+    if (from === null || !Number.isSafeInteger(from) || from < 0) {
+      die(`no deploy block for --network ${network} to read badge revocations from: pass --from-block N`);
+    }
+    const r = await readRevokedBuilders(client as unknown as LogReader, { badge, registry: builderRegistry, fromBlock: BigInt(from as number) });
+    if (!r.ok) die(`could not read the badge revocation history: ${r.error}`);
+    revoked = (r as { revoked: Set<number> }).revoked;
+    log(`revoked badges (not reactivated since block ${from}): ${revoked.size ? [...revoked].map((id) => `#${id}`).join(", ") : "none"}`);
+    log();
+  }
+
   // serialOf for the builders a badge could go to (pending + verified).
   let badgePlan: { address: Address; serials: Map<number, number> } | undefined;
   if (badge) {
@@ -216,6 +249,7 @@ async function main() {
     caretakerRegistry,
     operator,
     badge: badgePlan,
+    revoked,
   });
   for (const s of plan.skipped) log(`skip ${s.what}: ${s.reason}`);
   if (plan.skipped.length) log();

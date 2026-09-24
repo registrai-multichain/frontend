@@ -3,6 +3,7 @@ import { decodeFunctionData, type Address } from "viem";
 import {
   calldataList,
   cancelRecoveryTx,
+  mainnetOnboardDefaults,
   planOnboarding,
   safeBatchJson,
   setProjectActiveTx,
@@ -12,6 +13,7 @@ import {
 } from "./onboard-batch";
 import { verifiedBuilderAbi } from "./verified-builders-chain";
 import { badgeAbi } from "./verified-builder-badge";
+import mainnetFile from "./deployments/arc-mainnet.json";
 
 const OP = "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263" as Address;
 const REG = "0x10F8D6D5905E2C4dc565a1894c102B25E9d21DF4" as Address;
@@ -183,6 +185,46 @@ describe("single-transaction Safe files", () => {
   test("verifiedSourcesOf: the verified projects only", () => {
     const p = (source: string, status: "verified" | "lapsed" | "inactive") => ({ projectId: 1, source, canonical: true, active: true, addedAt: 0, status, country: null, proofUrl: null });
     expect(verifiedSourcesOf({ projects: [p("github:a/b", "verified"), p("github:c/d", "lapsed"), p("domain:e.org", "verified")] })).toEqual(["github:a/b", "domain:e.org"]);
+  });
+});
+
+describe("scripts/onboard-batch.ts --network mainnet defaults", () => {
+  const PHASE1 = {
+    network: "mainnet",
+    chainId: 5042,
+    deployBlock: null,
+    operator: null,
+    contracts: { NanoLedger: null, BuilderRegistry: null, CaretakerRegistry: null, MarketsPerennial: null, VerifiedBuilderBadge: null },
+    builders: { deployBlock: 1234, operator: OP, BuilderRegistry: REG, CaretakerRegistry: CARE, VerifiedBuilderBadge: B2 },
+  };
+
+  test("phase 1 (only the builders block filled): every address falls back to it; the badge is on by default", () => {
+    expect(mainnetOnboardDefaults(PHASE1)).toEqual({
+      rpc: "https://rpc.mainnet.arc.io",
+      chainId: 5042,
+      builderRegistry: REG,
+      caretakerRegistry: CARE,
+      operator: OP,
+      badge: B2,
+      deployBlock: 1234,
+    });
+  });
+
+  test("phase 2 (the market record filled): the top-level values win", () => {
+    const d = mainnetOnboardDefaults({
+      ...PHASE1,
+      operator: B1,
+      deployBlock: 99,
+      contracts: { BuilderRegistry: B0, CaretakerRegistry: B1, VerifiedBuilderBadge: B0 },
+    });
+    expect([d.builderRegistry, d.caretakerRegistry, d.operator, d.badge, d.deployBlock]).toEqual([B0, B1, B1, B0, 99]);
+  });
+
+  test("the shipped file parses (nulls until the deploy log fills it)", () => {
+    const d = mainnetOnboardDefaults(mainnetFile);
+    expect(d.chainId).toBe(5042);
+    expect(d.builderRegistry).toBe(mainnetFile.builders.BuilderRegistry ?? null);
+    expect(d.badge).toBe(mainnetFile.builders.VerifiedBuilderBadge ?? null);
   });
 });
 

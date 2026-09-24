@@ -261,3 +261,52 @@ export function calldataList(txs: PlannedTx[]): string {
   if (!txs.length) return "# nothing to do\n";
   return txs.map((t, i) => `# ${i + 1}. ${t.label}\nto=${t.to}\nvalue=0\ndata=${t.data}\n`).join("\n");
 }
+
+// ───────────────────────────── CLI network defaults ─────────────────────────────
+
+/** scripts/onboard-batch.ts --network defaults (every one can be overridden on the command line). */
+export interface OnboardNetworkDefaults {
+  rpc: string;
+  chainId: number;
+  builderRegistry: string | null;
+  caretakerRegistry: string | null;
+  operator: string | null;
+  /** The badge the batch issues by default (null = opt in with --badge). */
+  badge: string | null;
+  /** First block of the builder contracts: the revocation history starts here. */
+  deployBlock: number | null;
+}
+
+type BuildersBlock = {
+  BuilderRegistry?: string | null;
+  CaretakerRegistry?: string | null;
+  VerifiedBuilderBadge?: string | null;
+  operator?: string | null;
+  deployBlock?: number | null;
+};
+
+/**
+ * Pure: the mainnet defaults from deployments/arc-mainnet.json. Phase 1 fills
+ * only its `builders` block (DeployBuilders.s.sol: the two registries and the
+ * badge), so each address falls back to it — as perennial-network.ts
+ * mainnetPerennialSource does — and the badge is on by default: phase 1 exists
+ * to issue it.
+ */
+export function mainnetOnboardDefaults(d: {
+  contracts?: { BuilderRegistry?: string | null; CaretakerRegistry?: string | null; VerifiedBuilderBadge?: string | null } | null;
+  operator?: string | null;
+  deployBlock?: number | null;
+  builders?: BuildersBlock | null;
+}): OnboardNetworkDefaults {
+  const c = d.contracts ?? {};
+  const b = d.builders ?? {};
+  return {
+    rpc: "https://rpc.mainnet.arc.io",
+    chainId: 5042,
+    builderRegistry: c.BuilderRegistry ?? b.BuilderRegistry ?? null,
+    caretakerRegistry: c.CaretakerRegistry ?? b.CaretakerRegistry ?? null,
+    operator: d.operator ?? b.operator ?? null,
+    badge: c.VerifiedBuilderBadge ?? b.VerifiedBuilderBadge ?? null,
+    deployBlock: d.deployBlock ?? b.deployBlock ?? null,
+  };
+}
