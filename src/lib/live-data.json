@@ -1,97 +1,76 @@
 {
-  "syncedAt": "2026-09-23T10:09:21.282Z",
-  "builders": [],
-  "perennialMarkets": [
+  "syncedAt": "2026-09-24T10:53:22.030Z",
+  "builders": [
     {
-      "marketId": "0xb6e3a706e1b0078a7ccb7d31ace1be6432e7f3995bcd3c6b12532f55500467f6",
       "builderId": 1,
-      "expiry": 1789640052,
-      "phase": "resolved",
-      "yesWon": true,
-      "yesReserve": "3578586",
-      "noReserve": "6986000"
-    },
-    {
-      "marketId": "0x5e7e88c1e7e16ec469bf6089c22309d7f5983069332e8ba6e1bc43c344ae6296",
-      "builderId": 1,
-      "expiry": 1790248841,
-      "phase": "trading",
-      "yesWon": false,
-      "yesReserve": "4171534",
-      "noReserve": "5993000"
-    },
-    {
-      "marketId": "0x3837c1cf18b873bfd3da2e82ea5e5926963e9ccecf2d600c5926980c547aab98",
-      "builderId": 1,
-      "expiry": 1790267782,
-      "phase": "trading",
-      "yesWon": false,
-      "yesReserve": "5000000",
-      "noReserve": "5000000"
+      "address": "0xa9fa24e1147e8337c3d25b084890121be10a132b",
+      "lifetimeProgress": 0,
+      "volume": "0",
+      "country": null
     }
   ],
+  "perennialBuilders": [
+    {
+      "builderId": 1,
+      "address": "0xA9Fa24e1147E8337C3D25b084890121BE10a132B",
+      "name": "oracle-primitives",
+      "repo": "registrai-multichain/oracle-primitives",
+      "milestoneFeedId": null
+    }
+  ],
+  "perennialMarkets": [],
   "atlas": {
-    "lastScannedBlock": "63571151",
-    "progressByBuilder": {
-      "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e": 17
-    },
-    "volumeByBuilderId": {
-      "1": "3000000"
-    },
-    "marketToBuilder": {
-      "0xb6e3a706e1b0078a7ccb7d31ace1be6432e7f3995bcd3c6b12532f55500467f6": 1,
-      "0x5e7e88c1e7e16ec469bf6089c22309d7f5983069332e8ba6e1bc43c344ae6296": 1,
-      "0x3837c1cf18b873bfd3da2e82ea5e5926963e9ccecf2d600c5926980c547aab98": 1
-    },
+    "lastScannedBlock": "63752762",
+    "progressByBuilder": {},
+    "volumeByBuilderId": {},
+    "marketToBuilder": {},
     "pnl": {
-      "positions": {
-        "0x5e7e88c1e7e16ec469bf6089c22309d7f5983069332e8ba6e1bc43c344ae6296|0x84c799941c6b69abb296ec46a02e4e0772ad2e5e|0": {
-          "shares": "1821466",
-          "cost": "1000000"
-        }
-      },
-      "realised": {
-        "1": {
-          "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e": "1407414"
-        }
-      }
+      "positions": {},
+      "realised": {}
     },
-    "progressBySeason": {
-      "1": {
-        "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e": 17
-      }
-    },
+    "progressBySeason": {},
     "seasonStartBlocks": {
-      "1": "62539246"
+      "1": "63752157"
     },
     "seasonsVersion": 3,
     "chainId": 5042002,
-    "markets": "0x6F233843Db915EfD931DEC22842C9dBf55788f46"
+    "markets": "0x6a25D79D7664c284c0D130B0a385b9cAdf3481c7"
   },
   "seasons": [
     {
       "id": 1,
       "label": "Season 1",
-      "startBlock": 62539246,
+      "startBlock": 63752157,
       "endBlock": null,
-      "startedAt": 1789630500,
-      "endsAt": 1792049700
+      "startedAt": 1790246870,
+      "endsAt": 1792666070
     }
   ],
   "seasonBoards": {
     "1": {
-      "traders": [
-        [
-          "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e",
-          "1407414"
-        ]
-      ],
-      "builders": [
-        [
-          "0x84c799941c6b69abb296ec46a02e4e0772ad2e5e",
-          17
-        ]
-      ]
+      "traders": [],
+      "builders": []
+    }
+  },
+  "reputation": {
+    "agents": {},
+    "cursor": {
+      "version": 1,
+      "chainId": 5042002,
+      "contracts": {
+        "MarketsPerennial": "0x6a25d79d7664c284c0d130b0a385b9cadf3481c7",
+        "MarketsV4": "0x6f704cba9a026143f584b3fc0805da45f609138b",
+        "Attestation": "0xe75961e281a83eb5368fff43330f0e815b9b3b41",
+        "Dispute": "0x3eefde8ecc78457ab715f1b9a7c82fbcd416c329"
+      },
+      "fromBlock": "63752157",
+      "lastScannedBlock": "63752762",
+      "state": {
+        "agents": {},
+        "open": {}
+      },
+      "challenges": {},
+      "attesters": {}
     }
   },
   "chainId": 5042002,
@@ -129,13 +108,23 @@
     "SuffixTreasury_xyz": "0x41fFAf360C0F3120732BF69530a667Eec57FD7E3",
     "SuffixTreasury_fun": "0xcA9D317c846186F0B3f8446D8df94d6Ca826B1EB",
     "CurveMarket": "0xf5d0857df82f7bb26e81f59a5cc10c4ddffe2f2c",
-    "NanoLedger": "0x71Ea02b2E75e6C65A41DF9E3c78E14F9ae2232D9",
-    "MarketsV4": "0x7bCdf186a0C93A32B48ECC0D0d1160e75Bb2Ee03",
-    "BuilderRegistry": "0x16E7604882784530e2aAC279afb82198175131FF",
-    "CaretakerRegistry": "0xD5f24d4249079514F399b8917dEED8f900a6F303",
-    "ProgressPool": "0xDdf3A946971b6d3375fdec4F324473aE259359c6",
-    "MarketsPerennial": "0x6F233843Db915EfD931DEC22842C9dBf55788f46",
-    "ProgressArbiter": "0x7b588ce1b65a4f46d34Ae92472aF7dFc6356C959"
+    "NanoLedger": "0x7c1470Df1759848c15cbd9228504105501101a99",
+    "MarketsV4": "0x6f704Cba9a026143F584B3Fc0805DA45f609138b",
+    "BuilderRegistry": "0x10F8D6D5905E2C4dc565a1894c102B25E9d21DF4",
+    "CaretakerRegistry": "0x02CfdE88a97A56A7dbDC05F6c7BD3Dbc34393876",
+    "ProgressPool": "0xC5039177a5A2B6597Bb1587b08494968bc1eC0C0",
+    "MarketsPerennial": "0x6a25D79D7664c284c0D130B0a385b9cAdf3481c7",
+    "ProgressArbiter": "0x8Cb2FAD547cFc42081CA04f4c3c03588E27E0e98",
+    "NanoLedger_retired": "0x71Ea02b2E75e6C65A41DF9E3c78E14F9ae2232D9",
+    "MarketsV4_retired": "0x7bCdf186a0C93A32B48ECC0D0d1160e75Bb2Ee03",
+    "BuilderRegistry_retired": "0x16E7604882784530e2aAC279afb82198175131FF",
+    "CaretakerRegistry_retired": "0xD5f24d4249079514F399b8917dEED8f900a6F303",
+    "ProgressPool_retired": "0xDdf3A946971b6d3375fdec4F324473aE259359c6",
+    "MarketsPerennial_retired": "0x6F233843Db915EfD931DEC22842C9dBf55788f46",
+    "ProgressArbiter_retired": "0x7b588ce1b65a4f46d34Ae92472aF7dFc6356C959",
+    "Registry_v3": "0xb4BE6114a5103aBFfaBB053b740AD6Dc2aF27652",
+    "Attestation_v3": "0xE75961E281A83EB5368fFF43330f0E815b9b3B41",
+    "Dispute_v3": "0x3eEfdE8ecc78457aB715f1b9A7C82fBCd416c329"
   },
   "feed": {
     "id": "0xf4968db834c4e03f9c2e10bb883fe74f84c850cfacac058a1b520a8d8fa37c0b",
@@ -557,7 +546,7 @@
         "bond": "10000000",
         "lockedBond": "0",
         "registeredAt": 1778768861,
-        "lastAttestationAt": 1789999246,
+        "lastAttestationAt": 1790172065,
         "active": true,
         "slashed": false
       },
@@ -967,6 +956,14 @@
           "value": 410,
           "timestamp": 1789999246,
           "finalizedAt": 1790085646,
+          "inputHash": "0x07372378aa8681ff8081922ccd02ddd2cf75904af132aab27070048b74391978",
+          "status": 0
+        },
+        {
+          "id": "0x64637f406fc6d958cb9e9ef0c242277b5f29ec56f3f220b5c521864bcd64deb3",
+          "value": 410,
+          "timestamp": 1790172065,
+          "finalizedAt": 1790258465,
           "inputHash": "0x07372378aa8681ff8081922ccd02ddd2cf75904af132aab27070048b74391978",
           "status": 0
         }
