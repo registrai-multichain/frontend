@@ -12,6 +12,18 @@ import { EMPTY_PNL, foldTrades, seasonWindows } from "../src/lib/seasons";
 import type { PnlState, Season, Trade } from "../src/lib/seasons";
 import { REPUTATION_CURSOR_VERSION, type ReputationSnapshot } from "../src/lib/reputation";
 import { syncReputation } from "./reputation";
+import { proofConfigFromEnv, operatorFeeds } from "../src/lib/verified-builders";
+import {
+  feedCreatedEvent,
+  makeFetchJson,
+  perennialBuilderSnapshot,
+  readBuilderRecords,
+  verifiedOwners,
+  type LegacyKeeperBuilder,
+  type PerennialBuilderSnapshot,
+  type RegistryReader,
+} from "../src/lib/verified-builders-chain";
+import perennialTestnet from "../src/lib/deployments/arc-testnet-perennial.json";
 
 /**
  * Bump when the season fold changes shape or semantics. A cursor written by an
@@ -161,24 +173,6 @@ const marketsAbi = [
         ],
       },
     ],
-  },
-] as const;
-
-const builderRegistryAbi = [
-  { type: "function", name: "nextId", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
-  {
-    type: "function",
-    name: "ownerOf",
-    stateMutability: "view",
-    inputs: [{ name: "id", type: "uint256" }],
-    outputs: [{ type: "address" }],
-  },
-  {
-    type: "function",
-    name: "isActiveBuilderId",
-    stateMutability: "view",
-    inputs: [{ name: "id", type: "uint256" }],
-    outputs: [{ type: "bool" }],
   },
 ] as const;
 
@@ -474,17 +468,20 @@ async function main(): Promise<void> {
    * event ABI, and that inference does not survive being passed as a
    * parameter, so each caller re-asserts the shape it expects.
    */
+  type ScannedLog = Awaited<ReturnType<typeof client.getLogs>>[number] & { args: unknown };
   async function getLogsFor(
     address: Address,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     event: any,
     since: bigint = fromBlock,
-  ) {
-    const out: Awaited<ReturnType<typeof client.getLogs>> = [];
+    /** Indexed-argument filter, e.g. `{ creator }`. */
+    args?: Record<string, unknown>,
+  ): Promise<ScannedLog[]> {
+    const out: ScannedLog[] = [];
     for (let start = since; start <= latestBlock; start += CHUNK) {
       const end = start + CHUNK - 1n > latestBlock ? latestBlock : start + CHUNK - 1n;
-      const logs = await client.getLogs({ address, event, fromBlock: start, toBlock: end });
-      out.push(...logs);
+      const logs = await client.getLogs({ address, event, args, fromBlock: start, toBlock: end });
+      out.push(...(logs as ScannedLog[]));
       await pace();
     }
     return out;
@@ -645,6 +642,8 @@ async function main(): Promise<void> {
     /** seasonId -> resolved first block. Immutable once past, so cached. */
     seasonStartBlocks?: Record<string, string>;
     seasonsVersion?: number;
+    chainId?: number;
+    markets?: string;
   } | null = null;
 
   let seasons: Season[] = [];
@@ -668,20 +667,28 @@ async function main(): Promise<void> {
     creator: string;
   }> = [];
 
-  // Per-builder milestone feeds, as provisioned by the caretaker (keeper
-  // builders.json `milestoneFeedId`). The UI derives a market's feed/agent from
-  // chain; this is the only place it learns which feed is a builder's OWN
-  // milestone feed before the caretaker has opened a market on it.
-  let perennialBuilders: Array<{ builderId: number; address: string; name: string; repo: string; milestoneFeedId: string | null }> = [];
+  // Every builder on chain (ids 1..nextId-1) with its verified-builder status
+  // (docs/superpowers/specs/2026-09-24-verified-builders-design.md): source from
+  // the `registrai:` profile link, proof fetched + validated, caretaker checked.
+  // milestoneFeedId comes from the operator's Registry.FeedCreated events
+  // (`registrai-milestone:<source>`, or the legacy `<owner/repo>-ships-release`);
+  // keeper/builders.json is consulted only for legacy (non-`registrai:`) entries.
+  let perennialBuilders: PerennialBuilderSnapshot[] = [];
+  /** Resumable FeedCreated scan (operator-created feeds only). */
+  type BuilderFeedsCursor = {
+    chainId: number;
+    registry: string;
+    operator: string;
+    lastScannedBlock: string;
+    /** description -> feedId, latest wins. */
+    feeds: Record<string, string>;
+  };
+  let builderFeedsCursor: BuilderFeedsCursor | null = null;
+  let legacyKeeperBuilders: LegacyKeeperBuilder[] = [];
   try {
-    const kb = JSON.parse(readFileSync(resolve(__dirname, "../../keeper/builders.json"), "utf8")) as Array<{
-      builderId?: number; address: string; name: string; repo: string; milestoneFeedId?: string;
-    }>;
-    perennialBuilders = kb
-      .filter((b) => b.builderId)
-      .map((b) => ({ builderId: b.builderId!, address: b.address, name: b.name, repo: b.repo, milestoneFeedId: b.milestoneFeedId || null }));
+    legacyKeeperBuilders = JSON.parse(readFileSync(resolve(__dirname, "../../keeper/builders.json"), "utf8"));
   } catch {
-    // no keeper checkout next to the frontend — the UI falls back to chain
+    // no keeper checkout next to the frontend — legacy builders get no fallback
   }
 
   const builderAgg: Array<{
@@ -689,7 +696,8 @@ async function main(): Promise<void> {
     address: string;
     lifetimeProgress: number;
     volume: string;
-    country: null;
+    /** claim.country of a verified builder. */
+    country: string | null;
   }> = [];
 
   if (builderRegistryAddr && perennialAddr && poolAddr) {
@@ -709,6 +717,10 @@ async function main(): Promise<void> {
       /** Which chain and contract this cursor describes. */
       chainId?: number;
       markets?: string;
+      pnl?: PnlState;
+      progressBySeason?: Record<string, Record<string, number>>;
+      seasonStartBlocks?: Record<string, string>;
+      seasonsVersion?: number;
     };
     let cursor: AtlasCursor | undefined;
     try {
@@ -744,13 +756,6 @@ async function main(): Promise<void> {
         `${Math.ceil(Number(spanBlocks) / 5000)} chunks/event)`,
     );
 
-    const nextId = (await client.readContract({
-      address: builderRegistryAddr,
-      abi: builderRegistryAbi,
-      functionName: "nextId",
-      args: [],
-    })) as bigint;
-
     const progressLogs = await getLogsFor(poolAddr, progressAddedEvent, scanFrom);
     const progressByBuilder = new Map<string, number>(
       Object.entries(cursor?.progressByBuilder ?? {}),
@@ -783,29 +788,84 @@ async function main(): Promise<void> {
       volumeByBuilderId.set(bid, (volumeByBuilderId.get(bid) ?? 0n) + a.collateralIn);
     }
 
-    for (let id = 1n; id < nextId; id++) {
-      const active = (await client.readContract({
-        address: builderRegistryAddr,
-        abi: builderRegistryAbi,
-        functionName: "isActiveBuilderId",
-        args: [id],
-      })) as boolean;
-      if (!active) continue;
-      const owner = (await client.readContract({
-        address: builderRegistryAddr,
-        abi: builderRegistryAbi,
-        functionName: "ownerOf",
-        args: [id],
-      })) as Address;
+    // ── verified builders ────────────────────────────────────────────────
+    const operator = perennialTestnet.operator as Address;
+    const caretakerAddr = (DEPLOYMENT.contracts as { CaretakerRegistry?: string }).CaretakerRegistry as Address | undefined;
+    console.log("reading builders + proofs…");
+    const records = await readBuilderRecords(client as unknown as RegistryReader, {
+      builderRegistry: builderRegistryAddr,
+      caretakerRegistry: caretakerAddr ?? null,
+      operator,
+      chainId: DEPLOYMENT.chainId,
+      proofConfig: proofConfigFromEnv(process.env),
+      fetchJson: makeFetchJson({ timeoutMs: 15_000 }),
+      pace: async () => { await pace(); },
+    });
+    for (const r of records) {
+      console.log(`  · #${r.builderId} ${r.status}${r.source ? ` ${r.source}` : ""}${r.proofError ? ` (${r.proofError})` : ""}`);
+    }
+
+    // Milestone feeds live on the oracle Registry the markets settle against:
+    // MarketsPerennial.ATTESTATION() -> Attestation.REGISTRY().
+    const addrView = (address: Address, sig: "ATTESTATION" | "REGISTRY") =>
+      client.readContract({
+        address,
+        abi: [{ type: "function", name: sig, stateMutability: "view", inputs: [], outputs: [{ type: "address" }] }] as const,
+        functionName: sig,
+      }) as Promise<Address>;
+    const oracleRegistry = await addrView(await addrView(perennialAddr, "ATTESTATION"), "REGISTRY");
+    let feedsCursor: BuilderFeedsCursor | undefined;
+    try {
+      const prev = JSON.parse(readFileSync(resolve(__dirname, "../src/lib/live-data.json"), "utf8"));
+      const c = prev?.builderFeeds as BuilderFeedsCursor | undefined;
+      if (
+        c?.lastScannedBlock &&
+        c.chainId === DEPLOYMENT.chainId &&
+        c.registry?.toLowerCase() === oracleRegistry.toLowerCase() &&
+        c.operator?.toLowerCase() === operator.toLowerCase()
+      ) {
+        feedsCursor = c;
+      }
+    } catch {
+      // no previous snapshot — scan from the anchor
+    }
+    const feedLogs = await getLogsFor(
+      oracleRegistry,
+      feedCreatedEvent,
+      feedsCursor ? BigInt(feedsCursor.lastScannedBlock) + 1n : anchor,
+      { creator: operator },
+    );
+    const feeds = {
+      ...(feedsCursor?.feeds ?? {}),
+      ...operatorFeeds(
+        feedLogs.map((l) => {
+          const a = l.args as { feedId: string; creator: string; description: string };
+          return { feedId: a.feedId, creator: a.creator, description: a.description };
+        }),
+        operator,
+      ),
+    };
+    builderFeedsCursor = {
+      chainId: DEPLOYMENT.chainId,
+      registry: oracleRegistry,
+      operator,
+      lastScannedBlock: latestBlock.toString(),
+      feeds,
+    };
+    perennialBuilders = perennialBuilderSnapshot(records, feeds, legacyKeeperBuilders);
+
+    // Only verified builders reach the atlas and the season boards; country is
+    // the one in their signed claim.
+    for (const b of perennialBuilders) {
+      if (b.status !== "verified") continue;
       builderAgg.push({
-        builderId: Number(id),
-        address: owner.toLowerCase(),
-        lifetimeProgress: progressByBuilder.get(owner.toLowerCase()) ?? 0,
+        builderId: b.builderId,
+        address: b.owner,
+        lifetimeProgress: progressByBuilder.get(b.owner) ?? 0,
         // bigint is not JSON-serialisable; the consumer parses with BigInt().
-        volume: (volumeByBuilderId.get(Number(id)) ?? 0n).toString(),
-        country: null,
+        volume: (volumeByBuilderId.get(b.builderId) ?? 0n).toString(),
+        country: b.country,
       });
-      await pace();
     }
     /* ── seasons ──────────────────────────────────────────────────────────
        A season is a block range, so every board below is a windowed replay of
@@ -955,12 +1015,17 @@ async function main(): Promise<void> {
     ];
 
     const pnl = foldTrades(priorPnl, tradeEvents, seasons);
+    const verified = verifiedOwners(perennialBuilders);
     seasonBoards = Object.fromEntries(
       seasons.map((x) => [
         String(x.id),
         {
           traders: Object.entries(pnl.realised[String(x.id)] ?? {}) as Array<[string, string]>,
-          builders: [...(progressBySeason.get(x.id) ?? new Map())] as Array<[string, number]>,
+          // The fold keeps every builder (a builder verified later keeps its
+          // history); the board shows verified builders only.
+          builders: [...(progressBySeason.get(x.id) ?? new Map<string, number>())].filter(([addr]) =>
+            verified.has(addr),
+          ) as Array<[string, number]>,
         },
       ]),
     );
@@ -1022,7 +1087,7 @@ async function main(): Promise<void> {
     }
 
     console.log(
-      `  ${builderAgg.length} active builder(s), ${perennialMarkets.length} market(s), ` +
+      `  ${builderAgg.length} verified builder(s) of ${perennialBuilders.length}, ${perennialMarkets.length} market(s), ` +
         `cursor at block ${latestBlock}`,
     );
   }
@@ -1100,6 +1165,7 @@ async function main(): Promise<void> {
     syncedAt: new Date().toISOString(),
     builders: builderAgg,
     perennialBuilders,
+    builderFeeds: builderFeedsCursor,
     perennialMarkets,
     atlas: atlasCursor,
     seasons,
