@@ -43,6 +43,12 @@ export function isqrt(n: bigint): bigint {
   return x;
 }
 
+/** Ceiling integer square root (matches OpenZeppelin Math.sqrt(n, Rounding.Ceil)). */
+export function isqrtCeil(n: bigint): bigint {
+  const r = isqrt(n);
+  return r * r < n ? r + 1n : r;
+}
+
 /** Marginal price of `outcome` in 1e18 (MarketsPerennial.priceOf). */
 export function priceOf(r: Reserves, outcome: number): bigint {
   const total = r.yesReserve + r.noReserve;
@@ -120,11 +126,14 @@ export function quoteSell(r: Reserves, outcome: number, sharesIn: bigint, feeBps
   const sum = yesPost + noPost;
   const prod = yesPost * noPost;
   const disc = sum * sum - 4n * (prod - k);
-  const grossOut = (sum - isqrt(disc)) / 2n;
+  // The contract ceils the root and floors the halving so a sell never pays
+  // over the curve; a floored root here promised 1 unit more than it paid.
+  const grossOut = (sum - isqrtCeil(disc)) / 2n;
   const fee = (grossOut * feeBps) / BPS;
   const collateralOut = grossOut - fee;
   if (collateralOut <= 0n) return null;
   const after = { yesReserve: yesPost - grossOut, noReserve: noPost - grossOut };
+  if (after.yesReserve === 0n || after.noReserve === 0n) return null; // ReserveDepleted
   const priceBefore = toNum(priceOf(r, outcome));
   const exFeeAvg = Number(grossOut) / Number(sharesIn);
   return {

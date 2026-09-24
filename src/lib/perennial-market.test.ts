@@ -18,6 +18,7 @@ import {
   questionText,
   quoteBuy,
   quoteSell,
+  isqrtCeil,
   redeemPayout,
   settlementRuleText,
   splitFee,
@@ -240,5 +241,19 @@ describe("inputs", () => {
     expect(blockChunks(10n, 10n)).toEqual([[10n, 10n]]);
     expect(blockChunks(10n, 9n)).toEqual([]);
     for (const [a, b] of blockChunks(1n, 123_456n)) expect(b - a + 1n <= 5_000n).toBe(true);
+  });
+});
+
+describe("quoteSell matches the contract's protocol-favouring rounding", () => {
+  // Caught by the local end-to-end rehearsal: with a floored root the UI quoted
+  // 3,355,619 and MarketsPerennial.sell paid 3,355,618.
+  test("the rehearsal's sell, to the unit", () => {
+    const q = quoteSell({ yesReserve: 8_313_962n, noReserve: 12_027_961n }, OUTCOME.Yes, 6_627_759n, 70n)!;
+    expect(q.grossOut).toBe(3_379_272n);
+    expect(q.fee).toBe(23_654n);
+    expect(q.collateralOut).toBe(3_355_618n);
+  });
+  test("isqrtCeil", () => {
+    expect([0n, 1n, 2n, 4n, 5n, 99n, 100n].map(isqrtCeil)).toEqual([0n, 1n, 2n, 2n, 3n, 10n, 10n]);
   });
 });
