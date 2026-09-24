@@ -24,6 +24,8 @@ import { foundry } from "viem/chains";
 import { marketsPerennialAbi, nanoLedgerAbi, usdcAbi } from "../src/lib/abi";
 import { resolvePerennialDeployment } from "../src/lib/perennial-network";
 import { marketIdFromLogs, readLatestValue, readOverview, type ChainMarket } from "../src/lib/perennial-chain";
+import { readAgentBond, readOpenCollateral, resolveStack } from "../src/lib/reputation-chain";
+import { assessAgent, type AgentRecordJson } from "../src/lib/reputation";
 import {
   BPS,
   COMPARATOR,
@@ -324,6 +326,19 @@ async function main() {
       if (!who) die("netCost needs `who` or `key`");
       const [netCost, totalNetCost] = await Promise.all([holderView("netCost", id!, who!), view("totalNetCost", id!)]);
       return out({ ok: true, who, netCost, totalNetCost });
+    }
+    case "coverage": {
+      // The panel's own path: stack -> bond on the market's feed -> open collateral of
+      // the agent's Trading markets on that feed -> assessAgent with the snapshot record.
+      const { ov, m } = await market(id!);
+      const stack = await resolveStack(pc, P.MarketsPerennial!);
+      const bond = await readAgentBond(pc, stack.registry, m.feedId, m.agent);
+      const openCollateral = await readOpenCollateral(pc, P.MarketsPerennial!, "perennial", m.agent, m.feedId, m.id,
+        ov.markets.map((x: ChainMarket) => ({ id: x.id, phase: x.phase, agent: x.agent, feed: x.feedId })));
+      const record = (args.record ?? null) as AgentRecordJson | null;
+      const a = assessAgent({ record, indexed: record !== null, bond, openCollateral });
+      return out({ ok: true, agent: m.agent, registry: stack.registry ?? null, bond: a.bond ?? null, openCollateral: a.openCollateral ?? null,
+        recommended: a.recommended ?? null, level: a.level, coveragePct: a.coveragePct ?? null, tier: a.tier ?? null });
     }
     case "withdrawAll": {
       const bal = (await pc.readContract({ address: P.NanoLedger!, abi: nanoLedgerAbi, functionName: "balanceOf", args: [acct!.address] })) as bigint;
