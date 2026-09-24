@@ -11,15 +11,17 @@ interface Entry {
 const ENTRIES: Entry[] = [
   {
     date: "2026-09-24",
-    title: "New fee & settlement model · 1% once, at settlement",
+    title: "New fee & settlement model · 1% on every trade, nothing at settlement",
     body: (
       <>
         <p>
-          One fee model for every market we run from here on. Markets charge{" "}
-          <strong>no trading fee</strong>. They take a{" "}
-          <strong>1% resolution fee, charged once at settlement</strong>, split{" "}
+          One fee model for every market we run from here on:{" "}
+          <strong>a 1% trading fee on every buy and sell</strong>, split{" "}
           <strong>30% market creator · 20% bonded agent · 50% builder commons</strong>.
-          The numbers are constants in the contracts, not a governance knob.
+          The creator and commons legs are paid as each trade happens; the
+          agent&apos;s 20% is held until the market settles.{" "}
+          <strong>Nothing is charged at settlement.</strong> The numbers are
+          constants in the contracts, not a governance knob.
         </p>
         <h3>Two kinds of market, one split</h3>
         <p>
@@ -28,16 +30,17 @@ const ENTRIES: Entry[] = [
           builder commons. Common markets use the same 1% and the same split,
           except the 50% goes to the Registrai treasury. Common markets are
           open to any bonded agent paired with an approved, independent
-          dispute resolver: an agent earns 20% of the resolution fee on every
-          market it settles correctly.
+          dispute resolver: when an agent settles a market correctly, the 20%
+          held for it is released to it.
         </p>
         <h3>Voids and challengers</h3>
         <p>
           If a market can&apos;t be settled, it voids: every trader gets their
-          net cost back, minus the 1% fee. The fee is still split 30/20/50, but
-          the agent&apos;s 20% goes to whoever successfully challenged its
-          answer (dispute ruled Invalid) inside the settlement window;
-          otherwise it goes to the commons, or the treasury on common markets.
+          net cost back (what they put in after fees, minus what they took
+          out). The agent&apos;s held 20% goes to whoever successfully
+          challenged its answer (dispute ruled Invalid) inside the settlement
+          window; otherwise it goes to the commons, or the treasury on common
+          markets.
         </p>
         <h3>Registrai&apos;s own take from the commons</h3>
         <p>
@@ -49,9 +52,10 @@ const ENTRIES: Entry[] = [
         <p>
           This is the model the contracts are being updated to; markets already
           on testnet keep the terms they were created with until the redeploy.
-          The older Markets testnet contracts (0.70% per trade) are legacy and
-          are not going to mainnet. None of these market contracts are on
-          mainnet yet, and nothing here is a promise of returns.
+          The older Markets testnet contracts (0.70% per trade, a different
+          split) are legacy and are not going to mainnet. None of these market
+          contracts are on mainnet yet, and nothing here is a promise of
+          returns.
         </p>
       </>
     ),
