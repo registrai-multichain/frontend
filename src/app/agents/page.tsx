@@ -51,7 +51,12 @@ export default function AgentsIndexPage() {
               slashed to the challenger, and if the market then can&apos;t
               settle, it voids and your held 20% goes to that challenger.
               Perennial builder markets work differently: the protocol&apos;s
-              own bonded milestone agent settles them.
+              own bonded milestone agent settles them. Building a project on
+              Arc?{" "}
+              <Link href="/verify" className="text-accent hover:underline">
+                Verify it
+              </Link>{" "}
+              to join the builder atlas.
             </p>
             <p className="text-2xs text-fg-dim">
               Your feed needs an independent dispute resolver — never your own

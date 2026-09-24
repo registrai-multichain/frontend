@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { PerennialShell } from "@/components/PerennialShell";
 import { PerennialPanel } from "@/components/PerennialPanel";
 import { FaucetHint } from "@/components/FaucetHint";
@@ -35,6 +36,9 @@ export default function PerennialPage() {
             <div className="perennial-app-status"><i /> {networkStatusLine(PERENNIAL)}</div>
             <h1>Perennial markets</h1>
             <p>Builder milestone markets and progress-based commons payouts.</p>
+            <div className="vf-invite mt-3">
+              Building on Arc? <Link href="/verify">Verify your project →</Link>
+            </div>
           </div>
           <div className="perennial-app-actions">
             <PerennialViews />
