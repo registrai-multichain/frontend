@@ -14,6 +14,8 @@ const errs = parseAbi([
   "error NotResolved()",
   "error NoLPShares()",
   "error LiquidityTooLow()",
+  "error SelfResolvedFeed()",
+  "error ReserveDepleted()",
 ]);
 
 describe("revert decoding", () => {
@@ -29,6 +31,8 @@ describe("revert decoding", () => {
     "NotResolved",
     "NoLPShares",
     "LiquidityTooLow",
+    "SelfResolvedFeed",
+    "ReserveDepleted",
   ] as const)("%s decodes and has a human message", (name) => {
     const data = encodeErrorResult({ abi: errs, errorName: name });
     expect(decodeRevertData(data)).toBe(name);

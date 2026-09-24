@@ -42,6 +42,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   AgentNotRegistered: "That agent is not an active, bonded agent on this feed.",
   AgentNotApproved: "That feed/agent pair is not approved for new markets.",
   ResolverNotApproved: "That feed's dispute resolver is not approved for new markets.",
+  SelfResolvedFeed: "That feed's agent is also its own dispute resolver, so it can't back a market.",
+  ReserveDepleted: "That trade would empty one side of the pool. Try a smaller amount.",
   // ledger
   InsufficientBalance: "Not enough balance in your trading account. Deposit first.",
   InsufficientAllowance: "Trading-account allowance too low. Try again — the approval step runs first.",
