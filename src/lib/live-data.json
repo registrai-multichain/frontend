@@ -1,70 +1,59 @@
 {
-  "syncedAt": "2026-09-24T17:26:25.290Z",
+  "syncedAt": "2026-09-24T21:52:28.572Z",
   "builders": [],
-  "perennialBuilders": [
-    {
-      "builderId": 1,
-      "owner": "0xa9fa24e1147e8337c3d25b084890121be10a132b",
-      "source": null,
-      "status": "unverified",
-      "country": null,
-      "proofUrl": null,
-      "milestoneFeedId": "0xc1fb8a8d61edd9ec459f49f6db49242f24ece104817b9c8da38e08e0374f49a6",
-      "badge": null
-    }
-  ],
+  "perennialBuilders": [],
   "builderFeeds": {
     "chainId": 5042002,
-    "registry": "0xb4BE6114a5103aBFfaBB053b740AD6Dc2aF27652",
+    "registry": "0x770d0feedcDa264c9d5C835D56fA7903cbC5719c",
     "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
-    "lastScannedBlock": "63797827",
-    "feeds": {
-      "registrai-multichain/oracle-primitives-ships-release": "0xc1fb8a8d61edd9ec459f49f6db49242f24ece104817b9c8da38e08e0374f49a6"
-    }
+    "lastScannedBlock": "63827494",
+    "feeds": {}
   },
-  "perennialMarkets": [
-    {
-      "marketId": "0x2530a3b549ae3337a6add0a7de6b48234598b72a92464a2c277e55b7932e0adf",
-      "builderId": 1,
-      "expiry": 1790852829,
-      "phase": "trading",
-      "yesWon": false,
-      "yesReserve": "5000000",
-      "noReserve": "5000000",
-      "feedId": "0xc1fb8a8d61edd9ec459f49f6db49242f24ece104817b9c8da38e08e0374f49a6",
-      "agent": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
-      "threshold": "2",
-      "comparator": 1,
-      "creator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263"
-    }
-  ],
+  "perennialMarkets": [],
   "atlas": {
-    "lastScannedBlock": "63797827",
-    "progressByBuilder": {},
+    "lastScannedBlock": "63827494",
     "volumeByBuilderId": {},
-    "marketToBuilder": {
-      "0x2530a3b549ae3337a6add0a7de6b48234598b72a92464a2c277e55b7932e0adf": 1
-    },
+    "marketToBuilder": {},
     "pnl": {
       "positions": {},
       "realised": {}
     },
-    "progressBySeason": {},
-    "seasonStartBlocks": {
-      "1": "63752157"
+    "milestones": {
+      "latestByFeed": {},
+      "bySeason": {}
     },
-    "seasonsVersion": 3,
+    "seasonStartBlocks": {
+      "1": "63826822"
+    },
+    "seasonsVersion": 4,
     "chainId": 5042002,
-    "markets": "0x6a25D79D7664c284c0D130B0a385b9cAdf3481c7"
+    "markets": "0xF12F3427d9b47f4019809E7B753494A32C3e3a3B"
+  },
+  "economy": {
+    "chainId": 5042002,
+    "fund": "0x7e83096F8Ef50024e7bE106E47F1BD8ce2e882D1",
+    "pool": "0x56b3Ffc1c5DA4F867C3Fd56Be5dA731d457E32aA",
+    "scannedTo": "63827494",
+    "ledger": {
+      "income": {},
+      "claims": {},
+      "swept": {},
+      "schedules": [
+        "0"
+      ],
+      "funded": "0",
+      "voidEscrows": "0",
+      "seasons": {}
+    }
   },
   "seasons": [
     {
       "id": 1,
       "label": "Season 1",
-      "startBlock": 63752157,
+      "startBlock": 63826822,
       "endBlock": null,
-      "startedAt": 1790246870,
-      "endsAt": 1792666070
+      "startedAt": 1790286359,
+      "endsAt": 1792705559
     }
   ],
   "seasonBoards": {
@@ -79,22 +68,16 @@
       "version": 1,
       "chainId": 5042002,
       "contracts": {
-        "MarketsPerennial": "0x6a25d79d7664c284c0d130b0a385b9cadf3481c7",
-        "MarketsV4": "0x6f704cba9a026143f584b3fc0805da45f609138b",
-        "Attestation": "0xe75961e281a83eb5368fff43330f0e815b9b3b41",
-        "Dispute": "0x3eefde8ecc78457ab715f1b9a7c82fbcd416c329"
+        "MarketsPerennial": "0xf12f3427d9b47f4019809e7b753494a32c3e3a3b",
+        "MarketsV4": "0xccf185a2200b24624c404ff373bbef1423ae09c6",
+        "Attestation": "0xea2804de57ac57d17e77fc7ad5f55726636e74b7",
+        "Dispute": "0x9c0c81c11fe510eb89ade831c13c066cc5dad411"
       },
-      "fromBlock": "63752157",
-      "lastScannedBlock": "63797827",
+      "fromBlock": "63826822",
+      "lastScannedBlock": "63827494",
       "state": {
         "agents": {},
-        "open": {
-          "0x6a25d79d7664c284c0d130b0a385b9cadf3481c7:0x2530a3b549ae3337a6add0a7de6b48234598b72a92464a2c277e55b7932e0adf": {
-            "agent": "0xf26db19bc8dc33c9a72399128cf5cfb5ddc76263",
-            "feed": "0xc1fb8a8d61edd9ec459f49f6db49242f24ece104817b9c8da38e08e0374f49a6",
-            "volume": "0"
-          }
-        }
+        "open": {}
       },
       "challenges": {},
       "attesters": {}
@@ -102,28 +85,17 @@
   },
   "badges": {
     "arc-testnet": {
-      "address": "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c",
+      "address": "0xBF7FF680e0Ee7472E244cf2550EE016939cb6335",
       "maxSerial": 0
     }
   },
   "gallery": {
     "network": "testnet",
     "chainId": 5042002,
-    "builderRegistry": "0x10F8D6D5905E2C4dc565a1894c102B25E9d21DF4",
-    "syncedAt": "2026-09-24T17:26:25.290Z",
-    "nextId": 2,
-    "builders": [
-      {
-        "id": 1,
-        "owner": "0xa9fa24e1147e8337c3d25b084890121be10a132b",
-        "status": "unverified",
-        "source": null,
-        "country": null,
-        "proofUrl": null,
-        "badge": null,
-        "createdAt": 1790247059
-      }
-    ]
+    "builderRegistry": "0xB52FC2AB9b2457D8c56d3b4A624543aD61c70D9C",
+    "syncedAt": "2026-09-24T21:52:28.572Z",
+    "nextId": 1,
+    "builders": []
   },
   "chainId": 5042002,
   "explorer": "https://testnet.arcscan.app",
@@ -160,13 +132,6 @@
     "SuffixTreasury_xyz": "0x41fFAf360C0F3120732BF69530a667Eec57FD7E3",
     "SuffixTreasury_fun": "0xcA9D317c846186F0B3f8446D8df94d6Ca826B1EB",
     "CurveMarket": "0xf5d0857df82f7bb26e81f59a5cc10c4ddffe2f2c",
-    "NanoLedger": "0x7c1470Df1759848c15cbd9228504105501101a99",
-    "MarketsV4": "0x6f704Cba9a026143F584B3Fc0805DA45f609138b",
-    "BuilderRegistry": "0x10F8D6D5905E2C4dc565a1894c102B25E9d21DF4",
-    "CaretakerRegistry": "0x02CfdE88a97A56A7dbDC05F6c7BD3Dbc34393876",
-    "ProgressPool": "0xC5039177a5A2B6597Bb1587b08494968bc1eC0C0",
-    "MarketsPerennial": "0x6a25D79D7664c284c0D130B0a385b9cAdf3481c7",
-    "ProgressArbiter": "0x8Cb2FAD547cFc42081CA04f4c3c03588E27E0e98",
     "NanoLedger_retired": "0x71Ea02b2E75e6C65A41DF9E3c78E14F9ae2232D9",
     "MarketsV4_retired": "0x7bCdf186a0C93A32B48ECC0D0d1160e75Bb2Ee03",
     "BuilderRegistry_retired": "0x16E7604882784530e2aAC279afb82198175131FF",
@@ -177,7 +142,24 @@
     "Registry_v3": "0xb4BE6114a5103aBFfaBB053b740AD6Dc2aF27652",
     "Attestation_v3": "0xE75961E281A83EB5368fFF43330f0E815b9b3B41",
     "Dispute_v3": "0x3eEfdE8ecc78457aB715f1b9A7C82fBCd416c329",
-    "VerifiedBuilderBadge": "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c"
+    "NanoLedger_v3": "0x7c1470Df1759848c15cbd9228504105501101a99",
+    "MarketsV4_v3": "0x6f704Cba9a026143F584B3Fc0805DA45f609138b",
+    "BuilderRegistry_v3": "0x10F8D6D5905E2C4dc565a1894c102B25E9d21DF4",
+    "CaretakerRegistry_v3": "0x02CfdE88a97A56A7dbDC05F6c7BD3Dbc34393876",
+    "ProgressPool_v3": "0xC5039177a5A2B6597Bb1587b08494968bc1eC0C0",
+    "MarketsPerennial_v3": "0x6a25D79D7664c284c0D130B0a385b9cAdf3481c7",
+    "ProgressArbiter_v3": "0x8Cb2FAD547cFc42081CA04f4c3c03588E27E0e98",
+    "NanoLedger": "0x02D278930B67A290fEfE93Ac049a086A9b5e0FB5",
+    "MarketsV4": "0xCcf185a2200B24624c404fF373BbEf1423aE09c6",
+    "BuilderRegistry": "0xB52FC2AB9b2457D8c56d3b4A624543aD61c70D9C",
+    "CaretakerRegistry": "0x7adDA1fe8c6F3A5D405dc1F1aF68B42f2F6CAa78",
+    "MarketsPerennial": "0xF12F3427d9b47f4019809E7B753494A32C3e3a3B",
+    "BuilderFund": "0x7e83096F8Ef50024e7bE106E47F1BD8ce2e882D1",
+    "SeasonPool": "0x56b3Ffc1c5DA4F867C3Fd56Be5dA731d457E32aA",
+    "VerifiedBuilderBadge": "0xBF7FF680e0Ee7472E244cf2550EE016939cb6335",
+    "Registry_v4": "0x770d0feedcDa264c9d5C835D56fA7903cbC5719c",
+    "Attestation_v4": "0xeA2804dE57Ac57D17E77fC7ad5F55726636E74B7",
+    "Dispute_v4": "0x9c0C81C11Fe510EB89adE831c13C066Cc5Dad411"
   },
   "feed": {
     "id": "0xf4968db834c4e03f9c2e10bb883fe74f84c850cfacac058a1b520a8d8fa37c0b",
