@@ -1,7 +1,7 @@
 "use client";
 
 import type { BadgeInfo } from "@/lib/verified-builder-badge";
-import { BuilderBadgeCard, useBuilderBadge } from "./BuilderBadgeCard";
+import { BuilderBadgeCard, PERENNIAL_BADGE_NET, useBuilderBadge, type BadgeNet } from "./BuilderBadgeCard";
 import { ShareCard } from "./verify/ShareCard";
 
 /**
@@ -16,6 +16,7 @@ export function BuilderBadgeSection({
   source,
   snapshot = null,
   viewer,
+  net = PERENNIAL_BADGE_NET,
 }: {
   builderId: number;
   owner: string;
@@ -24,15 +25,17 @@ export function BuilderBadgeSection({
   snapshot?: BadgeInfo | null;
   /** The connected wallet, if any. */
   viewer?: string;
+  /** Which network's badge (Perennial's by default). */
+  net?: BadgeNet;
 }) {
-  const badge = useBuilderBadge(builderId, snapshot);
+  const badge = useBuilderBadge(builderId, snapshot, net);
   if (!badge) return null;
   const mine = Boolean(viewer && viewer.toLowerCase() === owner.toLowerCase());
   return (
     <section className="pp-action-card bb-section" aria-label={`${name}: verified builder badge`}>
       <div className="pp-panel-heading"><span>{name}</span><b>builder #{builderId}</b></div>
-      <BuilderBadgeCard badge={badge} owner={owner} />
-      {mine && !badge.lapsed && <ShareCard serial={badge.serial} builderId={builderId} source={source} issuedAt={badge.issuedAt} />}
+      <BuilderBadgeCard badge={badge} owner={owner} net={net} />
+      {mine && !badge.lapsed && <ShareCard serial={badge.serial} builderId={builderId} source={source} issuedAt={badge.issuedAt} network={net.network} />}
     </section>
   );
 }

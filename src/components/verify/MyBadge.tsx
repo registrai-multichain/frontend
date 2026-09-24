@@ -3,16 +3,18 @@
 import { createPublicClient, type Address, type Hex, type PublicClient } from "viem";
 import useSWR from "swr";
 import { useWallet } from "@/components/WalletProvider";
-import { BADGES_ON } from "@/components/BuilderBadgeCard";
+import { badgesOnFor, type BadgeNet } from "@/components/BuilderBadgeCard";
 import { BuilderBadgeSection } from "@/components/BuilderBadgeSection";
+import { BUILDERS } from "@/lib/builders-network";
 import { transportFor } from "@/lib/chains";
-import { PERENNIAL } from "@/lib/perennial-network";
 import { projectName } from "@/lib/share-card";
 import { sourceFromProfileURI } from "@/lib/verified-builders";
 import { verifiedBuilderAbi } from "@/lib/verified-builders-chain";
 
-const CHAIN = PERENNIAL.chain;
-const REG = PERENNIAL.contracts.BuilderRegistry;
+const CHAIN = BUILDERS.chain;
+const REG = BUILDERS.contracts.BuilderRegistry;
+/** The builders network's badge (Arc mainnet in phase 1, whatever the markets run on). */
+const NET: BadgeNet = { chain: CHAIN, badge: BUILDERS.contracts.VerifiedBuilderBadge, network: BUILDERS.badgeNetwork };
 
 /**
  * On /verify: once the connected wallet's builder holds a badge, show it with
@@ -20,7 +22,7 @@ const REG = PERENNIAL.contracts.BuilderRegistry;
  */
 export function MyBadge() {
   const { address } = useWallet();
-  const on = BADGES_ON && PERENNIAL.deployed && Boolean(REG && address);
+  const on = badgesOnFor(NET) && Boolean(REG && address);
   const { data: me } = useSWR(
     on ? ["verify-my-builder", CHAIN.id, address] : null,
     async () => {
@@ -42,6 +44,7 @@ export function MyBadge() {
       name={projectName(me.source, me.id)}
       source={me.source}
       viewer={address}
+      net={NET}
     />
   );
 }

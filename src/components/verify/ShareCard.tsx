@@ -56,11 +56,12 @@ async function loadPicture(upload: string | null, source: string | null): Promis
   }
 }
 
-export function ShareCard(d: Omit<ShareCardData, "picture">) {
+export function ShareCard(d: Omit<ShareCardData, "picture"> & { network?: string | null }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [state, setState] = useState<"drawing" | "ready" | "error">("drawing");
   const [upload, setUpload] = useState<string | null>(null);
   const { serial, builderId, source, issuedAt } = d;
+  const network = d.network ?? BADGE_NETWORK;
 
   useEffect(() => {
     let live = true;
@@ -76,7 +77,7 @@ export function ShareCard(d: Omit<ShareCardData, "picture">) {
         document.fonts.load(cardFont(L.name.weight, L.name.start, family), name),
         document.fonts.load(cardFont(L.sub.weight, L.sub.size, family), "GITHUB DOMAIN BUILDER VERIFIED #·0123456789-"),
       ]);
-      const [bg, picture] = await Promise.all([loadImage(`/badge/${BADGE_NETWORK}/card.jpg`), loadPicture(upload, source)]);
+      const [bg, picture] = await Promise.all([loadImage(`/badge/${network}/card.jpg`), loadPicture(upload, source)]);
       const ctx = canvas.current?.getContext("2d");
       if (!live || !ctx) return;
       drawShareCard(ctx, bg, { serial, builderId, source, issuedAt, picture }, family);
@@ -87,7 +88,7 @@ export function ShareCard(d: Omit<ShareCardData, "picture">) {
     return () => {
       live = false;
     };
-  }, [serial, builderId, source, issuedAt, upload]);
+  }, [serial, builderId, source, issuedAt, upload, network]);
 
   useEffect(() => () => {
     if (upload) URL.revokeObjectURL(upload);

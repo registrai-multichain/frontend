@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
-import { PerennialShell } from "@/components/PerennialShell";
+import Link from "next/link";
+import { BuildersShell } from "@/components/BuildersShell";
 import { VerifyFlow } from "@/components/verify/VerifyFlow";
 import { MyBadge } from "@/components/verify/MyBadge";
-import { PERENNIAL, networkStatusLine } from "@/lib/perennial-network";
+import { BUILDERS, MARKETS_OPEN_ON_BUILDERS_NETWORK, buildersStatusLine } from "@/lib/builders-network";
+
+/** Milestone feeds and markets exist where claims register (not in mainnet phase 1). */
+const MARKETS_OPEN = MARKETS_OPEN_ON_BUILDERS_NETWORK;
 
 export const metadata: Metadata = {
   title: "Verify your project · Registrai",
@@ -19,15 +23,18 @@ export const metadata: Metadata = {
  */
 export default function VerifyPage() {
   return (
-    <PerennialShell>
+    <BuildersShell wallet>
       <article className="perennial-app-page">
         <header className="perennial-app-header">
           <div>
             <div className="perennial-app-status">
-              <i /> {networkStatusLine(PERENNIAL)}
+              <i /> {buildersStatusLine(BUILDERS)}
             </div>
             <h1>Verify your project</h1>
             <p>Claim it with your wallet. Nothing about you is public until you finish.</p>
+            <div className="vf-invite mt-3">
+              <Link href="/builders">See who&apos;s verified →</Link>
+            </div>
           </div>
         </header>
 
@@ -44,12 +51,27 @@ export default function VerifyPage() {
                 A signed statement that this wallet builds this project, published where only you can
                 publish it: your repo, or your domain.
               </li>
-              <li>
-                Once verified, your project appears on the atlas and season boards, and our milestone
-                operator bonds a feed that records your releases (open source) or contract deployments
-                (closed source).
-              </li>
-              <li>Seasons are a scoreboard. Nothing on them pays out.</li>
+              {MARKETS_OPEN ? (
+                <>
+                  <li>
+                    Once verified, your project appears on the atlas and season boards, and our milestone
+                    operator bonds a feed that records your releases (open source) or contract deployments
+                    (closed source).
+                  </li>
+                  <li>Seasons are a scoreboard. Nothing on them pays out.</li>
+                </>
+              ) : (
+                <>
+                  <li>
+                    Once verified, your project appears in the builders gallery with a soulbound Verified
+                    Builder Badge, numbered in the order builders are verified.
+                  </li>
+                  <li>
+                    Milestone tracking (your releases, or the contracts your deployers create) starts when
+                    markets open on {BUILDERS.label}.
+                  </li>
+                </>
+              )}
             </ul>
             <div className="pp-card-label">What it isn&apos;t</div>
             <ul>
@@ -58,8 +80,8 @@ export default function VerifyPage() {
                 return.
               </li>
               <li>
-                We don&apos;t open markets on you. The community may; a market&apos;s creator earns 30%
-                of its trading fees.
+                {MARKETS_OPEN ? "We don't open markets on you." : "When markets open, we won't open markets on you."}{" "}
+                The community may; a market&apos;s creator earns 30% of its trading fees.
               </li>
               <li>
                 Milestone markets are builder-triggered: you decide when to ship, so every milestone
@@ -70,11 +92,11 @@ export default function VerifyPage() {
             <p>
               Your wallet address, the repo or domain, the deployer addresses you list, and the country
               you declare. Country is self-declared and never decides a reward. Removing the proof file
-              takes you off the atlas at the next sync.
+              marks you lapsed at the next sync{MARKETS_OPEN ? " and takes you off the atlas" : ""}.
             </p>
           </aside>
         </div>
       </article>
-    </PerennialShell>
+    </BuildersShell>
   );
 }

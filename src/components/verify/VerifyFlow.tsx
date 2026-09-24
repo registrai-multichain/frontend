@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import {
   createPublicClient,
@@ -17,7 +19,8 @@ import { transportFor, txUrl } from "@/lib/chains";
 import { shortAddr } from "@/lib/format";
 import { explainMinedRevert, humanizeError } from "@/lib/humanize-error";
 import { PERENNIAL_WRITES_ENABLED } from "@/lib/perennial";
-import { PERENNIAL } from "@/lib/perennial-network";
+import { BUILDERS, MARKETS_OPEN_ON_BUILDERS_NETWORK } from "@/lib/builders-network";
+import { parseSourceParam } from "@/lib/builders-gallery";
 import {
   canonicalClaimMessage,
   issuedToday,
@@ -32,9 +35,14 @@ import {
 } from "@/lib/verified-builders";
 import { verifiedBuilderAbi } from "@/lib/verified-builders-chain";
 
-const CHAIN = PERENNIAL.chain;
-const REG = PERENNIAL.contracts.BuilderRegistry;
-const HUMAN = { testnet: CHAIN.testnet, networkName: PERENNIAL.label };
+// Claims register on the BUILDERS network (Arc mainnet in phase 1), which may
+// have no markets yet; nothing here reads or needs a market contract.
+const CHAIN = BUILDERS.chain;
+const REG = BUILDERS.contracts.BuilderRegistry;
+const LABEL = BUILDERS.label;
+const HUMAN = { testnet: CHAIN.testnet, networkName: LABEL };
+/** Milestone feeds and markets exist on the builders network. */
+const MARKETS_OPEN = MARKETS_OPEN_ON_BUILDERS_NETWORK;
 
 type Path = "repo" | "domain";
 type Check =
@@ -83,6 +91,20 @@ function CopyButton({ text, label = "copy" }: { text: string; label?: string }) 
   );
 }
 
+/**
+ * `?source=` (the gallery's "Claim this project" link) prefills the project.
+ * useSearchParams needs a Suspense boundary in a static export, so it lives in
+ * this leaf and reports up.
+ */
+function SourceParam({ onSource }: { onSource: (p: { source: string; path: Path }) => void }) {
+  const raw = useSearchParams()?.get("source");
+  useEffect(() => {
+    const p = parseSourceParam(raw);
+    if (p) onSource(p);
+  }, [raw, onSource]);
+  return null;
+}
+
 function Step({ n, title, state, children }: { n: number; title: string; state: "done" | "active" | "todo"; children?: ReactNode }) {
   return (
     <li className="vf-step" data-state={state}>
@@ -105,6 +127,18 @@ export function VerifyFlow() {
   const [sourceInput, setSourceInput] = useState("");
   const [countryInput, setCountryInput] = useState("");
   const [deployersInput, setDeployersInput] = useState("");
+
+  // Prefill once from ?source=, never over something the builder typed or signed.
+  const prefilled = useRef(false);
+  const touched = useRef(false);
+  const [invitedSource, setInvitedSource] = useState<string | null>(null);
+  const onSourceParam = useCallback((p: { source: string; path: Path }) => {
+    if (prefilled.current || touched.current) return;
+    prefilled.current = true;
+    setInvitedSource(p.source);
+    setPath(p.path);
+    setSourceInput(sourceLabel(p.source));
+  }, []);
 
   // Frozen at the builder's signature: every later signature covers these bytes.
   const [claim, setClaim] = useState<Claim | null>(null);
@@ -242,7 +276,7 @@ export function VerifyFlow() {
   );
   const profileURI = claim ? profileURIFor(claim.source) : "";
   const { data: reg, error: regError, mutate: refreshReg } = useSWR(
-    complete && PERENNIAL.deployed && REG && builder ? ["verify-registration", CHAIN.id, builder, profileURI] : null,
+    complete && REG && builder ? ["verify-registration", CHAIN.id, builder, profileURI] : null,
     async () => {
       const id = Number(await publicClient.readContract({ address: REG!, abi: verifiedBuilderAbi, functionName: "builderIdOf", args: [builder!] }));
       const current = id
@@ -296,7 +330,7 @@ export function VerifyFlow() {
 
   const gasless = (
     <div className="vf-gasless">
-      <strong>No USDC for {PERENNIAL.label} gas? Send us your source.</strong>
+      <strong>No USDC for {LABEL} gas? Send us your source.</strong>
       <p>
         Reply to whoever sent you this link with the line below. We register it for you from the Registrai
         multisig after checking your proof. Your wallet stays the owner; nothing is signed on your behalf.
@@ -311,6 +345,10 @@ export function VerifyFlow() {
   );
 
   return (
+    <>
+    <Suspense fallback={null}>
+      <SourceParam onSource={onSourceParam} />
+    </Suspense>
     <ol className="vf-steps">
       <Step n={1} title="Connect your builder wallet" state={s1}>
         {address ? (
@@ -320,7 +358,10 @@ export function VerifyFlow() {
           </p>
         ) : (
           <>
-            <p className="vf-note">The wallet that will own the project on {PERENNIAL.label}. Signing is free; it sends nothing.</p>
+            {invitedSource && (
+              <p className="vf-hint">Claiming {sourceLabel(invitedSource)}. Connect to continue; it&apos;s prefilled below.</p>
+            )}
+            <p className="vf-note">The wallet that will own the project on {LABEL}. Signing is free; it sends nothing.</p>
             <button type="button" className="vf-primary" onClick={connect} disabled={isConnecting}>
               {isConnecting ? "connecting…" : "connect wallet"}
             </button>
@@ -339,10 +380,18 @@ export function VerifyFlow() {
               aria-checked={path === p}
               data-active={path === p ? "true" : undefined}
               disabled={Boolean(claim)}
-              onClick={() => setPath(p)}
+              onClick={() => {
+                touched.current = true;
+                setPath(p);
+              }}
             >
               <b>{p === "repo" ? "Open source" : "Closed source"}</b>
-              <span>{p === "repo" ? "a file in your GitHub repo; releases and tags count" : "a file on your domain; contracts your deployers create count"}</span>
+              <span>
+                {p === "repo" ? "a file in your GitHub repo" : "a file on your domain"}
+                {MARKETS_OPEN
+                  ? p === "repo" ? "; releases and tags count" : "; contracts your deployers create count"
+                  : p === "repo" ? "; releases and tags count once milestone tracking starts" : "; contracts your deployers create count once milestone tracking starts"}
+              </span>
             </button>
           ))}
         </div>
@@ -351,7 +400,10 @@ export function VerifyFlow() {
           <span>{path === "repo" ? "GitHub repository" : "Domain"}</span>
           <input
             value={claim ? sourceLabel(claim.source) : sourceInput}
-            onChange={(e) => setSourceInput(e.target.value)}
+            onChange={(e) => {
+              touched.current = true;
+              setSourceInput(e.target.value);
+            }}
             placeholder={path === "repo" ? "github.com/you/project" : "app.yourproject.xyz"}
             disabled={Boolean(claim)}
             spellCheck={false}
@@ -400,7 +452,7 @@ export function VerifyFlow() {
             <p className={deployers.bad.length && !claim ? "vf-error" : "vf-hint"}>
               {deployers.bad.length && !claim
                 ? `Not addresses: ${deployers.bad.join(", ")}`
-                : "Wallets that deploy your contracts directly. Each one signs this claim; your milestone is the number of contracts they create (factory / CREATE2 deploys don't count yet). Leave empty to verify the domain only."}
+                : `Wallets that deploy your contracts directly. Each one signs this claim; your milestone is the number of contracts they create (factory / CREATE2 deploys don't count yet)${MARKETS_OPEN ? "" : `, counted once milestone tracking starts with the markets on ${LABEL}`}. Leave empty to verify the domain only.`}
             </p>
           </>
         )}
@@ -496,14 +548,14 @@ export function VerifyFlow() {
         )}
       </Step>
 
-      <Step n={5} title={`Register on ${PERENNIAL.label}`} state={s5}>
-        {!PERENNIAL.deployed || !REG ? (
+      <Step n={5} title={`Register on ${LABEL}`} state={s5}>
+        {!REG ? (
           <>
-            <p className="vf-note">Registration opens here once Perennial is live on {PERENNIAL.label}. Keep your proof file published.</p>
+            <p className="vf-note">Registration opens here once the builder registry is live on {LABEL}. Keep your proof file published.</p>
             {gasless}
           </>
         ) : regError ? (
-          <p className="vf-error">Couldn&apos;t read {PERENNIAL.label}: {humanizeError(regError, HUMAN)}</p>
+          <p className="vf-error">Couldn&apos;t read {LABEL}: {humanizeError(regError, HUMAN)}</p>
         ) : !reg ? (
           <p className="vf-note">Reading your registration…</p>
         ) : alreadyDone ? (
@@ -511,11 +563,19 @@ export function VerifyFlow() {
             <p className="vf-ok">
               Registered as builder #{reg.id} with {claim?.source}.
             </p>
-            <p className="vf-note">
-              Next, the Registrai multisig assigns our milestone operator as your caretaker in its next onboarding batch. From
-              then on you show as verified on the atlas and season boards, and your milestone feed is bonded. Markets on it are
-              opened by the community, not by us.
-            </p>
+            {MARKETS_OPEN ? (
+              <p className="vf-note">
+                Next, the Registrai multisig assigns our milestone operator as your caretaker in its next onboarding batch. From
+                then on you show as verified on the atlas and season boards, and your milestone feed is bonded. Markets on it are
+                opened by the community, not by us.
+              </p>
+            ) : (
+              <p className="vf-note">
+                You now show as nominated in the builders gallery. Next, the Registrai multisig onboards you in its next batch
+                and issues your Verified Builder Badge. Milestone tracking starts when markets open on {LABEL}.
+              </p>
+            )}
+            <Link className="vf-link" href={`/builders?builder=${reg.id}`}>see your card in the gallery →</Link>
             {txState.hash && <a className="vf-link" href={txUrl(CHAIN, txState.hash)} target="_blank" rel="noreferrer">view transaction ↗</a>}
           </>
         ) : (
@@ -530,7 +590,7 @@ export function VerifyFlow() {
             ) : !isBuilderWallet ? (
               <p className="vf-error">Switch your wallet back to the builder wallet {builder ? shortAddr(builder) : ""} to register.</p>
             ) : !onChain ? (
-              <button type="button" className="vf-primary" onClick={() => switchChain(CHAIN.id)}>switch to {PERENNIAL.label}</button>
+              <button type="button" className="vf-primary" onClick={() => switchChain(CHAIN.id)}>switch to {LABEL}</button>
             ) : (
               <button type="button" className="vf-primary" onClick={register} disabled={txState.pending || !PERENNIAL_WRITES_ENABLED}>
                 {txState.pending ? "registering…" : reg.id ? "update profile link" : "register"}
@@ -548,5 +608,6 @@ export function VerifyFlow() {
         )}
       </Step>
     </ol>
+    </>
   );
 }

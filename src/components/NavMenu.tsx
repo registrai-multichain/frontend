@@ -25,6 +25,7 @@ const SECTIONS: MenuSection[] = [
       // product now, and the rails below them are what the product runs on.
       { label: "perennial · fund builders", href: "/perennial" },
       { label: "common markets", href: COMMON_MARKETS_HREF },
+      { label: "verified builders", href: "/builders" },
       { label: "BTC · 5 min curve", href: "/markets/btc-5m" },
       { label: "bridge USDC to Arc ↗", href: "https://bridge.registrai.cc", external: true },
       { label: "nanopayments", href: "/nanopay" },
