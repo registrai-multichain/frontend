@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Verified builders · Registrai",
     description: DESCRIPTION,
-    url: "https://registrai.cc/builders/",
+    url: "https://builder.registrai.cc/builders/",
     images: [{ url: "/social/registrai-landing-regi.png", width: 1200, height: 630 }],
   },
   twitter: {
@@ -39,7 +39,7 @@ export default function BuildersPage() {
     builderRegistry: BUILDERS.contracts.BuilderRegistry,
   });
   return (
-    <BuildersShell>
+    <BuildersShell wallet>
       <article className="perennial-app-page">
         <BuildersGallery snapshot={snapshot} nominees={parseNominees(nominees)} />
       </article>

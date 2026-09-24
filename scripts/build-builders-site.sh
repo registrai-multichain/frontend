@@ -12,6 +12,8 @@ for x in 404 404.html _headers _next _not-found apple-icon.png icon.png badge br
          mark.png mark-ring.svg mark-ring-512.png wordmark.png wordmark-dark.png; do
   [ -e "out/$x" ] && cp -R "out/$x" "$D/"
 done
+# the gallery's social preview image
+mkdir -p "$D/social" && cp out/social/registrai-landing-regi.png "$D/social/"
 {
   echo "/            /builders/  302"
   echo "/index.html  /builders/  302"

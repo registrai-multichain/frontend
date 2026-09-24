@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createPublicClient, type PublicClient } from "viem";
 import useSWR from "swr";
 import { BUILDERS, buildersStatusLine } from "@/lib/builders-network";
@@ -32,11 +32,16 @@ import {
   type LiveProof,
   type Nominee,
 } from "@/lib/builders-gallery";
-import { badgeImageBase, badgeImageUrl, badgeTokenUrl, parseBuilderParam, serialLabel } from "@/lib/verified-builder-badge";
+import { badgeImageBase, parseBuilderParam } from "@/lib/verified-builder-badge";
+import { BuilderBadgeSection } from "@/components/BuilderBadgeSection";
+import type { BadgeNet } from "@/components/BuilderBadgeCard";
+import { useWallet } from "@/components/WalletProvider";
 import { sourceFromProfileURI, sourceLabel } from "@/lib/verified-builders";
 
 const REG = BUILDERS.contracts.BuilderRegistry;
 const BADGE = BUILDERS.contracts.VerifiedBuilderBadge;
+/** The builders network's badge, for the detail view. */
+const BADGE_NET: BadgeNet = { chain: BUILDERS.chain, badge: BADGE, network: BUILDERS.badgeNetwork };
 
 const regionName = (() => {
   try {
@@ -96,14 +101,16 @@ function useLiveBuilders(snapshot: GallerySnapshot | null): GalleryBuilder[] {
   return data ?? base;
 }
 
-/** `?builder=<id>` (the badge's on-chain external_url). Suspense leaf for the static export. */
-function BuilderParam({ onBuilder }: { onBuilder: (id: number) => void }) {
+/** `?builder=<id>` (the badge's on-chain external_url): the open detail view. Suspense leaf for the static export. */
+function BuilderParam({ onBuilder }: { onBuilder: (id: number | null) => void }) {
   const id = parseBuilderParam(useSearchParams()?.get("builder"));
   useEffect(() => {
-    if (id) onBuilder(id);
+    onBuilder(id ?? null);
   }, [id, onBuilder]);
   return null;
 }
+
+const detailHref = (id: number) => `/builders/?builder=${id}`;
 
 function initialOf(name: string): string {
   return (/[a-z0-9]/i.exec(name)?.[0] ?? "R").toUpperCase();
@@ -126,36 +133,14 @@ function Avatar({ source, name }: { source: string | null; name: string }) {
   );
 }
 
-function BadgeThumb({ b }: { b: GalleryBuilder }) {
-  const [broken, setBroken] = useState(false);
-  if (!b.badge || !BADGE || !BUILDERS.badgeNetwork) return null;
-  const label = serialLabel(b.badge.serial);
-  return (
-    <a
-      className="bld-badge"
-      href={badgeTokenUrl(BUILDERS.explorer.url, BADGE, b.badge.serial)}
-      target="_blank"
-      rel="noreferrer"
-      title={`Registrai Verified Builder ${label} on ${BUILDERS.explorer.name}`}
-    >
-      {!broken && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={badgeImageUrl(`/badge/${BUILDERS.badgeNetwork}/`, b.badge.serial, b.badge.lapsed)}
-          alt={`Badge ${label}${b.badge.lapsed ? ", proof lapsed" : ""}`}
-          width={44}
-          height={44}
-          loading="lazy"
-          decoding="async"
-          onError={() => setBroken(true)}
-        />
-      )}
-      <span>
-        <b className="tnum">{label}</b>
-        <small>{b.badge.lapsed ? "badge lapsed" : `soulbound · ${BUILDERS.explorer.name} ↗`}</small>
-      </span>
-    </a>
-  );
+/** What a card and the detail view both say about a builder's state. */
+function StatusNote({ e }: { e: GalleryEntry }) {
+  const b = e.builder;
+  if (e.kind === "nominated")
+    return <p className="bld-note">{b?.proofUnchecked ? "Nominated · proof check at next sync" : "Claimed and registered · awaiting onboarding"}</p>;
+  if (e.kind === "lapsed") return <p className="bld-note">Proof file missing or no longer valid</p>;
+  if (e.kind === "invited") return <p className="bld-note">Invited · not claimed yet</p>;
+  return null;
 }
 
 function BuilderCard({ e, highlighted }: { e: GalleryEntry; highlighted: boolean }) {
@@ -172,7 +157,15 @@ function BuilderCard({ e, highlighted }: { e: GalleryEntry; highlighted: boolean
       <div className="bld-card-top">
         <Avatar source={e.source} name={e.name} />
         <div className="bld-card-title">
-          <h2 title={e.name}>{e.name}</h2>
+          <h2 title={e.name}>
+            {b ? (
+              <Link href={detailHref(b.id)} scroll={false} className="bld-card-open">
+                {e.name}
+              </Link>
+            ) : (
+              e.name
+            )}
+          </h2>
           {e.source && (
             <a href={sourceHref(e.source)} target="_blank" rel="noreferrer">
               {sourceLabel(e.source)} ↗
@@ -207,15 +200,7 @@ function BuilderCard({ e, highlighted }: { e: GalleryEntry; highlighted: boolean
         </dl>
       )}
 
-      {b && <BadgeThumb b={b} />}
-
-      {e.kind === "nominated" && (
-        <p className="bld-note">
-          {b?.proofUnchecked ? "Nominated · proof check at next sync" : "Claimed and registered · awaiting onboarding"}
-        </p>
-      )}
-      {e.kind === "lapsed" && <p className="bld-note">Proof file missing or no longer valid</p>}
-      {e.kind === "invited" && <p className="bld-note">Invited · not claimed yet</p>}
+      <StatusNote e={e} />
 
       <div className="bld-card-foot">
         {proof && (
@@ -228,8 +213,122 @@ function BuilderCard({ e, highlighted }: { e: GalleryEntry; highlighted: boolean
             Claim this project →
           </Link>
         )}
+        {b && (
+          <Link className="bld-claim" href={detailHref(b.id)} scroll={false}>
+            details →
+          </Link>
+        )}
       </div>
     </li>
+  );
+}
+
+const shortAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+const isoDate = (s: number) => (s > 0 ? new Date(s * 1000).toISOString().slice(0, 10) : null);
+
+/**
+ * One builder, opened from its card or from `?builder=<id>` (where the badge's
+ * explorer link lands): the facts, the proof, and — for verified builders —
+ * the badge itself, plus the X share card when the connected wallet is theirs.
+ */
+function BuilderDetail({ e, onClose }: { e: GalleryEntry; onClose: () => void }) {
+  const b = e.builder!;
+  const { address } = useWallet();
+  const proof = proofHref(b.source);
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => ev.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+  const registered = isoDate(b.createdAt);
+  return (
+    <div className="bld-detail-backdrop" onClick={onClose}>
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${e.name}: builder #${b.id}`}
+        className="bld-detail"
+        data-kind={e.kind}
+        data-tone={toneOf(e.kind)}
+        onClick={(ev) => ev.stopPropagation()}
+      >
+        <button type="button" className="bld-detail-close" onClick={onClose} aria-label="Close">
+          ×
+        </button>
+        <div className="bld-card-top">
+          <Avatar source={e.source} name={e.name} />
+          <div className="bld-card-title">
+            <h2 title={e.name}>{e.name}</h2>
+            {e.source && (
+              <a href={sourceHref(e.source)} target="_blank" rel="noreferrer">
+                {sourceLabel(e.source)} ↗
+              </a>
+            )}
+          </div>
+          <span className="bld-chip" data-kind={e.kind}>{labelOf(e.kind)}</span>
+        </div>
+
+        <dl className="bld-facts">
+          <div>
+            <dt>builder</dt>
+            <dd className="tnum">#{b.id}</dd>
+          </div>
+          {b.country && (e.kind === "verified" || e.kind === "nominated") && (
+            <div>
+              <dt>country</dt>
+              <dd>{regionName(b.country)}</dd>
+            </div>
+          )}
+          {registered && (
+            <div>
+              <dt>registered</dt>
+              <dd className="tnum">{registered}</dd>
+            </div>
+          )}
+          <div>
+            <dt>wallet</dt>
+            <dd>
+              <a href={`${BUILDERS.explorer.url}/address/${b.owner}`} target="_blank" rel="noreferrer">{shortAddr(b.owner)} ↗</a>
+            </dd>
+          </div>
+          {e.x && (
+            <div>
+              <dt>X</dt>
+              <dd>
+                <a href={xHref(e.x)} target="_blank" rel="noreferrer">{e.x}</a>
+              </dd>
+            </div>
+          )}
+        </dl>
+
+        <StatusNote e={e} />
+
+        {BADGE && (
+          <BuilderBadgeSection
+            builderId={b.id}
+            owner={b.owner}
+            name={e.name}
+            source={b.source}
+            snapshot={b.badge}
+            viewer={address}
+            net={BADGE_NET}
+          />
+        )}
+
+        {proof && (
+          <div className="bld-card-foot">
+            <a href={proof} target="_blank" rel="noreferrer">
+              proof ↗
+            </a>
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -242,23 +341,14 @@ export function BuildersGallery({ snapshot, nominees }: { snapshot: GallerySnaps
   const [query, setQuery] = useState("");
   const shown = useMemo(() => filterGallery(entries, filter, query), [entries, filter, query]);
 
-  // ?builder=<id>: highlight and scroll to the card, clearing filters that hide it.
+  // ?builder=<id>: the detail view of that builder (the card stays highlighted underneath).
+  const router = useRouter();
   const [target, setTarget] = useState<number | null>(null);
-  const scrolledTo = useRef<number | null>(null);
-  useEffect(() => {
-    if (!target || scrolledTo.current === target) return;
-    if (!entries.some((e) => e.builder?.id === target)) return;
-    if (!shown.some((e) => e.builder?.id === target)) {
-      setFilter("all");
-      setQuery("");
-      return;
-    }
-    const el = document.getElementById(builderAnchor(target));
-    if (!el) return;
-    scrolledTo.current = target;
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
-  }, [target, entries, shown]);
+  const openEntry = useMemo(() => (target ? entries.find((e) => e.builder?.id === target) ?? null : null), [target, entries]);
+  const closeDetail = useCallback(() => {
+    setTarget(null);
+    router.replace("/builders/", { scroll: false });
+  }, [router]);
 
   const chipCount = (f: GalleryFilter) => (f === "all" ? counts.all : counts[f]);
 
@@ -276,7 +366,7 @@ export function BuildersGallery({ snapshot, nominees }: { snapshot: GallerySnaps
           <h1>Verified builders</h1>
           <p className="bld-deck">
             Projects building on Arc, each claimed by its own wallet with a signed proof in its repo or on its domain,
-            and registered on-chain. Verified builders hold a soulbound badge, numbered in the order they were verified.
+            and registered on-chain.
           </p>
           <div className="vf-invite mt-3">
             Building on Arc? <Link href="/verify">Claim your project →</Link>
@@ -353,6 +443,8 @@ export function BuildersGallery({ snapshot, nominees }: { snapshot: GallerySnaps
           )}
         </>
       )}
+
+      {openEntry && <BuilderDetail e={openEntry} onClose={closeDetail} />}
 
       <p className="bld-legend">
         In colour: claimed (verified, or nominated and awaiting the multisig&apos;s onboarding batch). In grayscale:

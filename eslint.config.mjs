@@ -16,5 +16,5 @@ export default defineConfig([
       "react-hooks/static-components": "off",
     },
   },
-  globalIgnores([".next/**", "out/**", "node_modules/**", "next-env.d.ts"]),
+  globalIgnores([".next/**", "out/**", "dist-builders/**", "node_modules/**", "next-env.d.ts"]),
 ]);
