@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { keccak256, maxUint256, parseUnits, stringToHex, type Hex } from "viem";
+import { keccak256, maxUint256, parseAbi, parseUnits, stringToHex, type Hex } from "viem";
 import { useWallet } from "./WalletProvider";
 import { CONTRACTS, txUrl, addrUrl } from "@/lib/chain";
 import { registryAbi, usdcAbi, agentIdentityAbi } from "@/lib/abi";
 import { humanizeError } from "@/lib/humanize-error";
+import { APPROVED_DISPUTE_RESOLVER, validateResolver } from "@/lib/oracle-config";
 import {
   methodologyLocalKey,
   postFeedMethodology,
@@ -63,6 +64,10 @@ export function CreateAgentForm() {
     METHODOLOGY_TEMPLATE,
   );
   const [disputeHours, setDisputeHours] = useState("24");
+  // The feed's dispute resolver: an independent party, never this wallet.
+  const [resolverStr, setResolverStr] = useState<string>(APPROVED_DISPUTE_RESOLVER ?? "");
+  // Whether common markets (MarketsV4) accept this resolver; undefined = unknown on this network.
+  const [resolverApproved, setResolverApproved] = useState<boolean | undefined>();
 
   // Bond
   const [bondUsdcStr, setBondUsdcStr] = useState(String(MIN_BOND_USDC));
@@ -125,6 +130,23 @@ export function CreateAgentForm() {
       .catch(() => setUsdcBalance(0n));
   }, [address, publicClient, status]);
 
+  const resolverCheck = validateResolver(resolverStr, address);
+  const v4 = (CONTRACTS as { MarketsV4nano?: Hex }).MarketsV4nano;
+  useEffect(() => {
+    setResolverApproved(undefined);
+    if (!resolverCheck.ok || !v4) return;
+    publicClient
+      .readContract({
+        address: v4,
+        abi: parseAbi(["function approvedResolver(address) view returns (bool)"]),
+        functionName: "approvedResolver",
+        args: [resolverCheck.value],
+      })
+      .then((b) => setResolverApproved(b as boolean))
+      .catch(() => setResolverApproved(undefined)); // older contract: no allowlist to check
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolverStr, v4, publicClient]);
+
   const ruleValid = ruleChoice === "none" || !!ruleAddress;
   const canSubmit =
     address &&
@@ -132,6 +154,7 @@ export function CreateAgentForm() {
     bondWei > 0n &&
     usdcBalance >= bondWei &&
     ruleValid &&
+    resolverCheck.ok &&
     feedDescription.trim().length > 5 &&
     methodologyText.trim().length > 20 &&
     methodologyText.trim() !== METHODOLOGY_TEMPLATE.trim() &&
@@ -189,7 +212,8 @@ export function CreateAgentForm() {
           methodologyHash,
           bondWei,
           disputeWindowSec,
-          address,
+          // An independent resolver: markets refuse a feed that judges its own disputes.
+          (resolverCheck as { ok: true; value: Hex }).value,
         ],
         chain: walletClient.chain,
         account: walletClient.account!,
@@ -403,6 +427,35 @@ export function CreateAgentForm() {
               onChange={(e) => setDisputeHours(e.target.value)}
               className="w-full bg-bg border border-line px-3 py-2 text-[14px] tnum focus:outline-none focus:border-accent"
             />
+          </Field>
+
+          <Field
+            label="dispute resolver"
+            hint={
+              APPROVED_DISPUTE_RESOLVER
+                ? "Pre-filled with the independent resolver the markets approve. It rules on challenges to your answers. It can't be your own wallet."
+                : "The independent party that rules on challenges to your answers. It can't be your own wallet, and common markets only accept a resolver the governor has approved."
+            }
+          >
+            <input
+              type="text"
+              spellCheck={false}
+              placeholder="0x…"
+              value={resolverStr}
+              onChange={(e) => setResolverStr(e.target.value)}
+              className="w-full bg-bg border border-line px-3 py-2 text-[13px] font-mono focus:outline-none focus:border-accent"
+            />
+            <p className="mt-1 text-[12px]">
+              {!resolverCheck.ok ? (
+                <span className="text-down">{resolverStr ? resolverCheck.error : ""}</span>
+              ) : resolverApproved === true ? (
+                <span className="text-up">Approved for common markets — this agent can settle them and earn 20% of the resolution fee.</span>
+              ) : resolverApproved === false ? (
+                <span className="text-down">Not approved on common markets: the feed will register, but common markets will refuse it.</span>
+              ) : (
+                <span className="text-fg-dim">Approval can&apos;t be checked on this network.</span>
+              )}
+            </p>
           </Field>
         </div>
 

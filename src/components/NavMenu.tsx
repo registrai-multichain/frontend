@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { COMMON_MARKETS_HREF } from "@/lib/common-markets";
 
 interface Item {
   label: string;
@@ -23,7 +24,7 @@ const SECTIONS: MenuSection[] = [
       // The two market surfaces stay adjacent and at the top: they are the
       // product now, and the rails below them are what the product runs on.
       { label: "perennial · fund builders", href: "/perennial" },
-      { label: "common markets", href: "/markets" },
+      { label: "common markets", href: COMMON_MARKETS_HREF },
       { label: "BTC · 5 min curve", href: "/markets/btc-5m" },
       { label: "bridge USDC to Arc ↗", href: "https://bridge.registrai.cc", external: true },
       { label: "nanopayments", href: "/nanopay" },

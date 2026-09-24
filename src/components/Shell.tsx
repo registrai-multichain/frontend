@@ -3,6 +3,7 @@ import { WalletButton } from "./WalletButton";
 import { StatusBadge } from "./StatusBadge";
 import { NavMenu } from "./NavMenu";
 import { BrandLockup } from "./Brand";
+import { COMMON_MARKETS_HREF } from "@/lib/common-markets";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -43,7 +44,7 @@ function TopNav() {
             perennial
           </Link>
           <Link
-            href="/markets"
+            href={COMMON_MARKETS_HREF}
             className="hidden sm:inline hover:text-fg transition-colors"
           >
             common markets
