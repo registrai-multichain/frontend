@@ -10,7 +10,7 @@ import type { CityBuilder } from "@/lib/city";
  *   FOOTPRINT = market volume     — how much was bet about them
  *
  * The two are independent on purpose. A tall narrow tower is a quiet grinder
- * nobody bets on — exactly the builder the commons exists to fund. A wide flat
+ * nobody bets on yet (and so earns little builder income). A wide flat
  * slab is an attention magnet that has delivered nothing. Showing both at once
  * makes the decoupling visible instead of asserted.
  *

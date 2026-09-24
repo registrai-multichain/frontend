@@ -82,7 +82,7 @@ export default function VerifyPage() {
               </li>
               <li>
                 {MARKETS_OPEN ? "We don't open markets on you." : "When markets open, we won't open markets on you."}{" "}
-                The community may; a market&apos;s creator earns 30% of its trading fees.
+                The community may; a market&apos;s creator earns 30% of its trading fees, and 50% is your income, taxed progressively per epoch.
               </li>
               <li>
                 Milestone markets are builder-triggered: you decide when to ship, so every milestone

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Shell } from "@/components/Shell";
 import { REGI_CONTRACT, REGI_EXPLORER_URL } from "@/lib/regi";
 
@@ -100,15 +101,20 @@ export default function AboutPage() {
             <span className="text-up">30% to the market creator</span>,{" "}
             <span className="text-up">20% to the bonded agent</span> (held
             until the market settles), and{" "}
-            <span className="text-commons">50% to the builder commons</span>{" "}
+            <span className="text-commons">50% to the builder the market is about</span>{" "}
             (on common markets, that 50% goes to the Registrai treasury).
-            Builders are paid from the commons by verified progress; Registrai
-            takes 1% of each builder payout, which pays for the caretaker that
-            monitors milestones. If a market can&apos;t be settled, it voids:
-            every trader gets their net cost back (what they put in after fees,
-            minus what they took out), and the agent&apos;s held 20% goes to
-            whoever successfully challenged its answer (otherwise to the
-            commons). Core protocol accounting remains tied to
+            A builder&apos;s share is credited as its income per epoch; after
+            the epoch, the claim pays a progressive tax into the season pool,
+            1% of the rest to Registrai (which pays for the caretaker that
+            monitors milestones), and the net to the builder. The season pool
+            rewards building progress that traders confirmed. If a market
+            can&apos;t be settled, it voids: every trader gets their net cost
+            back (what they put in after fees, minus what they took out), and
+            the agent&apos;s held 20% goes to whoever successfully challenged
+            its answer (otherwise to the season pool on builder markets, the
+            treasury on common markets). See the{" "}
+            <Link href="/perennial/economy" className="underline decoration-fg-dim underline-offset-4 hover:text-accent">builder economy</Link>.
+            Core protocol accounting remains tied to
             real USDC activity, not to the price of $REGI.
           </p>
         </Prose>

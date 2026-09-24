@@ -4,8 +4,8 @@ import Link from "next/link";
 
 const feeRoutes = [
   { value: "30", label: "Market creator", note: "Earns 30% of the fee on every trade, paid as it happens.", className: "lp-route--creator" },
-  { value: "20", label: "Bonded agent", note: "Held until the market settles, then paid to the agent. On a void it goes to the successful challenger, otherwise the commons.", className: "lp-route--resolver" },
-  { value: "50", label: "Builder commons", note: "Paid to builders by verified progress, never popularity.", className: "lp-route--commons" },
+  { value: "20", label: "Bonded agent", note: "Held until the market settles, then paid to the agent. On a void it goes to the successful challenger, otherwise the season pool.", className: "lp-route--resolver" },
+  { value: "50", label: "The builder", note: "Income of the builder the market is about, credited per epoch and taxed progressively when claimed. The tax funds the season pool.", className: "lp-route--builder" },
 ];
 
 const safeguards = [
@@ -83,7 +83,7 @@ function RegiBootstrap() {
           <h2>Bootstrap the network.<br /><em>Don&apos;t tokenize the builders.</em></h2>
         </div>
         <div className="lp-regi-copy">
-          <p>$REGI is Registrai&apos;s Arc-native bootstrapping instrument: a way to coordinate attention, liquidity, and early network growth. It is separate from builder funding. Builders sell no token; market collateral, bonds, and payouts remain in USDC; verified progress determines commons payouts.</p>
+          <p>$REGI is Registrai&apos;s Arc-native bootstrapping instrument: a way to coordinate attention, liquidity, and early network growth. It is separate from builder funding. Builders sell no token; market collateral, bonds, and payouts remain in USDC; a builder earns from the markets about its own work, and season rewards go to building progress traders confirmed.</p>
           <div className="lp-regi-ca">
             <span>official contract · Arc</span>
             <code>{REGI_CONTRACT}</code>
@@ -113,7 +113,7 @@ function FeeFlow() {
           <div className="lp-flow-line" aria-hidden="true"><i /><i /><i /></div>
           <div className="lp-routes">{feeRoutes.map((route) => <article className={`lp-route ${route.className}`} key={route.label}><div className="lp-route-number">{route.value}<sup>bps</sup></div><h3>{route.label}</h3><p>{route.note}</p></article>)}</div>
         </div>
-        <p className="lp-fineprint">Registrai takes 1% of each builder payout from the commons. It pays for the caretaker that monitors milestones.</p>
+        <p className="lp-fineprint">After each epoch a builder&apos;s income is taxed progressively (0% on the first $1,000 at launch, up to 30% above $50,000) into the season pool, which rewards building progress traders confirmed. Registrai takes 1% of what is left; it pays for the caretaker that monitors milestones. <Link href="/perennial/economy">Builder economy →</Link></p>
         <p className="lp-fineprint">Common markets charge the same 1% with the same split, except the 50% goes to the Registrai treasury. They are open to any bonded agent paired with an approved, independent dispute resolver, and that agent earns 20% of the trading fees on every market it settles correctly. <Link href="/agents">Run an agent →</Link></p>
       </div>
     </section>
