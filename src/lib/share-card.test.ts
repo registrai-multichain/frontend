@@ -4,14 +4,16 @@ import {
   CARD_LAYOUT,
   CARD_W,
   cardFileName,
+  coverCrop,
+  defaultPictureUrl,
   drawShareCard,
-  fitNameSize,
-  nameTop,
-  baselineFor,
+  fitSize,
+  frameOutline,
+  initialOf,
   projectName,
   shareText,
   subLine,
-  trackedStarts,
+  tagText,
   xIntentUrl,
   type CardContext,
 } from "./share-card";
@@ -31,6 +33,17 @@ describe("text", () => {
     expect(subLine("github:acme/tool", 3, 0)).toBe("GITHUB · BUILDER #3 · VERIFIED");
   });
 
+  test("serial tag, picture default, initial", () => {
+    expect(tagText(7)).toBe("#007");
+    expect(tagText(1234)).toBe("#1234");
+    expect(defaultPictureUrl("github:acme/tool")).toBe("https://avatars.githubusercontent.com/acme?size=400");
+    expect(defaultPictureUrl("domain:acme.xyz")).toBeNull();
+    expect(defaultPictureUrl(null)).toBeNull();
+    expect(initialOf("github:acme/tool", 3)).toBe("A");
+    expect(initialOf("domain:9lives.io", 3)).toBe("9");
+    expect(initialOf(null, 3)).toBe("B");
+  });
+
   test("post text and X intent", () => {
     expect(shareText(7, "github:acme/tool", 3)).toBe("I'm Registrai Verified Builder No. 007 — acme/tool on Arc.");
     const u = new URL(xIntentUrl({ serial: 7, source: "github:acme/tool", builderId: 3 }));
@@ -42,34 +55,34 @@ describe("text", () => {
 });
 
 describe("geometry", () => {
-  test("name shrinks in 2px steps until it fits 700px, never below 28px", () => {
-    // monospace-ish: 0.6em per glyph
-    const w = (chars: number) => (size: number) => chars * size * 0.6;
-    expect(fitNameSize(w(10))).toBe(64); // 384px fits at once
-    expect(fitNameSize(w(20))).toBe(58); // 64: 768, 62: 744, 60: 720, 58: 696
-    expect(fitNameSize(w(200))).toBe(28); // never fits: floor
-    const seen: number[] = [];
-    fitNameSize((s) => (seen.push(s), s > 60 ? 999 : 0));
-    expect(seen).toEqual([64, 62, 60]);
+  test("text shrinks in steps until it fits, never below min", () => {
+    const w = (chars: number) => (size: number) => chars * size * 0.6; // 0.6em per glyph
+    const o = CARD_LAYOUT.name;
+    expect(fitSize(w(10), o)).toBe(56); // 336px fits at once
+    expect(fitSize(w(25), o)).toBe(52); // 56: 840, 54: 810, 52: 780
+    expect(fitSize(w(200), o)).toBe(28); // never fits: floor
+    expect(fitSize(w(4), CARD_LAYOUT.tag)).toBe(36); // "#007": 86px
+    expect(fitSize(w(5), CARD_LAYOUT.tag)).toBe(36); // "#1234": 108px fits at 36
+    expect(fitSize(w(6), CARD_LAYOUT.tag)).toBe(34); // "#12345": 130px at 36, 122px at 34
   });
 
-  test("baselines sit one ascender below the prototype's text tops", () => {
-    expect(baselineFor(318, 150)).toBe(471);
-    expect(baselineFor(352, 64)).toBe(417.3);
+  test("the name never runs under the serial tag", () => {
+    const { name, tag } = CARD_LAYOUT;
+    expect(name.left + name.maxWidth).toBeLessThan(tag.cx - tag.maxWidth / 2 - 20);
   });
 
-  test("a shrunk name stays centred on the 64px line", () => {
-    expect(nameTop(64)).toBe(352);
-    expect(nameTop(58)).toBe(355);
-    expect(nameTop(28)).toBe(370);
+  test("cover crop takes the centred square", () => {
+    expect(coverCrop(400, 400)).toEqual({ sx: 0, sy: 0, s: 400 });
+    expect(coverCrop(800, 400)).toEqual({ sx: 200, sy: 0, s: 400 });
+    expect(coverCrop(300, 500)).toEqual({ sx: 0, sy: 100, s: 300 });
   });
 
-  test("tracked run is centred, tracking only between glyphs", () => {
-    const xs = trackedStarts([18, 18, 18], 10, 706);
-    // total 18*3 + 10*2 = 74 -> starts at 706 - 37
-    expect(xs).toEqual([669, 697, 725]);
-    expect(xs[2] + 18 - 706).toBe(706 - xs[0]);
-    expect(trackedStarts([], 10, 706)).toEqual([]);
+  test("frame outline is the picture square with cut corners", () => {
+    const pts = frameOutline({ x: 0, y: 0, size: 100, cut: 10 });
+    expect(pts).toHaveLength(8);
+    expect(pts[0]).toEqual([10, 0]);
+    expect(pts[3]).toEqual([100, 90]);
+    expect(pts.every(([x, y]) => x >= 0 && x <= 100 && y >= 0 && y <= 100)).toBe(true);
   });
 });
 
@@ -77,7 +90,8 @@ describe("drawShareCard", () => {
   type Call = { op: string; args: unknown[]; font?: string; fill?: unknown; align?: string; baseline?: string };
   function fakeCtx(): { ctx: CardContext; calls: Call[] } {
     const calls: Call[] = [];
-    const state = { font: "", fillStyle: "" as unknown, strokeStyle: "" as unknown, lineWidth: 0, lineCap: "", textAlign: "", textBaseline: "" };
+    const state = { font: "", fillStyle: "" as unknown, textAlign: "", textBaseline: "" };
+    const rec = (op: string) => (...args: unknown[]) => calls.push({ op, args });
     const ctx = {
       ...state,
       measureText(text: string) {
@@ -87,46 +101,49 @@ describe("drawShareCard", () => {
       fillText(text: string, x: number, y: number) {
         calls.push({ op: "fillText", args: [text, x, y], font: this.font, fill: this.fillStyle, align: this.textAlign, baseline: this.textBaseline });
       },
-      drawImage: (...args: unknown[]) => calls.push({ op: "drawImage", args }),
-      beginPath: () => calls.push({ op: "beginPath", args: [] }),
-      moveTo: (...args: unknown[]) => calls.push({ op: "moveTo", args }),
-      lineTo: (...args: unknown[]) => calls.push({ op: "lineTo", args }),
-      stroke() { calls.push({ op: "stroke", args: [], fill: this.strokeStyle, font: String(this.lineWidth) }); },
+      drawImage: rec("drawImage"),
+      beginPath: rec("beginPath"),
+      moveTo: rec("moveTo"),
+      lineTo: rec("lineTo"),
+      closePath: rec("closePath"),
+      clip: rec("clip"),
+      save: rec("save"),
+      restore: rec("restore"),
     };
     return { ctx: ctx as unknown as CardContext, calls };
   }
+  const issuedAt = Date.UTC(2026, 8, 24) / 1000;
 
-  test("paints the approved layout", () => {
+  test("paints the approved layout with a picture", () => {
     const { ctx, calls } = fakeCtx();
     const bg = {} as CanvasImageSource;
-    const issuedAt = Date.UTC(2026, 8, 24) / 1000;
-    drawShareCard(ctx, bg, { serial: 7, builderId: 3, source: "github:registrai-multichain/oracle-primitives", issuedAt }, "MONO");
+    const img = {} as CanvasImageSource;
+    drawShareCard(ctx, bg, { serial: 7, builderId: 3, source: "github:registrai-multichain/oracle-primitives", issuedAt, picture: { image: img, width: 460, height: 400 } }, "MONO");
 
     expect(calls[0]).toEqual({ op: "drawImage", args: [bg, 0, 0, CARD_W, CARD_H] });
+    // picture: clipped, centre-cropped into the frame
+    const ops = calls.map((c) => c.op);
+    expect(ops.indexOf("save")).toBeLessThan(ops.indexOf("clip"));
+    expect(ops.indexOf("clip")).toBeLessThan(ops.lastIndexOf("drawImage"));
+    expect(ops.lastIndexOf("drawImage")).toBeLessThan(ops.indexOf("restore"));
+    const p = CARD_LAYOUT.picture;
+    expect(calls.filter((c) => c.op === "drawImage")[1].args).toEqual([img, 30, 0, 400, 400, p.x, p.y, p.size, p.size]);
+
     const texts = calls.filter((c) => c.op === "fillText");
     expect(texts.every((c) => c.baseline === "alphabetic")).toBe(true);
+    expect(texts[0]).toMatchObject({ args: ["#007", 1582, 446], font: "700 36px MONO", align: "center", fill: "rgb(217,240,67)" });
+    // 38 chars at 0.6em: 56px is 1277px; 34px (775px) is the first size within 780
+    expect(texts[1]).toMatchObject({ args: ["registrai-multichain/oracle-primitives", 676, 497], font: "700 34px MONO", align: "left", fill: "rgb(236,232,220)" });
+    expect(texts[2]).toMatchObject({ args: ["GITHUB · BUILDER #3 · VERIFIED 2026-09-24", 678, 533], font: "500 22px MONO", fill: "rgb(150,148,140)" });
+  });
 
-    // "NO." glyph by glyph, 30px Medium, 10px tracking, centred on 706
-    const no = texts.slice(0, 3);
-    expect(no.map((c) => c.args[0])).toEqual(["N", "O", "."]);
-    expect(no.every((c) => c.font === "500 30px MONO" && c.args[2] === 315.6 && c.fill === "rgb(150,148,140)")).toBe(true);
-    expect(no.map((c) => c.args[1])).toEqual([706 - 37, 706 - 37 + 28, 706 - 37 + 56]);
-
-    const serial = texts[3];
-    expect(serial).toMatchObject({ args: ["007", 706, 471], font: "700 150px MONO", align: "center", fill: "rgb(236,232,220)" });
-
-    expect(calls.find((c) => c.op === "moveTo")?.args).toEqual([640, 520]);
-    expect(calls.find((c) => c.op === "lineTo")?.args).toEqual([772, 520]);
-    expect(calls.find((c) => c.op === "stroke")).toMatchObject({ fill: "#d7ff56", font: "4" });
-
-    // 38 chars at 0.6em: 64px is 1459px wide; 30px (684px) is the first size that fits
-    const name = texts[4];
-    expect(name.args[0]).toBe("registrai-multichain/oracle-primitives");
-    expect(name.font).toBe("700 30px MONO");
-    expect(name.args.slice(1)).toEqual([1012, 399.6]);
-    expect(name.align).toBe("left");
-
-    expect(texts[5]).toMatchObject({ args: ["GITHUB · BUILDER #3 · VERIFIED 2026-09-24", 1014, 464.5], font: "500 24px MONO", fill: "rgb(150,148,140)" });
-    expect(CARD_LAYOUT.name.maxWidth).toBe(700);
+  test("without a picture the project initial fills the frame", () => {
+    const { ctx, calls } = fakeCtx();
+    drawShareCard(ctx, {} as CanvasImageSource, { serial: 12, builderId: 9, source: "domain:acme.xyz", issuedAt }, "MONO");
+    expect(calls.some((c) => c.op === "clip")).toBe(false);
+    const p = CARD_LAYOUT.picture;
+    const first = calls.find((c) => c.op === "fillText")!;
+    expect(first).toMatchObject({ font: "700 110px MONO", align: "center" });
+    expect(first.args.slice(0, 2)).toEqual(["A", p.x + p.size / 2]);
   });
 });

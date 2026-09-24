@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   CARD_H,
   CARD_LAYOUT,
   CARD_W,
   cardFileName,
   cardFont,
+  defaultPictureUrl,
   drawShareCard,
   projectName,
+  tagText,
   xIntentUrl,
+  type CardPicture,
   type ShareCardData,
 } from "@/lib/share-card";
 import { BADGE_NETWORK } from "@/components/BuilderBadgeCard";
@@ -24,10 +27,12 @@ function monoFamily(): string {
   return v ? `${v}, monospace` : `"JetBrains Mono", monospace`;
 }
 
-function loadImage(src: string): Promise<HTMLImageElement> {
+function loadImage(src: string, crossOrigin = false): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.decoding = "async";
+    // A remote picture must be CORS-clean or the canvas can no longer be exported.
+    if (crossOrigin) img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error(`could not load ${src}`));
     img.src = src;
@@ -39,27 +44,42 @@ function loadImage(src: string): Promise<HTMLImageElement> {
  * previewed at container width. X's intent cannot carry an image, so the
  * builder downloads the card and attaches it to the post.
  */
-export function ShareCard(d: ShareCardData) {
+/** The builder's picture: an uploaded file, else the GitHub owner's avatar, else none (initial). */
+async function loadPicture(upload: string | null, source: string | null): Promise<CardPicture | null> {
+  const url = upload ?? defaultPictureUrl(source);
+  if (!url) return null;
+  try {
+    const img = await loadImage(url, !upload);
+    return { image: img, width: img.naturalWidth, height: img.naturalHeight };
+  } catch {
+    return null;
+  }
+}
+
+export function ShareCard(d: Omit<ShareCardData, "picture">) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [state, setState] = useState<"drawing" | "ready" | "error">("drawing");
+  const [upload, setUpload] = useState<string | null>(null);
   const { serial, builderId, source, issuedAt } = d;
 
   useEffect(() => {
     let live = true;
     (async () => {
+      setState("drawing");
       const family = monoFamily();
       const name = projectName(source, builderId);
+      const L = CARD_LAYOUT;
       // Every weight/size the card uses, so nothing is drawn in the fallback face.
       await Promise.all([
-        document.fonts.load(cardFont(CARD_LAYOUT.no.weight, CARD_LAYOUT.no.size, family), "NO."),
-        document.fonts.load(cardFont(CARD_LAYOUT.serial.weight, CARD_LAYOUT.serial.size, family), "0123456789"),
-        document.fonts.load(cardFont(CARD_LAYOUT.name.weight, CARD_LAYOUT.name.start, family), name),
-        document.fonts.load(cardFont(CARD_LAYOUT.sub.weight, CARD_LAYOUT.sub.size, family), "GITHUB DOMAIN BUILDER VERIFIED #·0123456789-"),
+        document.fonts.load(cardFont(L.tag.weight, L.tag.start, family), tagText(serial)),
+        document.fonts.load(cardFont(L.initial.weight, L.initial.size, family), name),
+        document.fonts.load(cardFont(L.name.weight, L.name.start, family), name),
+        document.fonts.load(cardFont(L.sub.weight, L.sub.size, family), "GITHUB DOMAIN BUILDER VERIFIED #·0123456789-"),
       ]);
-      const bg = await loadImage(`/badge/${BADGE_NETWORK}/card.jpg`);
+      const [bg, picture] = await Promise.all([loadImage(`/badge/${BADGE_NETWORK}/card.jpg`), loadPicture(upload, source)]);
       const ctx = canvas.current?.getContext("2d");
       if (!live || !ctx) return;
-      drawShareCard(ctx, bg, { serial, builderId, source, issuedAt }, family);
+      drawShareCard(ctx, bg, { serial, builderId, source, issuedAt, picture }, family);
       setState("ready");
     })().catch(() => {
       if (live) setState("error");
@@ -67,7 +87,17 @@ export function ShareCard(d: ShareCardData) {
     return () => {
       live = false;
     };
-  }, [serial, builderId, source, issuedAt]);
+  }, [serial, builderId, source, issuedAt, upload]);
+
+  useEffect(() => () => {
+    if (upload) URL.revokeObjectURL(upload);
+  }, [upload]);
+
+  function pick(e: ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (f && f.type.startsWith("image/")) setUpload(URL.createObjectURL(f));
+    e.target.value = "";
+  }
 
   function download() {
     canvas.current?.toBlob((blob) => {
@@ -91,8 +121,19 @@ export function ShareCard(d: ShareCardData) {
       <div className="share-card-actions">
         <button type="button" className="vf-primary" onClick={download} disabled={state !== "ready"}>Download card</button>
         <a className="vf-mini" href={xIntentUrl({ serial, source, builderId })} target="_blank" rel="noreferrer">Post on X ↗</a>
+        <label className="vf-mini share-card-upload">
+          {upload ? "Change picture" : "Use another picture"}
+          <input type="file" accept="image/*" onChange={pick} hidden />
+        </label>
+        {upload && (
+          <button type="button" className="vf-mini" onClick={() => setUpload(null)}>
+            {defaultPictureUrl(source) ? "Use GitHub avatar" : "Remove picture"}
+          </button>
+        )}
       </div>
-      <p className="vf-hint">X can&apos;t take the image from a link: download the card, then attach it to your post.</p>
+      <p className="vf-hint">
+        Your picture stays in your browser. X can&apos;t take the image from a link: download the card, then attach it to your post.
+      </p>
     </div>
   );
 }

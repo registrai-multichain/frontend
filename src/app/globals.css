@@ -1622,6 +1622,7 @@ a.vbadge:hover { background: rgba(215,255,86,.1); }
 .share-card-frame[data-state="drawing"] canvas, .share-card-frame[data-state="error"] canvas { visibility: hidden; }
 .share-card-frame > span { position: absolute; inset: 0; display: grid; place-items: center; color: var(--fg-dim); font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .08em; }
 .share-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.share-card-upload { cursor: pointer; }
 .share-card-actions .vf-mini { padding: 11px 14px; }
 
 @media (max-width: 960px) {

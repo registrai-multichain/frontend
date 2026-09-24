@@ -55,13 +55,16 @@ SIZE = 1024           # published size
 QUALITY = 84
 
 # The X share card (1881x836). Only its network label is baked here; the
-# serial and project name are drawn in the browser (src/lib/share-card.ts).
+# picture, project name and serial tag are drawn in the browser
+# (src/lib/share-card.ts), so the art's sample "#001" is cleared from the tag.
 CARD_PITCH = 23.6
 CARD_LABEL_LEFT = 1406
-CARD_TEXT_TOP = 661
+CARD_TEXT_TOP = 656
 CARD_CAP = 20
-CARD_LABEL_BOX = (1400, 652, 1684, 690)
-CARD_PATCH_DY = 108   # empty band below the label
+CARD_LABEL_BOX = (1400, 647, 1684, 685)
+CARD_PATCH_DY = 113   # empty band below the label
+CARD_TAG_BOX = (1522, 413, 1640, 455)   # the "#001" inside the serial tag
+CARD_TAG_SRC = (700, 455)               # empty bar interior: grain source
 
 
 def _erase(im, box, dy=PATCH_DY):
@@ -122,9 +125,41 @@ def render(serial, network, lapsed, base=None):
     return im.resize((SIZE, SIZE), Image.LANCZOS)
 
 
+def _inpaint(im, box, grain_xy):
+    """Remove the lime sample text inside `box` without touching its frame:
+    only text pixels (dilated) are replaced, by the surrounding fill
+    (normalized-convolution blur of the known pixels) plus the grain of an
+    empty area at `grain_xy`."""
+    import numpy as np
+    x0, y0, x1, y1 = box
+    region = im.crop(box)
+    a = np.asarray(region).astype(float)
+    text = (a[:, :, 1] > 120) & (a[:, :, 2] < a[:, :, 1] - 40)       # lime ink and its anti-aliasing
+    mask = Image.fromarray((text * 255).astype("uint8")).filter(ImageFilter.MaxFilter(7))
+    m = np.asarray(mask).astype(float) / 255.0
+    known = 1.0 - m
+    def blur(arr, r=8):
+        # three separable box passes ~ a Gaussian; edge-padded so borders keep their level
+        k = np.ones(2 * r + 1) / (2 * r + 1)
+        out = arr
+        for _ in range(3):
+            out = np.pad(out, ((r, r), (0, 0)), mode="edge")
+            out = np.apply_along_axis(lambda c: np.convolve(c, k, mode="valid"), 0, out)
+            out = np.pad(out, ((0, 0), (r, r)), mode="edge")
+            out = np.apply_along_axis(lambda c: np.convolve(c, k, mode="valid"), 1, out)
+        return out
+    fill = np.stack([blur(a[:, :, i] * known) / np.maximum(blur(known), 1e-3) for i in range(3)], axis=2)
+    src = np.asarray(im.crop((grain_xy[0], grain_xy[1], grain_xy[0] + (x1 - x0), grain_xy[1] + (y1 - y0)))).astype(float)
+    grain = src - np.stack([blur(src[:, :, i], 3) for i in range(3)], axis=2)
+    soft = np.asarray(mask.filter(ImageFilter.GaussianBlur(1.5))).astype(float)[:, :, None] / 255.0
+    out = a * (1 - soft) + np.clip(fill + grain, 0, 255) * soft
+    im.paste(Image.fromarray(out.round().astype("uint8")), (x0, y0))
+
+
 def render_card_template(network):
     """The share card with this network's label; everything per-builder is left blank."""
     im = Image.open(CARD_ART).convert("RGB")
+    _inpaint(im, CARD_TAG_BOX, CARD_TAG_SRC)
     label = NETWORKS[network]
     if label != "ARC MAINNET":
         _erase(im, CARD_LABEL_BOX, CARD_PATCH_DY)
