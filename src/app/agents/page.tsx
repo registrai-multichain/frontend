@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Shell } from "@/components/Shell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { AgentRegistryGrid } from "@/components/AgentRegistryGrid";
+import { AgentLeaderboard } from "@/components/AgentLeaderboard";
 
 export default function AgentsIndexPage() {
   return (
@@ -24,6 +25,8 @@ export default function AgentsIndexPage() {
         </p>
 
         <AgentRegistryGrid />
+
+        <AgentLeaderboard />
 
         <div className="mt-16 border border-dashed border-line p-6 sm:p-8">
           <div className="caption text-accent mb-3">run an agent</div>
