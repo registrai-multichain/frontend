@@ -9,12 +9,12 @@
  * verifiability is the point, given how many "Arc bridge" sites took deposits
  * and never burned anything.
  *
- * The last mile matters most: the mint is a transaction ON the destination,
- * and a first-time user arriving on Arc has no USDC to pay gas with. Our
- * relayer delivers it for them. If the relayer is unreachable they can still
- * mint it themselves, and an interrupted transfer is never lost — the burn and
- * attestation stay valid indefinitely and can be resumed from the burn hash,
- * which is why every in-flight transfer is persisted locally.
+ * The last mile is the user's own: on EVM destinations their wallet submits
+ * Circle's receiveMessage (paying destination gas — USDC on Arc); Solana routes
+ * use Circle's Forwarding Service. No Registrai relayer sits in the path. An
+ * interrupted transfer is never lost — the burn and attestation stay valid
+ * indefinitely and can be resumed from the burn hash, which is why every
+ * in-flight transfer is persisted locally.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatUnits, type Hex } from "viem";
@@ -41,7 +41,6 @@ import {
   maxFeeFor,
   quoteBridge,
   receiveCalldata,
-  requestRelay,
   resolveRoute,
   waitForAttestation,
   type Quote,
@@ -77,9 +76,8 @@ type Step =
   | { kind: "approving" }
   | { kind: "burning" }
   | { kind: "attesting"; burnTx: Hex; status: string; elapsedMs: number }
-  | { kind: "relaying"; burnTx: Hex }
   | { kind: "minting"; burnTx: Hex }
-  | { kind: "done"; burnTx: Hex; mintTx: Hex; relayed?: boolean }
+  | { kind: "done"; burnTx: Hex; mintTx: Hex }
   | { kind: "circle"; status: string }
   | {
       kind: "circleDone";
@@ -250,7 +248,7 @@ export default function BridgePage() {
     });
   }, []);
 
-  /** Attest → relay → (fallback) self-mint. Shared by fresh and resumed transfers. */
+  /** Attest → self-mint on the destination. Shared by fresh and resumed transfers. */
   const deliver = useCallback(
     async (burnTx: Hex, srcChain: CctpChain, dstChain: CctpChain, owner: `0x${string}`) => {
       setStep({ kind: "attesting", burnTx, status: "indexing", elapsedMs: 0 });
@@ -261,17 +259,6 @@ export default function BridgePage() {
           setStep((s) => (s.kind === "attesting" ? { ...s, status, elapsedMs } : s)),
       });
 
-      // Registrai sponsors the destination transaction on Arc, where USDC is
-      // also gas. Every other route is trustless self-mint: the user's wallet
-      // submits Circle's receiveMessage transaction on the destination.
-      if (dstChain.usdcIsGas) {
-        setStep({ kind: "relaying", burnTx });
-        const relayed = await requestRelay(srcChain.domain, burnTx);
-        if (relayed.delivered) {
-          setStep({ kind: "done", burnTx, mintTx: relayed.txHash ?? burnTx, relayed: true });
-          return;
-        }
-      }
 
       setStep({ kind: "minting", burnTx });
       await wallet.switchTo(dstChain);
@@ -557,7 +544,7 @@ export default function BridgePage() {
               )}
             </div>
 
-            {!solanaRoute && isEvmChain(to) && !to.usdcIsGas && (
+            {!solanaRoute && isEvmChain(to) && (
               <p className="mt-3 border-l-2 border-line-strong pl-3 text-2xs leading-relaxed text-fg-dim">
                 You&apos;ll confirm the final mint on {to.name}, so your wallet needs a small amount of
                 {` ${to.gasSymbol}`} for destination gas. The burn remains claimable if delivery is interrupted.
@@ -598,7 +585,7 @@ export default function BridgePage() {
                   <Row label="settles" value={speed === "fast" ? "~seconds" : "on finality"} />
                   <Row
                     label="destination gas"
-                    value={solanaRoute ? "Circle relayed" : isEvmChain(to) && to.usdcIsGas ? "Registrai relayed" : `you pay · ${to.gasSymbol}`}
+                    value={solanaRoute ? "Circle relayed" : `you pay · ${to.gasSymbol}`}
                   />
                 </dl>
               )}
@@ -773,11 +760,6 @@ function Progress({ step, from, to }: { step: Step; from: BridgeChain; to: Bridg
     return (
       <div className="mt-4 border border-up/50 bg-up/[0.06] p-3">
         <p className="text-xs font-medium text-up">Delivered to {to.name}</p>
-        {step.relayed && (
-          <p className="mt-1 text-2xs text-fg-mute">
-            We paid the {to.name} gas, so you didn&apos;t need any.
-          </p>
-        )}
         <p className="mt-2 space-x-3 text-2xs">
           <a
             className="text-accent underline"
@@ -837,13 +819,11 @@ function Progress({ step, from, to }: { step: Step; from: BridgeChain; to: Bridg
     );
   }
 
-  // approve · burn · attest · deliver — relaying and minting are two routes
-  // through the same final stage.
+  // approve · burn · attest · mint
   const order: Record<string, number> = {
     approving: 0,
     burning: 1,
     attesting: 2,
-    relaying: 3,
     minting: 3,
   };
   const at = order[step.kind] ?? 0;
@@ -883,8 +863,6 @@ function labelFor(step: Step): string {
       return "Burning on the source chain…";
     case "attesting":
       return "Waiting for Circle's attestation…";
-    case "relaying":
-      return "Delivering to the destination…";
     case "minting":
       return "Minting on the destination chain…";
     case "circle":

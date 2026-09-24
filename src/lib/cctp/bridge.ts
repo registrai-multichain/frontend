@@ -42,46 +42,6 @@ import {
 
 const IRIS = "https://iris-api.circle.com";
 
-/** Our agents Worker, which also hosts the CCTP mint relayer. */
-const RELAYER = "https://registrai-agents.guanyidu98.workers.dev/relay";
-
-export type RelayOutcome =
-  | { delivered: true; txHash?: Hex; alreadyDelivered?: boolean }
-  | { delivered: false; reason: string };
-
-/**
- * Ask our relayer to deliver the mint on Arc.
- *
- * This is the difference between a bridge that works and one that strands
- * people: the mint is a transaction ON ARC, gas on Arc is USDC, and a
- * first-time user has none. `destinationCaller` is zero in our burns, so the
- * relayer can deliver it and the USDC still lands at the user's address.
- *
- * Failure here is never fatal — the burn and attestation stay valid, and the
- * caller falls back to letting the user mint it themselves.
- */
-export async function requestRelay(sourceDomain: number, transactionHash: Hex): Promise<RelayOutcome> {
-  try {
-    const res = await fetch(RELAYER, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sourceDomain, transactionHash }),
-    });
-    const body = (await res.json().catch(() => ({}))) as {
-      ok?: boolean;
-      txHash?: Hex;
-      alreadyDelivered?: boolean;
-      reason?: string;
-    };
-    if (res.ok && body.ok) {
-      return { delivered: true, txHash: body.txHash, alreadyDelivered: body.alreadyDelivered };
-    }
-    return { delivered: false, reason: body.reason ?? `relayer returned ${res.status}` };
-  } catch (e) {
-    return { delivered: false, reason: (e as Error).message ?? "relayer unreachable" };
-  }
-}
-
 export const bridgeRouterAbi = [
   {
     type: "function",
