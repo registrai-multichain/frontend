@@ -1,8 +1,10 @@
 /**
  * Pure Perennial market logic: the AMM quote (a bit-exact mirror of
- * MarketsPerennial.buy/sell), settlement-state labelling, question text, and
- * input validation. No I/O here, so all of it is unit-tested.
+ * MarketsPerennial.buy/sell — also MarketsV4, which runs the same curve),
+ * settlement-state labelling, question text, and input validation. No I/O here,
+ * so all of it is unit-tested. Fee & settlement payouts: resolution-fee.ts.
  */
+import type { FeeModel } from "./resolution-fee";
 
 export const BPS = 10_000n;
 export const USDC_DECIMALS = 6;
@@ -49,6 +51,12 @@ export function isqrtCeil(n: bigint): bigint {
   return r * r < n ? r + 1n : r;
 }
 
+/** Basis points as a trimmed percentage: 100 -> "1%", 3000 -> "30%", 35 -> "0.35%". */
+export function bpsPct(bps: bigint): string {
+  const n = Number(bps) / 100;
+  return `${n.toFixed(2).replace(/\.?0+$/, "")}%`;
+}
+
 /** Marginal price of `outcome` in 1e18 (MarketsPerennial.priceOf). */
 export function priceOf(r: Reserves, outcome: number): bigint {
   const total = r.yesReserve + r.noReserve;
@@ -61,8 +69,9 @@ export function priceOf(r: Reserves, outcome: number): bigint {
 
 export interface BuyQuote {
   sharesOut: bigint;
+  /** Trading fee — always 0 on the v2 contracts; legacy contracts charge one. */
   fee: bigint;
-  /** Average USDC paid per share, fee included, as a 0..1 number. */
+  /** Average USDC paid per share (any legacy fee included), as a 0..1 number. */
   avgPrice: number;
   priceBefore: number;
   priceAfter: number;
@@ -73,10 +82,15 @@ export interface BuyQuote {
 
 const toNum = (wad: bigint) => Number(wad) / 1e18;
 
-/** Mirror of MarketsPerennial.buy. `feeBps` is FEE_BPS_TOTAL read from chain. */
-export function quoteBuy(r: Reserves, outcome: number, collateralIn: bigint, feeBps: bigint): BuyQuote | null {
+/**
+ * Mirror of MarketsPerennial.buy / MarketsV4.buy. The v2 contracts charge no
+ * trading fee: all of `collateralIn` mints complete sets, then the unwanted
+ * side is swapped into the pool. `legacyFeeBps` is only for the legacy
+ * contracts still on testnet (their FEE_BPS_TOTAL); leave it at 0 otherwise.
+ */
+export function quoteBuy(r: Reserves, outcome: number, collateralIn: bigint, legacyFeeBps: bigint = 0n): BuyQuote | null {
   if (collateralIn <= 0n || r.yesReserve === 0n || r.noReserve === 0n) return null;
-  const fee = (collateralIn * feeBps) / BPS;
+  const fee = (collateralIn * legacyFeeBps) / BPS;
   const effectiveIn = collateralIn - fee;
   const yesAfterMint = r.yesReserve + effectiveIn;
   const noAfterMint = r.noReserve + effectiveIn;
@@ -107,8 +121,9 @@ export function quoteBuy(r: Reserves, outcome: number, collateralIn: bigint, fee
 export interface SellQuote {
   collateralOut: bigint;
   grossOut: bigint;
+  /** Trading fee — always 0 on the v2 contracts (collateralOut == grossOut). */
   fee: bigint;
-  /** Average USDC received per share, after fee, as a 0..1 number. */
+  /** Average USDC received per share (after any legacy fee), as a 0..1 number. */
   avgPrice: number;
   priceBefore: number;
   priceAfter: number;
@@ -117,8 +132,8 @@ export interface SellQuote {
   reservesAfter: Reserves;
 }
 
-/** Mirror of MarketsPerennial.sell. */
-export function quoteSell(r: Reserves, outcome: number, sharesIn: bigint, feeBps: bigint): SellQuote | null {
+/** Mirror of MarketsPerennial.sell / MarketsV4.sell (no fee on v2; see quoteBuy). */
+export function quoteSell(r: Reserves, outcome: number, sharesIn: bigint, legacyFeeBps: bigint = 0n): SellQuote | null {
   if (sharesIn <= 0n || r.yesReserve === 0n || r.noReserve === 0n) return null;
   const yesPost = outcome === OUTCOME.Yes ? r.yesReserve + sharesIn : r.yesReserve;
   const noPost = outcome === OUTCOME.No ? r.noReserve + sharesIn : r.noReserve;
@@ -129,7 +144,7 @@ export function quoteSell(r: Reserves, outcome: number, sharesIn: bigint, feeBps
   // The contract ceils the root and floors the halving so a sell never pays
   // over the curve; a floored root here promised 1 unit more than it paid.
   const grossOut = (sum - isqrtCeil(disc)) / 2n;
-  const fee = (grossOut * feeBps) / BPS;
+  const fee = (grossOut * legacyFeeBps) / BPS;
   const collateralOut = grossOut - fee;
   if (collateralOut <= 0n) return null;
   const after = { yesReserve: yesPost - grossOut, noReserve: noPost - grossOut };
@@ -154,7 +169,7 @@ export function minOutWithSlippage(expected: bigint, slippageBps: bigint): bigin
   return (expected * (BPS - slippageBps)) / BPS;
 }
 
-/** Split a fee by the governable bps (MarketsPerennial._payFees). */
+/** LEGACY contract only: split a per-trade fee by its governable bps. */
 export function splitFee(fee: bigint, split: { creatorBps: bigint; treasuryBps: bigint; agentBps: bigint }) {
   const total = split.creatorBps + split.treasuryBps + split.agentBps;
   if (total === 0n) return { creator: 0n, commons: fee, agent: 0n };
@@ -163,12 +178,14 @@ export function splitFee(fee: bigint, split: { creatorBps: bigint; treasuryBps: 
   return { creator, commons: fee - creator - agent, agent };
 }
 
-/** A voided market pays half a unit per share of either side. */
+/** LEGACY contract only: a voided market pays half a unit per share of either side.
+ *  (v2 refunds net cost minus the resolution fee — see resolution-fee.ts.) */
 export function voidPayout(yesShares: bigint, noShares: bigint): bigint {
   return (yesShares + noShares) / 2n;
 }
 
-/** What `redeem` would pay a holder right now (0 when there is nothing). */
+/** LEGACY contract only: what `redeem` would pay a holder right now. v2 payouts
+ *  come from the `redeemable` view or resolution-fee.ts's mirrorRedeem. */
 export function redeemPayout(
   m: { phase: number; yesWon: boolean },
   yesShares: bigint,
@@ -214,6 +231,8 @@ export interface StatusInput {
   settlement: number | undefined;
   /** False for the legacy contract (settlementState reverts). */
   supportsSettlement: boolean;
+  /** Probed fee model; v2 ("resolution") switches the payout copy. */
+  feeModel?: FeeModel;
 }
 
 const base = {
@@ -225,6 +244,8 @@ const base = {
 };
 
 export function marketStatus(s: StatusInput): MarketStatus {
+  const v2 = s.feeModel?.kind === "resolution" ? s.feeModel : undefined;
+  const feePct = v2 ? bpsPct(v2.resolutionFeeBps) : "";
   if (s.phase === undefined || s.expiry === undefined || s.chainNow === undefined) {
     return { ...base, key: "loading", label: "Loading", detail: "Reading market state…" };
   }
@@ -234,7 +255,9 @@ export function marketStatus(s: StatusInput): MarketStatus {
       ...base,
       key: yes ? "resolved-yes" : "resolved-no",
       label: yes ? "Resolved · YES won" : "Resolved · NO won",
-      detail: yes ? "YES shares redeem for $1.00 each." : "NO shares redeem for $1.00 each.",
+      detail: v2
+        ? `${yes ? "YES" : "NO"} shares redeem pro rata from the pot after the ${feePct} resolution fee.`
+        : yes ? "YES shares redeem for $1.00 each." : "NO shares redeem for $1.00 each.",
       canRedeem: true,
       canClaimLP: true,
     };
@@ -244,7 +267,9 @@ export function marketStatus(s: StatusInput): MarketStatus {
       ...base,
       key: "voided",
       label: "Voided",
-      detail: "No valid attestation settled it. Every YES and NO share redeems for $0.50.",
+      detail: v2
+        ? `Voided — refunds net cost minus ${feePct}; agent's ${bpsPct(v2.agentShareBps)} to its successful challenger (otherwise to the ${v2.commonsLabel}).`
+        : "No valid attestation settled it. Every YES and NO share redeems for $0.50.",
       canRedeem: true,
       canClaimLP: true,
     };
@@ -278,7 +303,9 @@ export function marketStatus(s: StatusInput): MarketStatus {
         ...base,
         key: "voidable",
         label: "Voidable",
-        detail: "No valid attestation arrived in the settlement window. Anyone can void it; shares then pay $0.50.",
+        detail: v2
+          ? `No valid attestation arrived in the settlement window. Anyone can void it; every trader then gets their net cost back minus ${feePct}.`
+          : "No valid attestation arrived in the settlement window. Anyone can void it; shares then pay $0.50.",
         canVoid: true,
       };
     case SETTLEMENT.Waiting:
@@ -343,12 +370,18 @@ export function fmtDurationShort(sec: number): string {
 }
 
 /** Plain-English rule for a market that settles under SettlementPolicy. */
-export function settlementRuleText(windowSecs: number | undefined): string {
+export function settlementRuleText(windowSecs: number | undefined, feeModel?: FeeModel): string {
   const w = windowSecs ? fmtDurationShort(windowSecs) : "the settlement window";
-  return (
-    `Trading closes at expiry. The market settles on the FIRST valid attestation stamped between expiry and expiry + ${w}. ` +
-    `If none arrives in that window, the market voids and every YES and NO share pays $0.50.`
-  );
+  const head = `Trading closes at expiry. The market settles on the FIRST valid attestation stamped between expiry and expiry + ${w}. `;
+  if (feeModel?.kind === "resolution") {
+    const fee = bpsPct(feeModel.resolutionFeeBps);
+    return (
+      head +
+      `If none arrives in that window, the market voids: every trader gets their net cost back, minus the ${fee} fee. ` +
+      `The agent's ${bpsPct(feeModel.agentShareBps)} goes to whoever successfully challenged its answer (otherwise to the ${feeModel.commonsLabel}).`
+    );
+  }
+  return head + `If none arrives in that window, the market voids and every YES and NO share pays $0.50.`;
 }
 
 // ───────────────────────────── inputs ─────────────────────────────

@@ -27,7 +27,47 @@ import {
 
 const seeded = { yesReserve: 5_000_000n, noReserve: 5_000_000n };
 
-describe("quoteBuy mirrors MarketsPerennial.buy", () => {
+describe("fee-free quotes mirror the v2 contracts (no trading fee)", () => {
+  test("buy mints all of collateralIn as complete sets, then swaps — to the unit", () => {
+    const q = quoteBuy(seeded, OUTCOME.Yes, 2_000_000n)!;
+    // yes = no = 5 + 2 = 7; k = 25e12; ceil(25e12 / 7e6) = 3,571,429
+    expect(q.fee).toBe(0n);
+    expect(q.sharesOut).toBe(3_428_571n);
+    expect(q.reservesAfter).toEqual({ yesReserve: 3_571_429n, noReserve: 7_000_000n });
+    expect(quoteBuy(seeded, OUTCOME.Yes, 2_000_000n, 0n)).toEqual(q);
+  });
+  test("each side's supply equals the pot afterwards (YES = NO = C)", () => {
+    const q = quoteBuy(seeded, OUTCOME.No, 3_000_000n)!;
+    const C = 5_000_000n + 3_000_000n;
+    expect(q.reservesAfter.yesReserve).toBe(C);
+    expect(q.reservesAfter.noReserve + q.sharesOut).toBe(C);
+  });
+  test("no fee: avg price equals the ex-fee average", () => {
+    const q = quoteBuy(seeded, OUTCOME.Yes, 2_000_000n)!;
+    expect(q.avgPrice).toBeCloseTo(2_000_000 / 3_428_571, 12);
+    expect(q.priceImpact).toBeCloseTo(q.avgPrice / 0.5 - 1, 12);
+  });
+  test("sell pays the whole curve output (collateralOut == grossOut), ceil-sqrt kept", () => {
+    const q = quoteSell({ yesReserve: 8_313_962n, noReserve: 12_027_961n }, OUTCOME.Yes, 6_627_759n)!;
+    expect(q.fee).toBe(0n);
+    expect(q.grossOut).toBe(3_379_272n);
+    expect(q.collateralOut).toBe(3_379_272n);
+  });
+  test("round trip loses only rounding — never a fee, never a gain", () => {
+    for (const amt of [1_000n, 1_000_000n, 3_000_000n, 25_000_000n]) {
+      const b = quoteBuy(seeded, OUTCOME.No, amt)!;
+      const s = quoteSell(b.reservesAfter, OUTCOME.No, b.sharesOut)!;
+      expect(s.collateralOut).toBeLessThanOrEqual(amt);
+      expect(amt - s.collateralOut).toBeLessThanOrEqual(2n);
+    }
+  });
+  test("slippage floor applies to fee-free quotes the same way", () => {
+    const q = quoteBuy(seeded, OUTCOME.Yes, 2_000_000n)!;
+    expect(minOutWithSlippage(q.sharesOut, 100n)).toBe(3_394_285n);
+  });
+});
+
+describe("LEGACY quoteBuy mirrors the testnet MarketsPerennial.buy (70 bps per trade)", () => {
   test("reproduces the on-chain testnet trade (2 USDC YES into a 5/5 pool)", () => {
     // deployments/arc-testnet.json settlementProof: reserves after were
     // yes 3,578,586 / no 6,986,000 and the buyer redeemed 3,407,414.
@@ -65,7 +105,7 @@ describe("quoteBuy mirrors MarketsPerennial.buy", () => {
   });
 });
 
-describe("quoteSell mirrors MarketsPerennial.sell", () => {
+describe("LEGACY quoteSell mirrors the testnet MarketsPerennial.sell", () => {
   test("gross out solves the constant product exactly (floor)", () => {
     const r = { yesReserve: 3_578_586n, noReserve: 6_986_000n };
     const q = quoteSell(r, OUTCOME.Yes, 1_000_000n, 70n)!;
