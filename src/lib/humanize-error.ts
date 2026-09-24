@@ -82,6 +82,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   NoBadge: "This builder has no Verified Builder Badge.",
   NoProject: "The builder needs at least one active project for a badge.",
   AlreadyIssued: "This builder already has a badge.",
+  // OZ AccessControl (CaretakerRegistry, VerifiedBuilderBadge)
+  AccessControlUnauthorizedAccount: "This wallet lacks the role that call needs (the Safe grants and removes roles).",
 };
 
 const EXTRA_ERRORS = parseAbi([
@@ -98,6 +100,7 @@ const EXTRA_ERRORS = parseAbi([
   "error NoBadge()",
   "error NoProject()",
   "error AlreadyIssued()",
+  "error AccessControlUnauthorizedAccount(address account, bytes32 neededRole)",
   "error Error(string)",
 ]);
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import useSWR from "swr";
-import { createPublicClient, getAddress, isAddress, type Address, type PublicClient } from "viem";
+import { createPublicClient, getAddress, isAddress, type Abi, type Address, type Hex, type PublicClient } from "viem";
 import { useWallet } from "@/components/WalletProvider";
 import { BUILDERS } from "@/lib/builders-network";
 import { transportFor } from "@/lib/chains";
@@ -29,6 +29,15 @@ import { formatCountdown, recoveryView, transferTargetError, utcMinute } from "@
 import { verifiedBuilderAbi } from "@/lib/verified-builders-chain";
 import { badgeImageBase, serialLabel } from "@/lib/verified-builder-badge";
 import { normalizeSource, sourceLabel } from "@/lib/verified-builders";
+import {
+  onboardStepCall,
+  onboarderGate,
+  onboarderRoles,
+  planOnboardSteps,
+  readBuilderForOnboarding,
+} from "@/lib/builders-onboarder";
+import { sendBuildersTx } from "@/components/verify/sendTx";
+import { buildersClient } from "@/components/verify/useMyBuilder";
 
 const REG = BUILDERS.contracts.BuilderRegistry;
 const CARE = BUILDERS.contracts.CaretakerRegistry;
@@ -139,8 +148,9 @@ export function AdminApp() {
           </div>
           <h1>Builders admin</h1>
           <p>
-            Invites, the onboarding queue, badge actions, recoveries and projects. Nothing the Safe must sign is sent from
-            here: those are Safe batch files. Finishing a recovery (anyone may) is the one transaction this page sends.
+            Invites, the onboarding queue, badge actions, recoveries and projects. What only the Safe may do (revokes,
+            recoveries, project switches) is a Safe batch file. This page sends two kinds of transaction itself:
+            onboarding, from an onboarder wallet the Safe gave its two roles, and finishing a recovery (anyone may).
           </p>
         </div>
       </header>
@@ -296,7 +306,7 @@ function Dashboard({ admin, onSignedOut }: { admin: string; onSignedOut: () => v
         onChanged={() => invites.mutate()}
       />
 
-      <OnboardingSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
+      <OnboardingSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} onChainChanged={() => chain.mutate()} />
 
       <BadgeSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
 
@@ -628,15 +638,59 @@ function InvitesTable({
 
 // ───────────────────────────── onboarding queue ─────────────────────────────
 
+/** One builder's direct onboarding, as this page ran it. */
+type OnboardRun = {
+  name: string;
+  state: "running" | "done" | "error";
+  txs: { label: string; hash?: Hex; confirmed?: boolean }[];
+  note?: string;
+  error?: string;
+};
+
+const txHref = (hash: string) => `${BUILDERS.explorer.url}/tx/${hash}`;
+
+function OnboardRunLine({ run }: { run: OnboardRun }) {
+  return (
+    <span className="adm-run">
+      {run.txs.map((t, i) => (
+        <span key={i}>
+          <code>{t.label}</code>{" "}
+          {t.hash ? (
+            <a className="vf-link" href={txHref(t.hash)} target="_blank" rel="noreferrer">
+              {t.confirmed ? "confirmed" : "sent, waiting for the receipt"} · {shortAddr(t.hash)} ↗
+            </a>
+          ) : (
+            <span className="adm-sub">{run.state === "running" ? "waiting" : "not sent"}</span>
+          )}
+        </span>
+      ))}
+      {run.note && <span className={run.state === "done" ? "vf-ok" : "vf-hint"}>{run.note}</span>}
+      {run.error && <span className="vf-error">{run.error}</span>}
+    </span>
+  );
+}
+
+/** The wallet must be on the builders chain: switch it, then check it really is (a rejected switch does not throw). */
+async function ensureBuildersChain(walletChainId: number | undefined, switchChain: (id?: number) => Promise<void>) {
+  if (walletChainId !== BUILDERS.chainId) await switchChain(BUILDERS.chainId);
+  const id = await window.ethereum?.request({ method: "eth_chainId" }).catch(() => undefined);
+  if (Number(id) !== BUILDERS.chainId) {
+    throw new Error(`Your wallet is not on ${BUILDERS.label} (chain ${BUILDERS.chainId}). Switch networks and try again.`);
+  }
+}
+
 function OnboardingSection({
   builders,
   chainNote,
   nameOf,
+  onChainChanged,
 }: {
   builders: GalleryBuilder[] | null;
   chainNote: string | null;
   nameOf: (b: GalleryBuilder) => string;
+  onChainChanged: () => void;
 }) {
+  const { address, walletChainId, switchChain, connect, isConnecting } = useWallet();
   const missing = [!REG && "BuilderRegistry", !CARE && "CaretakerRegistry", !OPERATOR && "the operator"].filter(Boolean);
   const badge = BUILDERS.badgesOn ? BADGE : null;
   const queue = useMemo(
@@ -646,6 +700,116 @@ function OnboardingSection({
         : null,
     [builders, badge],
   );
+
+  // Direct onboarding: the connected wallet must hold BOTH onboarder roles.
+  const directPossible = Boolean(REG && CARE && OPERATOR && badge);
+  const roles = useSWR(
+    directPossible && address ? ["admin-onboarder-roles", BUILDERS.chainId, address.toLowerCase()] : null,
+    () => onboarderRoles(buildersClient() as unknown as GalleryReader, address as Address, { caretakers: CARE, badge }),
+    { revalidateOnFocus: false, shouldRetryOnError: false },
+  );
+  const gate = onboarderGate(roles.data);
+  const [runs, setRuns] = useState<Record<number, OnboardRun>>({});
+  const [busy, setBusy] = useState(false);
+  const [allError, setAllError] = useState<string>();
+
+  const patch = (id: number, f: (r: OnboardRun) => OnboardRun) =>
+    setRuns((all) => ({ ...all, [id]: f(all[id] ?? { name: `Builder #${id}`, state: "running", txs: [] }) }));
+
+  /** Re-read, plan, send each step and wait for its receipt. True when the builder ends up onboarded. */
+  async function onboardOne(b: GalleryBuilder): Promise<boolean> {
+    if (!address || !REG || !CARE || !OPERATOR || !badge) return false;
+    const contracts = { registry: REG, caretakers: CARE, badge };
+    setRuns((all) => ({ ...all, [b.id]: { name: nameOf(b), state: "running", txs: [], note: "re-reading the chain…" } }));
+    try {
+      await ensureBuildersChain(walletChainId, switchChain);
+      const client = buildersClient() as unknown as GalleryReader;
+      const now = await readBuilderForOnboarding(client, b.id, contracts);
+      const plan = planOnboardSteps({ builderId: b.id, ...now, operator: OPERATOR as Address, expectedOwner: b.owner });
+      if (!plan.ok) throw new Error(plan.reason);
+      if (plan.steps.length === 0) {
+        patch(b.id, (r) => ({ ...r, state: "done", note: "Already onboarded: nothing to send." }));
+        return true;
+      }
+      const calls = plan.steps.map((step) => onboardStepCall(step, contracts));
+      patch(b.id, (r) => ({ ...r, txs: calls.map((c) => ({ label: c.label })), note: undefined }));
+      for (const [i, c] of calls.entries()) {
+        const setTx = (t: Partial<OnboardRun["txs"][number]>) =>
+          patch(b.id, (r) => ({ ...r, txs: r.txs.map((x, j) => (j === i ? { ...x, ...t } : x)) }));
+        await sendBuildersTx({
+          account: address as Address,
+          address: c.address,
+          abi: c.abi as Abi,
+          functionName: c.functionName,
+          args: c.args,
+          onHash: (hash) => setTx({ hash }),
+        });
+        setTx({ confirmed: true });
+      }
+      const after = await readBuilderForOnboarding(client, b.id, contracts);
+      patch(b.id, (r) => ({
+        ...r,
+        state: "done",
+        note: `Onboarded: caretaker ${shortAddr(after.caretaker)}${after.serial ? `, badge ${serialLabel(after.serial)}` : ""}.`,
+      }));
+      return true;
+    } catch (e) {
+      patch(b.id, (r) => ({ ...r, state: "error", note: undefined, error: humanizeError(e, HUMAN) }));
+      return false;
+    }
+  }
+
+  async function onboardSingle(b: GalleryBuilder) {
+    setBusy(true);
+    setAllError(undefined);
+    await onboardOne(b);
+    setBusy(false);
+    onChainChanged();
+  }
+
+  async function onboardAll() {
+    if (!queue || !address) return;
+    const list = queue.included;
+    if (
+      !window.confirm(
+        `Onboard ${list.length} builder${list.length === 1 ? "" : "s"} from ${shortAddr(address)}? Your wallet asks for each transaction; it stops at the first failure.`,
+      )
+    )
+      return;
+    setBusy(true);
+    setAllError(undefined);
+    for (const b of list) {
+      if (!(await onboardOne(b))) {
+        setAllError(`Stopped at builder #${b.id} (${nameOf(b)}): see its row.`);
+        break;
+      }
+    }
+    setBusy(false);
+    onChainChanged();
+  }
+
+  // Runs whose builder has left the queue (the chain re-read after onboarding): keep their hashes on screen.
+  const sentLog = queue ? Object.entries(runs).filter(([id]) => !queue.included.some((b) => b.id === Number(id))) : [];
+
+  const direct = !directPossible ? (
+    <p className="vf-hint">Direct onboarding needs a Verified Builder Badge contract on {BUILDERS.label}: use the Safe batch.</p>
+  ) : !address ? (
+    <p className="vf-hint">
+      Connect the onboarder wallet to onboard directly.{" "}
+      <button type="button" className="vf-mini" onClick={connect} disabled={isConnecting}>
+        {isConnecting ? "connecting…" : "connect"}
+      </button>
+    </p>
+  ) : roles.error ? (
+    <p className="vf-error">Could not read {shortAddr(address)}&apos;s roles: {humanizeError(roles.error, HUMAN)}</p>
+  ) : !roles.data ? (
+    <p className="vf-hint">Checking {shortAddr(address)}&apos;s onboarder roles…</p>
+  ) : !gate.ok ? (
+    <p className="vf-hint">
+      {shortAddr(address)} can&apos;t onboard directly: it lacks {gate.missing.join(" and ")}. Connect the onboarder wallet,
+      or use the Safe batch.
+    </p>
+  ) : null;
 
   return (
     <Section title="Onboarding queue">
@@ -663,23 +827,52 @@ function OnboardingSection({
                 {" "}then <code>issue(id)</code>, and verified builders without a badge get <code>issue(id)</code>
               </>
             ) : null}
-            . The same rules as <code>scripts/onboard-batch.ts</code>; the Safe signs and sends.
+            . The same rules as <code>scripts/onboard-batch.ts</code>: an onboarder wallet sends them from here, or the
+            Safe signs the batch file.
           </p>
+          {queue.included.length > 0 && direct}
+          {queue.included.length > 0 && gate.ok && (
+            <div className="adm-actions">
+              <button type="button" className="vf-primary" onClick={onboardAll} disabled={busy}>
+                {busy ? "onboarding…" : `Onboard all (${queue.included.length})`}
+              </button>
+              <span className="vf-hint">Sends from your connected onboarder wallet. The Safe can remove this wallet&apos;s roles any time.</span>
+            </div>
+          )}
+          {gate.ok && walletChainId !== BUILDERS.chainId && queue.included.length > 0 && (
+            <p className="vf-hint">Your wallet is on another network: Onboard switches it to {BUILDERS.label} first.</p>
+          )}
+          {allError && <p className="vf-error">{allError}</p>}
           {queue.included.length === 0 ? (
             <p className="vf-hint">Nobody to onboard.</p>
           ) : (
             <>
               <ul className="adm-list">
-                {queue.included.map((b) => (
-                  <li key={b.id}>
-                    <b>{nameOf(b)}</b>{" "}
-                    <span className="adm-sub">
-                      builder #{b.id} · {b.status === "pending" ? "claimed, awaiting onboarding" : "verified, no badge"} ·{" "}
-                      {b.projects.filter((p) => p.status === "verified" && !p.proofUnchecked).map((p) => sourceLabel(p.source)).join(", ")}
-                    </span>
-                  </li>
-                ))}
+                {queue.included.map((b) => {
+                  const run = runs[b.id];
+                  return (
+                    <li key={b.id}>
+                      <b>{nameOf(b)}</b>{" "}
+                      <span className="adm-sub">
+                        builder #{b.id} · {b.status === "pending" ? "claimed, awaiting onboarding" : "verified, no badge"} ·{" "}
+                        {b.projects.filter((p) => p.status === "verified" && !p.proofUnchecked).map((p) => sourceLabel(p.source)).join(", ")}
+                      </span>{" "}
+                      {gate.ok && (
+                        <button
+                          type="button"
+                          className="vf-mini vf-mini-strong"
+                          onClick={() => onboardSingle(b)}
+                          disabled={busy || run?.state === "done"}
+                        >
+                          {run?.state === "running" ? "onboarding…" : run?.state === "done" ? "onboarded" : "Onboard"}
+                        </button>
+                      )}
+                      {run && <OnboardRunLine run={run} />}
+                    </li>
+                  );
+                })}
               </ul>
+              <div className="pp-card-label">Or: the Safe batch</div>
               <ol className="adm-txs">
                 {queue.plan.txs.map((t, i) => (
                   <li key={i}>
@@ -689,7 +882,7 @@ function OnboardingSection({
               </ol>
               <button
                 type="button"
-                className="vf-primary"
+                className={gate.ok ? "vf-mini" : "vf-primary"}
                 onClick={() => download(safeFileName("onboarding", Date.now()), onboardingSafeFile(queue, BUILDERS.chainId, Date.now()))}
               >
                 Download Safe batch ({queue.plan.txs.length} tx)
@@ -699,6 +892,19 @@ function OnboardingSection({
                 {badge ? `, badge ${shortAddr(badge)}` : ""}, operator {OPERATOR && shortAddr(OPERATOR)}.
               </p>
             </>
+          )}
+          {sentLog.length > 0 && (
+            <div className="adm-result">
+              <div className="pp-card-label">Sent from this page</div>
+              <ul className="adm-list">
+                {sentLog.map(([id, run]) => (
+                  <li key={id}>
+                    <b>{run.name}</b> <span className="adm-sub">builder #{id}</span>
+                    <OnboardRunLine run={run} />
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           {queue.excluded.length > 0 && (
             <div className="adm-excluded">
