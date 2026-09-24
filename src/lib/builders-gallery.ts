@@ -50,6 +50,7 @@
  */
 import { getAddress, isAddress, parseAbi, zeroAddress, type Address, type Hex } from "viem";
 import {
+  freshProofUrl,
   builderCountry,
   builderStatus,
   normalizeSource,
@@ -846,7 +847,7 @@ export async function browserProjectProof(
   }
   let res: Response;
   try {
-    res = await (o.fetchImpl ?? fetch)(url, { cache: "no-store", signal: AbortSignal.timeout(o.timeoutMs ?? 10_000) });
+    res = await (o.fetchImpl ?? fetch)(freshProofUrl(url), { cache: "no-store", signal: AbortSignal.timeout(o.timeoutMs ?? 10_000) });
   } catch {
     return { state: "unchecked" };
   }

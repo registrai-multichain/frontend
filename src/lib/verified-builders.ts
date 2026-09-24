@@ -438,3 +438,13 @@ export function milestoneFeedFor(
   }
   return null;
 }
+
+/**
+ * `url` with a cache-busting query parameter. A builder's CDN may cache the
+ * proof file for days; asking with a new query every time gets the origin's
+ * current file, so a removed proof is noticed (the keeper does the same).
+ * Query only — a request header would trigger a CORS preflight in browsers.
+ */
+export function freshProofUrl(url: string, now: number = Date.now()): string {
+  return `${url}${url.includes("?") ? "&" : "?"}registrai=${now}`;
+}

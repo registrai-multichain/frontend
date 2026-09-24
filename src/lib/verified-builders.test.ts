@@ -296,3 +296,10 @@ describe("PROOF_DOMAIN_PORT (test-only)", () => {
     expect(proofUrl("domain:example.com", { domainPort: 8123 })).toBe("https://example.com/.well-known/registrai.json");
   });
 });
+
+describe("freshProofUrl", () => {
+  test("adds a cache-busting query so a CDN cannot keep a removed proof alive", () => {
+    expect(freshProofUrl("https://x.dev/.well-known/registrai.json", 1500)).toBe("https://x.dev/.well-known/registrai.json?registrai=1500");
+    expect(freshProofUrl("https://h/p?a=1", 2)).toBe("https://h/p?a=1&registrai=2");
+  });
+});

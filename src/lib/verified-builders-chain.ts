@@ -11,6 +11,7 @@
  */
 import { parseAbi, zeroAddress, type Address, type Hex } from "viem";
 import {
+  freshProofUrl,
   builderCountry,
   builderStatus,
   milestoneFeedFor,
@@ -131,7 +132,7 @@ export function makeFetchJson(opts: { timeoutMs?: number; fetchImpl?: typeof fet
   const f = opts.fetchImpl ?? fetch;
   return async (url) => {
     try {
-      const res = await f(url, { signal: AbortSignal.timeout(opts.timeoutMs ?? 10_000), cache: "no-store", redirect: "follow" });
+      const res = await f(freshProofUrl(url), { signal: AbortSignal.timeout(opts.timeoutMs ?? 10_000), cache: "no-store", redirect: "follow" });
       if (!res.ok) return null;
       return JSON.parse(await res.text());
     } catch {
