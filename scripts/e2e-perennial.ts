@@ -6,14 +6,18 @@
  *
  *   npx tsx scripts/e2e-perennial.ts '<json>'
  *
- * <json>: { rpc, contracts: {NanoLedger, BuilderRegistry, ProgressPool, MarketsPerennial,
- *           CaretakerRegistry, USDC}, operator, key, action, ...args }
+ * <json>: { rpc, contracts: {NanoLedger, BuilderRegistry, MarketsPerennial, CaretakerRegistry,
+ *           USDC, BuilderFund?, SeasonPool?}, operator, key, action, ...args }
+ * (A ProgressPool / ProgressArbiter key is ignored: both are retired.)
  * Prints one JSON line. Exits non-zero when the chain disagrees with the UI's quote
  * or preview. v3 (1% trading fee): buy/sell quotes must match to the unit, the
  * fee must be exactly 1%, its FeesPaid legs exactly 30/20/50 with the 20% added
- * to agentEscrow; voidMarket must pay no creator fee and send the escrow to the
- * challenger XOR the commons; redeem / claimLP must pay exactly the contract's
- * `redeemable` / `claimableLP` view read BEFORE the call AND the UI's mirror.
+ * to agentEscrow and, with a BuilderFund, the 50% credited as IncomeCredited to
+ * the market's builder; voidMarket must pay no creator fee and send the escrow
+ * to the challenger XOR the season pool (SeasonCredited on the fund); redeem /
+ * claimLP must pay exactly the contract's `redeemable` / `claimableLP` view
+ * read BEFORE the call AND the UI's mirror. `economy`, `income` and
+ * `claimIncome` read and claim builder income the way the market pages do.
  * Resolving is the keeper's job; the `resolve` action is kept for manual runs.
  * Refuses any chain but 31337, and only ever signs with the key it is handed
  * (anvil's dev keys, which hold nothing anywhere else).
@@ -21,9 +25,11 @@
 import { createPublicClient, createWalletClient, decodeEventLog, http, type Abi, type Address, type Hex, type PublicClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
-import { marketsPerennialAbi, nanoLedgerAbi, usdcAbi } from "../src/lib/abi";
+import { builderFundAbi, marketsPerennialAbi, nanoLedgerAbi, usdcAbi } from "../src/lib/abi";
+import { epochState, splitIncome } from "../src/lib/builder-economy";
+import { readBuilderEpochs, readEconomy, readEconomyHistory } from "../src/lib/economy-chain";
 import { resolvePerennialDeployment } from "../src/lib/perennial-network";
-import { marketIdFromLogs, readLatestValue, readOverview, type ChainMarket } from "../src/lib/perennial-chain";
+import { marketIdFromLogs, readFundStatus, readLatestValue, readOverview, type ChainMarket } from "../src/lib/perennial-chain";
 import { readAgentBond, readOpenCollateral, resolveStack } from "../src/lib/reputation-chain";
 import { assessAgent, type AgentRecordJson } from "../src/lib/reputation";
 import { canonicalClaimMessage, validateProof, type Claim } from "../src/lib/verified-builders";
@@ -91,11 +97,11 @@ async function ensureLedger(spender: Address, needed: bigint) {
   if (a < needed) await send(P.NanoLedger!, nanoLedgerAbi, "approveSpender", [spender, needed]);
 }
 
-function eventArgs(logs: { address: string; data: Hex; topics: [Hex, ...Hex[]] | [] }[], name: string) {
+function eventArgs(logs: { address: string; data: Hex; topics: [Hex, ...Hex[]] | [] }[], name: string, at: Address = P.MarketsPerennial!) {
   for (const l of logs) {
-    if (l.address.toLowerCase() !== P.MarketsPerennial!.toLowerCase()) continue;
-    // abi.ts may predate the v3 events (AgentFeeReleased): fall back to the fragment.
-    for (const abi of [marketsPerennialAbi as Abi, marketFeesAbi as Abi]) {
+    if (l.address.toLowerCase() !== at.toLowerCase()) continue;
+    // A pre-fund contract's field names differ (commonsFee): fall back to the fragment.
+    for (const abi of [marketsPerennialAbi as Abi, builderFundAbi as Abi, marketFeesAbi as Abi]) {
       try {
         const ev = decodeEventLog({ abi, data: l.data, topics: l.topics as never });
         if (ev.eventName === name) return ev.args as unknown as Record<string, bigint>;
@@ -116,7 +122,11 @@ async function books(id: Hex, who: Address) {
   return { netCost, collateral, escrow };
 }
 
-/** v3: the fee is exactly 1% and its FeesPaid legs are exactly 30/20/50, the 20% into escrow. */
+/** FeesPaid's third field: builderFee (BuilderFund), commonsFee (before it). */
+const payeeFeeOf = (paid: Record<string, bigint>) => paid.builderFee ?? paid.payeeFee ?? paid.commonsFee;
+
+/** v3: the fee is exactly 1% and its FeesPaid legs are exactly 30/20/50, the 20% into escrow;
+ *  with a BuilderFund, the 50% is credited to the market's builder for the current epoch. */
 function checkTradeFee(
   fm: Extract<FeeModel, { kind: "trade" }>,
   base: bigint,
@@ -124,6 +134,7 @@ function checkTradeFee(
   logs: never,
   before: { escrow: bigint },
   after: { escrow: bigint },
+  builderId?: bigint,
 ) {
   if (fm.tradeFeeBps !== ONE_PERCENT_BPS) die("TRADE_FEE_BPS is not 1%", { tradeFeeBps: fm.tradeFeeBps });
   const want = (base * ONE_PERCENT_BPS) / BPS;
@@ -131,10 +142,16 @@ function checkTradeFee(
   const legs = splitTradeFee(evFee, fm)!;
   const paid = eventArgs(logs, "FeesPaid");
   if (!paid) die("no FeesPaid event on the trade");
-  if (paid!.creatorFee !== legs.creator || paid!.agentFee !== legs.agent || paid!.commonsFee !== legs.commons) {
+  if (paid!.creatorFee !== legs.creator || paid!.agentFee !== legs.agent || payeeFeeOf(paid!) !== legs.payee) {
     die("FeesPaid legs are not 30/20/50 of the fee", { expected: legs, chain: paid });
   }
   if (after.escrow - before.escrow !== legs.agent) die("agentEscrow did not grow by the agent leg", { before: before.escrow, after: after.escrow, agentFee: legs.agent });
+  if (P.BuilderFund && fm.payee === "builder" && legs.payee > 0n) {
+    const credited = eventArgs(logs, "IncomeCredited", P.BuilderFund);
+    if (!credited || credited.builderId !== builderId || credited.amount !== legs.payee) {
+      die("the builder leg was not credited to the market's builder", { expected: { builderId, amount: legs.payee }, chain: credited ?? null });
+    }
+  }
   return legs;
 }
 
@@ -178,7 +195,48 @@ async function main() {
           settlement: m.settlement, status: marketStatus({ phase: m.phase, yesWon: m.yesWon, expiry: m.expiry, chainNow: now, settlement: m.settlement, supportsSettlement: ov.supportsSettlement, feeModel: ov.feeModel }).key,
         })),
         builders: ov.builders.map((b) => ({ builderId: b.builderId, active: b.active, milestoneFeedId: b.milestoneFeedId })),
+        fundStatus: ov.fundStatus,
       });
+    }
+    case "economy": {
+      // The market pages' fund + pool reads (status strip, tax schedule).
+      const fundStatus = await readFundStatus(pc, D);
+      if (fundStatus !== "live") return out({ ok: true, fundStatus });
+      const e = await readEconomy(pc, P.BuilderFund!, P.SeasonPool!);
+      return out({
+        ok: true, fundStatus, epoch: e.epoch, start: e.start, epochLength: e.epochLength, epochEndsAt: e.epochEndsAt,
+        outstanding: e.outstanding, unallocated: e.unallocated, reserved: e.reserved, schedule: e.schedule, upcoming: e.upcoming,
+      });
+    }
+    case "income": {
+      // One builder's income card: every epoch with income, as the panel shows it.
+      if ((await readFundStatus(pc, D)) !== "live") die("the BuilderFund is not live for these markets");
+      const e = await readEconomy(pc, P.BuilderFund!, P.SeasonPool!);
+      const head = await pc.getBlock();
+      const history = await readEconomyHistory(pc, D, head.number);
+      const rows = await readBuilderEpochs(pc, e, Number(args.builderId), head.timestamp, history.ledger);
+      return out({ ok: true, epoch: e.epoch, rows: rows.map((r) => ({ ...r, state: epochState(r) })) });
+    }
+    case "claimIncome": {
+      // The panel's claim: simulate + claimFor(epoch, builderId) from any wallet; the
+      // Claimed split must equal the UI's (progressiveTax over scheduleFor(epoch)).
+      if ((await readFundStatus(pc, D)) !== "live") die("the BuilderFund is not live for these markets");
+      const epoch = BigInt(String(args.epoch));
+      const builderId = BigInt(String(args.builderId));
+      const fund = P.BuilderFund!;
+      const [schedule, quote] = await Promise.all([
+        pc.readContract({ address: fund, abi: builderFundAbi, functionName: "scheduleFor", args: [epoch] }),
+        pc.readContract({ address: fund, abi: builderFundAbi, functionName: "quote", args: [epoch, builderId] }),
+      ]);
+      const gross = (quote as readonly bigint[])[0];
+      const ui = splitIncome(gross, (schedule as readonly { upTo: bigint; rateBps: number }[]).map((b) => ({ upTo: b.upTo, rateBps: Number(b.rateBps) })));
+      const q = quote as readonly [bigint, bigint, bigint, bigint];
+      if (q[1] !== ui.tax || q[2] !== ui.fee || q[3] !== ui.net) die("quote disagrees with the UI's tax math", { quote: q, ui });
+      const r = await send(fund, builderFundAbi, "claimFor", [epoch, builderId]);
+      const ev = eventArgs(r.logs as never, "Claimed", fund) as (Record<string, bigint> & { payout?: Address }) | undefined;
+      if (!ev) die("no Claimed event");
+      if (ev!.gross !== ui.gross || ev!.tax !== ui.tax || ev!.fee !== ui.fee || ev!.net !== ui.net) die("Claimed disagrees with the UI's split", { ui, chain: ev });
+      return out({ ok: true, gross: ev!.gross, tax: ev!.tax, fee: ev!.fee, net: ev!.net, payout: ev!.payout ?? null, previewMatched: true });
     }
     case "deposit": {
       const amount = BigInt(String(args.amount));
@@ -225,7 +283,7 @@ async function main() {
       if (ev!.sharesOut !== q!.sharesOut || ev!.fee !== q!.fee) die("chain disagrees with the UI buy quote", { quote: q, chain: ev });
       if (fm.kind !== "trade") return out({ ok: true, sharesOut: ev!.sharesOut, fee: ev!.fee, quoteMatched: true });
       const after = await books(m.id, acct!.address);
-      const legs = checkTradeFee(fm, amount, ev!.fee, r.logs as never, before!, after);
+      const legs = checkTradeFee(fm, amount, ev!.fee, r.logs as never, before!, after, m.builderId);
       const net = amount - ev!.fee;
       if (after.netCost !== before!.netCost + net) die("netCost did not grow by collateralIn − fee", { before: before!.netCost, after: after.netCost, net });
       if (after.collateral !== before!.collateral + net) die("collateralOf did not grow by collateralIn − fee", { before: before!.collateral, after: after.collateral, net });
@@ -249,7 +307,7 @@ async function main() {
       if (fm.kind !== "trade") return out({ ok: true, collateralOut: ev!.collateralOut, fee: ev!.fee, quoteMatched: true });
       const after = await books(m.id, acct!.address);
       const grossOut = ev!.collateralOut + ev!.fee;
-      const legs = checkTradeFee(fm, grossOut, ev!.fee, r.logs as never, before!, after);
+      const legs = checkTradeFee(fm, grossOut, ev!.fee, r.logs as never, before!, after, m.builderId);
       const reduce = before!.netCost < grossOut ? before!.netCost : grossOut;
       if (after.netCost !== before!.netCost - reduce) die("netCost did not shrink by min(netCost, grossOut)", { before: before!.netCost, after: after.netCost, grossOut });
       if (after.collateral !== before!.collateral - grossOut) die("collateralOf did not shrink by grossOut", { before: before!.collateral, after: after.collateral, grossOut });
@@ -284,14 +342,20 @@ async function main() {
       if (!ev) die("no VoidFeesPaid event on voidMarket");
       if (ev!.creatorFee !== 0n) die("a void charged a creator fee", { chain: ev });
       const challenged = Boolean(ev!.challenger && ev!.challenger !== "0x0000000000000000000000000000000000000000");
-      const toChallenger = challenged && ev!.challengerReward === escrow && ev!.commonsFee === 0n;
-      const toCommons = !challenged && ev!.commonsFee === escrow && ev!.challengerReward === 0n;
-      if (!(toChallenger || toCommons)) die("the held escrow did not go to the challenger XOR the commons", { escrow, chain: ev });
+      // Third field: seasonPoolAmount (BuilderFund), commonsFee before it.
+      const sinkAmount = ev!.seasonPoolAmount ?? ev!.sinkAmount ?? ev!.commonsFee;
+      const toChallenger = challenged && ev!.challengerReward === escrow && sinkAmount === 0n;
+      const toSink = !challenged && sinkAmount === escrow && ev!.challengerReward === 0n;
+      if (!(toChallenger || toSink)) die("the held escrow did not go to the challenger XOR the season pool", { escrow, chain: ev });
+      if (toSink && escrow > 0n && P.BuilderFund && fm.payee === "builder") {
+        const sc = eventArgs(r.logs as never, "SeasonCredited", P.BuilderFund);
+        if (sc?.amount !== escrow) die("the unchallenged escrow was not forwarded to the season pool", { escrow, chain: sc ?? null });
+      }
       const snap = await readMarketSettlement(pc, P.MarketsPerennial!, id!, PHASE.Voided);
       const want = mirrorVoid(collateral, totalNetCost);
       if (snap.voidTraderPool !== want.voidTraderPool || snap.voidNetCostTotal !== want.voidNetCostTotal) die("void snapshot disagrees with the mirror", { expected: want, chain: snap });
       return out({
-        ok: true, collateral, escrow, challenger: ev!.challenger ?? null, challengerReward: ev!.challengerReward, commonsFee: ev!.commonsFee,
+        ok: true, collateral, escrow, challenger: ev!.challenger ?? null, challengerReward: ev!.challengerReward, seasonPoolAmount: sinkAmount,
         voidTraderPool: snap.voidTraderPool, voidNetCostTotal: snap.voidNetCostTotal, previewMatched: true,
       });
     }
