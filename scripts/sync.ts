@@ -5,6 +5,11 @@
  *   RPC=https://… npx tsx scripts/sync.ts
  *
  * The frontend reads live-data.json at build time; no client-side RPC.
+ *
+ * `gallery` (the /builders page) is read on the BUILDERS network instead
+ * (src/lib/builders-network.ts): Arc mainnet once its phase-1 BuilderRegistry
+ * is recorded, with the registries + badge only, so it needs no market contract.
+ *   BUILDERS_RPC=https://…   override that network's (official) endpoint for a run
  */
 import { createPublicClient, http, defineChain, type Address, type Hex } from "viem";
 import { writeFileSync, readFileSync } from "node:fs";
@@ -19,16 +24,25 @@ import {
   perennialBuilderSnapshot,
   readBuilderRecords,
   verifiedOwners,
+  type BuilderRecord,
   type LegacyKeeperBuilder,
   type PerennialBuilderSnapshot,
   type RegistryReader,
 } from "../src/lib/verified-builders-chain";
+import { BUILDERS } from "../src/lib/builders-network";
+import {
+  buildGallerySnapshot,
+  gallerySyncPlan,
+  parseGallerySnapshot,
+  type GallerySnapshot,
+} from "../src/lib/builders-gallery";
 import perennialTestnet from "../src/lib/deployments/arc-testnet-perennial.json";
 import {
   attachBadges,
   badgeImageBase,
   badgeNetworkKey,
   readBuilderBadges,
+  type BadgeInfo,
   type BadgeReader,
 } from "../src/lib/verified-builder-badge";
 
@@ -703,6 +717,10 @@ async function main(): Promise<void> {
   const badgeNetwork = badgeNetworkKey(DEPLOYMENT.chainId);
   /** live-data.json `badges`: { <network>: { address, maxSerial } } — scripts/render-badges.py. */
   const badges: Record<string, { address: string; maxSerial: number }> = {};
+  /** What the market sync read of the testnet registry — the gallery reuses it
+   *  when the builders network is that same registry. */
+  let testnetRecords: BuilderRecord[] | null = null;
+  let testnetBadges: ReadonlyMap<number, BadgeInfo> = new Map();
   try {
     legacyKeeperBuilders = JSON.parse(readFileSync(resolve(__dirname, "../../keeper/builders.json"), "utf8"));
   } catch {
@@ -819,6 +837,7 @@ async function main(): Promise<void> {
       fetchJson: makeFetchJson({ timeoutMs: 15_000 }),
       pace: async () => { await pace(); },
     });
+    testnetRecords = records;
     for (const r of records) {
       console.log(`  · #${r.builderId} ${r.status}${r.source ? ` ${r.source}` : ""}${r.proofError ? ` (${r.proofError})` : ""}`);
     }
@@ -882,6 +901,7 @@ async function main(): Promise<void> {
         pace: async () => { await pace(); },
       });
       perennialBuilders = attachBadges(perennialBuilders, r.badges);
+      testnetBadges = r.badges;
       badges[badgeNetwork] = { address: badgeAddr, maxSerial: r.maxSerial };
       console.log(`  ${r.badges.size} badge(s) held, highest serial ${r.maxSerial}`);
     }
@@ -1193,8 +1213,86 @@ async function main(): Promise<void> {
     }
   }
 
+  // ── builders gallery (/builders) ────────────────────────────────────────
+  // Read on the BUILDERS network (builders-network.ts): Arc mainnet as soon as
+  // its phase-1 BuilderRegistry is recorded, else testnet. Registries + badge
+  // only: phase-1 mainnet has no market, pool or oracle, and nothing here needs
+  // one. A failed read keeps the previous gallery for the same registry.
+  const syncedAt = new Date().toISOString();
+  let gallery: GallerySnapshot | null = null;
+  let prevGallery: GallerySnapshot | null = null;
+  try {
+    const prev = JSON.parse(readFileSync(resolve(__dirname, "../src/lib/live-data.json"), "utf8"));
+    prevGallery = parseGallerySnapshot(prev?.gallery, { chainId: BUILDERS.chainId, builderRegistry: BUILDERS.contracts.BuilderRegistry });
+  } catch {
+    // no previous snapshot
+  }
+  const plan = gallerySyncPlan(BUILDERS, testnetRecords ? { chainId: DEPLOYMENT.chainId, builderRegistry: builderRegistryAddr } : null);
+  console.log(`builders gallery: ${BUILDERS.label} (${plan})…`);
+  if (plan === "reuse") {
+    gallery = buildGallerySnapshot({
+      network: BUILDERS.network,
+      chainId: BUILDERS.chainId,
+      builderRegistry: BUILDERS.contracts.BuilderRegistry!,
+      syncedAt,
+      records: testnetRecords!,
+      badges: testnetBadges,
+    });
+  } else if (plan === "read") {
+    try {
+      const bc = createPublicClient({
+        chain: BUILDERS.chain.viemChain,
+        // Circle's official endpoint for the chain; BUILDERS_RPC overrides for a run.
+        transport: http(process.env.BUILDERS_RPC ?? BUILDERS.rpc, { retryCount: 8, retryDelay: 1_200, batch: false }),
+      });
+      const records = await readBuilderRecords(bc as unknown as RegistryReader, {
+        builderRegistry: BUILDERS.contracts.BuilderRegistry!,
+        caretakerRegistry: BUILDERS.contracts.CaretakerRegistry,
+        operator: BUILDERS.operator,
+        chainId: BUILDERS.chainId,
+        proofConfig: proofConfigFromEnv(process.env),
+        fetchJson: makeFetchJson({ timeoutMs: 15_000 }),
+        pace: async () => { await pace(); },
+      });
+      for (const r of records) {
+        console.log(`  · #${r.builderId} ${r.status}${r.source ? ` ${r.source}` : ""}${r.proofError ? ` (${r.proofError})` : ""}`);
+      }
+      let held: ReadonlyMap<number, BadgeInfo> = new Map();
+      const badgeContract = BUILDERS.contracts.VerifiedBuilderBadge;
+      if (badgeContract && BUILDERS.badgeNetwork) {
+        const r = await readBuilderBadges(bc as unknown as BadgeReader, {
+          badge: badgeContract,
+          builderIds: records.map((x) => x.builderId),
+          imageBase: badgeImageBase(BUILDERS.badgeNetwork),
+          pace: async () => { await pace(); },
+        });
+        held = r.badges;
+        badges[BUILDERS.badgeNetwork] = { address: badgeContract, maxSerial: r.maxSerial };
+        console.log(`  ${r.badges.size} badge(s) held, highest serial ${r.maxSerial}`);
+      }
+      gallery = buildGallerySnapshot({
+        network: BUILDERS.network,
+        chainId: BUILDERS.chainId,
+        builderRegistry: BUILDERS.contracts.BuilderRegistry!,
+        syncedAt,
+        records,
+        badges: held,
+      });
+    } catch (e) {
+      console.warn(`  gallery read failed, keeping the previous snapshot: ${(e as Error).message.split("\n")[0]}`);
+      gallery = prevGallery;
+      // render-badges.py still needs the network's badge contract.
+      const badgeContract = BUILDERS.contracts.VerifiedBuilderBadge;
+      if (badgeContract && BUILDERS.badgeNetwork && !badges[BUILDERS.badgeNetwork]) {
+        const prevSerial = Math.max(0, ...(prevGallery?.builders ?? []).map((b) => b.badge?.serial ?? 0));
+        badges[BUILDERS.badgeNetwork] = { address: badgeContract, maxSerial: prevSerial };
+      }
+    }
+  }
+  if (gallery) console.log(`  ${gallery.builders.length} builder(s) in the gallery snapshot`);
+
   const out = {
-    syncedAt: new Date().toISOString(),
+    syncedAt,
     builders: builderAgg,
     perennialBuilders,
     builderFeeds: builderFeedsCursor,
@@ -1204,6 +1302,7 @@ async function main(): Promise<void> {
     seasonBoards,
     reputation,
     badges,
+    gallery,
     chainId: DEPLOYMENT.chainId,
     explorer: DEPLOYMENT.explorer,
     contracts: badgeAddr ? { ...DEPLOYMENT.contracts, VerifiedBuilderBadge: badgeAddr } : DEPLOYMENT.contracts,

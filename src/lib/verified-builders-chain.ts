@@ -49,6 +49,8 @@ export interface BuilderRecord {
   /** Why a `registrai:` builder is lapsed. */
   proofError?: string;
   claim?: Claim;
+  /** Registration time (BuilderRegistry.builders().createdAt), unix seconds. */
+  createdAt?: number;
 }
 
 /** Minimal read surface (a viem PublicClient satisfies it). */
@@ -107,7 +109,7 @@ export async function readBuilderRecords(
   })) as bigint;
   const out: BuilderRecord[] = [];
   for (let id = 1; id < Number(nextId); id++) {
-    const [owner, profileURI, , , active] = (await client.readContract({
+    const [owner, profileURI, , createdAt, active] = (await client.readContract({
       address: opts.builderRegistry, abi: verifiedBuilderAbi, functionName: "builders", args: [BigInt(id)],
     })) as readonly [Address, string, Hex, bigint, boolean];
     const caretaker = opts.caretakerRegistry
@@ -130,6 +132,7 @@ export async function readBuilderRecords(
       source,
       caretaker,
       status,
+      createdAt: Number(createdAt),
       country: proof?.ok ? proof.claim.country : null,
       proofUrl: proof?.proofUrl ?? null,
       ...(proof && !proof.ok ? { proofError: proof.error } : {}),

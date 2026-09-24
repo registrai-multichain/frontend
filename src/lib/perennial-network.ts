@@ -93,13 +93,37 @@ export function resolvePerennialDeployment(
   };
 }
 
+/** The phase-1 builder block of a deployments file (see builders-network.ts). */
+type BuildersBlock = { BuilderRegistry?: string | null; CaretakerRegistry?: string | null; VerifiedBuilderBadge?: string | null; operator?: string | null };
+
+/**
+ * Pure: the mainnet market record. Phase 2 reuses the phase-1 registries, so a
+ * registry (or the operator) left null in `contracts` falls back to the
+ * `builders` block: one address per contract, never two that could disagree.
+ */
+export function mainnetPerennialSource(record: {
+  contracts: DeploymentSource["contracts"];
+  operator?: string | null;
+  deployBlock?: number | null;
+  builders?: BuildersBlock;
+}): DeploymentSource {
+  const b = record.builders ?? {};
+  const c = record.contracts;
+  return {
+    contracts: {
+      ...c,
+      BuilderRegistry: c.BuilderRegistry ?? b.BuilderRegistry,
+      CaretakerRegistry: c.CaretakerRegistry ?? b.CaretakerRegistry,
+      VerifiedBuilderBadge: c.VerifiedBuilderBadge ?? b.VerifiedBuilderBadge,
+    },
+    operator: record.operator ?? b.operator,
+    deployBlock: record.deployBlock,
+  };
+}
+
 function sourceFor(network: PerennialNetwork): DeploymentSource {
   if (network === "mainnet") {
-    return {
-      contracts: mainnetDeployment.contracts as DeploymentSource["contracts"],
-      operator: mainnetDeployment.operator,
-      deployBlock: mainnetDeployment.deployBlock,
-    };
+    return mainnetPerennialSource(mainnetDeployment as Parameters<typeof mainnetPerennialSource>[0]);
   }
   // Testnet addresses come from the synced snapshot, which is only trusted if
   // it describes the testnet chain.
@@ -118,6 +142,11 @@ function sourceFor(network: PerennialNetwork): DeploymentSource {
     operator: testnetExtras.operator,
     deployBlock: testnetExtras.deployBlock,
   };
+}
+
+/** A network's market deployment, whichever network the Perennial pages are built for. */
+export function perennialDeploymentFor(network: PerennialNetwork): PerennialDeployment {
+  return resolvePerennialDeployment(network, sourceFor(network));
 }
 
 // NEXT_PUBLIC_* must be referenced literally for Next to inline it.

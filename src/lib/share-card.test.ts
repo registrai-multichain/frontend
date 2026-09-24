@@ -49,7 +49,7 @@ describe("text", () => {
     const u = new URL(xIntentUrl({ serial: 7, source: "github:acme/tool", builderId: 3 }));
     expect(u.origin + u.pathname).toBe("https://x.com/intent/post");
     expect(u.searchParams.get("text")).toBe("I'm Registrai Verified Builder No. 007 — acme/tool on Arc.");
-    expect(u.searchParams.get("url")).toBe("https://registrai.cc/perennial/?builder=3");
+    expect(u.searchParams.get("url")).toBe("https://registrai.cc/builders/?builder=3");
     expect(cardFileName(7)).toBe("registrai-verified-builder-007.png");
   });
 });

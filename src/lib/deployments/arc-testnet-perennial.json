@@ -4,5 +4,13 @@
   "note": "Perennial extras for Arc testnet. Contract addresses come from live-data.json (synced from contracts/deployments/arc-testnet.json). operator = keeper/config.arc.json operator_addr (the caretaker's bonded milestone agent); deployBlock = contracts/deployments/arc-testnet.json perennial.deployBlock (v3 stack, 2026-09-24). verifiedBuilderBadge = contracts/deployments/arc-testnet.json perennial.verifiedBuilderBadge.address (used until a sync writes contracts.VerifiedBuilderBadge).",
   "deployBlock": 63752157,
   "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
-  "verifiedBuilderBadge": "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c"
+  "verifiedBuilderBadge": "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c",
+  "builders": {
+    "note": "The builder registries on Arc testnet, used by /builders and /verify while the mainnet builders block is unset.",
+    "deployBlock": 63752157,
+    "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
+    "BuilderRegistry": "0x10F8D6D5905E2C4dc565a1894c102B25E9d21DF4",
+    "CaretakerRegistry": "0x02CfdE88a97A56A7dbDC05F6c7BD3Dbc34393876",
+    "VerifiedBuilderBadge": "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c"
+  }
 }

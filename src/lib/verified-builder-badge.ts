@@ -50,9 +50,10 @@ export function badgeTokenUrl(explorer: string, badge: string, serial: number): 
   return `${explorer.replace(/\/$/, "")}/token/${badge}/instance/${serial}`;
 }
 
-/** The token's external_url: the Perennial page, this builder selected. */
+/** The token's external_url: the builders gallery, scrolled to this builder
+ *  (DeployBuilders.s.sol BADGE_EXTERNAL_BASE). */
 export function builderDeepLink(builderId: number, origin = BADGE_ORIGIN): string {
-  return `${origin}/perennial/?builder=${builderId}`;
+  return `${origin}/builders/?builder=${builderId}`;
 }
 
 /** `?builder=<id>` -> a positive builder id, else null. */
