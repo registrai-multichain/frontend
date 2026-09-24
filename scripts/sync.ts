@@ -37,6 +37,8 @@ import {
   type GallerySnapshot,
 } from "../src/lib/builders-gallery";
 import perennialTestnet from "../src/lib/deployments/arc-testnet-perennial.json";
+import { EMPTY_MILESTONES, foldMilestones, lifetimeProgress, type MilestoneReading, type MilestoneState } from "../src/lib/milestone-progress";
+import { EMPTY_LEDGER, cursorMatches, scanEconomy, type EconomyCursor } from "../src/lib/economy-chain";
 import {
   attachBadges,
   badgeImageBase,
@@ -45,6 +47,24 @@ import {
   type BadgeInfo,
   type BadgeReader,
 } from "../src/lib/verified-builder-badge";
+
+/**
+ * live-data.json `contracts`: the deployment's contracts without the retired
+ * ProgressPool / ProgressArbiter (BuilderFund + SeasonPool replace them; nothing
+ * reads them any more), plus the addresses a deploy recorded elsewhere.
+ */
+function liveContracts(
+  contracts: Record<string, string>,
+  extra: Record<string, string | undefined>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(contracts)) {
+    if (k === "ProgressPool" || k === "ProgressArbiter") continue;
+    out[k] = v;
+  }
+  for (const [k, v] of Object.entries(extra)) if (v) out[k] = v;
+  return out;
+}
 
 /**
  * Bump when the season fold changes shape or semantics. A cursor written by an
@@ -59,8 +79,13 @@ import {
  *
  * v3: the v2 backfill seeded the fold with the existing cursor and then replayed
  * all of history on top of it, double counting everything it re-read.
+ *
+ * v4: builder progress comes from the milestone feeds' attestations
+ * (milestone-progress.ts), not ProgressPool.ProgressAdded: the pool is retired
+ * (spec 2026-09-24-builder-income-tax-design.md). The per-season builder board
+ * is rebuilt from the anchor once.
  */
-const SEASONS_CURSOR_VERSION = 3;
+const SEASONS_CURSOR_VERSION = 4;
 import { resolve } from "node:path";
 
 const DEPLOYMENT = JSON.parse(
@@ -225,13 +250,17 @@ const perennialMarketAbi = [
   },
 ] as const;
 
-const progressAddedEvent = {
+/** Attestation.Attested — the operator's readings of the milestone feeds. */
+const attestedEvent = {
   type: "event",
-  name: "ProgressAdded",
+  name: "Attested",
   inputs: [
-    { name: "epoch", type: "uint256", indexed: true },
-    { name: "builder", type: "address", indexed: true },
-    { name: "weight", type: "uint256", indexed: false },
+    { name: "attestationId", type: "bytes32", indexed: true },
+    { name: "feedId", type: "bytes32", indexed: true },
+    { name: "agent", type: "address", indexed: true },
+    { name: "value", type: "int256", indexed: false },
+    { name: "inputHash", type: "bytes32", indexed: false },
+    { name: "finalizedAt", type: "uint256", indexed: false },
   ],
 } as const;
 
@@ -639,27 +668,24 @@ async function main(): Promise<void> {
   }
 
   // ── builder atlas aggregates ─────────────────────────────────────────────
-  // Lifetime progress MUST be summed from ProgressAdded events. The on-chain
-  // progressWeight[epoch][builder] is consumed at closeEpoch, so reading the
-  // current epoch reports 0 for a builder who has already been paid — which is
-  // exactly what the live site shows for builder #1 today.
+  // Progress is the milestone feeds' attested counts (milestone-progress.ts):
+  // lifetime = the latest count of each of a builder's project feeds; per
+  // season = the increases attested inside it. (ProgressPool is retired.)
   const builderRegistryAddr = (DEPLOYMENT.contracts as { BuilderRegistry?: string }).BuilderRegistry as
     | Address
     | undefined;
   const perennialAddr = (DEPLOYMENT.contracts as { MarketsPerennial?: string }).MarketsPerennial as
     | Address
     | undefined;
-  const poolAddr = (DEPLOYMENT.contracts as { ProgressPool?: string }).ProgressPool as Address | undefined;
-
   let atlasCursor: {
     lastScannedBlock: string;
-    progressByBuilder: Record<string, number>;
     volumeByBuilderId: Record<string, string>;
     marketToBuilder: Record<string, number>;
     /** Resumable trader P&L fold — see seasons.ts. */
     pnl?: PnlState;
-    /** seasonId -> builder address -> progress earned inside that season. */
-    progressBySeason?: Record<string, Record<string, number>>;
+    /** Milestone readings folded so far: latest count per feed, and per season
+     *  per builder owner the progress attested inside it. */
+    milestones?: MilestoneState;
     /** seasonId -> resolved first block. Immutable once past, so cached. */
     seasonStartBlocks?: Record<string, string>;
     seasonsVersion?: number;
@@ -737,7 +763,7 @@ async function main(): Promise<void> {
     country: string | null;
   }> = [];
 
-  if (builderRegistryAddr && perennialAddr && poolAddr) {
+  if (builderRegistryAddr && perennialAddr) {
     // Arc testnet runs ~0.555s blocks (155,712/day), so `latestBlock - 100_000`
     // is a sliding ~15h window — it cannot see a stack deployed two days ago.
     // Anchor to the recorded deployment block instead.
@@ -748,14 +774,13 @@ async function main(): Promise<void> {
     // a market created long before the cursor.
     type AtlasCursor = {
       lastScannedBlock: string;
-      progressByBuilder: Record<string, number>;
       volumeByBuilderId: Record<string, string>;
       marketToBuilder: Record<string, number>;
       /** Which chain and contract this cursor describes. */
       chainId?: number;
       markets?: string;
       pnl?: PnlState;
-      progressBySeason?: Record<string, Record<string, number>>;
+      milestones?: MilestoneState;
       seasonStartBlocks?: Record<string, string>;
       seasonsVersion?: number;
     };
@@ -792,16 +817,6 @@ async function main(): Promise<void> {
       `reading builder atlas aggregates… (from block ${scanFrom}, ${spanBlocks} blocks, ` +
         `${Math.ceil(Number(spanBlocks) / 5000)} chunks/event)`,
     );
-
-    const progressLogs = await getLogsFor(poolAddr, progressAddedEvent, scanFrom);
-    const progressByBuilder = new Map<string, number>(
-      Object.entries(cursor?.progressByBuilder ?? {}),
-    );
-    for (const l of progressLogs) {
-      const a = (l as unknown as { args: { builder: Address; weight: bigint } }).args;
-      const k = a.builder.toLowerCase();
-      progressByBuilder.set(k, (progressByBuilder.get(k) ?? 0) + Number(a.weight));
-    }
 
     // Bought/Sold carry only marketId, so build marketId -> builderId from
     // MarketCreated first, then attribute each trade's notional to a builder.
@@ -849,7 +864,8 @@ async function main(): Promise<void> {
         abi: [{ type: "function", name: sig, stateMutability: "view", inputs: [], outputs: [{ type: "address" }] }] as const,
         functionName: sig,
       }) as Promise<Address>;
-    const oracleRegistry = await addrView(await addrView(perennialAddr, "ATTESTATION"), "REGISTRY");
+    const attestationAddr = await addrView(perennialAddr, "ATTESTATION");
+    const oracleRegistry = await addrView(attestationAddr, "REGISTRY");
     let feedsCursor: BuilderFeedsCursor | undefined;
     try {
       const prev = JSON.parse(readFileSync(resolve(__dirname, "../src/lib/live-data.json"), "utf8"));
@@ -905,19 +921,6 @@ async function main(): Promise<void> {
       console.log(`  ${r.badges.size} badge(s) held, highest serial ${r.maxSerial}`);
     }
 
-    // Only verified builders reach the atlas and the season boards; country is
-    // the one in their signed claim.
-    for (const b of perennialBuilders) {
-      if (b.status !== "verified") continue;
-      builderAgg.push({
-        builderId: b.builderId,
-        address: b.owner,
-        lifetimeProgress: progressByBuilder.get(b.owner) ?? 0,
-        // bigint is not JSON-serialisable; the consumer parses with BigInt().
-        volume: (volumeByBuilderId.get(b.builderId) ?? 0n).toString(),
-        country: b.country,
-      });
-    }
     /* ── seasons ──────────────────────────────────────────────────────────
        A season is a block range, so every board below is a windowed replay of
        events already fetched above. No contract knows seasons exist. */
@@ -978,9 +981,9 @@ async function main(): Promise<void> {
           `(${Math.ceil(Number(latestBlock - anchor) / 5000)} chunks/event, one time)`,
       );
     }
-    const seasonProgressLogs = needsBackfill
-      ? await getLogsFor(poolAddr, progressAddedEvent, anchor)
-      : progressLogs;
+    // The operator's milestone readings (Attested, agent = operator) since the
+    // cursor, or since the anchor on a backfill.
+    const attestedLogs = await getLogsFor(attestationAddr, attestedEvent, seasonFrom, { agent: operator });
     const boughtForPnl = needsBackfill
       ? await getLogsFor(perennialAddr, perennialBoughtEvent, anchor)
       : trades;
@@ -990,22 +993,39 @@ async function main(): Promise<void> {
     // event twice — which is exactly what happened: builder progress read 34
     // instead of 17, and the trader board carried a stale figure plus the
     // recomputed one. Accumulators must start empty whenever the scan does.
-    const priorProgress = needsBackfill ? {} : (cursor?.progressBySeason ?? {});
+    const priorMilestones = needsBackfill ? EMPTY_MILESTONES : (cursor?.milestones ?? EMPTY_MILESTONES);
     const priorPnl = needsBackfill ? EMPTY_PNL : (cursor?.pnl ?? EMPTY_PNL);
 
-    // Per-season builder progress, from the same ProgressAdded logs.
-    const progressBySeason = new Map<number, Map<string, number>>(
-      Object.entries(priorProgress).map(([sid, m]) => [Number(sid), new Map(Object.entries(m))]),
+    // Builder progress from the milestone feeds: each project's feed belongs to
+    // its builder's owner (the season boards are keyed by owner address).
+    const feedOwner = new Map<string, string>();
+    for (const b of perennialBuilders) {
+      for (const f of [b.milestoneFeedId, ...b.projects.map((p) => p.milestoneFeedId)]) {
+        if (f) feedOwner.set(f.toLowerCase(), b.owner.toLowerCase());
+      }
+    }
+    const milestones = foldMilestones(
+      priorMilestones,
+      attestedLogs.map((l): MilestoneReading => {
+        const a = (l as unknown as { args: { feedId: string; value: bigint } }).args;
+        return { feedId: a.feedId, value: a.value, block: Number(l.blockNumber ?? 0n), seq: Number(l.logIndex ?? 0) };
+      }),
+      (f) => feedOwner.get(f),
+      seasons,
     );
-    for (const l of seasonProgressLogs) {
-      const a = (l as unknown as { args: { builder: Address; weight: bigint } }).args;
-      const blk = Number(l.blockNumber ?? 0n);
-      const season = seasons.find((x) => blk >= x.startBlock && (x.endBlock === null || blk <= x.endBlock));
-      if (!season) continue;
-      let board = progressBySeason.get(season.id);
-      if (!board) progressBySeason.set(season.id, (board = new Map()));
-      const k = a.builder.toLowerCase();
-      board.set(k, (board.get(k) ?? 0) + Number(a.weight));
+
+    // Only verified builders reach the atlas and the season boards; country is
+    // the one in their signed claim.
+    for (const b of perennialBuilders) {
+      if (b.status !== "verified") continue;
+      builderAgg.push({
+        builderId: b.builderId,
+        address: b.owner,
+        lifetimeProgress: lifetimeProgress(milestones, [b.milestoneFeedId, ...b.projects.map((p) => p.milestoneFeedId)]),
+        // bigint is not JSON-serialisable; the consumer parses with BigInt().
+        volume: (volumeByBuilderId.get(b.builderId) ?? 0n).toString(),
+        country: b.country,
+      });
     }
 
     // Trader ledger. Bought is already in hand from the volume pass; Sold and
@@ -1074,7 +1094,7 @@ async function main(): Promise<void> {
           traders: Object.entries(pnl.realised[String(x.id)] ?? {}) as Array<[string, string]>,
           // The fold keeps every builder (a builder verified later keeps its
           // history); the board shows verified builders only.
-          builders: [...(progressBySeason.get(x.id) ?? new Map<string, number>())].filter(([addr]) =>
+          builders: Object.entries(milestones.bySeason[String(x.id)] ?? {}).filter(([addr]) =>
             verified.has(addr),
           ) as Array<[string, number]>,
         },
@@ -1083,15 +1103,12 @@ async function main(): Promise<void> {
 
     atlasCursor = {
       lastScannedBlock: latestBlock.toString(),
-      progressByBuilder: Object.fromEntries(progressByBuilder),
       volumeByBuilderId: Object.fromEntries(
         Array.from(volumeByBuilderId, ([k, v]) => [String(k), v.toString()]),
       ),
       marketToBuilder: Object.fromEntries(marketToBuilder),
       pnl,
-      progressBySeason: Object.fromEntries(
-        [...progressBySeason].map(([sid, m]) => [String(sid), Object.fromEntries(m)]),
-      ),
+      milestones,
       seasonStartBlocks: Object.fromEntries(
         [...startBlocks].map(([sid, b]) => [String(sid), b.toString()]),
       ),
@@ -1212,6 +1229,40 @@ async function main(): Promise<void> {
     }
   }
 
+  // ── builder economy (BuilderFund + SeasonPool) ───────────────────────────
+  // The fund's and the pool's events folded into live-data.json `economy`
+  // (economy-chain.ts): the browser resumes from its block instead of the
+  // deploy block. Absent until the contracts are deployed on this network
+  // (contracts.BuilderFund / SeasonPool, or perennial.builderFund / seasonPool).
+  const perennialRecord = (DEPLOYMENT.perennial ?? {}) as { builderFund?: { address?: string }; seasonPool?: { address?: string } };
+  const fundAddr = ((DEPLOYMENT.contracts as { BuilderFund?: string }).BuilderFund ?? perennialRecord.builderFund?.address) as Address | undefined;
+  const seasonPoolAddr = ((DEPLOYMENT.contracts as { SeasonPool?: string }).SeasonPool ?? perennialRecord.seasonPool?.address) as Address | undefined;
+  let economy: EconomyCursor | null = null;
+  if (fundAddr && seasonPoolAddr) {
+    let start: EconomyCursor | undefined;
+    try {
+      const prev = JSON.parse(readFileSync(resolve(__dirname, "../src/lib/live-data.json"), "utf8"));
+      if (cursorMatches(prev?.economy, DEPLOYMENT.chainId, fundAddr, seasonPoolAddr)) start = prev.economy as EconomyCursor;
+    } catch {
+      // no previous snapshot
+    }
+    const deployBlock = BigInt((DEPLOYMENT.perennial as { deployBlock?: number } | undefined)?.deployBlock ?? 0);
+    start ??= {
+      chainId: DEPLOYMENT.chainId, fund: fundAddr, pool: seasonPoolAddr,
+      scannedTo: (deployBlock > 0n ? deployBlock - 1n : fromBlock).toString(), ledger: EMPTY_LEDGER,
+    };
+    console.log(`reading builder economy (fund ${fundAddr}, pool ${seasonPoolAddr}) from block ${BigInt(start.scannedTo) + 1n}…`);
+    try {
+      const r = await scanEconomy(client as unknown as Parameters<typeof scanEconomy>[0], start, latestBlock, Number.MAX_SAFE_INTEGER);
+      economy = r.cursor;
+      if (r.partial) console.warn(`  economy scan stopped at block ${r.cursor.scannedTo} (a chunk failed); the next sync resumes`);
+      console.log(`  ${Object.keys(economy.ledger.seasons).length} season(s), income for ${Object.keys(economy.ledger.income).length} builder(s)`);
+    } catch (e) {
+      console.warn(`  economy scan failed, keeping the previous snapshot: ${(e as Error).message.split("\n")[0]}`);
+      economy = start.scannedTo === "0" ? null : start;
+    }
+  }
+
   // ── builders gallery (/builders) ────────────────────────────────────────
   // Read on the BUILDERS network (builders-network.ts): Arc mainnet as soon as
   // its phase-1 BuilderRegistry is recorded, else testnet. Registries + badge
@@ -1295,6 +1346,7 @@ async function main(): Promise<void> {
     builderFeeds: builderFeedsCursor,
     perennialMarkets,
     atlas: atlasCursor,
+    economy,
     seasons,
     seasonBoards,
     reputation,
@@ -1302,7 +1354,7 @@ async function main(): Promise<void> {
     gallery,
     chainId: DEPLOYMENT.chainId,
     explorer: DEPLOYMENT.explorer,
-    contracts: badgeAddr ? { ...DEPLOYMENT.contracts, VerifiedBuilderBadge: badgeAddr } : DEPLOYMENT.contracts,
+    contracts: liveContracts(DEPLOYMENT.contracts, { VerifiedBuilderBadge: badgeAddr, BuilderFund: fundAddr, SeasonPool: seasonPoolAddr }),
     // Backwards-compat: the first feed exposes a flat `feed` / `agent` /
     // `attestations` shape for components that haven't migrated to the
     // multi-feed `feeds[]` array yet.

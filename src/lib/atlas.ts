@@ -11,7 +11,8 @@
 export type BuilderAggregate = {
   builderId: number;
   address: string;
-  /** Summed from ProgressAdded events — NOT progressWeight, which resets each epoch. */
+  /** Verified artifacts: the latest attested count of each of the builder's project
+   *  milestone feeds, summed (milestone-progress.ts). */
   lifetimeProgress: number;
   /** Trade notional across every market tagged to this builder, in USDC base units (6dp). */
   volume: bigint;
