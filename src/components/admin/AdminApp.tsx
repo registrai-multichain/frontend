@@ -2,24 +2,31 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import useSWR from "swr";
-import { createPublicClient, type Address, type PublicClient } from "viem";
+import { createPublicClient, getAddress, isAddress, type Address, type PublicClient } from "viem";
 import { useWallet } from "@/components/WalletProvider";
 import { BUILDERS } from "@/lib/builders-network";
 import { transportFor } from "@/lib/chains";
 import { shortAddr } from "@/lib/format";
 import { humanizeError } from "@/lib/humanize-error";
-import { sourceHref, xHref, type GalleryBuilder, type GalleryReader } from "@/lib/builders-gallery";
+import { builderName, projectChipKind, sourceHref, xHref, type GalleryBuilder, type GalleryReader } from "@/lib/builders-gallery";
 import { ADMIN_SERVICE, adminLoginMessage, inviteDm, type InviteRecord } from "@/lib/builders-admin";
 import {
+  cancelRecoverySafeFile,
+  deactivateProjectSafeFile,
   inviteChainStatus,
   needsFollowUp,
   onboardingQueue,
   onboardingSafeFile,
   readAdminChain,
+  readRecoveries,
   revokeSafeFile,
   safeFileName,
+  startRecoverySafeFile,
   type InviteChainStatus,
+  type PendingRecovery,
 } from "@/lib/builders-admin-chain";
+import { formatCountdown, recoveryView, transferTargetError, utcMinute } from "@/lib/builder-ownership";
+import { verifiedBuilderAbi } from "@/lib/verified-builders-chain";
 import { badgeImageBase, serialLabel } from "@/lib/verified-builder-badge";
 import { normalizeSource, sourceLabel } from "@/lib/verified-builders";
 
@@ -131,7 +138,10 @@ export function AdminApp() {
             <i /> {BUILDERS.label} · admin
           </div>
           <h1>Builders admin</h1>
-          <p>Invites, the onboarding queue and badge actions. Nothing is sent on-chain from here: batches go to the Safe.</p>
+          <p>
+            Invites, the onboarding queue, badge actions, recoveries and projects. Nothing the Safe must sign is sent from
+            here: those are Safe batch files. Finishing a recovery (anyone may) is the one transaction this page sends.
+          </p>
         </div>
       </header>
 
@@ -233,10 +243,14 @@ function Dashboard({ admin, onSignedOut }: { admin: string; onSignedOut: () => v
     shouldRetryOnError: false,
   });
 
+  /** The gallery's name rule (builderName), with the admin's invite names as the curated names. */
   const nameOf = useCallback(
-    (source: string | null, id?: number) => {
-      const inv = source ? invites.data?.find((i) => i.source === source) : undefined;
-      return inv?.name ?? (source ? sourceLabel(source) : `Builder #${id}`);
+    (b: GalleryBuilder) => {
+      const named = b.projects
+        .filter((p) => p.active)
+        .map((p) => invites.data?.find((i) => i.source === p.source))
+        .filter((i): i is AdminInvite => Boolean(i));
+      return builderName(b, named);
     },
     [invites.data],
   );
@@ -285,6 +299,10 @@ function Dashboard({ admin, onSignedOut }: { admin: string; onSignedOut: () => v
       <OnboardingSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
 
       <BadgeSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
+
+      <RecoverySection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
+
+      <ProjectsSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
     </div>
   );
 }
@@ -617,7 +635,7 @@ function OnboardingSection({
 }: {
   builders: GalleryBuilder[] | null;
   chainNote: string | null;
-  nameOf: (source: string | null, id?: number) => string;
+  nameOf: (b: GalleryBuilder) => string;
 }) {
   const missing = [!REG && "BuilderRegistry", !CARE && "CaretakerRegistry", !OPERATOR && "the operator"].filter(Boolean);
   const badge = BUILDERS.badgesOn ? BADGE : null;
@@ -638,7 +656,8 @@ function OnboardingSection({
       ) : (
         <>
           <p className="vf-note">
-            Claimed builders whose proof this browser just validated: pending ones get <code>setCaretaker(id, operator)</code>
+            Builders with at least one project proof this browser just validated (onboarding is per builder, not per
+            project): pending ones get <code>setCaretaker(id, operator)</code>
             {badge ? (
               <>
                 {" "}then <code>issue(id)</code>, and verified builders without a badge get <code>issue(id)</code>
@@ -653,7 +672,11 @@ function OnboardingSection({
               <ul className="adm-list">
                 {queue.included.map((b) => (
                   <li key={b.id}>
-                    <b>{nameOf(b.source, b.id)}</b> <span className="adm-sub">builder #{b.id} · {b.status === "pending" ? "claimed, awaiting onboarding" : "verified, no badge"}</span>
+                    <b>{nameOf(b)}</b>{" "}
+                    <span className="adm-sub">
+                      builder #{b.id} · {b.status === "pending" ? "claimed, awaiting onboarding" : "verified, no badge"} ·{" "}
+                      {b.projects.filter((p) => p.status === "verified" && !p.proofUnchecked).map((p) => sourceLabel(p.source)).join(", ")}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -680,13 +703,16 @@ function OnboardingSection({
           {queue.excluded.length > 0 && (
             <div className="adm-excluded">
               <p className="vf-note">
-                <b>Not in this batch:</b> the browser could not read their domain proof (CORS). Verify with{" "}
+                <b>Not in this batch:</b> the browser could not read any of their project proofs (domains, CORS). Verify with{" "}
                 <code>{CLI}</code>.
               </p>
               <ul className="adm-list">
                 {queue.excluded.map((b) => (
                   <li key={b.id}>
-                    <b>{nameOf(b.source, b.id)}</b> <span className="adm-sub">builder #{b.id} · {b.source ? sourceLabel(b.source) : ""}</span>
+                    <b>{nameOf(b)}</b>{" "}
+                    <span className="adm-sub">
+                      builder #{b.id} · {b.projects.filter((p) => p.proofUnchecked).map((p) => sourceLabel(p.source)).join(", ")}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -707,7 +733,7 @@ function BadgeSection({
 }: {
   builders: GalleryBuilder[] | null;
   chainNote: string | null;
-  nameOf: (source: string | null, id?: number) => string;
+  nameOf: (b: GalleryBuilder) => string;
 }) {
   const [confirm, setConfirm] = useState<GalleryBuilder | null>(null);
   const holders = useMemo(
@@ -734,7 +760,7 @@ function BadgeSection({
             <thead>
               <tr>
                 <th>Badge</th>
-                <th>Project</th>
+                <th>Builder name</th>
                 <th>Builder</th>
                 <th>Owner</th>
                 <th>State</th>
@@ -747,7 +773,7 @@ function BadgeSection({
                   <td className="tnum">
                     <b>{serialLabel(b.badge!.serial)}</b>
                   </td>
-                  <td>{nameOf(b.source, b.id)}</td>
+                  <td>{nameOf(b)}</td>
                   <td className="tnum">#{b.id}</td>
                   <td>
                     <a href={`${BUILDERS.explorer.url}/address/${b.owner}`} target="_blank" rel="noreferrer">
@@ -766,7 +792,7 @@ function BadgeSection({
           </table>
         </div>
       )}
-      {confirm && <RevokeDialog b={confirm} name={nameOf(confirm.source, confirm.id)} onClose={() => setConfirm(null)} />}
+      {confirm && <RevokeDialog b={confirm} name={nameOf(confirm)} onClose={() => setConfirm(null)} />}
     </Section>
   );
 }
@@ -812,5 +838,286 @@ function RevokeDialog({ b, name, onClose }: { b: GalleryBuilder; name: string; o
         </div>
       </section>
     </div>
+  );
+}
+
+// ───────────────────────────── recovery ─────────────────────────────
+
+const nowS = () => Math.floor(Date.now() / 1000);
+
+function useTick(ms = 1000): number {
+  const [now, setNow] = useState(nowS);
+  useEffect(() => {
+    const t = setInterval(() => setNow(nowS()), ms);
+    return () => clearInterval(t);
+  }, [ms]);
+  return now;
+}
+
+/**
+ * Key recovery (spec 2026-09-24-builder-projects-design.md): the Safe (REGISTRAR)
+ * starts it — a Safe batch file from here —, the builder's owner may cancel it
+ * for 7 days, then anyone may finish it (sent from the connected wallet).
+ */
+function RecoverySection({
+  builders,
+  chainNote,
+  nameOf,
+}: {
+  builders: GalleryBuilder[] | null;
+  chainNote: string | null;
+  nameOf: (b: GalleryBuilder) => string;
+}) {
+  const { address, walletClient, walletChainId, switchChain } = useWallet();
+  const [idInput, setIdInput] = useState("");
+  const [toInput, setToInput] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [finish, setFinish] = useState<{ id?: number; error?: string; hash?: string }>({});
+  const now = useTick();
+  const ids = useMemo(() => (builders ?? []).map((b) => b.id), [builders]);
+  const pending = useSWR(REG && builders ? ["admin-recoveries", BUILDERS.chainId, REG, ids.join(",")] : null, async () => {
+    const client = createPublicClient({ chain: BUILDERS.chain.viemChain, transport: transportFor(BUILDERS.chain, { batch: true }) }) as PublicClient;
+    return readRecoveries(client as unknown as GalleryReader, REG!, ids);
+  }, { revalidateOnFocus: false });
+
+  if (!REG) {
+    return (
+      <Section title="Recovery">
+        <p className="vf-hint">No builder registry on {BUILDERS.label}.</p>
+      </Section>
+    );
+  }
+
+  function start() {
+    const id = Number(idInput.trim());
+    const b = builders?.find((x) => x.id === id);
+    if (!Number.isSafeInteger(id) || id <= 0) return setFormError("Enter a builder id.");
+    if (builders && !b) return setFormError(`No builder #${id} on ${BUILDERS.label}.`);
+    const holder = builders?.find((x) => isAddress(toInput.trim(), { strict: false }) && x.owner === toInput.trim().toLowerCase());
+    const err = transferTargetError(toInput, { owner: b?.owner ?? "", newOwnerBuilderId: holder?.id });
+    if (err) return setFormError(err);
+    setFormError(null);
+    download(
+      safeFileName(`recovery-builder-${id}`, Date.now()),
+      startRecoverySafeFile({ registry: REG!, builderId: id, newOwner: getAddress(toInput.trim()), chainId: BUILDERS.chainId, createdAt: Date.now() }),
+    );
+  }
+
+  async function finishRecovery(r: PendingRecovery) {
+    if (!address || !walletClient) return;
+    setFinish({ id: r.builderId });
+    try {
+      if (walletChainId !== BUILDERS.chainId) await switchChain(BUILDERS.chainId);
+      const pc = createPublicClient({ chain: BUILDERS.chain.viemChain, transport: transportFor(BUILDERS.chain) }) as PublicClient;
+      await pc.simulateContract({ address: REG!, abi: verifiedBuilderAbi, functionName: "finishRecovery", args: [BigInt(r.builderId)], account: address as Address });
+      const hash = await walletClient.writeContract({
+        address: REG!, abi: verifiedBuilderAbi, functionName: "finishRecovery", args: [BigInt(r.builderId)],
+        account: address as Address, chain: BUILDERS.chain.viemChain,
+      });
+      setFinish({ id: r.builderId, hash });
+      const rc = await pc.waitForTransactionReceipt({ hash });
+      if (rc.status !== "success") throw new Error("the transaction reverted");
+      setFinish({ hash });
+      await pending.mutate();
+    } catch (e) {
+      setFinish((f) => ({ hash: f.hash, error: humanizeError(e, HUMAN) }));
+    }
+  }
+
+  const rows = pending.data ?? [];
+  return (
+    <Section title="Recovery">
+      <p className="vf-note">
+        For a builder who lost their key (or had it stolen): <code>startRecovery(builderId, newOwner)</code> from the Safe. The
+        current owner sees a banner on /verify and may cancel it for 7 days; after that anyone can finish it. The new wallet
+        must hold no builder. Payouts fall back to the new owner; project proofs must be re-signed with the new wallet and the
+        badge synced.
+      </p>
+      <div className="adm-inline">
+        <label className="vf-field">
+          <span>Builder id</span>
+          <input value={idInput} onChange={(e) => setIdInput(e.target.value)} inputMode="numeric" placeholder="7" />
+          <em>{builders?.find((b) => b.id === Number(idInput)) ? nameOf(builders.find((b) => b.id === Number(idInput))!) : ""}</em>
+        </label>
+        <label className="vf-field">
+          <span>New owner</span>
+          <input value={toInput} onChange={(e) => setToInput(e.target.value)} placeholder="0x…" spellCheck={false} autoCapitalize="off" />
+          <em />
+        </label>
+        <button type="button" className="vf-primary" onClick={start} disabled={!idInput.trim() || !toInput.trim()}>
+          Download recovery batch
+        </button>
+      </div>
+      {formError && <p className="vf-error">{formError}</p>}
+
+      <div className="pp-card-label">Pending recoveries</div>
+      {!builders ? (
+        <p className="vf-hint">{chainNote}</p>
+      ) : pending.error ? (
+        <p className="vf-error">Could not read recoveries: {humanizeError(pending.error, HUMAN)}</p>
+      ) : !pending.data ? (
+        <p className="vf-hint">Reading recoveries…</p>
+      ) : rows.length === 0 ? (
+        <p className="vf-hint">None.</p>
+      ) : (
+        <div className="adm-table-wrap">
+          <table className="adm-table">
+            <thead>
+              <tr>
+                <th>Builder</th>
+                <th>Moves to</th>
+                <th>Ready</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const v = recoveryView(r, now);
+                const b = builders.find((x) => x.id === r.builderId);
+                return (
+                  <tr key={r.builderId}>
+                    <td>
+                      <b>{b ? nameOf(b) : `Builder #${r.builderId}`}</b>
+                      <span className="adm-sub">#{r.builderId}{b ? ` · owner ${shortAddr(b.owner)}` : ""}</span>
+                    </td>
+                    <td>
+                      <a href={`${BUILDERS.explorer.url}/address/${r.newOwner}`} target="_blank" rel="noreferrer">
+                        {shortAddr(r.newOwner)} ↗
+                      </a>
+                    </td>
+                    <td className="tnum">
+                      {v.kind === "waiting" ? `in ${formatCountdown(v.secondsLeft)}` : "ready"}
+                      <span className="adm-sub">{utcMinute(r.readyAt)}</span>
+                    </td>
+                    <td>
+                      <span className="adm-actions">
+                        {v.kind === "ready" && (
+                          <button
+                            type="button"
+                            className="vf-mini vf-mini-strong"
+                            disabled={!address || finish.id === r.builderId}
+                            title={address ? "finishRecovery: anyone may send it" : "connect a wallet to send it"}
+                            onClick={() => finishRecovery(r)}
+                          >
+                            {finish.id === r.builderId ? "finishing…" : "Finish"}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="vf-mini"
+                          onClick={() =>
+                            download(
+                              safeFileName(`cancel-recovery-builder-${r.builderId}`, Date.now()),
+                              cancelRecoverySafeFile({ registry: REG!, builderId: r.builderId, chainId: BUILDERS.chainId, createdAt: Date.now() }),
+                            )
+                          }
+                        >
+                          cancel (Safe)
+                        </button>
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {finish.error && <p className="vf-error">{finish.error}</p>}
+      {finish.hash && (
+        <a className="vf-link" href={`${BUILDERS.explorer.url}/tx/${finish.hash}`} target="_blank" rel="noreferrer">
+          view transaction ↗
+        </a>
+      )}
+    </Section>
+  );
+}
+
+// ───────────────────────────── projects ─────────────────────────────
+
+/** Every active project on chain, with a Safe batch to deactivate one (setProjectActive(id, false), REGISTRAR). */
+function ProjectsSection({
+  builders,
+  chainNote,
+  nameOf,
+}: {
+  builders: GalleryBuilder[] | null;
+  chainNote: string | null;
+  nameOf: (b: GalleryBuilder) => string;
+}) {
+  const [query, setQuery] = useState("");
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (builders ?? [])
+      .flatMap((b) => b.projects.filter((p) => p.active).map((p) => ({ b, p })))
+      .filter(({ b, p }) => !q || `${p.source} #${p.id} #${b.id} ${nameOf(b)}`.toLowerCase().includes(q));
+  }, [builders, query, nameOf]);
+  if (!REG) return null;
+  return (
+    <Section
+      title="Projects"
+      aside={
+        <label className="bld-search">
+          <span className="sr-only">Filter projects</span>
+          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="filter: source, #id, name" spellCheck={false} />
+        </label>
+      }
+    >
+      <p className="vf-note">
+        Active projects on {BUILDERS.label}. <b>Deactivate</b> downloads a one-transaction Safe batch,{" "}
+        <code>setProjectActive(projectId, false)</code> (e.g. a fraudulent claim). The project keeps its id and history; the
+        builder&apos;s status follows at the next read.
+      </p>
+      {!builders ? (
+        <p className="vf-hint">{chainNote}</p>
+      ) : rows.length === 0 ? (
+        <p className="vf-hint">{query ? "Nothing matches." : "No active projects."}</p>
+      ) : (
+        <div className="adm-table-wrap">
+          <table className="adm-table">
+            <thead>
+              <tr>
+                <th>Project</th>
+                <th>Builder</th>
+                <th>Proof</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ b, p }) => (
+                <tr key={`${b.id}-${p.id}`}>
+                  <td>
+                    <a href={sourceHref(p.source)} target="_blank" rel="noreferrer">
+                      {sourceLabel(p.source)} ↗
+                    </a>
+                    <span className="adm-sub">project #{p.id}</span>
+                  </td>
+                  <td>
+                    <b>{nameOf(b)}</b>
+                    <span className="adm-sub">#{b.id}</span>
+                  </td>
+                  <td>{projectChipKind(p, b) ?? "inactive"}{p.proofUnchecked ? " · unchecked" : ""}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="vf-mini"
+                      onClick={() => {
+                        if (!window.confirm(`Download a Safe batch deactivating project #${p.id} (${p.source}) of builder #${b.id}?`)) return;
+                        download(
+                          safeFileName(`deactivate-project-${p.id}`, Date.now()),
+                          deactivateProjectSafeFile({ registry: REG!, projectId: p.id, source: p.source, chainId: BUILDERS.chainId, createdAt: Date.now() }),
+                        );
+                      }}
+                    >
+                      Deactivate
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Section>
   );
 }

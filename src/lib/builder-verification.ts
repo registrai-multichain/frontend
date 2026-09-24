@@ -1,12 +1,16 @@
 /**
  * Verified-builder status as the UI shows it: the synced snapshot
  * (live-data.json `perennialBuilders`, written by scripts/sync.ts), trusted only
- * when it describes the selected network and, when the live profile link is
- * known, only while that link still names the same source.
+ * when it describes the selected network and only for the same builder id AND
+ * owner (every proof names the owner, so an owner change voids the mark).
+ *
+ * TODO(spec 2026-09-24-builder-projects-design.md "Phase 2"): a builder has
+ * several projects; the market pages still show one (the snapshot's lead
+ * `source`). Switch them to `projects` when markets are re-keyed per project feed.
  */
 import live from "./live-data.json";
 import { SNAPSHOT_MATCHES_NETWORK } from "./perennial-network";
-import { profileURIFor, type BuilderStatus } from "./verified-builders";
+import type { BuilderStatus } from "./verified-builders";
 import { parseSnapshotBadge, type BadgeInfo } from "./verified-builder-badge";
 
 export interface SnapshotBuilder {
@@ -17,6 +21,8 @@ export interface SnapshotBuilder {
   country: string | null;
   proofUrl: string | null;
   milestoneFeedId: string | null;
+  /** Absent in snapshots written before builders had projects. */
+  projects?: { id: number; source: string; status: string; milestoneFeedId: string | null }[];
   /** Raw; read it through snapshotBadgeFor. */
   badge?: unknown;
 }
@@ -36,17 +42,21 @@ export function snapshotBuilders(): SnapshotBuilder[] {
 /** Pure: the Verified mark for a builder, or null. */
 export function verificationFor(
   rows: SnapshotBuilder[],
-  b: { builderId: number; owner: string; profileURI?: string },
+  b: { builderId: number; owner: string },
 ): Verification | null {
-  const row = rows.find((r) => r.builderId === b.builderId && r.owner.toLowerCase() === b.owner.toLowerCase());
+  const row = snapshotRowFor(rows, b);
   if (!row || row.status !== "verified" || !row.source || !row.proofUrl) return null;
-  if (b.profileURI !== undefined && b.profileURI !== profileURIFor(row.source)) return null;
   return { source: row.source, proofUrl: row.proofUrl };
+}
+
+/** Pure: the snapshot row for this builder (same id AND owner), or null. */
+export function snapshotRowFor(rows: SnapshotBuilder[], b: { builderId: number; owner: string }): SnapshotBuilder | null {
+  return rows.find((r) => r.builderId === b.builderId && r.owner.toLowerCase() === b.owner.toLowerCase()) ?? null;
 }
 
 /** Pure: the badge the snapshot recorded for this builder (same id AND owner), or null. */
 export function snapshotBadgeFor(rows: SnapshotBuilder[], b: { builderId: number; owner: string }): BadgeInfo | null {
-  const row = rows.find((r) => r.builderId === b.builderId && r.owner.toLowerCase() === b.owner.toLowerCase());
+  const row = snapshotRowFor(rows, b);
   return row ? parseSnapshotBadge(row.badge) : null;
 }
 

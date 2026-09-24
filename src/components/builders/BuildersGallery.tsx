@@ -9,18 +9,19 @@ import { BUILDERS, buildersStatusLine } from "@/lib/builders-network";
 import { transportFor } from "@/lib/chains";
 import {
   FILTERS,
-  avatarUrl,
   browserProofCheck,
   builderAnchor,
   claimHref,
   filterGallery,
   galleryCounts,
+  initialOf,
   labelOf,
   mergeGallery,
   mergeNominees,
-  needsProofCheck,
   overlayLive,
   parsePublicInvites,
+  projectChipKind,
+  projectsNeedingCheck,
   proofHref,
   readLiveGallery,
   sourceHref,
@@ -29,16 +30,18 @@ import {
   type GalleryBuilder,
   type GalleryEntry,
   type GalleryFilter,
+  type GalleryProject,
   type GalleryReader,
   type GallerySnapshot,
   type LiveProof,
   type Nominee,
+  type ProjectChip,
 } from "@/lib/builders-gallery";
 import { badgeImageBase, parseBuilderParam } from "@/lib/verified-builder-badge";
 import { BuilderBadgeSection } from "@/components/BuilderBadgeSection";
 import type { BadgeNet } from "@/components/BuilderBadgeCard";
 import { useWallet } from "@/components/WalletProvider";
-import { sourceFromProfileURI, sourceLabel } from "@/lib/verified-builders";
+import { sourceLabel } from "@/lib/verified-builders";
 
 const REG = BUILDERS.contracts.BuilderRegistry;
 const BADGE = BUILDERS.contracts.VerifiedBuilderBadge;
@@ -68,9 +71,9 @@ async function eachLimited<T>(items: T[], limit: number, fn: (t: T) => Promise<v
 }
 
 /**
- * The snapshot, then the chain: builders registered after the sync are added
- * (their proof checked in the browser), caretakers and badges refreshed. Any
- * RPC failure leaves the snapshot on screen, silently.
+ * The snapshot, then the chain: builders and projects added after the sync
+ * appear (their proofs checked in the browser), caretakers, badges and project
+ * flags refreshed. Any RPC failure leaves the snapshot on screen, silently.
  */
 function useLiveBuilders(snapshot: GallerySnapshot | null): GalleryBuilder[] {
   const base = useMemo(() => snapshot?.builders ?? [], [snapshot]);
@@ -89,13 +92,10 @@ function useLiveBuilders(snapshot: GallerySnapshot | null): GalleryBuilder[] {
       });
       const snapById = new Map(base.map((b) => [b.id, b]));
       const proofs = new Map<number, LiveProof>();
-      await eachLimited(
-        rows.filter((r) => needsProofCheck(r, snapById.get(r.id))),
-        4,
-        async (r) => {
-          proofs.set(r.id, await browserProofCheck({ owner: r.owner, source: sourceFromProfileURI(r.profileURI)! }, { chainId: BUILDERS.chainId }));
-        },
-      );
+      const checks = rows.flatMap((r) => projectsNeedingCheck(r, snapById.get(r.id)).map((p) => ({ owner: r.owner, id: p.id, source: p.source })));
+      await eachLimited(checks, 4, async (c) => {
+        proofs.set(c.id, await browserProofCheck({ owner: c.owner, source: c.source }, { chainId: BUILDERS.chainId }));
+      });
       return overlayLive(base, rows, proofs, BUILDERS.operator);
     },
     { revalidateOnFocus: false, shouldRetryOnError: false, dedupingInterval: 60_000 },
@@ -133,13 +133,8 @@ function BuilderParam({ onBuilder }: { onBuilder: (id: number | null) => void })
 
 const detailHref = (id: number) => `/builders/?builder=${id}`;
 
-function initialOf(name: string): string {
-  return (/[a-z0-9]/i.exec(name)?.[0] ?? "R").toUpperCase();
-}
-
-/** GitHub owner avatar, else (domain, or a failed load) the project initial. */
-function Avatar({ source, name }: { source: string | null; name: string }) {
-  const url = avatarUrl(source, 128);
+/** The builder's avatar (first verified GitHub project's owner), else (domain, none, or a failed load) the name's initial. */
+function Avatar({ url, name }: { url: string | null; name: string }) {
   const [failed, setFailed] = useState(false);
   return (
     <div className="bld-avatar" aria-hidden="true">
@@ -154,19 +149,49 @@ function Avatar({ source, name }: { source: string | null; name: string }) {
   );
 }
 
+const CHIP_TITLE: Record<ProjectChip["kind"], string> = {
+  verified: "verified project",
+  nominated: "verified project · builder awaiting onboarding",
+  lapsed: "proof missing or no longer valid",
+};
+
+/** The builder's active projects as chips: verified / nominated in colour, lapsed greyed. */
+function ProjectChips({ chips }: { chips: ProjectChip[] }) {
+  if (!chips.length) return null;
+  return (
+    <ul className="bld-projects" aria-label="Projects">
+      {chips.map((c) => (
+        <li key={`${c.id}-${c.source}`}>
+          <a
+            className="bld-pchip"
+            data-kind={c.kind}
+            href={sourceHref(c.source)}
+            target="_blank"
+            rel="noreferrer"
+            title={`${c.source}: ${CHIP_TITLE[c.kind]}${c.unchecked ? " (proof check at next sync)" : ""}`}
+          >
+            {c.label}
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** What a card and the detail view both say about a builder's state. */
 function StatusNote({ e }: { e: GalleryEntry }) {
   const b = e.builder;
   if (e.kind === "nominated")
     return <p className="bld-note">{b?.proofUnchecked ? "Nominated · proof check at next sync" : "Claimed and registered · awaiting onboarding"}</p>;
-  if (e.kind === "lapsed") return <p className="bld-note">Proof file missing or no longer valid</p>;
+  if (e.kind === "lapsed") return <p className="bld-note">No project proof checks out right now</p>;
   if (e.kind === "invited") return <p className="bld-note">Invited · not claimed yet</p>;
   return null;
 }
 
 function BuilderCard({ e, highlighted }: { e: GalleryEntry; highlighted: boolean }) {
   const b = e.builder;
-  const proof = b ? proofHref(b.source) : null;
+  const proof = !b && e.source ? proofHref(e.source) : null;
+  const projects = b ? b.projects.filter((p) => p.active).length : 0;
   return (
     <li
       id={b ? builderAnchor(b.id) : e.key}
@@ -176,7 +201,7 @@ function BuilderCard({ e, highlighted }: { e: GalleryEntry; highlighted: boolean
       data-highlight={highlighted ? "true" : undefined}
     >
       <div className="bld-card-top">
-        <Avatar source={e.source} name={e.name} />
+        <Avatar url={e.avatar} name={e.name} />
         <div className="bld-card-title">
           <h2 title={e.name}>
             {b ? (
@@ -187,14 +212,17 @@ function BuilderCard({ e, highlighted }: { e: GalleryEntry; highlighted: boolean
               e.name
             )}
           </h2>
-          {e.source && (
+          {!b && e.source && (
             <a href={sourceHref(e.source)} target="_blank" rel="noreferrer">
               {sourceLabel(e.source)} ↗
             </a>
           )}
+          {b && <span className="bld-card-sub">{projects === 1 ? "1 project" : `${projects} projects`}</span>}
         </div>
         <span className="bld-chip" data-kind={e.kind}>{labelOf(e.kind)}</span>
       </div>
+
+      <ProjectChips chips={e.chips} />
 
       {(b || e.x) && (
         <dl className="bld-facts">
@@ -244,6 +272,47 @@ function BuilderCard({ e, highlighted }: { e: GalleryEntry; highlighted: boolean
   );
 }
 
+const PROJECT_STATUS_LABEL = { verified: "Verified", nominated: "Nominated", lapsed: "Lapsed" } as const;
+
+/** Every project of a builder (removed ones too): source, proof, status. */
+function ProjectList({ b }: { b: GalleryBuilder }) {
+  if (!b.projects.length) return <p className="bld-note">No projects on chain.</p>;
+  return (
+    <div className="bld-plist" role="table" aria-label="Projects">
+      {b.projects.map((p: GalleryProject) => {
+        const kind = projectChipKind(p, b);
+        const proof = p.proofUrl ?? proofHref(p.source);
+        return (
+          <div role="row" key={`${p.id}-${p.source}`} className="bld-plist-row" data-kind={kind ?? "inactive"}>
+            <span role="cell" className="bld-plist-name">
+              <a href={sourceHref(p.source)} target="_blank" rel="noreferrer">
+                {sourceLabel(p.source)} ↗
+              </a>
+              <small>
+                {p.source.startsWith("github:") ? "open source · repo" : "closed source · domain"}
+                {p.id ? ` · project #${p.id}` : ""}
+              </small>
+            </span>
+            <span role="cell">
+              {proof && p.active ? (
+                <a href={proof} target="_blank" rel="noreferrer">
+                  proof ↗
+                </a>
+              ) : null}
+            </span>
+            <span role="cell">
+              <span className="bld-pchip" data-kind={kind ?? "inactive"}>
+                {kind ? PROJECT_STATUS_LABEL[kind] : "Removed"}
+                {p.proofUnchecked ? " · unchecked" : ""}
+              </span>
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 const shortAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const isoDate = (s: number) => (s > 0 ? new Date(s * 1000).toISOString().slice(0, 10) : null);
 
@@ -255,7 +324,6 @@ const isoDate = (s: number) => (s > 0 ? new Date(s * 1000).toISOString().slice(0
 function BuilderDetail({ e, onClose }: { e: GalleryEntry; onClose: () => void }) {
   const b = e.builder!;
   const { address } = useWallet();
-  const proof = proofHref(b.source);
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => ev.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -282,14 +350,10 @@ function BuilderDetail({ e, onClose }: { e: GalleryEntry; onClose: () => void })
           ×
         </button>
         <div className="bld-card-top">
-          <Avatar source={e.source} name={e.name} />
+          <Avatar url={e.avatar} name={e.name} />
           <div className="bld-card-title">
             <h2 title={e.name}>{e.name}</h2>
-            {e.source && (
-              <a href={sourceHref(e.source)} target="_blank" rel="noreferrer">
-                {sourceLabel(e.source)} ↗
-              </a>
-            )}
+            <span className="bld-card-sub">builder #{b.id}</span>
           </div>
           <span className="bld-chip" data-kind={e.kind}>{labelOf(e.kind)}</span>
         </div>
@@ -329,24 +393,18 @@ function BuilderDetail({ e, onClose }: { e: GalleryEntry; onClose: () => void })
 
         <StatusNote e={e} />
 
+        <ProjectList b={b} />
+
         {BADGE && (
           <BuilderBadgeSection
             builderId={b.id}
             owner={b.owner}
             name={e.name}
-            source={b.source}
+            source={e.source}
             snapshot={b.badge}
             viewer={address}
             net={BADGE_NET}
           />
-        )}
-
-        {proof && (
-          <div className="bld-card-foot">
-            <a href={proof} target="_blank" rel="noreferrer">
-              proof ↗
-            </a>
-          </div>
         )}
       </section>
     </div>
@@ -387,8 +445,8 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
           </div>
           <h1>Verified builders</h1>
           <p className="bld-deck">
-            Projects building on Arc, each claimed by its own wallet with a signed proof in its repo or on its domain,
-            and registered on-chain.
+            Builders on Arc and their projects, each project claimed by the builder&apos;s wallet with a signed proof in
+            its repo or on its domain, and registered on-chain.
           </p>
           <div className="vf-invite mt-3">
             Building on Arc? <Link href="/verify">Claim your project →</Link>
@@ -435,7 +493,7 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
                 type="search"
                 value={query}
                 onChange={(ev) => setQuery(ev.target.value)}
-                placeholder="search project, @handle, country, No."
+                placeholder="search builder, project, @handle, country, No."
                 spellCheck={false}
                 autoCapitalize="off"
               />
@@ -469,8 +527,9 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
       {openEntry && <BuilderDetail e={openEntry} onClose={closeDetail} />}
 
       <p className="bld-legend">
-        In colour: claimed (verified, or nominated and awaiting the multisig&apos;s onboarding batch). In grayscale:
-        lapsed proofs and invited projects that haven&apos;t claimed yet.
+        In colour: claimed builders (verified, or nominated and awaiting the multisig&apos;s onboarding batch). In
+        grayscale: builders with no project proof that checks out, and invited projects that haven&apos;t claimed yet.
+        Project chips: verified, nominated, or greyed when that project&apos;s proof has lapsed.
         {snapshot?.syncedAt ? ` Snapshot ${snapshot.syncedAt.slice(0, 10)}, updated live from ${BUILDERS.label}.` : ""}
       </p>
     </>

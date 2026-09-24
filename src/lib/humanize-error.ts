@@ -64,11 +64,34 @@ const ERROR_MESSAGES: Record<string, string> = {
   EpochNotClosed: "That epoch has not closed yet.",
   EpochNotOver: "That epoch is not over yet.",
   NoProgress: "No verified progress in that epoch, so there is nothing to claim.",
+  // builder projects, ownership, recovery (BuilderRegistry) and the badge
+  TooLong: "That text is too long for the registry (a project source is at most 128 bytes).",
+  EmptySource: "The project source is empty.",
+  TooManyProjects: "This builder has used all 16 project slots (removed projects keep theirs).",
+  UnknownProject: "That project does not exist.",
+  InactiveBuilder: "This builder is deactivated on the registry.",
+  NotPendingOwner: "This wallet is not the proposed new owner of that builder.",
+  NoRecovery: "There is no pending recovery for that builder.",
+  RecoveryNotReady: "The recovery's 7-day waiting period has not passed yet.",
+  NoBadge: "This builder has no Verified Builder Badge.",
+  NoProject: "The builder needs at least one active project for a badge.",
+  AlreadyIssued: "This builder already has a badge.",
 };
 
 const EXTRA_ERRORS = parseAbi([
   "error AgentNotApproved()",
   "error ResolverNotApproved()",
+  "error TooLong()",
+  "error EmptySource()",
+  "error TooManyProjects()",
+  "error UnknownProject()",
+  "error InactiveBuilder()",
+  "error NotPendingOwner()",
+  "error NoRecovery()",
+  "error RecoveryNotReady()",
+  "error NoBadge()",
+  "error NoProject()",
+  "error AlreadyIssued()",
   "error Error(string)",
 ]);
 

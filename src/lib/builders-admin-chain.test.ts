@@ -2,15 +2,19 @@ import { describe, expect, test } from "vitest";
 import { decodeFunctionData, getAddress, zeroAddress, type Address } from "viem";
 import {
   FOLLOW_UP_AFTER_MS,
+  cancelRecoverySafeFile,
+  deactivateProjectSafeFile,
   inviteChainStatus,
   needsFollowUp,
   onboardingQueue,
   onboardingSafeFile,
   readAdminChain,
+  readRecoveries,
   revokeSafeFile,
   safeFileName,
+  startRecoverySafeFile,
 } from "./builders-admin-chain";
-import type { GalleryBuilder, GalleryReader } from "./builders-gallery";
+import type { GalleryBuilder, GalleryProject, GalleryReader } from "./builders-gallery";
 import { verifiedBuilderAbi } from "./verified-builders-chain";
 import { badgeAbi, type BadgeInfo } from "./verified-builder-badge";
 
@@ -21,17 +25,23 @@ const BADGE = "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c" as Address;
 const B0 = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 
 const badge = (serial: number, lapsed = false): BadgeInfo => ({ serial, lapsed, issuedAt: 1, image: "" });
-const b = (id: number, status: GalleryBuilder["status"], source: string | null, extra: Partial<GalleryBuilder> = {}): GalleryBuilder => ({
-  id,
-  owner: B0,
-  status,
-  source,
-  country: null,
-  proofUrl: null,
-  badge: null,
-  createdAt: 0,
-  ...extra,
-});
+/** A builder with one project `source` (id = builder id * 10) whose status follows the builder's. */
+const b = (id: number, status: GalleryBuilder["status"], source: string | null, extra: Partial<GalleryBuilder> = {}): GalleryBuilder => {
+  const ps: GalleryProject["status"] = status === "verified" || status === "pending" ? "verified" : status === "lapsed" ? "lapsed" : "inactive";
+  return {
+    id,
+    owner: B0,
+    status,
+    profileURI: "",
+    projects: source
+      ? [{ id: id * 10, source, active: ps !== "inactive", status: ps, country: null, proofUrl: null, ...(extra.proofUnchecked ? { proofUnchecked: true } : {}) }]
+      : [],
+    country: null,
+    badge: null,
+    createdAt: 0,
+    ...extra,
+  };
+};
 
 describe("inviteChainStatus", () => {
   test("invited until a shown builder claims the source; the best claim wins", () => {
@@ -49,6 +59,23 @@ describe("inviteChainStatus", () => {
     ).toEqual({ kind: "verified", builderId: 5, serial: 7 });
     // a lapsed badge shows the builder as lapsed
     expect(inviteChainStatus("github:a/b", [b(5, "verified", "github:a/b", { badge: badge(7, true) })])).toEqual({ kind: "lapsed", builderId: 5 });
+  });
+
+  test("per project: the invited source among a builder's several projects", () => {
+    const multi = b(9, "verified", "github:main/app", { badge: badge(3) });
+    multi.projects.push(
+      { id: 91, source: "github:a/b", active: true, status: "verified", country: null, proofUrl: null },
+      { id: 92, source: "domain:new.example", active: true, status: "lapsed", country: null, proofUrl: null },
+      { id: 93, source: "github:gone/away", active: false, status: "inactive", country: null, proofUrl: null },
+    );
+    expect(inviteChainStatus("github:a/b", [multi])).toEqual({ kind: "verified", builderId: 9, serial: 3 });
+    // that project's own proof is lapsed: the invite shows lapsed, even on a verified builder
+    expect(inviteChainStatus("domain:new.example", [multi])).toEqual({ kind: "lapsed", builderId: 9 });
+    // a removed project is no longer a claim
+    expect(inviteChainStatus("github:gone/away", [multi])).toEqual({ kind: "invited" });
+    // pending builder: its verified projects are nominated
+    const pending = b(8, "pending", "github:p/q");
+    expect(inviteChainStatus("github:p/q", [pending])).toEqual({ kind: "nominated", builderId: 8, unchecked: false });
   });
 });
 
@@ -68,7 +95,7 @@ describe("needsFollowUp", () => {
   });
 });
 
-describe("onboardingQueue", () => {
+describe("onboardingQueue (per builder)", () => {
   const builders = [
     b(1, "unverified", null),
     b(2, "pending", "github:o/r"),
@@ -101,6 +128,26 @@ describe("onboardingQueue", () => {
     expect(safe.transactions).toHaveLength(3);
   });
 
+  test("one batch entry per builder, however many verified projects it has", () => {
+    const multi = b(2, "pending", "github:o/r");
+    multi.projects.push({ id: 21, source: "domain:o.org", active: true, status: "verified", country: null, proofUrl: null });
+    const q = onboardingQueue([multi], { builderRegistry: REG, caretakerRegistry: CARE, operator: OP, badge: BADGE });
+    expect(q.plan.txs.map(decode)).toEqual([
+      { functionName: "setCaretaker", args: [2n, OP] },
+      { functionName: "issue", args: [2n] },
+    ]);
+    expect(q.plan.txs[0].label).toContain("# o/r, o.org");
+  });
+
+  test("a builder with one checked and one CORS-blocked project is included", () => {
+    const mixed = b(2, "pending", "github:o/r");
+    mixed.projects.push({ id: 21, source: "domain:cors.example", active: true, status: "verified", country: null, proofUrl: null, proofUnchecked: true });
+    const q = onboardingQueue([mixed], { builderRegistry: REG, caretakerRegistry: CARE, operator: OP, badge: null });
+    expect(q.included.map((x) => x.id)).toEqual([2]);
+    expect(q.plan.txs[0].label).toContain("# o/r");
+    expect(q.plan.txs[0].label).not.toContain("cors.example");
+  });
+
   test("without a badge contract: setCaretaker only, verified builders are done", () => {
     const q = onboardingQueue(builders, { builderRegistry: REG, caretakerRegistry: CARE, operator: OP, badge: null });
     expect(q.included.map((x) => x.id)).toEqual([2]);
@@ -127,17 +174,28 @@ describe("revokeSafeFile", () => {
 });
 
 describe("readAdminChain", () => {
-  test("every active claim is checked in the browser; no snapshot verdict is used", async () => {
+  test("every active project of every active builder is checked in the browser; no snapshot verdict is used", async () => {
+    const B1 = getAddress("0x70997970c51812dc3a010c7d01b50e0d17dc79c8");
     const rows: Record<number, readonly [string, string, string, bigint, boolean]> = {
-      1: [B0, "registrai:github:o/r", "0x", 10n, true],
-      2: [getAddress("0x70997970c51812dc3a010c7d01b50e0d17dc79c8"), "registrai:domain:cors.example", "0x", 11n, true],
+      1: [B0, "", "0x", 10n, true],
+      2: [B1, "Cors Co", "0x", 11n, true],
       3: [B0, "https://not-a-claim", "0x", 12n, true],
-      4: [B0, "registrai:github:off/line", "0x", 13n, false],
+      4: [B0, "", "0x", 13n, false],
+    };
+    const projectsOf: Record<number, bigint[]> = { 1: [1n], 2: [2n, 3n], 3: [], 4: [4n] };
+    const projects: Record<number, readonly [bigint, string, boolean, bigint]> = {
+      1: [1n, "github:o/r", true, 1n],
+      2: [2n, "domain:cors.example", true, 2n],
+      3: [2n, "github:removed/one", false, 3n],
+      4: [4n, "github:off/line", true, 4n],
     };
     const client: GalleryReader = {
       async readContract({ functionName, args }) {
+        const n = args ? Number(args[0] as bigint) : 0;
         if (functionName === "nextId") return 5n;
-        if (functionName === "builders") return rows[Number(args![0])];
+        if (functionName === "builders") return rows[n];
+        if (functionName === "projectsOf") return projectsOf[n];
+        if (functionName === "projects") return projects[n];
         if (functionName === "caretakerOf") return zeroAddress;
         throw new Error(functionName);
       },
@@ -156,5 +214,33 @@ describe("readAdminChain", () => {
       [3, "unverified", false],
       [4, "inactive", false],
     ]);
+  });
+});
+
+describe("recovery and project Safe files", () => {
+  const NEW = getAddress("0x90f79bf6eb2c4f870365e785982e1f101e93b906");
+  test("startRecovery: one call to the registry, named for the builder", () => {
+    const f = startRecoverySafeFile({ registry: REG, builderId: 7, newOwner: NEW, chainId: 5042, createdAt: 5 });
+    expect(f.meta.name).toBe("Registrai: start recovery of builder #7");
+    expect(f.transactions).toHaveLength(1);
+    expect(f.transactions[0].to).toBe(REG);
+    expect(decodeFunctionData({ abi: verifiedBuilderAbi, data: f.transactions[0].data })).toEqual({ functionName: "startRecovery", args: [7n, NEW] });
+  });
+  test("cancelRecovery and deactivate project", () => {
+    const c = cancelRecoverySafeFile({ registry: REG, builderId: 7, chainId: 5042, createdAt: 5 });
+    expect(decodeFunctionData({ abi: verifiedBuilderAbi, data: c.transactions[0].data })).toEqual({ functionName: "cancelRecovery", args: [7n] });
+    const d = deactivateProjectSafeFile({ registry: REG, projectId: 31, source: "github:x/y", chainId: 5042, createdAt: 5 });
+    expect(d.meta.name).toBe("Registrai: deactivate project #31");
+    expect(decodeFunctionData({ abi: verifiedBuilderAbi, data: d.transactions[0].data })).toEqual({ functionName: "setProjectActive", args: [31n, false] });
+  });
+  test("readRecoveries: only builders with a pending recovery", async () => {
+    const client: GalleryReader = {
+      async readContract({ functionName, args }) {
+        if (functionName !== "recoveryOf") throw new Error(functionName);
+        const id = Number(args![0] as bigint);
+        return id === 2 ? [NEW, 1_800_000_000n] : [zeroAddress, 0n];
+      },
+    };
+    expect(await readRecoveries(client, REG, [1, 2, 3])).toEqual([{ builderId: 2, newOwner: NEW, readyAt: 1_800_000_000 }]);
   });
 });

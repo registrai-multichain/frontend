@@ -209,13 +209,20 @@ export async function buildVerifiedBuilderVectors() {
     }
   });
 
+  // Builder status over its projects (spec 2026-09-24-builder-projects-design.md).
+  const V = { status: "verified" as const };
+  const L = { status: "lapsed" as const };
+  const I = { status: "inactive" as const };
   const statusInputs = [
-    { active: true, profileURI: "registrai:github:o/r", proofValid: true, caretakerIsOperator: false },
-    { active: true, profileURI: "registrai:github:o/r", proofValid: true, caretakerIsOperator: true },
-    { active: true, profileURI: "registrai:github:o/r", proofValid: false, caretakerIsOperator: true },
-    { active: true, profileURI: "registrai:github:o/r", proofValid: false, caretakerIsOperator: false },
-    { active: true, profileURI: "https://github.com/o/r", proofValid: false, caretakerIsOperator: true },
-    { active: false, profileURI: "registrai:github:o/r", proofValid: true, caretakerIsOperator: true },
+    { active: true, projects: [V], caretakerIsOperator: false },
+    { active: true, projects: [V], caretakerIsOperator: true },
+    { active: true, projects: [L, V], caretakerIsOperator: true },
+    { active: true, projects: [L, V], caretakerIsOperator: false },
+    { active: true, projects: [L], caretakerIsOperator: true },
+    { active: true, projects: [L, I], caretakerIsOperator: false },
+    { active: true, projects: [I], caretakerIsOperator: true },
+    { active: true, projects: [], caretakerIsOperator: true },
+    { active: false, projects: [V], caretakerIsOperator: true },
   ];
   const status = statusInputs.map((input) => ({ input, expected: builderStatus(input) }));
 

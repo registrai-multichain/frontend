@@ -1,15 +1,19 @@
 /**
- * The /builders gallery: every builder who claimed a project (verified,
+ * The /builders gallery: one card per builder who claimed a project (verified,
  * nominated, lapsed) plus the owner's invited list, read with the builder
  * registries and the badge ONLY — no market, pool, oracle or feed is read,
  * linked or shown, because mainnet phase 1 has none of them.
  *
- * Pure except readLiveGallery and browserProofCheck, which take their client /
- * fetch as arguments. Used by scripts/sync.ts (the snapshot) and the page (the
- * snapshot plus a live overlay).
+ * A builder holds up to 16 projects (spec docs/superpowers/specs/
+ * 2026-09-24-builder-projects-design.md); each project is one claimed source
+ * with its own signed proof. The card shows the builder's projects as chips.
+ *
+ * Pure except readLiveGallery and the browser proof checks, which take their
+ * client / fetch as arguments. Used by scripts/sync.ts (the snapshot) and the
+ * page (the snapshot plus a live overlay).
  *
  * ── Invited list: src/data/nominees.json ──────────────────────────────────
- * Curated by hand by the owner. A JSON array; each entry:
+ * Curated by hand by the owner. A JSON array; each entry is one PROJECT:
  *
  *   { "source": "github:owner/repo" | "domain:host",   required
  *     "name":   "Project name",                          optional, shown
@@ -19,33 +23,66 @@
  * `source` may also be written the way /verify accepts it (a GitHub URL,
  * `owner/repo`, a bare host); it is normalised, and an entry whose source does
  * not normalise is dropped. Duplicates (same normalised source) keep the first.
- * A nominee whose source matches an on-chain `registrai:` claim is shown as
- * that builder, with its chain status (never twice); otherwise as Invited,
- * with only what the file says: name, source link, X handle. Never a country
- * or a wallet: an invitee has claimed nothing.
+ * A nominee whose source is an active project of any builder merges into that
+ * builder's card (never twice; see mergeGallery); otherwise it is shown as
+ * Invited, with only what the file says: name, source link, X handle. Never a
+ * country or a wallet: an invitee has claimed nothing.
  *
  * On builder.registrai.cc the page also merges the invites the owner made in
  * /admin (GET /api/invites, public fields only): parsePublicInvites +
  * mergeNominees. Where that API does not exist the file alone is shown.
+ *
+ * ── A builder's name (builderName) ──────────────────────────────────────────
+ *   1. its profileURI, when the builder has a verified project and the profile
+ *      is a plain short name (plainProfileName: ≤ 48 characters of letters,
+ *      digits, spaces and . , ' & + _ ( ) ! -; so never a link, a `registrai:`
+ *      string or an address). An unproven builder cannot put its own text on the
+ *      gallery.
+ *   2. the owner's curated name (nominee / invite) of one of its projects, in
+ *      project order
+ *   3. its lead project's label (`owner/repo` or the host): the first verified
+ *      project, else the first active one, else the first
+ *   4. "Builder #id"
+ *
+ * ── A builder's avatar (builderAvatarUrl) ────────────────────────────────────
+ * The GitHub owner avatar of its first VERIFIED github project, else none (the
+ * card shows the name's initial).
  */
 import { getAddress, isAddress, parseAbi, zeroAddress, type Address, type Hex } from "viem";
 import {
+  builderCountry,
   builderStatus,
   normalizeSource,
   proofUrl as proofUrlFor,
-  sourceFromProfileURI,
   sourceLabel,
   validateProof,
   type BuilderStatus,
+  type ProjectStatus,
 } from "./verified-builders";
 import type { BuilderRecord } from "./verified-builders-chain";
 import { parseSnapshotBadge, readBadge, serialDigits, type BadgeInfo, type BadgeReader } from "./verified-builder-badge";
 
 // ───────────────────────────── snapshot ─────────────────────────────
 
-/** A chain builder's status in the gallery. `inactive` = deactivated on chain. */
-export type GalleryStatus = BuilderStatus | "inactive";
+/** A chain builder's status in the gallery (the spec's builder status). */
+export type GalleryStatus = BuilderStatus;
 const STATUSES: readonly GalleryStatus[] = ["verified", "pending", "lapsed", "unverified", "inactive"];
+const PROJECT_STATUSES: readonly ProjectStatus[] = ["verified", "lapsed", "inactive"];
+
+/** live-data.json `gallery.builders[].projects[]`. Canonical sources only. */
+export interface GalleryProject {
+  /** Registry project id; 0 = unknown (a builder from an old single-source snapshot). */
+  id: number;
+  source: string;
+  /** The registry's flag (a removed project is inactive). */
+  active: boolean;
+  status: ProjectStatus;
+  /** From the project's valid claim only. */
+  country: string | null;
+  proofUrl: string | null;
+  /** Live overlay only: a domain proof the browser could not read (CORS). */
+  proofUnchecked?: boolean;
+}
 
 /** live-data.json `gallery.builders[]`. */
 export interface GalleryBuilder {
@@ -53,15 +90,16 @@ export interface GalleryBuilder {
   /** Lowercase. */
   owner: string;
   status: GalleryStatus;
-  /** Canonical source from the `registrai:` profile link, else null. */
-  source: string | null;
-  /** From a valid claim only (verified / pending). */
+  /** Free-form (a display name, a link, or empty); never a claim. */
+  profileURI: string;
+  /** Canonical-source projects in add order, inactive ones included. */
+  projects: GalleryProject[];
+  /** builderCountry over the verified projects (verified / pending builders only). */
   country: string | null;
-  proofUrl: string | null;
   badge: BadgeInfo | null;
   /** Registration time, unix seconds (0 when unknown). */
   createdAt: number;
-  /** Live overlay only: a domain proof the browser could not read (CORS). */
+  /** Live overlay only: the builder is claimed only through proofs the browser could not read. */
   proofUnchecked?: boolean;
 }
 
@@ -76,30 +114,32 @@ export interface GallerySnapshot {
   builders: GalleryBuilder[];
 }
 
-/** Pure: a record's gallery status (the verified-builders status, plus inactive). */
-export function galleryStatus(r: { active: boolean; status: BuilderStatus }): GalleryStatus {
-  return r.active ? r.status : "inactive";
-}
+const claimedStatus = (s: GalleryStatus) => s === "verified" || s === "pending";
 
 /** Pure (sync.ts): the gallery rows for chain records and their badges. */
 export function galleryRowsFromRecords(
-  records: Pick<BuilderRecord, "builderId" | "owner" | "active" | "status" | "source" | "country" | "proofUrl" | "createdAt">[],
+  records: Pick<BuilderRecord, "builderId" | "owner" | "active" | "status" | "profileURI" | "projects" | "country" | "createdAt">[],
   badges: ReadonlyMap<number, BadgeInfo>,
 ): GalleryBuilder[] {
-  return records.map((r) => {
-    const status = galleryStatus(r);
-    const claimed = status === "verified" || status === "pending";
-    return {
-      id: r.builderId,
-      owner: r.owner.toLowerCase(),
-      status,
-      source: r.source,
-      country: claimed ? r.country : null,
-      proofUrl: r.proofUrl,
-      badge: badges.get(r.builderId) ?? null,
-      createdAt: r.createdAt ?? 0,
-    };
-  });
+  return records.map((r) => ({
+    id: r.builderId,
+    owner: r.owner.toLowerCase(),
+    status: r.status,
+    profileURI: r.profileURI,
+    projects: r.projects
+      .filter((p) => p.canonical)
+      .map((p) => ({
+        id: p.projectId,
+        source: p.source,
+        active: p.active,
+        status: p.status,
+        country: p.status === "verified" ? p.country : null,
+        proofUrl: p.proofUrl,
+      })),
+    country: claimedStatus(r.status) ? r.country : null,
+    badge: badges.get(r.builderId) ?? null,
+    createdAt: r.createdAt ?? 0,
+  }));
 }
 
 /** Pure (sync.ts): the whole `gallery` entry. Records cover ids 1..nextId-1. */
@@ -145,21 +185,64 @@ export function gallerySyncPlan(
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+const canonicalOrNull = (v: unknown): string | null => (typeof v === "string" && normalizeSource(v) === v ? v : null);
+const countryOrNull = (v: unknown): string | null => (typeof v === "string" && /^[A-Z]{2}$/.test(v) ? v : null);
+const httpsOrNull = (v: unknown): string | null => (typeof v === "string" && v.startsWith("https://") ? v : null);
+
+function parseGalleryProject(raw: unknown): GalleryProject | null {
+  if (!isObj(raw)) return null;
+  const source = canonicalOrNull(raw.source);
+  if (!source) return null;
+  const id = typeof raw.id === "number" && Number.isSafeInteger(raw.id) && raw.id >= 0 ? raw.id : 0;
+  const status = PROJECT_STATUSES.includes(raw.status as ProjectStatus) ? (raw.status as ProjectStatus) : "lapsed";
+  return {
+    id,
+    source,
+    active: typeof raw.active === "boolean" ? raw.active : status !== "inactive",
+    status,
+    country: status === "verified" ? countryOrNull(raw.country) : null,
+    proofUrl: httpsOrNull(raw.proofUrl),
+  };
+}
+
+/**
+ * An old (single-source) snapshot row `{source, proofUrl, status, country}` as
+ * one project: a claimed builder's (verified / pending) source is a verified
+ * project, a lapsed builder's a lapsed one, anything else inactive.
+ */
+function legacyProjects(raw: Record<string, unknown>, status: GalleryStatus): GalleryProject[] {
+  const source = canonicalOrNull(raw.source);
+  if (!source) return [];
+  const ps: ProjectStatus = claimedStatus(status) ? "verified" : status === "lapsed" ? "lapsed" : "inactive";
+  return [
+    {
+      id: 0,
+      source,
+      active: ps !== "inactive",
+      status: ps,
+      country: ps === "verified" ? countryOrNull(raw.country) : null,
+      proofUrl: httpsOrNull(raw.proofUrl),
+    },
+  ];
+}
 
 function parseGalleryRow(raw: unknown): GalleryBuilder | null {
   if (!isObj(raw)) return null;
-  const { id, owner, status, source, country, proofUrl, createdAt } = raw;
+  const { id, owner, status, createdAt } = raw;
   if (typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0) return null;
   if (typeof owner !== "string" || !isAddress(owner, { strict: false })) return null;
   if (typeof status !== "string" || !STATUSES.includes(status as GalleryStatus)) return null;
-  const src = typeof source === "string" && normalizeSource(source) === source ? source : null;
+  const st = status as GalleryStatus;
+  const projects = Array.isArray(raw.projects)
+    ? raw.projects.map(parseGalleryProject).filter((p): p is GalleryProject => p !== null)
+    : legacyProjects(raw, st);
   return {
     id,
     owner: owner.toLowerCase(),
-    status: status as GalleryStatus,
-    source: src,
-    country: typeof country === "string" && /^[A-Z]{2}$/.test(country) ? country : null,
-    proofUrl: typeof proofUrl === "string" && proofUrl.startsWith("https://") ? proofUrl : null,
+    status: st,
+    profileURI: typeof raw.profileURI === "string" ? raw.profileURI.slice(0, 256) : "",
+    projects,
+    country: claimedStatus(st) ? countryOrNull(raw.country) : null,
     badge: parseSnapshotBadge(raw.badge),
     createdAt: typeof createdAt === "number" && createdAt > 0 ? createdAt : 0,
   };
@@ -168,7 +251,8 @@ function parseGalleryRow(raw: unknown): GalleryBuilder | null {
 /**
  * Pure: the synced gallery, trusted only when it describes the expected chain
  * and registry (a testnet snapshot is never shown as mainnet). Malformed rows
- * are dropped. null when absent or for another deployment.
+ * are dropped. Old single-source rows read as one project each. null when
+ * absent or for another deployment.
  */
 export function parseGallerySnapshot(
   raw: unknown,
@@ -206,10 +290,10 @@ export const DISPLAY: Record<DisplayKind, { label: string; tone: "color" | "gray
 
 /**
  * Pure: how a chain builder is shown, or null when it is not shown at all
- * (unverified: no claim; inactive: deactivated on chain).
- *   lapsed     proof missing/invalid, or its badge is marked lapsed on chain
+ * (unverified: no active project; inactive: deactivated on chain).
+ *   lapsed     no verified project, or its badge is marked lapsed on chain
  *   verified   caretaker set, or a (non-lapsed) badge issued
- *   nominated  pending: claimed + registered, awaiting the Safe's onboarding batch
+ *   nominated  pending: a verified project, awaiting the Safe's onboarding batch
  */
 export function displayKind(b: Pick<GalleryBuilder, "status" | "badge">): Exclude<DisplayKind, "invited"> | null {
   if (b.status === "unverified" || b.status === "inactive") return null;
@@ -220,6 +304,79 @@ export function displayKind(b: Pick<GalleryBuilder, "status" | "badge">): Exclud
 
 export const toneOf = (k: DisplayKind) => DISPLAY[k].tone;
 export const labelOf = (k: DisplayKind) => DISPLAY[k].label;
+
+// ───────────────────────────── projects on a card ─────────────────────────────
+
+/** A project chip: verified (the builder is onboarded), nominated (verified
+ *  project, builder not onboarded yet) or lapsed (greyed). */
+export type ChipKind = "verified" | "nominated" | "lapsed";
+
+export interface ProjectChip {
+  id: number;
+  source: string;
+  label: string;
+  kind: ChipKind;
+  unchecked: boolean;
+}
+
+/** Pure: one project's chip on its builder's card; null for an inactive project. */
+export function projectChipKind(p: Pick<GalleryProject, "status" | "active">, b: Pick<GalleryBuilder, "status" | "badge">): ChipKind | null {
+  if (!p.active || p.status === "inactive") return null;
+  if (p.status === "lapsed") return "lapsed";
+  const k = displayKind(b);
+  return k === "verified" || (k === "lapsed" && b.status === "verified") ? "verified" : "nominated";
+}
+
+/** Pure: the card's chips — active projects in add order. */
+export function projectChips(b: GalleryBuilder): ProjectChip[] {
+  const out: ProjectChip[] = [];
+  for (const p of b.projects) {
+    const kind = projectChipKind(p, b);
+    if (kind) out.push({ id: p.id, source: p.source, label: sourceLabel(p.source), kind, unchecked: Boolean(p.proofUnchecked) });
+  }
+  return out;
+}
+
+/** Pure: the builder's lead project — first verified, else first active, else first. */
+export function leadProject(b: Pick<GalleryBuilder, "projects">): GalleryProject | null {
+  return b.projects.find((p) => p.status === "verified") ?? b.projects.find((p) => p.active) ?? b.projects[0] ?? null;
+}
+
+/** A plain short display name: ≤ 48 characters of letters, digits, spaces and . , ' & + _ ( ) ! -. */
+const PLAIN_NAME = /^[\p{L}\p{N}][\p{L}\p{N} .,'\u2019&+_()!-]*$/u;
+export const MAX_NAME_LEN = 48;
+
+/** Pure: the profileURI as a display name, or null when it is not a plain short name. */
+export function plainProfileName(profileURI: string | null | undefined): string | null {
+  const s = (profileURI ?? "").trim().replace(/\s+/g, " ");
+  if (!s || [...s].length > MAX_NAME_LEN) return null;
+  return PLAIN_NAME.test(s) ? s : null;
+}
+
+/** Pure: a builder's name (the rule is in the header). */
+export function builderName(
+  b: Pick<GalleryBuilder, "id" | "profileURI" | "projects">,
+  nominees: readonly Pick<Nominee, "name">[] = [],
+): string {
+  const claimed = b.projects.some((p) => p.status === "verified");
+  const profile = claimed ? plainProfileName(b.profileURI) : null;
+  if (profile) return profile;
+  const curated = nominees.find((n) => n.name)?.name;
+  if (curated) return curated;
+  const lead = leadProject(b);
+  return lead ? sourceLabel(lead.source) : `Builder #${b.id}`;
+}
+
+/** Pure: the builder's avatar — its first verified GitHub project's owner, else null (show the initial). */
+export function builderAvatarUrl(b: Pick<GalleryBuilder, "projects">, size = 96): string | null {
+  const gh = b.projects.find((p) => p.status === "verified" && p.source.startsWith("github:"));
+  return gh ? avatarUrl(gh.source, size) : null;
+}
+
+/** The name's first letter or digit, for a card without an avatar. */
+export function initialOf(name: string): string {
+  return (/[\p{L}\p{N}]/u.exec(name)?.[0] ?? "R").toUpperCase();
+}
 
 // ───────────────────────────── nominees ─────────────────────────────
 
@@ -270,7 +427,7 @@ export function parsePublicInvites(raw: unknown): Nominee[] {
  * Pure: the file's nominees plus the API's invitees, deduped by normalised
  * source. File order first, then new invitees in API order; for a source in
  * both, the API's name / X handle win (the admin record is the editable one).
- * An on-chain claim still wins over either (mergeGallery).
+ * An on-chain project still wins over either (mergeGallery).
  */
 export function mergeNominees(file: Nominee[], api: Nominee[]): Nominee[] {
   const fromApi = new Map<string, Nominee>();
@@ -296,54 +453,76 @@ export interface GalleryEntry {
   key: string;
   kind: DisplayKind;
   name: string;
+  /** The builder's lead project source; the invitee's source. */
   source: string | null;
-  /** From the nominee file only. */
+  /** From the nominee file / invites only. */
   x: string | null;
   /** The chain builder; null for an invitee. */
   builder: GalleryBuilder | null;
+  /** The builder's active projects (empty for an invitee). */
+  chips: ProjectChip[];
+  /** Avatar image, else the card shows the name's initial. */
+  avatar: string | null;
 }
 
 const KIND_ORDER: Record<DisplayKind, number> = { verified: 0, nominated: 1, lapsed: 2, invited: 3 };
-const STATUS_RANK: Record<string, number> = { verified: 0, nominated: 1, lapsed: 2 };
+const RANK: Record<string, number> = { verified: 0, nominated: 1, lapsed: 2 };
 
-/** A project's display name: the nominee's name, else `owner/repo` / the host, else "Builder #id". */
+/** @deprecated An invitee's display name: the nominee's name, else `owner/repo` / the host. */
 export function entryName(source: string | null, builderId?: number, nominee?: Nominee): string {
   if (nominee?.name) return nominee.name;
   if (source) return sourceLabel(source);
   return builderId !== undefined ? `Builder #${builderId}` : "";
 }
 
+/** Pure: every source that is an active project of some builder (shown or not). */
+export function claimedSources(builders: readonly GalleryBuilder[]): Set<string> {
+  const out = new Set<string>();
+  for (const b of builders) for (const p of b.projects) if (p.active) out.add(p.source);
+  return out;
+}
+
 /**
- * Pure: chain builders merged with the invited list, deduped by normalised
- * source, in gallery order — verified by badge serial, then nominated, lapsed
- * (by builder id), then invitees in file order.
+ * Pure: chain builders merged with the invited list, in gallery order —
+ * verified by badge serial, then nominated, lapsed (by builder id), then
+ * invitees in file order. A nominee whose source is an active project of any
+ * builder is never "Invited"; it merges into the best-ranked SHOWN builder
+ * holding that project (verified, nominated, lapsed; lowest id on a tie),
+ * which then carries its name and X handle (see builderName). A builder may
+ * absorb several nominees (one per project).
  */
 export function mergeGallery(builders: GalleryBuilder[], nominees: Nominee[]): GalleryEntry[] {
   const shown = builders
     .map((b) => ({ b, kind: displayKind(b) }))
     .filter((x): x is { b: GalleryBuilder; kind: Exclude<DisplayKind, "invited"> } => x.kind !== null);
-  // Every source any chain builder claims, shown or not: a nominee whose project
-  // was claimed on chain is never also "Invited".
-  const claimedSources = new Set(builders.map((b) => b.source).filter((s): s is string => Boolean(s)));
-  // Each nominee attaches to the best-ranked shown builder with its source.
-  const bestFor = new Map<string, number>();
+  const claimed = claimedSources(builders);
+  // Each claimed nominee attaches to the best-ranked shown builder with that project.
+  const bestFor = new Map<string, { id: number; rank: number }>();
   for (const { b, kind } of shown) {
-    if (!b.source) continue;
-    const cur = bestFor.get(b.source);
-    const curKind = cur === undefined ? undefined : shown.find((x) => x.b.id === cur)!.kind;
-    if (curKind === undefined || STATUS_RANK[kind] < STATUS_RANK[curKind]) bestFor.set(b.source, b.id);
+    for (const p of b.projects) {
+      if (!p.active) continue;
+      const cur = bestFor.get(p.source);
+      const rank = RANK[kind];
+      if (!cur || rank < cur.rank || (rank === cur.rank && b.id < cur.id)) bestFor.set(p.source, { id: b.id, rank });
+    }
   }
   const nomineeBySource = new Map(nominees.map((n) => [n.source, n]));
 
   const entries: GalleryEntry[] = shown.map(({ b, kind }) => {
-    const nominee = b.source && bestFor.get(b.source) === b.id ? nomineeBySource.get(b.source) : undefined;
+    const mine = b.projects
+      .filter((p) => p.active && bestFor.get(p.source)?.id === b.id)
+      .map((p) => nomineeBySource.get(p.source))
+      .filter((n): n is Nominee => Boolean(n));
+    const name = builderName(b, mine);
     return {
       key: `builder-${b.id}`,
       kind,
-      name: entryName(b.source, b.id, nominee),
-      source: b.source,
-      x: nominee?.x ?? null,
+      name,
+      source: leadProject(b)?.source ?? null,
+      x: mine.find((n) => n.x)?.x ?? null,
       builder: b,
+      chips: projectChips(b),
+      avatar: builderAvatarUrl(b, 128),
     };
   });
   entries.sort((a, b) => {
@@ -356,7 +535,7 @@ export function mergeGallery(builders: GalleryBuilder[], nominees: Nominee[]): G
   });
 
   const invited: GalleryEntry[] = nominees
-    .filter((n) => !claimedSources.has(n.source))
+    .filter((n) => !claimed.has(n.source))
     .map((n) => ({
       key: `invited-${n.source.replace(/[^a-z0-9]+/g, "-")}`,
       kind: "invited" as const,
@@ -364,6 +543,8 @@ export function mergeGallery(builders: GalleryBuilder[], nominees: Nominee[]): G
       source: n.source,
       x: n.x ?? null,
       builder: null,
+      chips: [],
+      avatar: avatarUrl(n.source, 128),
     }));
   return [...entries, ...invited];
 }
@@ -382,6 +563,7 @@ function haystack(e: GalleryEntry): string {
   const parts = [e.name, e.source ?? "", e.source ? sourceLabel(e.source) : "", e.x ?? ""];
   if (e.builder) {
     parts.push(`#${e.builder.id}`, e.builder.country ?? "");
+    for (const p of e.builder.projects) parts.push(p.source, sourceLabel(p.source));
     if (e.builder.badge) parts.push(`no. ${serialDigits(e.builder.badge.serial)}`, `#${serialDigits(e.builder.badge.serial)}`);
   }
   return parts.join(" ").toLowerCase();
@@ -464,6 +646,14 @@ export function parseSourceParam(raw: string | null | undefined): { source: stri
 
 // ───────────────────────────── live overlay ─────────────────────────────
 
+/** One project as the chain says right now. */
+export interface LiveProjectRow {
+  id: number;
+  source: string;
+  active: boolean;
+  addedAt: number;
+}
+
 /** One builder as the chain says right now. */
 export interface LiveChainRow {
   id: number;
@@ -473,6 +663,8 @@ export interface LiveChainRow {
   createdAt: number;
   caretaker: string;
   badge: BadgeInfo | null;
+  /** Every project ever added, in add order. */
+  projects: LiveProjectRow[];
 }
 
 /** A proof as the browser could (or could not) check it. */
@@ -481,6 +673,8 @@ export type LiveProof = { state: "valid"; country: string } | { state: "invalid"
 const liveAbi = parseAbi([
   "function nextId() view returns (uint256)",
   "function builders(uint256) view returns (address owner, string profileURI, bytes linkedIdentity, uint64 createdAt, bool active)",
+  "function projectsOf(uint256 builderId) view returns (uint256[])",
+  "function projects(uint256) view returns (uint256 builderId, string source, bool active, uint64 addedAt)",
   "function caretakerOf(uint256) view returns (address)",
 ]);
 
@@ -492,9 +686,22 @@ export interface GalleryReader {
 /** Most builders the page reads live; the snapshot covers the rest. */
 export const LIVE_MAX_BUILDERS = 1000;
 
+/** One builder's projects, live. */
+export async function readLiveProjects(client: GalleryReader, registry: Address, builderId: number): Promise<LiveProjectRow[]> {
+  const ids = (await client.readContract({ address: registry, abi: liveAbi, functionName: "projectsOf", args: [BigInt(builderId)] })) as readonly bigint[];
+  return Promise.all(
+    ids.map(async (pid) => {
+      const [, source, active, addedAt] = (await client.readContract({ address: registry, abi: liveAbi, functionName: "projects", args: [pid] })) as readonly [
+        bigint, string, boolean, bigint,
+      ];
+      return { id: Number(pid), source, active, addedAt: Number(addedAt) };
+    }),
+  );
+}
+
 /**
- * Every builder, live: registry row, caretaker and badge. Reads are issued
- * concurrently so a batching transport folds them into a few requests.
+ * Every builder, live: registry row, projects, caretaker and badge. Reads are
+ * issued concurrently so a batching transport folds them into a few requests.
  */
 export async function readLiveGallery(
   client: GalleryReader,
@@ -505,36 +712,51 @@ export async function readLiveGallery(
   const ids = Array.from({ length: Math.max(0, last) }, (_, i) => i + 1);
   return Promise.all(
     ids.map(async (id) => {
-      const [row, caretaker, badge] = await Promise.all([
+      const [row, projects, caretaker, badge] = await Promise.all([
         client.readContract({ address: o.registry, abi: liveAbi, functionName: "builders", args: [BigInt(id)] }) as Promise<
           readonly [Address, string, Hex, bigint, boolean]
         >,
+        readLiveProjects(client, o.registry, id),
         o.caretakers
           ? (client.readContract({ address: o.caretakers, abi: liveAbi, functionName: "caretakerOf", args: [BigInt(id)] }) as Promise<Address>)
           : Promise.resolve(zeroAddress as Address),
         o.badge ? readBadge(client as unknown as BadgeReader, o.badge, id, o.imageBase) : Promise.resolve(null),
       ]);
       const [owner, profileURI, , createdAt, active] = row;
-      return { id, owner: owner.toLowerCase(), profileURI, active, createdAt: Number(createdAt), caretaker, badge };
+      return { id, owner: owner.toLowerCase(), profileURI, active, createdAt: Number(createdAt), caretaker, badge, projects };
     }),
   );
 }
 
-/** Pure: whether the browser must check this row's proof (the snapshot never saw this claim). */
+const isCanonical = (source: string) => normalizeSource(source) === source;
+
+/** The snapshot's verdict for a live project, when it still applies: same
+ *  owner (a proof names the owner), same project, and it was checked. */
+function snapshotVerdict(row: LiveChainRow, p: LiveProjectRow, snap: GalleryBuilder | undefined): GalleryProject | null {
+  if (!snap || snap.owner !== row.owner.toLowerCase() || snap.status === "inactive") return null;
+  const sp = snap.projects.find((x) => x.id === p.id && x.source === p.source);
+  return sp && sp.active && sp.status !== "inactive" ? sp : null;
+}
+
+/** Pure: the projects of a live row whose proof the browser must check (the snapshot never checked them). */
+export function projectsNeedingCheck(row: LiveChainRow, snap: GalleryBuilder | undefined): LiveProjectRow[] {
+  if (!row.active) return [];
+  return row.projects.filter((p) => p.active && isCanonical(p.source) && !snapshotVerdict(row, p, snap));
+}
+
+/** Pure: whether the browser must check any of this row's proofs. */
 export function needsProofCheck(row: LiveChainRow, snap: GalleryBuilder | undefined): boolean {
-  const source = sourceFromProfileURI(row.profileURI);
-  if (!row.active || !source) return false;
-  // The sync checks proofs of active builders only: an inactive row was never checked.
-  if (!snap || snap.status === "inactive" || snap.status === "unverified") return true;
-  return snap.source !== source || snap.owner !== row.owner.toLowerCase();
+  return projectsNeedingCheck(row, snap).length > 0;
 }
 
 /**
- * Pure: the snapshot updated with the live chain. A claim the snapshot already
- * checked keeps its proof verdict (re-checked at the next sync) and takes the
- * live caretaker, badge and active flag; a claim it never saw uses the
- * browser's check — a domain the browser could not read (CORS) is shown as
- * nominated (or verified, once the Safe set its caretaker), flagged unchecked.
+ * Pure: the snapshot updated with the live chain. A project the snapshot
+ * already checked (same owner) keeps its proof verdict (re-checked at the next
+ * sync); a project it never saw — or any project after an owner change — uses
+ * the browser's check (`proofs`, by project id). A domain the browser could not
+ * read (CORS) counts as verified, flagged unchecked. Caretaker, badge, active
+ * flags and the project list are always live. A non-canonical source is never
+ * shown but counts as a lapsed project.
  */
 export function overlayLive(
   snapshot: GalleryBuilder[],
@@ -546,33 +768,102 @@ export function overlayLive(
   const out = new Map(byId);
   for (const row of live) {
     const snap = byId.get(row.id);
-    const source = sourceFromProfileURI(row.profileURI);
     const caretakerIsOperator = Boolean(
       operator && row.caretaker.toLowerCase() !== zeroAddress && row.caretaker.toLowerCase() === operator.toLowerCase(),
     );
-    const base = { id: row.id, owner: row.owner.toLowerCase(), source, badge: row.badge, createdAt: row.createdAt || snap?.createdAt || 0 };
-    const proofUrl = proofHref(source);
-    if (!needsProofCheck(row, snap)) {
-      const proofValid = snap?.status === "verified" || snap?.status === "pending";
-      const status = galleryStatus({ active: row.active, status: builderStatus({ active: row.active, profileURI: row.profileURI, proofValid, caretakerIsOperator }) });
-      const claimed = status === "verified" || status === "pending";
-      out.set(row.id, { ...base, status, country: claimed ? (snap?.country ?? null) : null, proofUrl: snap?.proofUrl ?? proofUrl });
-      continue;
+    const projects: GalleryProject[] = [];
+    let hiddenLapsed = false;
+    for (const p of row.projects) {
+      if (!isCanonical(p.source)) {
+        if (row.active && p.active) hiddenLapsed = true;
+        continue;
+      }
+      const base = { id: p.id, source: p.source, active: p.active };
+      if (!row.active || !p.active) {
+        projects.push({ ...base, status: "inactive", country: null, proofUrl: proofHref(p.source) });
+        continue;
+      }
+      const v = snapshotVerdict(row, p, snap);
+      if (v) {
+        projects.push({ ...base, status: v.status, country: v.country, proofUrl: v.proofUrl ?? proofHref(p.source), ...(v.proofUnchecked ? { proofUnchecked: true } : {}) });
+        continue;
+      }
+      const proof = proofs.get(p.id) ?? { state: "unchecked" };
+      if (proof.state === "invalid") projects.push({ ...base, status: "lapsed", country: null, proofUrl: proofHref(p.source) });
+      else
+        projects.push({
+          ...base,
+          status: "verified",
+          country: proof.state === "valid" ? proof.country : null,
+          proofUrl: proofHref(p.source),
+          ...(proof.state === "unchecked" ? { proofUnchecked: true } : {}),
+        });
     }
-    const proof = proofs.get(row.id) ?? { state: "unchecked" };
-    if (proof.state === "invalid") {
-      out.set(row.id, { ...base, status: "lapsed", country: null, proofUrl });
-    } else {
-      out.set(row.id, {
-        ...base,
-        status: caretakerIsOperator ? "verified" : "pending",
-        country: proof.state === "valid" ? proof.country : null,
-        proofUrl,
-        ...(proof.state === "unchecked" ? { proofUnchecked: true } : {}),
-      });
-    }
+    const forStatus = hiddenLapsed ? [...projects, { status: "lapsed" as const }] : projects;
+    const status = builderStatus({ active: row.active, projects: forStatus, caretakerIsOperator });
+    const verified = projects.filter((p) => p.status === "verified");
+    const b: GalleryBuilder = {
+      id: row.id,
+      owner: row.owner.toLowerCase(),
+      status,
+      profileURI: row.profileURI,
+      projects,
+      country: claimedStatus(status) ? builderCountry(projects) : null,
+      badge: row.badge,
+      createdAt: row.createdAt || snap?.createdAt || 0,
+    };
+    if (verified.length > 0 && verified.every((p) => p.proofUnchecked)) b.proofUnchecked = true;
+    out.set(row.id, b);
   }
   return [...out.values()].sort((a, b) => a.id - b.id);
+}
+
+/**
+ * A project's proof as the browser sees it, with the reason:
+ *   valid      checks out for this owner
+ *   resign     a well-signed proof for ANOTHER wallet (the builder's owner
+ *              changed): the current wallet must re-sign it
+ *   invalid    present but does not check out
+ *   missing    404 / 410
+ *   unchecked  the browser may not read it (CORS, network, 5xx) — never a verdict
+ */
+export type ProjectProofState =
+  | { state: "valid"; country: string }
+  | { state: "resign"; signer: string }
+  | { state: "invalid"; reason: string }
+  | { state: "missing" }
+  | { state: "unchecked" };
+
+export async function browserProjectProof(
+  p: { owner: string; source: string },
+  o: { chainId: number; fetchImpl?: typeof fetch; timeoutMs?: number },
+): Promise<ProjectProofState> {
+  let url: string;
+  try {
+    url = proofUrlFor(p.source);
+  } catch {
+    return { state: "invalid", reason: "not a canonical source" };
+  }
+  let res: Response;
+  try {
+    res = await (o.fetchImpl ?? fetch)(url, { cache: "no-store", signal: AbortSignal.timeout(o.timeoutMs ?? 10_000) });
+  } catch {
+    return { state: "unchecked" };
+  }
+  if (!res.ok) return res.status === 404 || res.status === 410 ? { state: "missing" } : { state: "unchecked" };
+  let body: unknown;
+  try {
+    body = JSON.parse(await res.text());
+  } catch {
+    return { state: "invalid", reason: "the file is not valid JSON" };
+  }
+  const r = await validateProof(body, { expectedSource: p.source, onchainOwner: getAddress(p.owner), chainId: o.chainId });
+  if (r.valid) return { state: "valid", country: r.claim.country };
+  if (r.rule === 4) {
+    const signer = String((body as { claim?: { builder?: unknown } }).claim?.builder ?? "").toLowerCase();
+    return { state: "resign", signer };
+  }
+  return { state: "invalid", reason: r.reason };
 }
 
 /**
@@ -584,25 +875,8 @@ export async function browserProofCheck(
   b: { owner: string; source: string },
   o: { chainId: number; fetchImpl?: typeof fetch; timeoutMs?: number },
 ): Promise<LiveProof> {
-  let url: string;
-  try {
-    url = proofUrlFor(b.source);
-  } catch {
-    return { state: "invalid" };
-  }
-  let res: Response;
-  try {
-    res = await (o.fetchImpl ?? fetch)(url, { cache: "no-store", signal: AbortSignal.timeout(o.timeoutMs ?? 10_000) });
-  } catch {
-    return { state: "unchecked" };
-  }
-  if (!res.ok) return res.status === 404 || res.status === 410 ? { state: "invalid" } : { state: "unchecked" };
-  let body: unknown;
-  try {
-    body = JSON.parse(await res.text());
-  } catch {
-    return { state: "invalid" };
-  }
-  const r = await validateProof(body, { expectedSource: b.source, onchainOwner: getAddress(b.owner), chainId: o.chainId });
-  return r.valid ? { state: "valid", country: r.claim.country } : { state: "invalid" };
+  const r = await browserProjectProof(b, o);
+  if (r.state === "valid") return r;
+  if (r.state === "unchecked") return r;
+  return { state: "invalid" };
 }

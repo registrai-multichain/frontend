@@ -1,20 +1,25 @@
 /**
  * Onboarding batch for the multisig (REGISTRAR + GOVERNOR). Reads the chain,
- * fetches and validates every builder's proof, and writes — never signs, never
- * sends — a Safe Transaction Builder file plus a plain calldata list with:
+ * fetches and validates every active project's proof, and writes — never signs,
+ * never sends — a Safe Transaction Builder file plus a plain calldata list with
+ * (per BUILDER; spec docs/superpowers/specs/2026-09-24-builder-projects-design.md):
  *
- *   setCaretaker(id, operator)            for every PENDING builder
- *   registerFor(builder, "registrai:"+src) for each --register source whose proof
- *                                          is valid and whose builder is not yet
- *                                          registered (claims DM'd by builders
- *                                          without Arc gas)
- *   issue(id)                             with --badge <address>: the Verified
- *                                          Builder Badge, for every PENDING builder
- *                                          (right after its setCaretaker) and every
- *                                          VERIFIED builder whose serialOf(id) == 0
+ *   setCaretaker(id, operator)       for every PENDING builder (≥1 verified
+ *                                    project, caretaker not ours yet)
+ *   registerFor(builder, "")         for each --register source whose proof is
+ *                                    valid and whose wallet is not registered yet
+ *                                    (claims DM'd by builders without Arc gas)
+ *   addProjectFor(id, source)        for each --register source whose wallet is
+ *                                    already builder #id and not yet holding it
+ *   issue(id)                        with --badge <address>: the Verified Builder
+ *                                    Badge, for every PENDING builder (right after
+ *                                    its setCaretaker) and every VERIFIED builder
+ *                                    whose serialOf(id) == 0 — only while it has
+ *                                    an active project (activeProjectCount > 0)
  *
- * A builder registered by this batch gets its caretaker in the NEXT batch (its id
- * exists only after registration): run the script again once this one executes.
+ * A wallet registered by this batch gets its project (addProjectFor), then its
+ * caretaker, in the NEXT batches (its id exists only after registration): run
+ * the script again, with the same --register, once this one executes.
  *
  *   npx tsx scripts/onboard-batch.ts [--network testnet|mainnet|local] [--rpc URL]
  *     [--register <source> ...] [--badge 0x..] [--out <dir>]
@@ -34,7 +39,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { createPublicClient, defineChain, getAddress, http, isAddress, type Address } from "viem";
-import { calldataList, planOnboarding, safeBatchJson, type RegistrationCandidate } from "../src/lib/onboard-batch";
+import { calldataList, planOnboarding, safeBatchJson, verifiedSourcesOf, type RegistrationCandidate } from "../src/lib/onboard-batch";
 import { makeFetchJson, readBuilderRecords, verifiedBuilderAbi, type RegistryReader } from "../src/lib/verified-builders-chain";
 import { normalizeSource, proofConfigFromEnv, proofUrl, validateProof } from "../src/lib/verified-builders";
 import { badgeAbi, serialLabel } from "../src/lib/verified-builder-badge";
@@ -145,8 +150,11 @@ async function main() {
   });
   log(`builders (${records.length}):`);
   for (const r of records) {
-    const why = r.proofError ? ` — ${r.proofError}` : "";
-    log(`  #${r.builderId} ${r.status.padEnd(10)} ${r.owner} ${r.source ?? r.profileURI}${why}`);
+    log(`  #${r.builderId} ${r.status.padEnd(10)} ${r.owner} (${r.activeProjectCount} active project(s))`);
+    for (const p of r.projects) {
+      const why = p.proofError ? ` — ${p.proofError}` : "";
+      log(`      project ${p.projectId} ${p.status.padEnd(8)} ${JSON.stringify(p.source)}${why}`);
+    }
   }
   log();
 
@@ -176,7 +184,15 @@ async function main() {
     const existingId = Number(
       await client.readContract({ address: builderRegistry, abi: verifiedBuilderAbi, functionName: "builderIdOf", args: [builder] }),
     );
-    registrations.push({ source, builder, existingId });
+    const existing = records.find((x) => x.builderId === existingId);
+    registrations.push({
+      source,
+      builder,
+      existingId,
+      existingSources: existing ? existing.projects.filter((p) => p.active).map((p) => p.source) : [],
+      existingProjectCount: existing?.projects.length ?? 0,
+      existingActive: existing?.active ?? true,
+    });
   }
 
   // serialOf for the builders a badge could go to (pending + verified).
@@ -193,7 +209,14 @@ async function main() {
     badgePlan = { address: badge, serials };
   }
 
-  const plan = planOnboarding({ records, registrations, builderRegistry, caretakerRegistry, operator, badge: badgePlan });
+  const plan = planOnboarding({
+    records: records.map((r) => ({ ...r, verifiedSources: verifiedSourcesOf(r) })),
+    registrations,
+    builderRegistry,
+    caretakerRegistry,
+    operator,
+    badge: badgePlan,
+  });
   for (const s of plan.skipped) log(`skip ${s.what}: ${s.reason}`);
   if (plan.skipped.length) log();
   log(`${plan.txs.length} transaction(s) in the batch. Nothing was signed or sent.`);

@@ -3,7 +3,11 @@ import { getContractAddress, type Address, type Hex } from "viem";
 import vectors from "./__fixtures__/verified-builder-vectors.json";
 import { buildVerifiedBuilderVectors } from "./verified-builder-vectors";
 import {
+  MAX_PROJECTS_PER_BUILDER,
+  MAX_SOURCE_LEN,
+  builderCountry,
   builderStatus,
+  byteLength,
   canonicalClaimMessage,
   countCreateDeployments,
   createDeployAddress,
@@ -11,7 +15,9 @@ import {
   normalizeSource,
   operatorFeeds,
   proofConfigFromEnv,
+  projectStatus,
   proofUrl,
+  sourceFits,
   sourceFromProfileURI,
   validateProof,
   type Claim,
@@ -152,19 +158,61 @@ describe("validateProof", () => {
   });
 });
 
-describe("builderStatus", () => {
-  const base = { active: true, profileURI: "registrai:github:o/r", proofValid: true, caretakerIsOperator: false };
-  test("transitions", () => {
-    expect(builderStatus(base)).toBe("pending");
-    expect(builderStatus({ ...base, caretakerIsOperator: true })).toBe("verified");
-    // verified -> proof removed -> lapsed (even though the caretaker is still ours)
-    expect(builderStatus({ ...base, caretakerIsOperator: true, proofValid: false })).toBe("lapsed");
-    expect(builderStatus({ ...base, proofValid: false })).toBe("lapsed");
-    expect(builderStatus({ ...base, profileURI: "https://github.com/o/r", caretakerIsOperator: true })).toBe("unverified");
-    expect(builderStatus({ ...base, active: false, caretakerIsOperator: true })).toBe("unverified");
+describe("builderStatus (over projects)", () => {
+  const V = { status: "verified" as const };
+  const L = { status: "lapsed" as const };
+  const I = { status: "inactive" as const };
+  test("verified = caretaker ours and >= 1 verified project; pending = verified project, caretaker not ours", () => {
+    expect(builderStatus({ active: true, projects: [V], caretakerIsOperator: true })).toBe("verified");
+    expect(builderStatus({ active: true, projects: [V], caretakerIsOperator: false })).toBe("pending");
+    // one verified project is enough, whatever the others are
+    expect(builderStatus({ active: true, projects: [L, I, V], caretakerIsOperator: true })).toBe("verified");
+    expect(builderStatus({ active: true, projects: [L, V], caretakerIsOperator: false })).toBe("pending");
+  });
+  test("lapsed = active projects, none verified (the caretaker does not matter)", () => {
+    expect(builderStatus({ active: true, projects: [L], caretakerIsOperator: true })).toBe("lapsed");
+    expect(builderStatus({ active: true, projects: [L, I], caretakerIsOperator: false })).toBe("lapsed");
+  });
+  test("unverified = no active project; inactive = deactivated builder", () => {
+    expect(builderStatus({ active: true, projects: [], caretakerIsOperator: true })).toBe("unverified");
+    expect(builderStatus({ active: true, projects: [I, I], caretakerIsOperator: true })).toBe("unverified");
+    expect(builderStatus({ active: false, projects: [V], caretakerIsOperator: true })).toBe("inactive");
+  });
+  test("project status: inactive when removed or its builder is deactivated", () => {
+    expect(projectStatus({ builderActive: true, active: true, proofValid: true })).toBe("verified");
+    expect(projectStatus({ builderActive: true, active: true, proofValid: false })).toBe("lapsed");
+    expect(projectStatus({ builderActive: true, active: false, proofValid: true })).toBe("inactive");
+    expect(projectStatus({ builderActive: false, active: true, proofValid: true })).toBe("inactive");
   });
   test("fixture", () => {
-    for (const s of vectors.status) expect(builderStatus(s.input)).toBe(s.expected);
+    expect(vectors.status.length).toBeGreaterThan(5);
+    for (const s of vectors.status) expect(builderStatus(s.input as Parameters<typeof builderStatus>[0])).toBe(s.expected);
+  });
+});
+
+describe("builderCountry", () => {
+  const p = (status: "verified" | "lapsed" | "inactive", country: string | null) => ({ status, country });
+  test("the verified projects' claims only", () => {
+    expect(builderCountry([p("lapsed", "US"), p("verified", "PL")])).toBe("PL");
+    expect(builderCountry([p("lapsed", "US"), p("inactive", "DE")])).toBeNull();
+    expect(builderCountry([])).toBeNull();
+  });
+  test("most common wins; a tie goes to the earliest project", () => {
+    expect(builderCountry([p("verified", "DE"), p("verified", "PL"), p("verified", "PL")])).toBe("PL");
+    expect(builderCountry([p("verified", "DE"), p("verified", "PL")])).toBe("DE");
+    expect(builderCountry([p("verified", "PL"), p("verified", "DE"), p("verified", "DE"), p("verified", "PL")])).toBe("PL");
+  });
+});
+
+describe("source limits", () => {
+  test("128 bytes, as the registry measures", () => {
+    expect(MAX_SOURCE_LEN).toBe(128);
+    expect(MAX_PROJECTS_PER_BUILDER).toBe(16);
+    const long = `github:${"a".repeat(39)}/${"r".repeat(100)}`;
+    expect(normalizeSource(long)).toBe(long);
+    expect(sourceFits(long)).toBe(false);
+    expect(sourceFits("github:o/r")).toBe(true);
+    expect(byteLength("domain:é.example")).toBe(17);
   });
 });
 

@@ -17,7 +17,7 @@ import { PERENNIAL_BUILDERS } from "./perennial";
 import { blockChunks } from "./perennial-market";
 import { SNAPSHOT_MATCHES_NETWORK, type PerennialDeployment } from "./perennial-network";
 import { isRevert, readFeeModel, readMarketSettlement } from "./market-fees-chain";
-import { snapshotBadgeFor, snapshotBuilders, verificationFor, type Verification } from "./builder-verification";
+import { snapshotBadgeFor, snapshotBuilders, snapshotRowFor, verificationFor, type Verification } from "./builder-verification";
 import type { BadgeInfo } from "./verified-builder-badge";
 import { sourceFromProfileURI, sourceLabel } from "./verified-builders";
 import type { FeeModel } from "./market-fees";
@@ -209,9 +209,12 @@ export interface BuilderRow {
   profileURI: string;
   /** The builder's own milestone feed (count of verified artifacts), if any. */
   milestoneFeedId?: Hex;
-  /** Canonical source from a `registrai:` profile link, else null. */
+  /** The builder's lead project source from the synced snapshot (its first
+   *  verified project), else a legacy `registrai:` profile link, else null.
+   *  TODO(spec 2026-09-24-builder-projects-design.md "Phase 2"): builders have
+   *  several projects and markets name one project's feed; show them all. */
   source: string | null;
-  /** Verified mark (synced snapshot, still matching the live profile link). */
+  /** Verified mark (synced snapshot, same builder id and owner). */
   verification: Verification | null;
   /** Verified Builder Badge as of the last sync; the UI refreshes it live. */
   badge: BadgeInfo | null;
@@ -365,8 +368,8 @@ export async function readOverview(client: PublicClient, d: PerennialDeployment)
       repo,
       profileURI,
       milestoneFeedId: meta?.milestoneFeedId ?? snapFeeds[String(id)] ?? milestoneFeedFromMarkets(markets, id, d.operator),
-      source: sourceFromProfileURI(profileURI),
-      verification: verificationFor(snapRows, { builderId: id, owner, profileURI }),
+      source: snapshotRowFor(snapRows, { builderId: id, owner })?.source ?? sourceFromProfileURI(profileURI),
+      verification: verificationFor(snapRows, { builderId: id, owner }),
       badge: snapshotBadgeFor(snapRows, { builderId: id, owner }),
     } satisfies BuilderRow;
   });

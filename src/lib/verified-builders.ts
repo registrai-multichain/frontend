@@ -36,7 +36,9 @@ export interface ProofFile {
   signatures: { builder: Hex; deployers: Record<string, Hex> };
 }
 
-/** Profile link prefix: `profileURI = "registrai:" + source`. */
+/** Legacy profile link prefix (`profileURI = "registrai:" + source`), from
+ *  before builders had projects. Only read to NAME a legacy builder on the
+ *  market pages; never a claim (spec 2026-09-24-builder-projects-design.md). */
 export const PROFILE_PREFIX = "registrai:";
 /** Milestone feed description the keeper uses for a verified builder. */
 export const MILESTONE_FEED_PREFIX = "registrai-milestone:";
@@ -137,19 +139,27 @@ export function normalizeSource(input: string): string | null {
   return validHost(host) ? `domain:${host}` : null;
 }
 
-/** The source a `registrai:` profile link names, when it is canonical. */
+/** @deprecated Legacy only: the source a pre-projects `registrai:` profile
+ *  link names. The profile no longer carries the claim; a builder's claims are
+ *  its projects (BuilderRegistry.projectsOf). Used for display names only. */
 export function sourceFromProfileURI(uri: string): string | null {
   if (!uri.startsWith(PROFILE_PREFIX)) return null;
   const source = uri.slice(PROFILE_PREFIX.length);
   return normalizeSource(source) === source ? source : null;
 }
 
-export function isRegistraiProfile(uri: string): boolean {
-  return uri.startsWith(PROFILE_PREFIX);
-}
+/** BuilderRegistry.MAX_SOURCE_LEN: a project's source, in UTF-8 bytes. */
+export const MAX_SOURCE_LEN = 128;
+/** BuilderRegistry.MAX_PROJECTS_PER_BUILDER: every project ever added counts
+ *  (a removed project keeps its slot). */
+export const MAX_PROJECTS_PER_BUILDER = 16;
 
-export function profileURIFor(source: string): string {
-  return PROFILE_PREFIX + source;
+/** UTF-8 length, as the registry measures a string. */
+export const byteLength = (s: string) => new TextEncoder().encode(s).length;
+
+/** A canonical source the registry will take (≤ MAX_SOURCE_LEN bytes). */
+export function sourceFits(source: string): boolean {
+  return byteLength(source) <= MAX_SOURCE_LEN;
 }
 
 /** Human form: `owner/repo` or the host. */
@@ -295,23 +305,56 @@ export async function validateProof(
 
 // ───────────────────────────── status ─────────────────────────────
 
-export type BuilderStatus = "pending" | "verified" | "lapsed" | "unverified";
+/** A project: its proof checks out (verified), does not (lapsed), or the
+ *  project was removed / its builder deactivated (inactive: never checked). */
+export type ProjectStatus = "verified" | "lapsed" | "inactive";
+
+export function projectStatus(p: { builderActive: boolean; active: boolean; proofValid: boolean }): ProjectStatus {
+  if (!p.builderActive || !p.active) return "inactive";
+  return p.proofValid ? "verified" : "lapsed";
+}
+
+export type BuilderStatus = "verified" | "pending" | "lapsed" | "unverified" | "inactive";
 
 /**
- * pending:    active, `registrai:` link, valid proof, caretaker ≠ operator
- * verified:   pending + CaretakerRegistry.isCaretaker(id, operator)
- * lapsed:     `registrai:` link, but proof missing / invalid / mismatched
- * unverified: no `registrai:` link — or an inactive builder (never shown)
+ * Spec 2026-09-24-builder-projects-design.md "Status" (the keeper applies the same rules):
+ *   inactive    the builder is deactivated on chain
+ *   verified    ≥1 verified project and CaretakerRegistry.isCaretaker(id, operator)
+ *   pending     ≥1 verified project, caretaker not (yet) ours — "nominated"
+ *   lapsed      has active projects, none verified
+ *   unverified  no active project
  */
 export function builderStatus(b: {
   active: boolean;
-  profileURI: string;
-  proofValid: boolean;
+  projects: readonly { status: ProjectStatus }[];
   caretakerIsOperator: boolean;
 }): BuilderStatus {
-  if (!b.active || !isRegistraiProfile(b.profileURI)) return "unverified";
-  if (!b.proofValid) return "lapsed";
-  return b.caretakerIsOperator ? "verified" : "pending";
+  if (!b.active) return "inactive";
+  if (b.projects.some((p) => p.status === "verified")) return b.caretakerIsOperator ? "verified" : "pending";
+  if (b.projects.some((p) => p.status === "lapsed")) return "lapsed";
+  return "unverified";
+}
+
+/**
+ * A builder's country: from the claims of its VERIFIED projects, in project
+ * order. When they disagree the most common wins; a tie goes to the one that
+ * appears first (the earliest project). null without a verified project.
+ */
+export function builderCountry(projects: readonly { status: ProjectStatus; country: string | null }[]): string | null {
+  const counts = new Map<string, number>(); // insertion order = first appearance
+  for (const p of projects) {
+    if (p.status !== "verified" || !p.country) continue;
+    counts.set(p.country, (counts.get(p.country) ?? 0) + 1);
+  }
+  let best: string | null = null;
+  let n = 0;
+  for (const [c, k] of counts) {
+    if (k > n) {
+      best = c;
+      n = k;
+    }
+  }
+  return best;
 }
 
 // ───────────────────────────── CREATE deployments ─────────────────────────────
@@ -381,7 +424,7 @@ export function operatorFeeds(logs: FeedCreatedLog[], operator: string): Record<
   return out;
 }
 
-/** A builder's milestone feed: `registrai-milestone:<source>`, else the legacy
+/** A project's milestone feed: `registrai-milestone:<source>`, else the legacy
  *  `<owner/repo>-ships-release` feed for any of the given legacy repos. */
 export function milestoneFeedFor(
   feeds: Record<string, string>,

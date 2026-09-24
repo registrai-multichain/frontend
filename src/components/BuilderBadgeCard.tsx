@@ -96,7 +96,7 @@ export function BuilderBadgeCard({ badge, owner, net = PERENNIAL_BADGE_NET }: { 
         </div>
         <p>
           {badge.lapsed
-            ? "The proof file is missing or no longer checks out. The badge keeps its number and turns verified again once the proof is back."
+            ? "No project proof checks out right now (or the builder is deactivated). The badge keeps its number and turns verified again once a proof is back."
             : `Soulbound, held by ${shortAddr(owner)}${day ? ` since ${day}` : ""}.`}
         </p>
         <a className="vf-link" href={href} target="_blank" rel="noreferrer">view on {CHAIN.explorer.name} ↗</a>

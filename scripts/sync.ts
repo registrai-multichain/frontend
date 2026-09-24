@@ -689,11 +689,12 @@ async function main(): Promise<void> {
   }> = [];
 
   // Every builder on chain (ids 1..nextId-1) with its verified-builder status
-  // (docs/superpowers/specs/2026-09-24-verified-builders-design.md): source from
-  // the `registrai:` profile link, proof fetched + validated, caretaker checked.
-  // milestoneFeedId comes from the operator's Registry.FeedCreated events
-  // (`registrai-milestone:<source>`, or the legacy `<owner/repo>-ships-release`);
-  // keeper/builders.json is consulted only for legacy (non-`registrai:`) entries.
+  // (docs/superpowers/specs/2026-09-24-builder-projects-design.md): its projects
+  // (projectsOf), each active project's proof fetched + validated, caretaker
+  // checked. Milestone feeds are per project, from the operator's
+  // Registry.FeedCreated events (`registrai-milestone:<source>`); the builder's
+  // `milestoneFeedId` is its lead project's (the market pages show one).
+  // keeper/builders.json is consulted only for legacy builders without a project.
   let perennialBuilders: PerennialBuilderSnapshot[] = [];
   /** Resumable FeedCreated scan (operator-created feeds only). */
   type BuilderFeedsCursor = {
@@ -838,9 +839,7 @@ async function main(): Promise<void> {
       pace: async () => { await pace(); },
     });
     testnetRecords = records;
-    for (const r of records) {
-      console.log(`  · #${r.builderId} ${r.status}${r.source ? ` ${r.source}` : ""}${r.proofError ? ` (${r.proofError})` : ""}`);
-    }
+    for (const r of records) logBuilderRecord(r);
 
     // Milestone feeds live on the oracle Registry the markets settle against:
     // MarketsPerennial.ATTESTATION() -> Attestation.REGISTRY().
@@ -1254,9 +1253,7 @@ async function main(): Promise<void> {
         fetchJson: makeFetchJson({ timeoutMs: 15_000 }),
         pace: async () => { await pace(); },
       });
-      for (const r of records) {
-        console.log(`  · #${r.builderId} ${r.status}${r.source ? ` ${r.source}` : ""}${r.proofError ? ` (${r.proofError})` : ""}`);
-      }
+      for (const r of records) logBuilderRecord(r);
       let held: ReadonlyMap<number, BadgeInfo> = new Map();
       const badgeContract = BUILDERS.contracts.VerifiedBuilderBadge;
       if (badgeContract && BUILDERS.badgeNetwork) {
@@ -1332,6 +1329,14 @@ async function main(): Promise<void> {
   const target = resolve(__dirname, "../src/lib/live-data.json");
   writeFileSync(target, JSON.stringify(out, null, 2));
   console.log(`wrote ${target}`);
+}
+
+/** One builder and its projects, for the sync log. */
+function logBuilderRecord(r: BuilderRecord) {
+  console.log(`  · #${r.builderId} ${r.status} (${r.activeProjectCount} active project(s))`);
+  for (const p of r.projects) {
+    console.log(`      project ${p.projectId} ${p.status} ${JSON.stringify(p.source)}${p.proofError ? ` (${p.proofError})` : ""}`);
+  }
 }
 
 main().catch((e) => {

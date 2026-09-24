@@ -18,15 +18,17 @@ describe("verificationFor", () => {
     expect(verificationFor([row()], b)).toEqual({ source: "github:o/r", proofUrl: row().proofUrl });
   });
   test("no badge unless verified", () => {
-    for (const status of ["pending", "lapsed", "unverified"] as const) expect(verificationFor([row({ status })], b)).toBeNull();
+    for (const status of ["pending", "lapsed", "unverified", "inactive"] as const) expect(verificationFor([row({ status })], b)).toBeNull();
   });
   test("no badge when the id or owner differ", () => {
     expect(verificationFor([row()], { ...b, builderId: 3 })).toBeNull();
     expect(verificationFor([row({ owner: "0xdef0000000000000000000000000000000000001" })], b)).toBeNull();
   });
-  test("no badge once the live profile link no longer names the source", () => {
-    expect(verificationFor([row()], { ...b, profileURI: "registrai:github:o/r" })).not.toBeNull();
-    expect(verificationFor([row()], { ...b, profileURI: "registrai:github:o/other" })).toBeNull();
+  test("an owner change voids the mark (every proof names the owner)", () => {
+    expect(verificationFor([row()], { ...b, owner: "0xdef0000000000000000000000000000000000002" })).toBeNull();
+  });
+  test("an inactive builder shows no mark", () => {
+    expect(verificationFor([row({ status: "inactive" })], b)).toBeNull();
   });
   test("milestone metric by proof path", () => {
     expect(milestoneMetric("github:o/r")).toBe("releases and tags");

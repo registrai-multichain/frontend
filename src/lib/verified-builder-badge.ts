@@ -1,7 +1,9 @@
 /**
  * The Verified Builder Badge (contracts/src/perennial/VerifiedBuilderBadge.sol):
- * a soulbound 1:1 token per verified builder, token id = serial in issue order
- * (spec: docs/superpowers/specs/2026-09-24-verified-builder-badge-design.md).
+ * a soulbound 1:1 token per verified builder (not per project), token id =
+ * serial in issue order (spec: docs/superpowers/specs/2026-09-24-verified-builder-badge-design.md,
+ * metadata and sync per 2026-09-24-builder-projects-design.md). No project is
+ * named on-chain: which project is verified is only known off-chain.
  * Shared by scripts/sync.ts (snapshot), scripts/onboard-batch.ts (issue calls)
  * and the UI (live read, image, explorer link). A null badge address turns
  * every badge feature off: no contract calls, nothing rendered.
@@ -21,7 +23,12 @@ export const badgeAbi = parseAbi([
   "function BUILDERS() view returns (address)",
   "function issue(uint256 builderId) returns (uint256 serial)",
   "function revoke(uint256 builderId)",
+  /** Anyone: after an owner change, burn + re-mint the SAME serial to the builder's current owner. */
+  "function sync(uint256 builderId)",
   "event Issued(uint256 indexed builderId, uint256 indexed serial, address indexed owner)",
+  "event Revoked(uint256 indexed builderId, uint256 indexed serial)",
+  "event LapsedSet(uint256 indexed builderId, uint256 indexed serial, bool lapsed)",
+  "event Synced(uint256 indexed builderId, uint256 indexed serial, address from, address to)",
 ]);
 
 /** Chain id -> the `public/badge/<network>/` path segment (scripts/render-badges.py NETWORKS). */
@@ -93,16 +100,15 @@ export interface BadgeReader {
   readContract(args: {
     address: Address;
     abi: typeof badgeAbi;
-    functionName: "serialOf" | "lapsed" | "isLapsed" | "issuedAt" | "nextSerial";
+    functionName: "serialOf" | "lapsed" | "isLapsed" | "issuedAt" | "nextSerial" | "ownerOf";
     args?: readonly unknown[];
   }): Promise<unknown>;
 }
 
 /**
- * What the badge shows: `isLapsed` = the keeper's flag OR the builder no longer
- * standing where it was verified (profile link changed / deactivated). Badge
- * contracts deployed before that view existed (the first testnet badge) only
- * have the keeper's `lapsed` flag.
+ * What the badge shows: `isLapsed` = the keeper's flag (no verified project
+ * remains) OR the builder is deactivated. Badge contracts deployed before that
+ * view existed (the first testnet badge) only have the keeper's `lapsed` flag.
  */
 export async function readShownLapsed(client: BadgeReader, badge: Address, serial: number): Promise<boolean> {
   try {
@@ -151,4 +157,19 @@ export function attachBadges<T extends { builderId: number }>(
   badges: ReadonlyMap<number, BadgeInfo>,
 ): (T & { badge: BadgeInfo | null })[] {
   return rows.map((r) => ({ ...r, badge: badges.get(r.builderId) ?? null }));
+}
+
+/** Pure: the badge sits with another wallet than the builder's registry owner
+ *  (an owner change happened): `sync(builderId)` moves it. */
+export function badgeNeedsSync(holder: string | null | undefined, owner: string | null | undefined): boolean {
+  return Boolean(holder && owner && holder.toLowerCase() !== owner.toLowerCase());
+}
+
+/** The wallet holding a serial, or null when it does not exist (revoked / never issued). */
+export async function readBadgeHolder(client: BadgeReader, badge: Address, serial: number): Promise<Address | null> {
+  try {
+    return (await client.readContract({ address: badge, abi: badgeAbi, functionName: "ownerOf", args: [BigInt(serial)] })) as Address;
+  } catch {
+    return null;
+  }
 }

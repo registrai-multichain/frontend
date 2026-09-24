@@ -802,8 +802,11 @@
     {
       "input": {
         "active": true,
-        "profileURI": "registrai:github:o/r",
-        "proofValid": true,
+        "projects": [
+          {
+            "status": "verified"
+          }
+        ],
         "caretakerIsOperator": false
       },
       "expected": "pending"
@@ -811,8 +814,11 @@
     {
       "input": {
         "active": true,
-        "profileURI": "registrai:github:o/r",
-        "proofValid": true,
+        "projects": [
+          {
+            "status": "verified"
+          }
+        ],
         "caretakerIsOperator": true
       },
       "expected": "verified"
@@ -820,8 +826,41 @@
     {
       "input": {
         "active": true,
-        "profileURI": "registrai:github:o/r",
-        "proofValid": false,
+        "projects": [
+          {
+            "status": "lapsed"
+          },
+          {
+            "status": "verified"
+          }
+        ],
+        "caretakerIsOperator": true
+      },
+      "expected": "verified"
+    },
+    {
+      "input": {
+        "active": true,
+        "projects": [
+          {
+            "status": "lapsed"
+          },
+          {
+            "status": "verified"
+          }
+        ],
+        "caretakerIsOperator": false
+      },
+      "expected": "pending"
+    },
+    {
+      "input": {
+        "active": true,
+        "projects": [
+          {
+            "status": "lapsed"
+          }
+        ],
         "caretakerIsOperator": true
       },
       "expected": "lapsed"
@@ -829,8 +868,14 @@
     {
       "input": {
         "active": true,
-        "profileURI": "registrai:github:o/r",
-        "proofValid": false,
+        "projects": [
+          {
+            "status": "lapsed"
+          },
+          {
+            "status": "inactive"
+          }
+        ],
         "caretakerIsOperator": false
       },
       "expected": "lapsed"
@@ -838,8 +883,19 @@
     {
       "input": {
         "active": true,
-        "profileURI": "https://github.com/o/r",
-        "proofValid": false,
+        "projects": [
+          {
+            "status": "inactive"
+          }
+        ],
+        "caretakerIsOperator": true
+      },
+      "expected": "unverified"
+    },
+    {
+      "input": {
+        "active": true,
+        "projects": [],
         "caretakerIsOperator": true
       },
       "expected": "unverified"
@@ -847,11 +903,14 @@
     {
       "input": {
         "active": false,
-        "profileURI": "registrai:github:o/r",
-        "proofValid": true,
+        "projects": [
+          {
+            "status": "verified"
+          }
+        ],
         "caretakerIsOperator": true
       },
-      "expected": "unverified"
+      "expected": "inactive"
     }
   ],
   "createAddresses": [

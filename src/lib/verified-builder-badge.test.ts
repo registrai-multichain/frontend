@@ -2,6 +2,9 @@ import { describe, expect, test } from "vitest";
 import type { Address } from "viem";
 import {
   attachBadges,
+  badgeAbi,
+  badgeNeedsSync,
+  readBadgeHolder,
   badgeImageBase,
   badgeImageUrl,
   badgeNetworkKey,
@@ -134,7 +137,7 @@ describe("network config", () => {
 
 describe("readShownLapsed", () => {
   const B = "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c" as const;
-  test("prefers the contract's combined isLapsed (profile changed / deactivated)", async () => {
+  test("prefers the contract's combined isLapsed (keeper flag OR builder deactivated)", async () => {
     const reader: BadgeReader = {
       readContract: async ({ functionName }) => (functionName === "isLapsed" ? true : functionName === "lapsed" ? false : 0n),
     };
@@ -148,5 +151,38 @@ describe("readShownLapsed", () => {
       },
     };
     expect(await readShownLapsed(reader, B, 1)).toBe(true);
+  });
+});
+
+describe("badge ABI (builder projects release)", () => {
+  const names = badgeAbi.filter((x) => x.type === "function").map((x) => x.name);
+  test("has sync and the Synced event; none of the removed per-source views", () => {
+    expect(names).toContain("sync");
+    expect(names).toContain("isLapsed");
+    expect(badgeAbi.some((x) => x.type === "event" && x.name === "Synced")).toBe(true);
+    for (const gone of ["verifiedSource", "verifiedProfileHash", "isCurrent", "sourceOf"]) expect(names).not.toContain(gone);
+  });
+});
+
+describe("badge sync after an owner change", () => {
+  const B = "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c" as const;
+  const OLD = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+  const NEW = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+  test("needed only when the holder is not the registry owner", () => {
+    expect(badgeNeedsSync(OLD, NEW)).toBe(true);
+    expect(badgeNeedsSync(OLD, OLD.toLowerCase())).toBe(false);
+    expect(badgeNeedsSync(null, NEW)).toBe(false);
+    expect(badgeNeedsSync(OLD, undefined)).toBe(false);
+  });
+  test("readBadgeHolder: ownerOf, null for a burned / missing serial", async () => {
+    const reader: BadgeReader = {
+      readContract: async ({ functionName, args }) => {
+        if (functionName !== "ownerOf") throw new Error(functionName);
+        if (Number(args![0] as bigint) === 2) throw new Error("ERC721NonexistentToken");
+        return OLD;
+      },
+    };
+    expect(await readBadgeHolder(reader, B, 1)).toBe(OLD);
+    expect(await readBadgeHolder(reader, B, 2)).toBeNull();
   });
 });

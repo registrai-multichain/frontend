@@ -1,15 +1,12 @@
 "use client";
 
-import { createPublicClient, type Address, type Hex, type PublicClient } from "viem";
-import useSWR from "swr";
 import { useWallet } from "@/components/WalletProvider";
 import { badgesOnFor, type BadgeNet } from "@/components/BuilderBadgeCard";
 import { BuilderBadgeSection } from "@/components/BuilderBadgeSection";
 import { BUILDERS } from "@/lib/builders-network";
-import { transportFor } from "@/lib/chains";
+import { plainProfileName } from "@/lib/builders-gallery";
 import { projectName } from "@/lib/share-card";
-import { sourceFromProfileURI } from "@/lib/verified-builders";
-import { verifiedBuilderAbi } from "@/lib/verified-builders-chain";
+import { useMyBuilder, useProjectProofs } from "./useMyBuilder";
 
 const CHAIN = BUILDERS.chain;
 const REG = BUILDERS.contracts.BuilderRegistry;
@@ -23,26 +20,19 @@ const NET: BadgeNet = { chain: CHAIN, badge: BUILDERS.contracts.VerifiedBuilderB
 export function MyBadge() {
   const { address } = useWallet();
   const on = badgesOnFor(NET) && Boolean(REG && address);
-  const { data: me } = useSWR(
-    on ? ["verify-my-builder", CHAIN.id, address] : null,
-    async () => {
-      const client = createPublicClient({ chain: CHAIN.viemChain, transport: transportFor(CHAIN) }) as PublicClient;
-      const id = Number(await client.readContract({ address: REG!, abi: verifiedBuilderAbi, functionName: "builderIdOf", args: [address!] }));
-      if (!id) return null;
-      const [owner, profileURI] = (await client.readContract({
-        address: REG!, abi: verifiedBuilderAbi, functionName: "builders", args: [BigInt(id)],
-      })) as readonly [Address, string, Hex, bigint, boolean];
-      return { id, owner, source: sourceFromProfileURI(profileURI) };
-    },
-    { revalidateOnFocus: false },
-  );
-  if (!on || !me) return null;
+  const { data } = useMyBuilder(on ? address : undefined);
+  const b = data?.builder ?? null;
+  const { data: proofs } = useProjectProofs(on ? b : null);
+  if (!on || !b) return null;
+  // The share card names the first project whose proof checks out for this wallet, else the first active one.
+  const lead = b.projects.find((p) => p.active && proofs?.get(p.id)?.state === "valid") ?? b.projects.find((p) => p.active) ?? null;
+  const source = lead?.source ?? null;
   return (
     <BuilderBadgeSection
-      builderId={me.id}
-      owner={me.owner}
-      name={projectName(me.source, me.id)}
-      source={me.source}
+      builderId={b.id}
+      owner={b.owner}
+      name={plainProfileName(b.profileURI) ?? projectName(source, b.id)}
+      source={source}
       viewer={address}
       net={NET}
     />

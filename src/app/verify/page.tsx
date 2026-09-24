@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
-import { VerifyFlow } from "@/components/verify/VerifyFlow";
-import { MyBadge } from "@/components/verify/MyBadge";
+import { VerifyApp } from "@/components/verify/VerifyApp";
 import { BUILDERS, MARKETS_OPEN_ON_BUILDERS_NETWORK, buildersStatusLine } from "@/lib/builders-network";
 
 /** Milestone feeds and markets exist where claims register (not in mainnet phase 1). */
@@ -11,7 +10,7 @@ const MARKETS_OPEN = MARKETS_OPEN_ON_BUILDERS_NETWORK;
 export const metadata: Metadata = {
   title: "Verify your project · Registrai",
   description:
-    "Claim your project as a Registrai verified builder: sign a proof with your wallet, publish it in your repo or on your domain, and register on Arc.",
+    "Claim your projects as a Registrai verified builder: sign a proof with your wallet, publish it in your repo or on your domain, and register on Arc.",
   alternates: { canonical: "/verify" },
   robots: { index: false, follow: true },
 };
@@ -19,7 +18,9 @@ export const metadata: Metadata = {
 /**
  * The claim page builders are invited to. Nothing about a builder is public or
  * on-chain until they finish it (spec: docs/superpowers/specs/
- * 2026-09-24-verified-builders-design.md).
+ * 2026-09-24-verified-builders-design.md; projects, transfer and recovery:
+ * 2026-09-24-builder-projects-design.md). A builder registers once and then
+ * adds projects, each with its own proof.
  */
 export default function VerifyPage() {
   return (
@@ -40,8 +41,7 @@ export default function VerifyPage() {
 
         <div className="vf-layout">
           <div className="vf-main">
-            <MyBadge />
-            <VerifyFlow />
+            <VerifyApp />
           </div>
 
           <aside className="vf-aside" aria-label="What verifying means">
@@ -49,7 +49,8 @@ export default function VerifyPage() {
             <ul>
               <li>
                 A signed statement that this wallet builds this project, published where only you can
-                publish it: your repo, or your domain.
+                publish it: your repo, or your domain. One wallet is one builder; add up to 16 projects,
+                each with its own proof.
               </li>
               {MARKETS_OPEN ? (
                 <>
@@ -92,7 +93,9 @@ export default function VerifyPage() {
             <p>
               Your wallet address, the repo or domain, the deployer addresses you list, and the country
               you declare. Country is self-declared and never decides a reward. Removing the proof file
-              marks you lapsed at the next sync{MARKETS_OPEN ? " and takes you off the atlas" : ""}.
+              marks that project lapsed at the next sync; with no verified project left your builder
+              lapses{MARKETS_OPEN ? " and leaves the atlas" : ""}. Moving to a new wallet means re-signing
+              every project&apos;s proof with it.
             </p>
           </aside>
         </div>
