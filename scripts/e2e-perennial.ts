@@ -9,9 +9,12 @@
  * <json>: { rpc, contracts: {NanoLedger, BuilderRegistry, ProgressPool, MarketsPerennial,
  *           CaretakerRegistry, USDC}, operator, key, action, ...args }
  * Prints one JSON line. Exits non-zero when the chain disagrees with the UI's quote
- * or preview: trades are fee-free on the v2 contracts (the quote must match to the
- * unit, fee 0); redeem / claimLP must pay exactly the contract's `redeemable` /
- * `claimableLP` view read BEFORE the call AND the UI's local payout mirror.
+ * or preview. v3 (1% trading fee): buy/sell quotes must match to the unit, the
+ * fee must be exactly 1%, its FeesPaid legs exactly 30/20/50 with the 20% added
+ * to agentEscrow; voidMarket must pay no creator fee and send the escrow to the
+ * challenger XOR the commons; redeem / claimLP must pay exactly the contract's
+ * `redeemable` / `claimableLP` view read BEFORE the call AND the UI's mirror.
+ * Resolving is the keeper's job; the `resolve` action is kept for manual runs.
  * Refuses any chain but 31337, and only ever signs with the key it is handed
  * (anvil's dev keys, which hold nothing anywhere else).
  */
@@ -22,6 +25,7 @@ import { marketsPerennialAbi, nanoLedgerAbi, usdcAbi } from "../src/lib/abi";
 import { resolvePerennialDeployment } from "../src/lib/perennial-network";
 import { marketIdFromLogs, readLatestValue, readOverview, type ChainMarket } from "../src/lib/perennial-chain";
 import {
+  BPS,
   COMPARATOR,
   OUTCOME,
   PHASE,
@@ -35,13 +39,13 @@ import {
   feeSummary,
   mirrorClaimLP,
   mirrorRedeem,
-  mirrorResolve,
   mirrorVoid,
-  splitResolutionFee,
+  splitTradeFee,
   tradeFeeBps,
+  type FeeModel,
   type SettlementSnapshot,
-} from "../src/lib/resolution-fee";
-import { readHolderSettlement, readMarketSettlement, resolutionFeeAbi } from "../src/lib/resolution-fee-chain";
+} from "../src/lib/market-fees";
+import { marketFeesAbi, readHolderSettlement, readMarketSettlement } from "../src/lib/market-fees-chain";
 
 type Args = Record<string, unknown> & {
   rpc: string;
@@ -58,6 +62,7 @@ const acct = args.key ? privateKeyToAccount(args.key) : undefined;
 const wc = acct ? createWalletClient({ chain: foundry, transport: http(args.rpc), account: acct }) : undefined;
 const P = D.contracts;
 const SLIPPAGE_BPS = 100n; // the panel's default 1%
+const ONE_PERCENT_BPS = 100n; // the v3 trading fee the owner set
 
 const out = (o: unknown) => console.log(JSON.stringify(o, (_k, v) => (typeof v === "bigint" ? v.toString() : v)));
 function die(msg: string, extra: Record<string, unknown> = {}): never {
@@ -86,8 +91,8 @@ async function ensureLedger(spender: Address, needed: bigint) {
 function eventArgs(logs: { address: string; data: Hex; topics: [Hex, ...Hex[]] | [] }[], name: string) {
   for (const l of logs) {
     if (l.address.toLowerCase() !== P.MarketsPerennial!.toLowerCase()) continue;
-    // abi.ts may predate the v2 events (VoidFeesPaid): fall back to the fragment.
-    for (const abi of [marketsPerennialAbi as Abi, resolutionFeeAbi as Abi]) {
+    // abi.ts may predate the v3 events (AgentFeeReleased): fall back to the fragment.
+    for (const abi of [marketsPerennialAbi as Abi, marketFeesAbi as Abi]) {
       try {
         const ev = decodeEventLog({ abi, data: l.data, topics: l.topics as never });
         if (ev.eventName === name) return ev.args as unknown as Record<string, bigint>;
@@ -97,10 +102,38 @@ function eventArgs(logs: { address: string; data: Hex; topics: [Hex, ...Hex[]] |
   return undefined;
 }
 
-const view = (functionName: "collateralOf" | "totalNetCost", id: Hex) =>
-  pc.readContract({ address: P.MarketsPerennial!, abi: resolutionFeeAbi, functionName, args: [id] }) as Promise<bigint>;
+const view = (functionName: "collateralOf" | "totalNetCost" | "agentEscrow", id: Hex) =>
+  pc.readContract({ address: P.MarketsPerennial!, abi: marketFeesAbi, functionName, args: [id] }) as Promise<bigint>;
 const holderView = (functionName: "netCost" | "redeemable" | "claimableLP", id: Hex, who: Address) =>
-  pc.readContract({ address: P.MarketsPerennial!, abi: resolutionFeeAbi, functionName, args: [id, who] }) as Promise<bigint>;
+  pc.readContract({ address: P.MarketsPerennial!, abi: marketFeesAbi, functionName, args: [id, who] }) as Promise<bigint>;
+
+/** v3 bookkeeping a trade moves: the trader's net cost, the pot, the agent escrow. */
+async function books(id: Hex, who: Address) {
+  const [netCost, collateral, escrow] = await Promise.all([holderView("netCost", id, who), view("collateralOf", id), view("agentEscrow", id)]);
+  return { netCost, collateral, escrow };
+}
+
+/** v3: the fee is exactly 1% and its FeesPaid legs are exactly 30/20/50, the 20% into escrow. */
+function checkTradeFee(
+  fm: Extract<FeeModel, { kind: "trade" }>,
+  base: bigint,
+  evFee: bigint,
+  logs: never,
+  before: { escrow: bigint },
+  after: { escrow: bigint },
+) {
+  if (fm.tradeFeeBps !== ONE_PERCENT_BPS) die("TRADE_FEE_BPS is not 1%", { tradeFeeBps: fm.tradeFeeBps });
+  const want = (base * ONE_PERCENT_BPS) / BPS;
+  if (evFee !== want) die("trade fee is not exactly 1%", { base, fee: evFee, want });
+  const legs = splitTradeFee(evFee, fm)!;
+  const paid = eventArgs(logs, "FeesPaid");
+  if (!paid) die("no FeesPaid event on the trade");
+  if (paid!.creatorFee !== legs.creator || paid!.agentFee !== legs.agent || paid!.commonsFee !== legs.commons) {
+    die("FeesPaid legs are not 30/20/50 of the fee", { expected: legs, chain: paid });
+  }
+  if (after.escrow - before.escrow !== legs.agent) die("agentEscrow did not grow by the agent leg", { before: before.escrow, after: after.escrow, agentFee: legs.agent });
+  return legs;
+}
 
 async function market(id: Hex) {
   const ov = await readOverview(pc, D);
@@ -173,104 +206,100 @@ async function main() {
       const { ov, m } = await market(id!);
       const outcome = outcomeOf(args.side);
       const amount = BigInt(String(args.amount));
-      const fee = tradeFeeBps(ov.feeModel);
-      if (fee === undefined) die("fee model unknown: the UI would not quote", { feeModel: ov.feeModel });
-      const v2 = ov.feeModel.kind === "resolution";
-      const q = quoteBuy(m, outcome, amount, fee!);
+      const fm = ov.feeModel;
+      const feeBps = tradeFeeBps(fm);
+      if (feeBps === undefined) die("fee model unknown: the UI would not quote", { feeModel: fm });
+      const q = quoteBuy(m, outcome, amount, feeBps!);
       if (!q) die("quoteBuy returned null");
-      if (v2 && q!.fee !== 0n) die("v2 quote carries a trading fee", { quote: q });
       const floor = minOutWithSlippage(q!.sharesOut, SLIPPAGE_BPS);
-      const costBefore = v2 ? await holderView("netCost", m.id, acct!.address) : 0n;
+      const before = fm.kind === "trade" ? await books(m.id, acct!.address) : undefined;
       await ensureLedger(P.MarketsPerennial!, amount);
       const r = await send(P.MarketsPerennial!, marketsPerennialAbi, "buy", [m.id, outcome, amount, floor]);
       const ev = eventArgs(r.logs as never, "Bought");
       if (!ev) die("no Bought event");
       if (ev!.sharesOut !== q!.sharesOut || ev!.fee !== q!.fee) die("chain disagrees with the UI buy quote", { quote: q, chain: ev });
-      let netCost: bigint | undefined;
-      if (v2) {
-        netCost = await holderView("netCost", m.id, acct!.address);
-        if (netCost !== costBefore + amount) die("netCost did not grow by collateralIn", { before: costBefore, after: netCost, amount });
-      }
-      return out({ ok: true, sharesOut: ev!.sharesOut, fee: ev!.fee, quoteMatched: true, netCost: netCost ?? null });
+      if (fm.kind !== "trade") return out({ ok: true, sharesOut: ev!.sharesOut, fee: ev!.fee, quoteMatched: true });
+      const after = await books(m.id, acct!.address);
+      const legs = checkTradeFee(fm, amount, ev!.fee, r.logs as never, before!, after);
+      const net = amount - ev!.fee;
+      if (after.netCost !== before!.netCost + net) die("netCost did not grow by collateralIn − fee", { before: before!.netCost, after: after.netCost, net });
+      if (after.collateral !== before!.collateral + net) die("collateralOf did not grow by collateralIn − fee", { before: before!.collateral, after: after.collateral, net });
+      return out({ ok: true, sharesOut: ev!.sharesOut, fee: ev!.fee, legs, netCost: after.netCost, agentEscrow: after.escrow, quoteMatched: true });
     }
     case "sell": {
       const { ov, m } = await market(id!);
       const outcome = outcomeOf(args.side);
       const shares = BigInt(String(args.shares));
-      const fee = tradeFeeBps(ov.feeModel);
-      if (fee === undefined) die("fee model unknown: the UI would not quote", { feeModel: ov.feeModel });
-      const v2 = ov.feeModel.kind === "resolution";
-      const q = quoteSell(m, outcome, shares, fee!);
+      const fm = ov.feeModel;
+      const feeBps = tradeFeeBps(fm);
+      if (feeBps === undefined) die("fee model unknown: the UI would not quote", { feeModel: fm });
+      const q = quoteSell(m, outcome, shares, feeBps!);
       if (!q) die("quoteSell returned null");
-      if (v2 && (q!.fee !== 0n || q!.collateralOut !== q!.grossOut)) die("v2 quote carries a trading fee", { quote: q });
       const floor = minOutWithSlippage(q!.collateralOut, SLIPPAGE_BPS);
-      const costBefore = v2 ? await holderView("netCost", m.id, acct!.address) : 0n;
+      const before = fm.kind === "trade" ? await books(m.id, acct!.address) : undefined;
       const r = await send(P.MarketsPerennial!, marketsPerennialAbi, "sell", [m.id, outcome, shares, floor]);
       const ev = eventArgs(r.logs as never, "Sold");
       if (!ev) die("no Sold event");
       if (ev!.collateralOut !== q!.collateralOut || ev!.fee !== q!.fee) die("chain disagrees with the UI sell quote", { quote: q, chain: ev });
-      let netCost: bigint | undefined;
-      if (v2) {
-        netCost = await holderView("netCost", m.id, acct!.address);
-        const reduce = costBefore < ev!.collateralOut ? costBefore : ev!.collateralOut;
-        if (netCost !== costBefore - reduce) die("netCost did not shrink by min(netCost, collateralOut)", { before: costBefore, after: netCost, out: ev!.collateralOut });
-      }
-      return out({ ok: true, collateralOut: ev!.collateralOut, fee: ev!.fee, quoteMatched: true, netCost: netCost ?? null });
+      if (fm.kind !== "trade") return out({ ok: true, collateralOut: ev!.collateralOut, fee: ev!.fee, quoteMatched: true });
+      const after = await books(m.id, acct!.address);
+      const grossOut = ev!.collateralOut + ev!.fee;
+      const legs = checkTradeFee(fm, grossOut, ev!.fee, r.logs as never, before!, after);
+      const reduce = before!.netCost < grossOut ? before!.netCost : grossOut;
+      if (after.netCost !== before!.netCost - reduce) die("netCost did not shrink by min(netCost, grossOut)", { before: before!.netCost, after: after.netCost, grossOut });
+      if (after.collateral !== before!.collateral - grossOut) die("collateralOf did not shrink by grossOut", { before: before!.collateral, after: after.collateral, grossOut });
+      return out({ ok: true, collateralOut: ev!.collateralOut, grossOut, fee: ev!.fee, legs, netCost: after.netCost, agentEscrow: after.escrow, quoteMatched: true });
     }
     case "status": {
       const { ov, m } = await market(id!);
       return out({ ok: true, phase: m.phase, settlement: m.settlement, yesWon: m.yesWon, feeModel: ov.feeModel,
-        collateral: m.collateral ?? null,
+        collateral: m.collateral ?? null, agentEscrow: m.agentEscrow ?? null,
         status: marketStatus({ phase: m.phase, yesWon: m.yesWon, expiry: m.expiry, chainNow: ov.chainNow, settlement: m.settlement, supportsSettlement: ov.supportsSettlement, feeModel: ov.feeModel }).key });
     }
     case "resolve":
     case "voidMarket": {
       const { ov } = await market(id!);
       const fm = ov.feeModel;
-      if (fm.kind !== "resolution") {
+      if (fm.kind !== "trade") {
         await send(P.MarketsPerennial!, marketsPerennialAbi, args.action, [id]);
         return out({ ok: true });
       }
-      // v2: the 1% is charged once here, on the pot as it stood.
-      const [collateral, totalNetCost] = await Promise.all([view("collateralOf", id!), view("totalNetCost", id!)]);
-      const split = splitResolutionFee(collateral, fm);
+      // v3: nothing is charged at settlement; only the held agent escrow moves.
+      const [collateral, totalNetCost, escrow] = await Promise.all([view("collateralOf", id!), view("totalNetCost", id!), view("agentEscrow", id!)]);
       const r = await send(P.MarketsPerennial!, marketsPerennialAbi, args.action, [id]);
+      const escrowAfter = await view("agentEscrow", id!);
+      if (escrowAfter !== 0n) die("agentEscrow was not emptied at settlement", { before: escrow, after: escrowAfter });
       if (args.action === "resolve") {
-        const ev = eventArgs(r.logs as never, "FeesPaid");
-        if (!ev) die("no FeesPaid event on resolve");
-        if (ev!.creatorFee !== split.creator || ev!.agentFee !== split.agent || ev!.commonsFee !== split.commons) {
-          die("FeesPaid disagrees with the UI's 1% split", { expected: split, chain: ev });
-        }
-        const snap = await readMarketSettlement(pc, P.MarketsPerennial!, id!, PHASE.Resolved);
-        const want = mirrorResolve(collateral, fm.resolutionFeeBps);
-        if (snap.settledGross !== want.settledGross || snap.settledNet !== want.settledNet) die("settledNet/settledGross disagree with the mirror", { expected: want, chain: snap });
-        return out({ ok: true, collateral, fee: split, settledNet: snap.settledNet, settledGross: snap.settledGross, previewMatched: true });
+        // Normally the keeper resolves; kept for manual runs.
+        const rel = eventArgs(r.logs as never, "AgentFeeReleased");
+        if (escrow > 0n && rel?.amount !== escrow) die("AgentFeeReleased does not match the held escrow", { escrow, chain: rel ?? null });
+        return out({ ok: true, agentFeeReleased: rel?.amount ?? 0n });
       }
       const ev = eventArgs(r.logs as never, "VoidFeesPaid") as (Record<string, bigint> & { challenger?: Address }) | undefined;
       if (!ev) die("no VoidFeesPaid event on voidMarket");
-      // The 20% leg goes to a successful challenger, else to the commons; either
-      // way the creator's 30% is exact and the legs sum to the whole fee.
-      if (ev!.creatorFee !== split.creator || ev!.creatorFee + ev!.commonsFee + ev!.challengerReward !== split.fee) {
-        die("VoidFeesPaid disagrees with the UI's 1% split", { expected: split, chain: ev });
-      }
+      if (ev!.creatorFee !== 0n) die("a void charged a creator fee", { chain: ev });
+      const challenged = Boolean(ev!.challenger && ev!.challenger !== "0x0000000000000000000000000000000000000000");
+      const toChallenger = challenged && ev!.challengerReward === escrow && ev!.commonsFee === 0n;
+      const toCommons = !challenged && ev!.commonsFee === escrow && ev!.challengerReward === 0n;
+      if (!(toChallenger || toCommons)) die("the held escrow did not go to the challenger XOR the commons", { escrow, chain: ev });
       const snap = await readMarketSettlement(pc, P.MarketsPerennial!, id!, PHASE.Voided);
-      const want = mirrorVoid(collateral, totalNetCost, fm.resolutionFeeBps);
+      const want = mirrorVoid(collateral, totalNetCost);
       if (snap.voidTraderPool !== want.voidTraderPool || snap.voidNetCostTotal !== want.voidNetCostTotal) die("void snapshot disagrees with the mirror", { expected: want, chain: snap });
       return out({
-        ok: true, collateral, fee: split, challenger: ev!.challenger ?? null, challengerReward: ev!.challengerReward,
+        ok: true, collateral, escrow, challenger: ev!.challenger ?? null, challengerReward: ev!.challengerReward, commonsFee: ev!.commonsFee,
         voidTraderPool: snap.voidTraderPool, voidNetCostTotal: snap.voidNetCostTotal, previewMatched: true,
       });
     }
     case "redeem": {
       const { ov, m } = await market(id!);
       const pos = await position(id!, acct!.address);
-      const v2 = ov.feeModel.kind === "resolution";
+      const v3 = ov.feeModel.kind === "trade";
       // Read the contract's own preview BEFORE redeeming, exactly as the panel does.
-      const views = v2 ? await readHolderSettlement(pc, P.MarketsPerennial!, id!, acct!.address, m.phase) : {};
-      if (v2 && views.redeemable === undefined) die("v2 contract has no redeemable view");
+      const views = v3 ? await readHolderSettlement(pc, P.MarketsPerennial!, id!, acct!.address, m.phase) : {};
+      if (v3 && views.redeemable === undefined) die("v3 contract has no redeemable view");
       const mirror = mirrorRedeem(snapshotOf(m), { ...pos, netCost: views.netCost }, ov.feeModel);
       if (mirror === undefined) die("local redeem mirror lacked inputs", { market: m, views });
-      if (v2 && views.redeemable !== mirror) die("redeemable view disagrees with the UI mirror", { view: views.redeemable, mirror });
+      if (v3 && views.redeemable !== mirror) die("redeemable view disagrees with the UI mirror", { view: views.redeemable, mirror });
       const r = await send(P.MarketsPerennial!, marketsPerennialAbi, "redeem", [id]);
       const ev = eventArgs(r.logs as never, "Redeemed");
       if (!ev) die("no Redeemed event");
@@ -280,10 +309,10 @@ async function main() {
     case "claimLP": {
       const { ov, m } = await market(id!);
       const pos = await position(id!, acct!.address);
-      const v2 = ov.feeModel.kind === "resolution";
-      const claimable = v2 ? await holderView("claimableLP", id!, acct!.address) : undefined;
+      const v3 = ov.feeModel.kind === "trade";
+      const claimable = v3 ? await holderView("claimableLP", id!, acct!.address) : undefined;
       const mirror = mirrorClaimLP(snapshotOf(m), pos);
-      if (v2 && claimable !== mirror) die("claimableLP view disagrees with the UI mirror", { view: claimable, mirror });
+      if (v3 && claimable !== mirror) die("claimableLP view disagrees with the UI mirror", { view: claimable, mirror });
       const r = await send(P.MarketsPerennial!, marketsPerennialAbi, "claimLP", [id]);
       const ev = eventArgs(r.logs as never, "LPClaimed");
       const payout = ev?.payout ?? 0n;
