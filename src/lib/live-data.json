@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-09-24T16:42:09.557Z",
+  "syncedAt": "2026-09-24T17:14:09.096Z",
   "builders": [],
   "perennialBuilders": [
     {
@@ -17,7 +17,7 @@
     "chainId": 5042002,
     "registry": "0xb4BE6114a5103aBFfaBB053b740AD6Dc2aF27652",
     "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
-    "lastScannedBlock": "63792506",
+    "lastScannedBlock": "63796386",
     "feeds": {
       "registrai-multichain/oracle-primitives-ships-release": "0xc1fb8a8d61edd9ec459f49f6db49242f24ece104817b9c8da38e08e0374f49a6"
     }
@@ -39,7 +39,7 @@
     }
   ],
   "atlas": {
-    "lastScannedBlock": "63792506",
+    "lastScannedBlock": "63796386",
     "progressByBuilder": {},
     "volumeByBuilderId": {},
     "marketToBuilder": {
@@ -85,7 +85,7 @@
         "Dispute": "0x3eefde8ecc78457ab715f1b9a7c82fbcd416c329"
       },
       "fromBlock": "63752157",
-      "lastScannedBlock": "63792506",
+      "lastScannedBlock": "63796386",
       "state": {
         "agents": {},
         "open": {
@@ -105,6 +105,25 @@
       "address": "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c",
       "maxSerial": 0
     }
+  },
+  "gallery": {
+    "network": "testnet",
+    "chainId": 5042002,
+    "builderRegistry": "0x10F8D6D5905E2C4dc565a1894c102B25E9d21DF4",
+    "syncedAt": "2026-09-24T17:14:09.096Z",
+    "nextId": 2,
+    "builders": [
+      {
+        "id": 1,
+        "owner": "0xa9fa24e1147e8337c3d25b084890121be10a132b",
+        "status": "unverified",
+        "source": null,
+        "country": null,
+        "proofUrl": null,
+        "badge": null,
+        "createdAt": 1790247059
+      }
+    ]
   },
   "chainId": 5042002,
   "explorer": "https://testnet.arcscan.app",
