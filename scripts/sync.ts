@@ -10,6 +10,8 @@ import { createPublicClient, http, defineChain, type Address, type Hex } from "v
 import { writeFileSync, readFileSync } from "node:fs";
 import { EMPTY_PNL, foldTrades, seasonWindows } from "../src/lib/seasons";
 import type { PnlState, Season, Trade } from "../src/lib/seasons";
+import { REPUTATION_CURSOR_VERSION, type ReputationSnapshot } from "../src/lib/reputation";
+import { syncReputation } from "./reputation";
 
 /**
  * Bump when the season fold changes shape or semantics. A cursor written by an
@@ -1025,6 +1027,75 @@ async function main(): Promise<void> {
     );
   }
 
+  // ── agent reputation ─────────────────────────────────────────────────────
+  // A resumable fold over MarketsPerennial + MarketsV4 + Dispute logs (see
+  // scripts/reputation.ts). Its cursor carries its own REPUTATION_CURSOR_VERSION
+  // and a chain + contract stamp; syncReputation rescans from the anchor when
+  // either no longer matches, exactly like the atlas cursor above.
+  let reputation: ReputationSnapshot | null = null;
+  let prevReputation: ReputationSnapshot | null = null;
+  try {
+    const prev = JSON.parse(readFileSync(resolve(__dirname, "../src/lib/live-data.json"), "utf8"));
+    if (prev?.reputation?.cursor) prevReputation = prev.reputation as ReputationSnapshot;
+  } catch {
+    // no previous snapshot — full scan from the anchor
+  }
+  const marketsV4Addr = (DEPLOYMENT.contracts as { MarketsV4?: string }).MarketsV4 as Address | undefined;
+  if (perennialAddr || marketsV4Addr) {
+    const view = (address: Address, sig: "ATTESTATION" | "dispute") =>
+      client.readContract({
+        address,
+        abi: [{ type: "function", name: sig, stateMutability: "view", inputs: [], outputs: [{ type: "address" }] }] as const,
+        functionName: sig,
+      }) as Promise<Address>;
+    // The markets name their own Attestation; Attestation names its Dispute.
+    // The deployment file's top-level Registry/Attestation/Dispute are the v1
+    // stack, which the nanopay markets do not use.
+    const c = DEPLOYMENT.contracts as Record<string, string | undefined>;
+    let attestationAddr: Address | undefined;
+    let disputeAddr: Address | undefined;
+    try {
+      attestationAddr = await view((perennialAddr ?? marketsV4Addr)!, "ATTESTATION");
+      if (perennialAddr && marketsV4Addr) {
+        const other = await view(marketsV4Addr, "ATTESTATION");
+        if (other.toLowerCase() !== attestationAddr.toLowerCase()) {
+          console.warn(`  MarketsV4 uses Attestation ${other}, Perennial ${attestationAddr}; indexing rulings on Perennial's stack only`);
+        }
+      }
+      disputeAddr = await view(attestationAddr, "dispute");
+    } catch (e) {
+      console.warn(`  could not read ATTESTATION()/dispute() (${(e as Error).message.split("\n")[0]}); falling back to config`);
+      attestationAddr ??= (c.Attestation_v2 ?? c.Attestation) as Address;
+      disputeAddr ??= (c.Dispute_v2 ?? c.Dispute) as Address;
+    }
+    const deployBlock = (DEPLOYMENT.perennial as { deployBlock?: number } | undefined)?.deployBlock ?? 0;
+    const repAnchor = deployBlock > 0 ? BigInt(deployBlock) : fromBlock;
+    console.log(`reading agent reputation (cursor v${REPUTATION_CURSOR_VERSION})…`);
+    try {
+      const r = await syncReputation({
+        rpc: arc.rpcUrls.default.http[0],
+        contracts: {
+          MarketsPerennial: perennialAddr ?? null,
+          MarketsV4: marketsV4Addr ?? null,
+          Attestation: attestationAddr!,
+          Dispute: disputeAddr!,
+        },
+        prior: prevReputation?.cursor ?? null,
+        fromBlock: repAnchor.toString(),
+        toBlock: latestBlock.toString(),
+        paceMs: 120,
+        log: (m) => console.log(`  ${m}`),
+      });
+      reputation = { agents: r.reputation.agents, cursor: r.cursor };
+      console.log(`  ${Object.keys(r.reputation.agents).length} agent(s) with a record, cursor at block ${r.cursor.lastScannedBlock}`);
+    } catch (e) {
+      // Keep the last good snapshot rather than blanking the leaderboard; its
+      // cursor still says exactly how far it reaches.
+      console.warn(`  reputation sync failed, keeping the previous snapshot: ${(e as Error).message.split("\n")[0]}`);
+      reputation = prevReputation;
+    }
+  }
+
   const out = {
     syncedAt: new Date().toISOString(),
     builders: builderAgg,
@@ -1033,6 +1104,7 @@ async function main(): Promise<void> {
     atlas: atlasCursor,
     seasons,
     seasonBoards,
+    reputation,
     chainId: DEPLOYMENT.chainId,
     explorer: DEPLOYMENT.explorer,
     contracts: DEPLOYMENT.contracts,

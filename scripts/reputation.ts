@@ -29,6 +29,7 @@ import { attestationAbi, disputeAbi, marketsPerennialAbi, marketsV4Abi } from ".
 import {
   EMPTY_REPUTATION,
   REPUTATION_CURSOR_VERSION,
+  cursorMatches,
   foldReputation,
   invalidationsFromRulings,
   marketKey,
@@ -85,13 +86,6 @@ function stampOf(c: SyncReputationInput["contracts"]): ReputationContractsStamp 
   return { MarketsPerennial: mp, MarketsV4: v4, Attestation: attestation, Dispute: dispute };
 }
 
-const sameStamp = (a: ReputationContractsStamp | undefined, b: ReputationContractsStamp) =>
-  Boolean(a) &&
-  (a!.MarketsPerennial ?? null) === b.MarketsPerennial &&
-  (a!.MarketsV4 ?? null) === b.MarketsV4 &&
-  lc(a!.Attestation ?? "") === b.Attestation &&
-  lc(a!.Dispute ?? "") === b.Dispute;
-
 function unwrapPrior(p: SyncReputationInput["prior"]): ReputationCursor | undefined {
   if (!p) return undefined;
   return "cursor" in p && p.cursor ? p.cursor : (p as ReputationCursor);
@@ -131,13 +125,13 @@ export async function syncReputation(input: SyncReputationInput): Promise<SyncRe
   const chainId = await client.getChainId();
 
   // ── where to start ──
-  let prior = unwrapPrior(input.prior);
-  if (prior && (prior.version !== REPUTATION_CURSOR_VERSION || prior.chainId !== chainId || !sameStamp(prior.contracts, stamp))) {
+  const given = unwrapPrior(input.prior);
+  const prior = given && cursorMatches(given, chainId, stamp) ? given : undefined;
+  if (given && !prior) {
     log(
-      `reputation: prior cursor is for chain ${prior.chainId} v${prior.version} / other contracts; ` +
+      `reputation: prior cursor is for chain ${given.chainId} v${given.version} / other contracts; ` +
         `rescanning chain ${chainId} from the anchor`,
     );
-    prior = undefined;
   }
   const anchor = prior ? BigInt(prior.fromBlock) : BigInt(input.fromBlock ?? 0);
   const from = prior ? BigInt(prior.lastScannedBlock) + 1n : anchor;

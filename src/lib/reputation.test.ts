@@ -9,6 +9,7 @@ import {
   coveragePct,
   coverageTier,
   coverageWarning,
+  cursorMatches,
   foldReputation,
   invalidationsFromRulings,
   leaderboard,
@@ -350,6 +351,18 @@ describe("snapshot", () => {
     expect(snapshotFor(snap({ version: REPUTATION_CURSOR_VERSION - 1 }), { chainId: 5042002 })).toBeNull();
     expect(snapshotFor(snap(), { chainId: 5042, market: "0xmp" })).toBeNull();
     expect(snapshotFor(snap(), { chainId: 5042002, market: "0xother" })).toBeNull();
+  });
+
+  it("resumes a cursor only on the same version, chain and contracts", () => {
+    const c = snap().cursor;
+    const stamp = { MarketsPerennial: "0xmp", MarketsV4: "0xv4", Attestation: "0xAT", Dispute: "0xDI" };
+    expect(cursorMatches(c, 5042002, stamp)).toBe(true);
+    expect(cursorMatches(c, 31337, stamp)).toBe(false);
+    expect(cursorMatches({ ...c, version: 0 }, 5042002, stamp)).toBe(false);
+    expect(cursorMatches(c, 5042002, { ...stamp, MarketsV4: null })).toBe(false);
+    expect(cursorMatches(c, 5042002, { ...stamp, Dispute: "0xother" })).toBe(false);
+    expect(cursorMatches(undefined, 5042002, stamp)).toBe(false);
+    expect(cursorMatches({ ...c, lastScannedBlock: undefined as never }, 5042002, stamp)).toBe(false);
   });
 
   it("lists the snapshot's open markets of one agent on one feed and contract", () => {

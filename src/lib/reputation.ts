@@ -361,6 +361,29 @@ export interface ReputationSnapshot {
 }
 
 /**
+ * True when a stored cursor may be resumed: same fold version, same chain, and
+ * the same four contracts. Anything else is rescanned from the anchor — a block
+ * number and folded state are meaningless on another chain or contract, and
+ * "state exists" is not "state is right".
+ */
+export function cursorMatches(
+  cursor: Partial<ReputationCursor> | null | undefined,
+  chainId: number,
+  contracts: ReputationContractsStamp,
+): cursor is ReputationCursor {
+  if (!cursor || cursor.version !== REPUTATION_CURSOR_VERSION || cursor.chainId !== chainId) return false;
+  const c = cursor.contracts;
+  if (!c || typeof cursor.lastScannedBlock !== "string" || typeof cursor.fromBlock !== "string" || !cursor.state) return false;
+  const norm = (x: string | null | undefined) => (x ? lc(x) : null);
+  return (
+    norm(c.MarketsPerennial) === norm(contracts.MarketsPerennial) &&
+    norm(c.MarketsV4) === norm(contracts.MarketsV4) &&
+    norm(c.Attestation) === norm(contracts.Attestation) &&
+    norm(c.Dispute) === norm(contracts.Dispute)
+  );
+}
+
+/**
  * The snapshot, only if it describes this chain and this market contract. A
  * testnet snapshot must never speak for mainnet, and a cursor from an older
  * fold version is not trusted. null = no usable snapshot (the UI then shows the
