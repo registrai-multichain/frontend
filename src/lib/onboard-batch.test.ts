@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { decodeFunctionData, type Address } from "viem";
 import { calldataList, planOnboarding, safeBatchJson } from "./onboard-batch";
 import { verifiedBuilderAbi } from "./verified-builders-chain";
+import { badgeAbi } from "./verified-builder-badge";
 
 const OP = "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263" as Address;
 const REG = "0x10F8D6D5905E2C4dc565a1894c102B25E9d21DF4" as Address;
@@ -70,5 +71,55 @@ describe("planOnboarding", () => {
     expect(text.split("\n").filter((l) => l.startsWith("data=0x"))).toHaveLength(3);
     expect(text).toContain(`to=${CARE}`);
     expect(calldataList([])).toBe("# nothing to do\n");
+  });
+});
+
+describe("planOnboarding --badge", () => {
+  const BADGE = "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c" as Address;
+  const base = { registrations: [], builderRegistry: REG, caretakerRegistry: CARE, operator: OP };
+  const decode = (t: { to: Address; data: `0x${string}` }) =>
+    t.to === BADGE ? decodeFunctionData({ abi: badgeAbi, data: t.data }) : decodeFunctionData({ abi: verifiedBuilderAbi, data: t.data });
+  const calls = (p: ReturnType<typeof planOnboarding>) => p.txs.map((t) => [t.to, decode(t).functionName, (decode(t).args ?? [])[0]]);
+
+  test("pending: setCaretaker then issue, same builder, adjacent", () => {
+    const p = planOnboarding({ ...base, records: [records[1]], badge: { address: BADGE, serials: new Map([[2, 0]]) } });
+    expect(calls(p)).toEqual([
+      [CARE, "setCaretaker", 2n],
+      [BADGE, "issue", 2n],
+    ]);
+    expect(p.txs.map((t) => t.kind)).toEqual(["setCaretaker", "issue"]);
+  });
+
+  test("verified without a badge: issue only; verified with one: nothing", () => {
+    const without = planOnboarding({ ...base, records: [records[2]], badge: { address: BADGE, serials: new Map() } });
+    expect(calls(without)).toEqual([[BADGE, "issue", 3n]]);
+    const withBadge = planOnboarding({ ...base, records: [records[2]], badge: { address: BADGE, serials: new Map([[3, 7]]) } });
+    expect(withBadge.txs).toEqual([]);
+  });
+
+  test("lapsed and unverified builders never get issue", () => {
+    const p = planOnboarding({ ...base, records: [records[0], records[3]], badge: { address: BADGE, serials: new Map() } });
+    expect(p.txs).toEqual([]);
+  });
+
+  test("a whole cohort: each issue follows its own setCaretaker; description counts issues", () => {
+    const p = planOnboarding({ ...base, records, badge: { address: BADGE, serials: new Map([[2, 0], [3, 0], [5, 4]]) } });
+    expect(calls(p)).toEqual([
+      [CARE, "setCaretaker", 2n],
+      [BADGE, "issue", 2n],
+      [BADGE, "issue", 3n],
+      [CARE, "setCaretaker", 5n],
+    ]);
+    expect(safeBatchJson(p.txs, { chainId: 5042002, createdAt: 0 }).meta.description).toBe("0 registerFor, 2 setCaretaker, 2 issue");
+    expect(calldataList(p.txs)).toContain(`to=${BADGE}`);
+  });
+
+  test("without --badge the batch is unchanged: only setCaretaker for pending builders", () => {
+    const p = planOnboarding({ ...base, records });
+    expect(calls(p)).toEqual([
+      [CARE, "setCaretaker", 2n],
+      [CARE, "setCaretaker", 5n],
+    ]);
+    expect(safeBatchJson(p.txs, { chainId: 5042002, createdAt: 0 }).meta.description).toBe("0 registerFor, 2 setCaretaker");
   });
 });

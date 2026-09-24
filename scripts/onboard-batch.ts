@@ -8,12 +8,16 @@
  *                                          is valid and whose builder is not yet
  *                                          registered (claims DM'd by builders
  *                                          without Arc gas)
+ *   issue(id)                             with --badge <address>: the Verified
+ *                                          Builder Badge, for every PENDING builder
+ *                                          (right after its setCaretaker) and every
+ *                                          VERIFIED builder whose serialOf(id) == 0
  *
  * A builder registered by this batch gets its caretaker in the NEXT batch (its id
  * exists only after registration): run the script again once this one executes.
  *
  *   npx tsx scripts/onboard-batch.ts [--network testnet|mainnet|local] [--rpc URL]
- *     [--register <source> ...] [--out <dir>]
+ *     [--register <source> ...] [--badge 0x..] [--out <dir>]
  *     [--builder-registry 0x..] [--caretaker-registry 0x..] [--operator 0x..] [--chain-id N]
  *
  * <source> is anything /verify accepts: github.com/owner/repo, owner/repo,
@@ -33,6 +37,7 @@ import { createPublicClient, defineChain, getAddress, http, isAddress, type Addr
 import { calldataList, planOnboarding, safeBatchJson, type RegistrationCandidate } from "../src/lib/onboard-batch";
 import { makeFetchJson, readBuilderRecords, verifiedBuilderAbi, type RegistryReader } from "../src/lib/verified-builders-chain";
 import { normalizeSource, proofConfigFromEnv, proofUrl, validateProof } from "../src/lib/verified-builders";
+import { badgeAbi, serialLabel } from "../src/lib/verified-builder-badge";
 
 type Network = "testnet" | "mainnet" | "local";
 const die = (msg: string): never => {
@@ -52,6 +57,7 @@ const { values, positionals } = parseArgs({
     "caretaker-registry": { type: "string" },
     operator: { type: "string" },
     "chain-id": { type: "string" },
+    badge: { type: "string" },
     help: { type: "boolean", short: "h" },
   },
 });
@@ -107,6 +113,8 @@ async function main() {
   const builderRegistry = addressArg("builder-registry", values["builder-registry"] ?? d.builderRegistry);
   const caretakerRegistry = addressArg("caretaker-registry", values["caretaker-registry"] ?? d.caretakerRegistry);
   const operator = addressArg("operator", values.operator ?? d.operator);
+  // Opt-in only: without --badge the batch is exactly what it always was.
+  const badge = values.badge !== undefined ? addressArg("badge", values.badge) : undefined;
 
   const chain = defineChain({
     id: chainId,
@@ -124,6 +132,12 @@ async function main() {
 
   log(`network ${network} · chain ${chainId} · rpc ${rpc}`);
   log(`BuilderRegistry ${builderRegistry} · CaretakerRegistry ${caretakerRegistry} · operator ${operator}`);
+  if (badge) {
+    // A badge contract bound to another registry would issue to the wrong owners.
+    const bound = (await client.readContract({ address: badge, abi: badgeAbi, functionName: "BUILDERS" })) as Address;
+    if (bound.toLowerCase() !== builderRegistry.toLowerCase()) die(`--badge ${badge} is bound to BuilderRegistry ${bound}, not ${builderRegistry}`);
+    log(`VerifiedBuilderBadge ${badge}`);
+  }
   log();
 
   const records = await readBuilderRecords(client as unknown as RegistryReader, {
@@ -165,7 +179,21 @@ async function main() {
     registrations.push({ source, builder, existingId });
   }
 
-  const plan = planOnboarding({ records, registrations, builderRegistry, caretakerRegistry, operator });
+  // serialOf for the builders a badge could go to (pending + verified).
+  let badgePlan: { address: Address; serials: Map<number, number> } | undefined;
+  if (badge) {
+    const serials = new Map<number, number>();
+    for (const r of records) {
+      if (r.status !== "pending" && r.status !== "verified") continue;
+      const serial = Number(await client.readContract({ address: badge, abi: badgeAbi, functionName: "serialOf", args: [BigInt(r.builderId)] }));
+      serials.set(r.builderId, serial);
+      log(`  badge #${r.builderId}: ${serial ? serialLabel(serial) : "none"}`);
+    }
+    log();
+    badgePlan = { address: badge, serials };
+  }
+
+  const plan = planOnboarding({ records, registrations, builderRegistry, caretakerRegistry, operator, badge: badgePlan });
   for (const s of plan.skipped) log(`skip ${s.what}: ${s.reason}`);
   if (plan.skipped.length) log();
   log(`${plan.txs.length} transaction(s) in the batch. Nothing was signed or sent.`);

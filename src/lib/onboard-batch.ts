@@ -2,14 +2,16 @@
  * The multisig's onboarding batch, as data. Pure: scripts/onboard-batch.ts does
  * the chain reads and proof fetches, this decides what goes in the batch and
  * renders it as a Safe Transaction Builder file plus a plain calldata list.
- * Nothing here signs or sends.
+ * Nothing here signs or sends. With a badge contract (`--badge`) the batch also
+ * issues Verified Builder Badges (VerifiedBuilderBadge.issue, ISSUER_ROLE = the Safe).
  */
 import { encodeFunctionData, getAddress, type Address, type Hex } from "viem";
 import { verifiedBuilderAbi, type BuilderRecord } from "./verified-builders-chain";
 import { profileURIFor } from "./verified-builders";
+import { badgeAbi } from "./verified-builder-badge";
 
 export interface PlannedTx {
-  kind: "setCaretaker" | "registerFor";
+  kind: "setCaretaker" | "registerFor" | "issue";
   to: Address;
   value: "0";
   data: Hex;
@@ -38,6 +40,10 @@ export function planOnboarding(opts: {
   builderRegistry: Address;
   caretakerRegistry: Address;
   operator: Address;
+  /** `--badge`: issue the Verified Builder Badge to every pending builder (right
+   *  after its setCaretaker) and to every verified builder without one.
+   *  `serials` = serialOf(builderId) as read; a missing entry counts as 0. */
+  badge?: { address: Address; serials: ReadonlyMap<number, number> };
 }): OnboardingPlan {
   const txs: PlannedTx[] = [];
   const skipped: OnboardingPlan["skipped"] = [];
@@ -62,15 +68,29 @@ export function planOnboarding(opts: {
     });
   }
 
+  // Lapsed and unverified builders never get a badge; pending ones get theirs
+  // in the same batch that makes them verified, after the setCaretaker.
+  const badge = opts.badge;
   for (const r of opts.records) {
-    if (r.status !== "pending") continue;
-    txs.push({
-      kind: "setCaretaker",
-      to: opts.caretakerRegistry,
-      value: "0",
-      data: encodeFunctionData({ abi: verifiedBuilderAbi, functionName: "setCaretaker", args: [BigInt(r.builderId), opts.operator] }),
-      label: `setCaretaker(${r.builderId}, ${opts.operator})  # ${r.source}`,
-    });
+    if (r.status !== "pending" && r.status !== "verified") continue;
+    if (r.status === "pending") {
+      txs.push({
+        kind: "setCaretaker",
+        to: opts.caretakerRegistry,
+        value: "0",
+        data: encodeFunctionData({ abi: verifiedBuilderAbi, functionName: "setCaretaker", args: [BigInt(r.builderId), opts.operator] }),
+        label: `setCaretaker(${r.builderId}, ${opts.operator})  # ${r.source}`,
+      });
+    }
+    if (badge && (badge.serials.get(r.builderId) ?? 0) === 0) {
+      txs.push({
+        kind: "issue",
+        to: badge.address,
+        value: "0",
+        data: encodeFunctionData({ abi: badgeAbi, functionName: "issue", args: [BigInt(r.builderId)] }),
+        label: `issue(${r.builderId})  # Verified Builder Badge for ${r.source}`,
+      });
+    }
   }
   return { txs, skipped };
 }
@@ -83,14 +103,18 @@ export function safeBatchJson(txs: PlannedTx[], opts: { chainId: number; created
     createdAt: opts.createdAt,
     meta: {
       name: "Registrai verified builders onboarding",
-      description:
-        opts.description ??
-        `${txs.filter((t) => t.kind === "registerFor").length} registerFor, ${txs.filter((t) => t.kind === "setCaretaker").length} setCaretaker`,
+      description: opts.description ?? batchSummary(txs),
       createdFromSafeAddress: "",
       createdFromOwnerAddress: "",
     },
     transactions: txs.map((t) => ({ to: t.to, value: t.value, data: t.data })),
   };
+}
+
+/** "1 registerFor, 2 setCaretaker" (+ ", 2 issue" when the batch issues badges). */
+export function batchSummary(txs: PlannedTx[]): string {
+  const n = (k: PlannedTx["kind"]) => txs.filter((t) => t.kind === k).length;
+  return `${n("registerFor")} registerFor, ${n("setCaretaker")} setCaretaker${n("issue") ? `, ${n("issue")} issue` : ""}`;
 }
 
 /** One call per paragraph: what it does, then to / value / data. */
