@@ -7,13 +7,20 @@ import {
   type Hex,
   type PublicClient,
 } from "viem";
-import { builderRegistryAbi, marketsPerennialAbi, nanoLedgerAbi, progressPoolAbi } from "./abi";
+import { builderRegistryAbi, marketsPerennialAbi, marketsV4Abi, nanoLedgerAbi, progressPoolAbi } from "./abi";
 
 /**
  * Custom errors we know how to explain, by name. Covers MarketsPerennial /
  * MarketsV4 (incl. SettlementPolicy), NanoLedger, BuilderRegistry, ProgressPool,
  * plus errors the next contract release adds (AgentNotApproved,
  * ResolverNotApproved) so they read well before abi.ts is regenerated.
+ *
+ * Fee & settlement model v2 (1% resolution fee) removes no error: the removed
+ * members (FEE_BPS_TOTAL, setFeeSplit, agentEscrow, forfeitSink, ...) were views
+ * and setters, BadSplit only guarded setFeeSplit (never user-facing), and
+ * AgentNotApproved survives on MarketsPerennial (MarketsV4 agents become
+ * permissionless). A void pays out through redeem, whose "nothing to pay"
+ * revert is still InsufficientShares.
  */
 const ERROR_MESSAGES: Record<string, string> = {
   // markets: lifecycle
@@ -34,16 +41,17 @@ const ERROR_MESSAGES: Record<string, string> = {
   SlippageExceeded: "The price moved past your slippage tolerance. Refresh the quote and try again, or raise the tolerance.",
   AmountTooLow: "Amount too small to trade — it would round to zero shares.",
   LiquidityTooLow: "Amount too low. Markets need at least 5 USDC of liquidity, and trades must be above zero.",
-  InsufficientShares: "You don't hold enough shares for that (or have nothing left to redeem).",
+  InsufficientShares: "You don't hold enough shares for that (or have nothing left to redeem or refund).",
   NoLPShares: "This address has no liquidity to claim in this market (already claimed, or never provided).",
   BadExpiry: "Expiry must be in the future.",
   // markets: who may create
   BuilderInactive: "That builder is not active on the registry, so markets about it can't be opened.",
-  AgentNotRegistered: "That agent is not an active, bonded agent on this feed.",
+  AgentNotRegistered: "That agent is not an active, bonded agent on this feed. Register and bond it on the feed first.",
   AgentNotApproved: "That feed/agent pair is not approved for new markets.",
   ResolverNotApproved: "That feed's dispute resolver is not approved for new markets.",
   SelfResolvedFeed: "That feed's agent is also its own dispute resolver, so it can't back a market.",
   ReserveDepleted: "That trade would empty one side of the pool. Try a smaller amount.",
+  ZeroAddress: "An address this call needs was empty (zero address).",
   // ledger
   InsufficientBalance: "Not enough balance in your trading account. Deposit first.",
   InsufficientAllowance: "Trading-account allowance too low. Try again — the approval step runs first.",
@@ -66,6 +74,7 @@ const EXTRA_ERRORS = parseAbi([
 
 const DECODE_ABIS: Abi[] = [
   marketsPerennialAbi as Abi,
+  marketsV4Abi as Abi,
   nanoLedgerAbi as Abi,
   builderRegistryAbi as Abi,
   progressPoolAbi as Abi,

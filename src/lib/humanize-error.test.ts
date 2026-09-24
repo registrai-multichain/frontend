@@ -16,6 +16,7 @@ const errs = parseAbi([
   "error LiquidityTooLow()",
   "error SelfResolvedFeed()",
   "error ReserveDepleted()",
+  "error ZeroAddress()",
 ]);
 
 describe("revert decoding", () => {
@@ -33,6 +34,7 @@ describe("revert decoding", () => {
     "LiquidityTooLow",
     "SelfResolvedFeed",
     "ReserveDepleted",
+    "ZeroAddress",
   ] as const)("%s decodes and has a human message", (name) => {
     const data = encodeErrorResult({ abi: errs, errorName: name });
     expect(decodeRevertData(data)).toBe(name);
@@ -55,6 +57,10 @@ describe("revert decoding", () => {
   test("mainnet copy has no faucet", () => {
     expect(humanizeError(new Error("insufficient funds for gas"), { testnet: false })).not.toContain("faucet");
     expect(humanizeError(new Error("insufficient funds for gas"))).toContain("faucet");
+  });
+
+  test("a voided market's empty redeem reads as nothing to refund", () => {
+    expect(humanizeError(new Error("InsufficientShares()"))).toMatch(/nothing left to redeem or refund/);
   });
 
   test("unknown data is not decoded", () => {
