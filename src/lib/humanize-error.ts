@@ -15,9 +15,9 @@ import { builderRegistryAbi, marketsPerennialAbi, marketsV4Abi, nanoLedgerAbi, p
  * plus errors the next contract release adds (AgentNotApproved,
  * ResolverNotApproved) so they read well before abi.ts is regenerated.
  *
- * Fee & settlement model v2 (1% resolution fee) removes no error: the removed
- * members (FEE_BPS_TOTAL, setFeeSplit, agentEscrow, forfeitSink, ...) were views
- * and setters, BadSplit only guarded setFeeSplit (never user-facing), and
+ * Fee model v3 (1% trading fee, agent share escrowed) removes no error: the
+ * removed members (FEE_BPS_TOTAL, setFeeSplit, forfeitSink, ...) were views and
+ * setters, BadSplit only guarded setFeeSplit (never user-facing), and
  * AgentNotApproved survives on MarketsPerennial (MarketsV4 agents become
  * permissionless). A void pays out through redeem, whose "nothing to pay"
  * revert is still InsufficientShares.
