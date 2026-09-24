@@ -659,7 +659,28 @@ async function main(): Promise<void> {
     yesWon: boolean;
     yesReserve: string;
     noReserve: string;
+    feedId: string;
+    agent: string;
+    threshold: string;
+    comparator: number;
+    creator: string;
   }> = [];
+
+  // Per-builder milestone feeds, as provisioned by the caretaker (keeper
+  // builders.json `milestoneFeedId`). The UI derives a market's feed/agent from
+  // chain; this is the only place it learns which feed is a builder's OWN
+  // milestone feed before the caretaker has opened a market on it.
+  let perennialBuilders: Array<{ builderId: number; address: string; name: string; repo: string; milestoneFeedId: string | null }> = [];
+  try {
+    const kb = JSON.parse(readFileSync(resolve(__dirname, "../../keeper/builders.json"), "utf8")) as Array<{
+      builderId?: number; address: string; name: string; repo: string; milestoneFeedId?: string;
+    }>;
+    perennialBuilders = kb
+      .filter((b) => b.builderId)
+      .map((b) => ({ builderId: b.builderId!, address: b.address, name: b.name, repo: b.repo, milestoneFeedId: b.milestoneFeedId || null }));
+  } catch {
+    // no keeper checkout next to the frontend — the UI falls back to chain
+  }
 
   const builderAgg: Array<{
     builderId: number;
@@ -974,6 +995,11 @@ async function main(): Promise<void> {
         noReserve: bigint;
         phase: number;
         yesWon: boolean;
+        feedId: string;
+        agent: string;
+        threshold: bigint;
+        comparator: number;
+        creator: string;
       };
       perennialMarkets.push({
         marketId,
@@ -984,6 +1010,11 @@ async function main(): Promise<void> {
         yesWon: m.yesWon,
         yesReserve: m.yesReserve.toString(),
         noReserve: m.noReserve.toString(),
+        feedId: m.feedId,
+        agent: m.agent,
+        threshold: m.threshold.toString(),
+        comparator: Number(m.comparator),
+        creator: m.creator,
       });
       await pace();
     }
@@ -997,6 +1028,7 @@ async function main(): Promise<void> {
   const out = {
     syncedAt: new Date().toISOString(),
     builders: builderAgg,
+    perennialBuilders,
     perennialMarkets,
     atlas: atlasCursor,
     seasons,

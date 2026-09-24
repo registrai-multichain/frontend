@@ -64,3 +64,24 @@ describe("resolvePerennialDeployment", () => {
     expect(networkStatusLine(d)).toBe("Arc testnet · test USDC");
   });
 });
+
+import { milestoneFeedFromMarkets } from "./perennial-chain";
+
+describe("milestoneFeedFromMarkets", () => {
+  const op = "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263";
+  const m = (builderId: bigint, agent: string, feedId: string, createdAt: bigint) =>
+    ({ builderId, agent: agent as `0x${string}`, feedId: feedId as `0x${string}`, createdAt });
+  test("the newest operator market for the builder names its feed", () => {
+    const feeds = [
+      m(3n, op, "0xaa", 10n),
+      m(3n, op.toLowerCase(), "0xbb", 20n),
+      m(3n, "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e", "0xcc", 30n),
+      m(4n, op, "0xdd", 40n),
+    ];
+    expect(milestoneFeedFromMarkets(feeds, 3, op)).toBe("0xbb");
+  });
+  test("no operator market (or no operator) means no milestone feed", () => {
+    expect(milestoneFeedFromMarkets([m(1n, "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e", "0x5f", 1n)], 1, op)).toBeUndefined();
+    expect(milestoneFeedFromMarkets([m(1n, op, "0x5f", 1n)], 1, null)).toBeUndefined();
+  });
+});

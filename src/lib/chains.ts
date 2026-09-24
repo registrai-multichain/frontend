@@ -13,9 +13,19 @@ export function arcTransport(): Transport {
   return fallback([http(ARC_TESTNET_RPC)]);
 }
 
-/** Read transport for a given chain entry: its own (official) RPC list only. */
-export function transportFor(chain: WalletChain): Transport {
-  return fallback(chain.rpcUrls.map((url) => http(url)));
+/** Read transport for a given chain entry: its own (official) RPC list only.
+ *  `batch` coalesces concurrent reads into JSON-RPC batches (Circle's Arc
+ *  endpoints accept them), which keeps multi-read views under the rate limit. */
+export function transportFor(chain: WalletChain, opts: { batch?: boolean } = {}): Transport {
+  return fallback(
+    chain.rpcUrls.map((url) =>
+      http(url, {
+        batch: opts.batch ? { batchSize: 25, wait: 20 } : false,
+        retryCount: 4,
+        retryDelay: 400,
+      }),
+    ),
+  );
 }
 
 /**

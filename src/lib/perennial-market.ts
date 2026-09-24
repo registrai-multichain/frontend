@@ -311,9 +311,12 @@ export function questionText(q: {
   threshold: bigint;
   comparator: number;
   expiry: bigint;
+  /** Legacy contract: settles on the latest attestation at or before expiry. */
+  legacy?: boolean;
 }): string {
   const metric = q.metric ?? `feed ${shortHex(q.feedId)} value`;
-  return `${q.subject}: ${metric} ${comparatorSymbol(q.comparator)} ${q.threshold.toString()} at the first attestation after ${utcStamp(q.expiry)}?`;
+  const when = q.legacy ? `by ${utcStamp(q.expiry)}` : `at the first attestation after ${utcStamp(q.expiry)}`;
+  return `${q.subject}: ${metric} ${comparatorSymbol(q.comparator)} ${q.threshold.toString()} ${when}?`;
 }
 
 /** Threshold for a new milestone market: one more verified artifact than the

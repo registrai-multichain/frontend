@@ -184,6 +184,10 @@ describe("copy", () => {
     });
     expect(q).toContain("feed 0x5fef…195a value > 17000");
   });
+  test("legacy markets read as 'by expiry'", () => {
+    const q = questionText({ subject: "B", metric: "verified artifacts", feedId: "0x00", threshold: 2n, comparator: COMPARATOR.GreaterOrEqual, expiry: 1_790_267_782n, legacy: true });
+    expect(q).toBe("B: verified artifacts ≥ 2 by 2026-09-24 16:36 UTC?");
+  });
   test("settlement rule names the window and the $0.50 void payout", () => {
     expect(settlementRuleText(86_400)).toContain("expiry + 1d");
     expect(settlementRuleText(86_400)).toContain("$0.50");
