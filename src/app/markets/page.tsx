@@ -41,9 +41,9 @@ export default function MarketsPage() {
           markets on this page run the older Markets testnet contracts, which
           charge 0.70% per trade (0.40% creator, 0.20% agent, 0.10% protocol).
           Those contracts are not going to mainnet. The new market contracts
-          charge no trading fee: 1% once, at settlement, split 30% creator, 20%
-          bonded agent, 50% builder commons (Registrai treasury on common
-          markets). Common markets on the new contracts settle on the{" "}
+          charge 1% per trade, split 30% creator, 20% bonded agent (held until
+          the market settles), 50% builder commons (Registrai treasury on
+          common markets), and nothing at settlement. Common markets on the new contracts settle on the{" "}
           <Link href="/nanopay" className="underline decoration-fg-dim underline-offset-4 hover:text-accent">
             nanopay ledger
           </Link>

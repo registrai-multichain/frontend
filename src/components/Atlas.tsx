@@ -210,7 +210,7 @@ export function Atlas() {
                                   {m.phase === "resolved"
                                     ? `settled ${m.yesWon ? "yes" : "no"}`
                                     : m.phase === "voided"
-                                      ? "voided · net cost refunded, minus 1%"
+                                      ? "voided · net cost refunded"
                                       : "trading"}
                                 </span>
                               </li>

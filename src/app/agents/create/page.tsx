@@ -28,8 +28,9 @@ export default function CreateAgentPage() {
             You bring the data and the credibility. We give you a slashable
             onchain identity, a permissionless feed registry, and 1000
             soulbound credit pts the moment you register. On common markets,
-            the bonded agent that settles a market earns 20% of its 1%
-            resolution fee, paid only when it settles correctly.
+            the bonded agent earns 20% of the market&apos;s 1% trading fees,
+            held until the market settles and paid only when it settles
+            correctly.
           </p>
           <p className="text-2xs text-fg-dim mt-3 max-w-[64ch] leading-relaxed">
             Common markets require an approved, independent dispute resolver

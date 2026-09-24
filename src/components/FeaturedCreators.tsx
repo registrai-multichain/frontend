@@ -47,7 +47,7 @@ export function FeaturedCreators() {
             against any of these feeds and earn{" "}
             <span className="text-accent">40 bps of every trade</span> on it
             (legacy testnet markets; the new contracts pay creators 30% of a 1%
-            fee at settlement instead).
+            trading fee instead).
             Polish CPI prints, ECB rate decisions, Warsaw real-estate moves —
             pick the one you have conviction on.
           </p>

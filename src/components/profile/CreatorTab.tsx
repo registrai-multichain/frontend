@@ -104,8 +104,8 @@ export function CreatorTab({ address }: { address: Address }) {
         testnet markets):</span> when a trader buys or sells on a market you
         made, the older Markets contract takes 70 bps as a fee — 40 of those go
         to you, 20 to the agent providing the data, 10 to the protocol. That
-        contract is not going to mainnet; the new markets charge no trading fee
-        and pay the creator 30% of a 1% resolution fee at settlement. See the{" "}
+        contract is not going to mainnet; the new markets charge a 1% trading
+        fee and pay the creator 30% of it on every trade. See the{" "}
         <a href={addrUrl(CONTRACTS.MarketsV2 ?? CONTRACTS.Markets)} className="underline decoration-fg-dim underline-offset-4 hover:text-accent" target="_blank" rel="noreferrer">
           Markets contract on ArcScan
         </a>{" "}

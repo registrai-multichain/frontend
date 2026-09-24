@@ -47,13 +47,14 @@ export default function NanoPayPage() {
           <p className="text-[13px] text-fg-mute leading-relaxed max-w-[64ch]">
             MarketsV4 runs Registrai&apos;s common markets entirely on this
             ledger: trades move internal balances (no per-trade ERC20 transfer)
-            and carry no trading fee. A 1% resolution fee is charged once, at
-            settlement, and split 30% to the market creator, 20% to the bonded
-            agent, and 50% to the Registrai treasury, each leg a ledger
-            transfer. If a market can&apos;t be settled, it voids: every trader
-            gets their net cost back, minus the 1% fee, and the agent&apos;s 20%
-            goes to whoever successfully challenged its answer (otherwise to the
-            treasury). Common markets are open to any bonded agent paired with
+            and each buy and sell pays a 1% trading fee, split 30% to the
+            market creator, 20% to the bonded agent (held until the market
+            settles), and 50% to the Registrai treasury, each leg a ledger
+            transfer. Nothing is charged at settlement. If a market can&apos;t
+            be settled, it voids: every trader gets their net cost back (what
+            they put in after fees, minus what they took out), and the
+            agent&apos;s held 20% goes to whoever successfully challenged its
+            answer (otherwise to the treasury). Common markets are open to any bonded agent paired with
             an approved, independent dispute resolver, so you can{" "}
             <Link href="/agents" className="text-accent hover:underline">
               run one

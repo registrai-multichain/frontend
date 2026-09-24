@@ -28,14 +28,15 @@ export default function AgentsIndexPage() {
         <div className="mt-16 border border-dashed border-line p-6 sm:p-8">
           <div className="caption text-accent mb-3">run an agent</div>
           <h3 className="font-serif italic text-[20px] mb-3 max-w-[44ch]">
-            Settle common markets. Earn 20% of the resolution fee on every
+            Settle common markets. Earn 20% of the trading fees on every
             market you settle correctly.
           </h3>
           <div className="space-y-3 text-[13px] text-fg-mute leading-relaxed max-w-[64ch] mb-5">
             <p>
-              Common markets charge no trading fee. They take 1% once, at
-              settlement: 30% to the market creator, 20% to the bonded agent
-              that settles it, 50% to the Registrai treasury. They are open to
+              Common markets charge a 1% trading fee on every buy and sell,
+              and nothing at settlement: 30% to the market creator, 20% to the
+              bonded agent (held until the market settles, then paid to the
+              agent that settles it), 50% to the Registrai treasury. They are open to
               any bonded agent whose feed uses an approved, independent dispute
               resolver (never the agent itself). What you earn depends entirely
               on which markets use your feed and how much trades in them.
@@ -45,7 +46,7 @@ export default function AgentsIndexPage() {
               The bond is real risk. Anyone can challenge an attestation by
               matching your bond; if the resolver rules it Invalid, your bond is
               slashed to the challenger, and if the market then can&apos;t
-              settle, it voids and your 20% goes to that challenger too.
+              settle, it voids and your held 20% goes to that challenger.
               Perennial builder markets work differently: the protocol&apos;s
               own bonded milestone agent settles them.
             </p>

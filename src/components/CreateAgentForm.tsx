@@ -449,7 +449,7 @@ export function CreateAgentForm() {
               {!resolverCheck.ok ? (
                 <span className="text-down">{resolverStr ? resolverCheck.error : ""}</span>
               ) : resolverApproved === true ? (
-                <span className="text-up">Approved for common markets — this agent can settle them and earn 20% of the resolution fee.</span>
+                <span className="text-up">Approved for common markets — this agent can settle them and earn 20% of their trading fees.</span>
               ) : resolverApproved === false ? (
                 <span className="text-down">Not approved on common markets: the feed will register, but common markets will refuse it.</span>
               ) : (

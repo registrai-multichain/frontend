@@ -33,7 +33,7 @@ export default function CreateMarketPage() {
             Legacy testnet markets: this form creates a market on an older
             Markets testnet contract (0.70% per trade, 0.40% of each trade to you as
             creator). That contract is not going to mainnet; new markets charge
-            1% once, at settlement, 30% of it to the creator.
+            1% per trade, 30% of it to the creator.
           </p>
         </div>
 

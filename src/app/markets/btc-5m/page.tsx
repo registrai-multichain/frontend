@@ -528,14 +528,14 @@ export default function Btc5mPage() {
             </a>
             . Spot is live from Coinbase. Bucketing in this UI is the same kernel the contract settles
             on, verified against it case by case. Legacy testnet market: the fee and jackpot share
-            shown are this curve contract&apos;s own, not Registrai&apos;s 1% resolution fee.
+            shown are this curve contract&apos;s own, not Registrai&apos;s 1% trading fee.
           </>
         ) : (
           <>
             Preview: spot is live from Coinbase, pool depth is illustrative while the contract is
             unreachable. Bucketing is the same kernel the contract settles on. Legacy testnet market:
             the fee and jackpot share shown are this curve contract&apos;s own, not Registrai&apos;s 1%
-            resolution fee.
+            trading fee.
           </>
         )}
       </p>
