@@ -3,16 +3,16 @@ import { REGI_CONTRACT, REGI_DEXSCREENER_URL, REGI_EXPLORER_URL } from "@/lib/re
 import Link from "next/link";
 
 const feeRoutes = [
-  { value: "30", label: "Market creator", note: "Keeps earning each time the market settles.", className: "lp-route--creator" },
-  { value: "20", label: "Bonded resolver", note: "Held through the challenge window. Wrong calls forfeit it.", className: "lp-route--resolver" },
+  { value: "30", label: "Market creator", note: "Earns 30% of the fee when the market settles.", className: "lp-route--creator" },
+  { value: "20", label: "Bonded agent", note: "Paid only when it settles correctly. On a void it goes to the successful challenger, otherwise the commons.", className: "lp-route--resolver" },
   { value: "50", label: "Builder commons", note: "Paid to builders by verified progress, never popularity.", className: "lp-route--commons" },
 ];
 
 const safeguards = [
-  ["01", "Bond the answer", "A resolver locks USDC behind every settlement."],
-  ["02", "Open challenge", "Anyone can match the bond and dispute the call."],
-  ["03", "Slash the miss", "A bad settlement forfeits its fee back to traders."],
-  ["04", "Promote accuracy", "Proven forecasters earn the right to resolve next."],
+  ["01", "Bond the answer", "The agent locks USDC behind every answer it attests."],
+  ["02", "Open challenge", "Anyone can match the bond and dispute the answer. An independent resolver rules."],
+  ["03", "Slash the miss", "If the resolver rules the answer Invalid, the agent's bond is slashed to the challenger."],
+  ["04", "Void, don't guess", "If the market then can't settle, it voids: traders get their net cost back minus 1%, and the challenger also receives the agent's 20% share."],
 ];
 
 export default function Home() {
@@ -68,7 +68,7 @@ function MarketTicket() {
         </div>
         <div className="lp-outcomes"><div><span>YES</span><strong>67¢</strong></div><div><span>NO</span><strong>33¢</strong></div></div>
       </div>
-      <div className="lp-ticket-foot"><span>VOLUME <b>$84,720</b></span><span>RESOLVER BOND <b>$5,000</b></span></div>
+      <div className="lp-ticket-foot"><span>VOLUME <b>$84,720</b></span><span>AGENT BOND <b>$5,000</b></span></div>
       <div className="lp-stamp">USDC MARKET</div>
     </aside>
   );
@@ -107,13 +107,14 @@ function FeeFlow() {
   return (
     <section className="lp-fees">
       <div className="lp-frame">
-        <div className="lp-section-head"><p className="lp-kicker">Funding without fundraising</p><h2>Launchpads fund promises.<br />Markets can fund proof.</h2><p>One percent at resolution. Visible, fixed, and routed to the people doing the work.</p></div>
+        <div className="lp-section-head"><p className="lp-kicker">Funding without fundraising</p><h2>Launchpads fund promises.<br />Markets can fund proof.</h2><p>One percent, charged once at settlement. No trading fee. Visible, fixed in code, and routed to the people doing the work.</p></div>
         <div className="lp-flow" aria-label="One percent fee distribution">
           <div className="lp-flow-source"><span>RESOLUTION FEE</span><strong>100<sup>bps</sup></strong><small>charged once</small></div>
           <div className="lp-flow-line" aria-hidden="true"><i /><i /><i /></div>
           <div className="lp-routes">{feeRoutes.map((route) => <article className={`lp-route ${route.className}`} key={route.label}><div className="lp-route-number">{route.value}<sup>bps</sup></div><h3>{route.label}</h3><p>{route.note}</p></article>)}</div>
         </div>
-        <p className="lp-fineprint">Registrai draws from the commons on the same terms as every other builder, with the same verified milestones and a hard 20% per-epoch cap. If we stop shipping, we stop earning.</p>
+        <p className="lp-fineprint">Registrai takes 1% of each builder payout from the commons. It pays for the caretaker that monitors milestones.</p>
+        <p className="lp-fineprint">Common markets charge the same 1% with the same split, except the 50% goes to the Registrai treasury. They are open to any bonded agent paired with an approved, independent dispute resolver, and that agent earns 20% of the fee on every market it settles correctly. <Link href="/agents">Run an agent →</Link></p>
       </div>
     </section>
   );
@@ -121,7 +122,7 @@ function FeeFlow() {
 
 function Settlement() {
   return (
-    <section className="lp-settlement"><div className="lp-frame"><div className="lp-settlement-head"><div><p className="lp-kicker">Honest by construction</p><h2>Settlement with<br />something to lose.</h2></div><p>Access is free. The answer is bonded. That makes the resolver the one party the protocol can punish for being wrong.</p></div><div className="lp-steps">{safeguards.map(([number, title, copy]) => <article key={number}><span>{number}</span><div><h3>{title}</h3><p>{copy}</p></div></article>)}</div></div></section>
+    <section className="lp-settlement"><div className="lp-frame"><div className="lp-settlement-head"><div><p className="lp-kicker">Honest by construction</p><h2>Settlement with<br />something to lose.</h2></div><p>Access is free. The answer is bonded. That makes the agent the one party the protocol can punish for being wrong.</p></div><div className="lp-steps">{safeguards.map(([number, title, copy]) => <article key={number}><span>{number}</span><div><h3>{title}</h3><p>{copy}</p></div></article>)}</div></div></section>
   );
 }
 

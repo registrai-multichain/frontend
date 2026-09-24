@@ -437,6 +437,9 @@ a:hover {
 .lp-route-number { font-size: 72px; line-height: 1; letter-spacing: -.07em; }.lp-route h3 { margin: 72px 0 7px; font-size: 18px; }.lp-route p { max-width: 23ch; margin: 0; color: #6a685f; font-size: 13px; line-height: 1.55; }
 .lp-route--commons { background: rgba(101, 217, 177, .2); }
 .lp-fineprint { width: min(650px, 100%); margin: 34px 0 0 auto; padding-left: 28px; border-left: 2px solid var(--lp-orange); color: #555349; font-family: var(--font-mono), monospace; font-size: 10px; line-height: 1.75; }
+.lp-fineprint + .lp-fineprint { margin-top: 12px; }
+.lp .lp-fineprint a { color: #0d0d0c; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+.lp .lp-fineprint a:hover { color: var(--lp-orange); }
 
 
 .lp-settlement { color: var(--lp-night); background: var(--lp-orange); padding-block: 115px; }
