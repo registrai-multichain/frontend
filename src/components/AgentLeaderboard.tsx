@@ -45,43 +45,43 @@ export function AgentLeaderboard() {
           <table className="w-full text-[12.5px] tnum">
             <thead>
               <tr className="text-left caption text-[10px] text-fg-dim border-b border-line">
-                <th className="px-3 py-2 font-normal w-8">#</th>
-                <th className="px-3 py-2 font-normal">agent</th>
-                <th className="px-3 py-2 font-normal">level</th>
-                <th className="px-3 py-2 font-normal text-right">score</th>
-                <th className="px-3 py-2 font-normal text-right">settled</th>
-                <th className="px-3 py-2 font-normal">caught</th>
+                <th className="hidden sm:table-cell px-3 py-2 font-normal w-8">#</th>
+                <th className="px-2 sm:px-3 py-2 font-normal">agent</th>
+                <th className="px-2 sm:px-3 py-2 font-normal">level</th>
+                <th className="px-2 sm:px-3 py-2 font-normal text-right">score</th>
+                <th className="px-2 sm:px-3 py-2 font-normal text-right">settled</th>
+                <th className="hidden sm:table-cell px-3 py-2 font-normal">caught</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
-                <tr key={r.agent} className="border-b border-line last:border-b-0">
-                  <td className="px-3 py-2 text-fg-dim">{i + 1}</td>
-                  <td className="px-3 py-2">
-                    <a href={`${explorer}/address/${r.agent}`} target="_blank" rel="noreferrer" className="font-mono text-2xs text-fg-mute hover:text-accent">
-                      {short(r.agent)}
+              {rows.map((r, i) => {
+                const caught = r.caught ? (
+                  r.caughtTx ? (
+                    <a href={`${explorer}/tx/${r.caughtTx}`} target="_blank" rel="noreferrer" className="text-down hover:underline">
+                      caught ↗
                     </a>
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    {r.level} <span className="text-fg-dim text-2xs">· {multiplierLabel(r.level)}</span>
-                  </td>
-                  <td className="px-3 py-2 text-right whitespace-nowrap">{usd(BigInt(r.score))}</td>
-                  <td className="px-3 py-2 text-right">{r.settledMarkets}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-2xs">
-                    {r.caught ? (
-                      r.caughtTx ? (
-                        <a href={`${explorer}/tx/${r.caughtTx}`} target="_blank" rel="noreferrer" className="text-down hover:underline">
-                          caught ↗
-                        </a>
-                      ) : (
-                        <span className="text-down">caught</span>
-                      )
-                    ) : (
-                      <span className="text-fg-dim">no</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                  ) : (
+                    <span className="text-down">caught</span>
+                  )
+                ) : null;
+                return (
+                  <tr key={r.agent} className="border-b border-line last:border-b-0">
+                    <td className="hidden sm:table-cell px-3 py-2 text-fg-dim">{i + 1}</td>
+                    <td className="px-2 sm:px-3 py-2 whitespace-nowrap">
+                      <a href={`${explorer}/address/${r.agent}`} target="_blank" rel="noreferrer" className="font-mono text-2xs text-fg-mute hover:text-accent">
+                        {short(r.agent)}
+                      </a>
+                      {caught && <span className="sm:hidden block text-2xs">{caught}</span>}
+                    </td>
+                    <td className="px-2 sm:px-3 py-2 whitespace-nowrap">
+                      {r.level} <span className="hidden sm:inline text-fg-dim text-2xs">· {multiplierLabel(r.level)}</span>
+                    </td>
+                    <td className="px-2 sm:px-3 py-2 text-right whitespace-nowrap">{usd(BigInt(r.score))}</td>
+                    <td className="px-2 sm:px-3 py-2 text-right">{r.settledMarkets}</td>
+                    <td className="hidden sm:table-cell px-3 py-2 whitespace-nowrap text-2xs">{caught ?? <span className="text-fg-dim">no</span>}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
