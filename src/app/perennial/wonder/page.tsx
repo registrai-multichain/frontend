@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { PerennialShell } from "@/components/PerennialShell";
-import { WonderMarkets } from "@/components/wonder/WonderMarkets";
-import { PERENNIAL, networkStatusLine } from "@/lib/perennial-network";
+import { PerennialApp } from "@/components/perennial/PerennialApp";
 
 export const metadata: Metadata = {
   title: "Wonder markets · Perennial · Registrai",
@@ -13,20 +12,7 @@ export const metadata: Metadata = {
 export default function WonderPage() {
   return (
     <PerennialShell>
-      <article className="perennial-app-page">
-        <header className="perennial-app-header">
-          <div>
-            <div className="perennial-app-status"><i /> {networkStatusLine(PERENNIAL)}</div>
-            <h1>Wonder markets</h1>
-            <p>
-              Markets about projects Registrai nominated before their team joined. Half of each trading fee on a market
-              using the project&apos;s milestone feed is held for the team until it claims the project; unclaimed after
-              about 180 days, it goes to the season pool.
-            </p>
-          </div>
-        </header>
-        <WonderMarkets />
-      </article>
+      <PerennialApp initialTab="unclaimed" />
     </PerennialShell>
   );
 }
