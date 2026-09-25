@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono, Instrument_Serif, Instrument_Sans } from "next/font/google";
 import { Providers } from "@/components/Providers";
 import "./globals.css";
+import "./paper.css";
 
 const mono = JetBrains_Mono({
   subsets: ["latin"],

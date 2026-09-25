@@ -587,6 +587,42 @@ a:hover {
   font-family: var(--font-sans), sans-serif;
   letter-spacing: -.012em;
 }
+/* ───────── Paper: the warm-paper look (spec 2026-09-26-ui-redesign-design.md) ─────────
+   Tokens only. Fonts live in .paper-type (src/app/paper.css) so /rounds can take the
+   colours without changing its typography. */
+.paper-theme {
+  --bg: #F4EEE1;
+  --bg-elev: #FBF7EE;
+  --fg: #2B2620;
+  --fg-mute: #6F6353;
+  --fg-dim: #6F6353;
+  --accent: #8F560C;
+  --accent-deep: #6E4108;
+  --up: #2F6B4F;
+  --down: #8A3B22;
+  --line: #E2D6BF;
+  --line-strong: #C9B994;
+  --commons: #2F6B4F;
+  --commons-soft: #DCE8DF;
+  --commons-line: #2F6B4F;
+  --chip: #E6DCC7;
+  --chip-fg: #6B5E4A;
+  --unclaimed: #E9DFF0;
+  --unclaimed-fg: #5B4470;
+
+  --globe-ocean: #EDE4D2;
+  --globe-land: #D9CBAE;
+  --globe-border: #C9B994;
+  --globe-graticule: #E4D8BF;
+  --globe-halo: #8F560C;
+  --globe-accent: #8F560C;
+  /* the lit ramp, light to dark */
+  --globe-lit-0: #E8D9B5;
+  --globe-lit-1: #DDBF86;
+  --globe-lit-2: #C99A55;
+  --globe-lit-3: #AE7629;
+  --globe-lit-4: #8F560C;
+}
 .perennial-theme ::selection { color: var(--bg); background: var(--up); }
 .perennial-theme .brand-wordmark { letter-spacing: -.055em; }
 .perennial-theme .caption,
