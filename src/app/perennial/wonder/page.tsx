@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { PerennialShell } from "@/components/PerennialShell";
-import { PerennialViews } from "@/components/PerennialViews";
 import { WonderMarkets } from "@/components/wonder/WonderMarkets";
 import { PERENNIAL, networkStatusLine } from "@/lib/perennial-network";
 
@@ -24,9 +23,6 @@ export default function WonderPage() {
               using the project&apos;s milestone feed is held for the team until it claims the project; unclaimed after
               about 180 days, it goes to the season pool.
             </p>
-          </div>
-          <div className="perennial-app-actions">
-            <PerennialViews />
           </div>
         </header>
         <WonderMarkets />

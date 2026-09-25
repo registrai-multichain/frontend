@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { PerennialShell } from "@/components/PerennialShell";
-import { PerennialViews } from "@/components/PerennialViews";
 import { Atlas } from "@/components/Atlas";
 import { PERENNIAL, SNAPSHOT_MATCHES_NETWORK, networkStatusLine } from "@/lib/perennial-network";
 
@@ -41,7 +40,6 @@ export default function AtlasPage() {
             <h1>Builder atlas</h1>
             <p>Where the grind is — by country, by builder, by season.</p>
           </div>
-          <PerennialViews />
         </header>
 
         {/* The atlas is baked from a synced snapshot; never show one network's

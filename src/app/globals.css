@@ -623,16 +623,6 @@ a:hover {
   --globe-lit-3: #AE7629;
   --globe-lit-4: #8F560C;
 }
-.perennial-theme ::selection { color: var(--bg); background: var(--up); }
-.perennial-theme .brand-wordmark { letter-spacing: -.055em; }
-.perennial-theme .caption,
-.perennial-theme .tabular-nums,
-.perennial-theme .tnum,
-.perennial-theme code { font-family: var(--font-mono), monospace; }
-.perennial-theme button,
-.perennial-theme input { border-radius: 0; }
-.perennial-theme input::placeholder { color: #808178; }
-.perennial-nav i { box-shadow: 0 0 0 4px rgba(215, 255, 86, .15); }
 
 .perennial-page { padding-top: 0; }
 .perennial-hero {
@@ -1489,24 +1479,6 @@ a:hover {
   flex-wrap: wrap;
 }
 
-.pv-switch {
-  display: inline-flex;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
-}
-
-.pv-switch-item {
-  padding: 7px 15px;
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--fg-dim);
-  border-right: 1px solid var(--line);
-  transition: color 0.15s ease, background 0.15s ease;
-}
-.pv-switch-item:last-child { border-right: 0; }
-.pv-switch-item:hover { color: var(--fg); }
-.pv-switch-item[data-active="true"] { color: var(--bg); background: var(--accent); }
 
 /* ── seasons ───────────────────────────────────────────────────────────── */
 
@@ -1909,39 +1881,29 @@ li > .adm-sub { display: inline; margin: 0 0 0 6px; }
    card surface #171913: secondary text 6.3 -> 9.0, muted 10.6 -> 13.4, borders
    2.0 -> 3.0; grayscale (lapsed / invited) cards 2.9 -> 6.4 (dimmed by colour,
    not by transparency). Tiny mono labels move up to >= 9.5px. */
-.builders-theme {
-  --fg-mute: #e3e0d2;
-  --fg-dim: #b9baae;
-  --line: #62655a;
-  --line-strong: #93968a;
-}
-.builders-theme .bld-card { background: #1b1d17; }
-.builders-theme .bld-card[data-tone="grayscale"] { filter: grayscale(1); opacity: .82; }
-.builders-theme .bld-card[data-tone="grayscale"]:hover,
-.builders-theme .bld-card[data-tone="grayscale"]:focus-within { opacity: 1; }
-.builders-theme .bld-detail[data-tone="grayscale"] .bld-card-top,
-.builders-theme .bld-detail[data-tone="grayscale"] .bld-facts { opacity: 1; }
-.builders-theme .bld-stats dt,
-.builders-theme .bld-facts dt,
-.builders-theme .bld-chip { font-size: 9.5px; }
-.builders-theme .bld-chip:not([data-kind="verified"]):not([data-kind="nominated"]) { color: var(--fg-mute); }
-.builders-theme .bld-chips button,
-.builders-theme .bld-card-foot a,
-.builders-theme .bld-claim { font-size: 10.5px; }
-.builders-theme .bld-card-title > a { font-size: 11.5px; }
-.builders-theme .bld-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
-.builders-theme .bld-facts dd { font-size: 12px; color: var(--fg); }
-.builders-theme .bld-note { font-size: 11px; color: var(--fg-mute); }
-.builders-theme .bld-legend { color: var(--fg-dim); font-size: 11px; }
-.builders-theme .bld-deck { color: var(--fg-mute); }
-.builders-theme .bld-search input::placeholder { color: var(--fg-dim); opacity: 1; }
-.builders-theme .vf-mini,
-.builders-theme .vf-field span,
-.builders-theme .vf-done { font-size: 10px; }
-.builders-theme .vf-primary { font-size: 10.5px; }
-.builders-theme .vf-signers li > span:nth-child(2) { font-size: 10px; }
-.builders-theme .pp-card-label { color: var(--fg-mute); }
-.builders-theme .perennial-app-status { color: var(--fg-mute); font-size: 10px; }
+.paper-type .bld-detail[data-tone="grayscale"] .bld-card-top,
+.paper-type .bld-detail[data-tone="grayscale"] .bld-facts { opacity: 1; }
+.paper-type .bld-stats dt,
+.paper-type .bld-facts dt,
+.paper-type .bld-chip { font-size: 9.5px; }
+.paper-type .bld-chip:not([data-kind="verified"]):not([data-kind="nominated"]) { color: var(--fg-mute); }
+.paper-type .bld-chips button,
+.paper-type .bld-card-foot a,
+.paper-type .bld-claim { font-size: 10.5px; }
+.paper-type .bld-card-title > a { font-size: 11.5px; }
+.paper-type .bld-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.paper-type .bld-facts dd { font-size: 12px; color: var(--fg); }
+.paper-type .bld-note { font-size: 11px; color: var(--fg-mute); }
+.paper-type .bld-legend { color: var(--fg-dim); font-size: 11px; }
+.paper-type .bld-deck { color: var(--fg-mute); }
+.paper-type .bld-search input::placeholder { color: var(--fg-dim); opacity: 1; }
+.paper-type .vf-mini,
+.paper-type .vf-field span,
+.paper-type .vf-done { font-size: 10px; }
+.paper-type .vf-primary { font-size: 10.5px; }
+.paper-type .vf-signers li > span:nth-child(2) { font-size: 10px; }
+.paper-type .pp-card-label { color: var(--fg-mute); }
+.paper-type .perennial-app-status { color: var(--fg-mute); font-size: 10px; }
 
 /* ───────── /verify invitee header, FAQ, register choice, mobile wallet ───────── */
 .vf-hero { align-items: center; }

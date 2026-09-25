@@ -3,7 +3,6 @@ import Link from "next/link";
 import { PerennialShell } from "@/components/PerennialShell";
 import { PerennialPanel } from "@/components/PerennialPanel";
 import { FaucetHint } from "@/components/FaucetHint";
-import { PerennialViews } from "@/components/PerennialViews";
 import { PERENNIAL, networkStatusLine } from "@/lib/perennial-network";
 
 const ON = PERENNIAL.label;
@@ -41,7 +40,6 @@ export default function PerennialPage() {
             </div>
           </div>
           <div className="perennial-app-actions">
-            <PerennialViews />
             {PERENNIAL.chain.testnet && (
               <FaucetHint
                 className="perennial-app-faucet"

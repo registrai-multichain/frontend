@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { PerennialShell } from "@/components/PerennialShell";
-import { PerennialViews } from "@/components/PerennialViews";
 import { EconomyPanel } from "@/components/EconomyPanel";
 import { PERENNIAL, networkStatusLine } from "@/lib/perennial-network";
 
@@ -37,9 +36,6 @@ export default function EconomyPage() {
               Half of every trading fee is the income of the builder the market is about, taxed progressively per
               epoch. The tax funds a season pool that rewards building progress traders confirmed.
             </p>
-          </div>
-          <div className="perennial-app-actions">
-            <PerennialViews />
           </div>
         </header>
         <EconomyPanel />
