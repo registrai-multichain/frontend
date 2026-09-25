@@ -60,7 +60,7 @@ describe("admin invites", () => {
   test("an existing source is a 409 with the existing record", async () => {
     const { call } = setup();
     const first = await call("POST", { source: "foo/bar", name: "Foo" });
-    const again = await call("POST", { source: "github:FOO/bar.git", name: "Other" });
+    const again = await call("POST", { source: "https://github.com/FOO/bar.git", name: "Other" });
     expect(again.status).toBe(409);
     expect(again.body.invite).toMatchObject({ source: "github:foo/bar", name: "Foo", code: first.body.invite!.code });
     expect(again.body.invite!.claimLink).toBe(first.body.invite!.claimLink);

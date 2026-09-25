@@ -103,6 +103,47 @@ describe("normalizeSource", () => {
     },
   );
 
+  test("GitHub names as the keeper checks them: single inner hyphens, ≤ 39-char owner, no .git / . / .. repo", () => {
+    expect(normalizeSource("github:owner-/repo")).toBeNull();
+    expect(normalizeSource("github:-owner/repo")).toBeNull();
+    expect(normalizeSource("github:ow--ner/repo")).toBeNull();
+    expect(normalizeSource("owner-/repo")).toBeNull();
+    expect(normalizeSource("github:my-org-1/repo")).toBe("github:my-org-1/repo");
+    expect(normalizeSource(`github:${"a".repeat(39)}/r`)).toBe(`github:${"a".repeat(39)}/r`);
+    expect(normalizeSource(`github:${"a".repeat(40)}/r`)).toBeNull();
+    // the canonical form never ends in .git; a typed URL loses one clone suffix
+    expect(normalizeSource("github:owner/repo.git")).toBeNull();
+    expect(normalizeSource("https://github.com/owner/repo.git")).toBe("github:owner/repo");
+    expect(normalizeSource("owner/repo.git")).toBe("github:owner/repo");
+    expect(normalizeSource("https://github.com/owner/repo.git.git")).toBeNull();
+    expect(normalizeSource("github:owner/.")).toBeNull();
+    expect(normalizeSource("github:owner/..")).toBeNull();
+    expect(normalizeSource(`github:o/${"r".repeat(101)}`)).toBeNull();
+  });
+
+  test("fixture: every GitHub case has a stable id; local test hosts are marked test-override-only", () => {
+    const ids = (vectors.sources as { id?: string }[]).map((x) => x.id).filter(Boolean);
+    expect(ids).toEqual([
+      "gh-owner-trailing-hyphen",
+      "gh-owner-trailing-hyphen-url",
+      "gh-owner-double-hyphen",
+      "gh-owner-single-hyphens",
+      "gh-owner-39-chars",
+      "gh-owner-40-chars",
+      "gh-repo-git-suffix",
+      "gh-repo-git-suffix-url-stripped-once",
+      "gh-repo-double-git-suffix-url",
+      "gh-repo-dot",
+      "gh-repo-dotdot",
+      "gh-repo-dots-inside",
+      "gh-repo-100-chars",
+      "gh-repo-101-chars",
+    ]);
+    for (const x of vectors.sources as { expected: string | null; testOverrideOnly?: boolean }[]) {
+      expect(Boolean(x.testOverrideOnly)).toBe(x.expected === "domain:localhost" || x.expected === "domain:127.0.0.1");
+    }
+  });
+
   test("fixture sources", () => {
     for (const s of vectors.sources) expect(normalizeSource(s.input)).toBe(s.expected);
   });

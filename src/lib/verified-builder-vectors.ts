@@ -263,7 +263,30 @@ export async function buildVerifiedBuilderVectors() {
     "example",
     "",
   ];
-  const sources = sourceInputs.map((input) => ({ input, expected: normalizeSource(input) }));
+  const LOCAL = new Set(["domain:localhost", "domain:127.0.0.1"]);
+  const sources: { id?: string; input: string; expected: string | null; testOverrideOnly?: true }[] = sourceInputs.map((input) => {
+    const expected = normalizeSource(input);
+    // A local test host is a source only under the test override (PROOF_DOMAIN_SCHEME=http).
+    return expected && LOCAL.has(expected) ? { input, expected, testOverrideOnly: true as const } : { input, expected };
+  });
+  // GitHub names exactly as the keeper checks them (2026-09-25). Each case has a stable `id`.
+  const ghCases: [id: string, input: string][] = [
+    ["gh-owner-trailing-hyphen", "github:owner-/repo"],
+    ["gh-owner-trailing-hyphen-url", "https://github.com/owner-/repo"],
+    ["gh-owner-double-hyphen", "github:ow--ner/repo"],
+    ["gh-owner-single-hyphens", "github:my-org-1/repo"],
+    ["gh-owner-39-chars", `github:${"a".repeat(39)}/repo`],
+    ["gh-owner-40-chars", `github:${"a".repeat(40)}/repo`],
+    ["gh-repo-git-suffix", "github:owner/repo.git"],
+    ["gh-repo-git-suffix-url-stripped-once", "https://github.com/owner/repo.git"],
+    ["gh-repo-double-git-suffix-url", "https://github.com/owner/repo.git.git"],
+    ["gh-repo-dot", "github:owner/."],
+    ["gh-repo-dotdot", "github:owner/.."],
+    ["gh-repo-dots-inside", "github:owner/.x..y."],
+    ["gh-repo-100-chars", `github:owner/${"r".repeat(100)}`],
+    ["gh-repo-101-chars", `github:owner/${"r".repeat(101)}`],
+  ];
+  for (const [id, input] of ghCases) sources.push({ id, input, expected: normalizeSource(input) });
 
   const urlCases: { source: string; config: ProofFetchConfig }[] = [
     { source: "github:owner/repo", config: {} },
@@ -315,7 +338,8 @@ export async function buildVerifiedBuilderVectors() {
       "proofs[].file is the proof exactly as served: read it with a JSON parser that keeps floats (a `1.0` is not the integer 1). " +
       "version and claim.chain must be JSON integers (chain >= 0); signatures are 65-byte hex (64-byte EIP-2098 compact is refused); " +
       "signatures.deployers must be an object (it may be empty). " +
-      "sources[].expected / proofUrls[].url: null means rejected. createAddresses: CREATE address of (deployer, nonce).",
+      "sources[].expected / proofUrls[].url: null means rejected; sources[].testOverrideOnly: a local test host, a source only under PROOF_DOMAIN_SCHEME=http. " +
+      "createAddresses: CREATE address of (deployer, nonce).",
     keys: Object.entries(DEV_KEYS).map(([name, privateKey]) => ({
       name,
       privateKey,

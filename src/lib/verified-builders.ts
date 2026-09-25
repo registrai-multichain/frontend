@@ -70,7 +70,9 @@ export function issuedToday(now: Date = new Date()): string {
 
 // ───────────────────────────── sources ─────────────────────────────
 
-const GH_OWNER = /^[a-z0-9](?:[a-z0-9-]{0,38})$/;
+/** GitHub owner: 1–39 of a-z 0-9 -, single hyphens only, none leading or trailing (the keeper's rule too). */
+const GH_OWNER = /^(?=.{1,39}$)[a-z0-9]+(?:-[a-z0-9]+)*$/;
+/** GitHub repo: 1–100 of a-z 0-9 . _ -, not "." / "..", never ending in ".git". */
 const GH_REPO = /^[a-z0-9._-]{1,100}$/;
 const HOST_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
@@ -86,10 +88,13 @@ function validHost(host: string): boolean {
   return labels.every((l) => HOST_LABEL.test(l));
 }
 
-function githubSource(owner: string, repo: string): string | null {
+/** A canonical github source, or null. `stripGit`: a URL or `owner/repo`
+ *  typed with a clone suffix (`repo.git`) loses ONE `.git`; the canonical
+ *  `github:` form never does (a repo name ending in `.git` is refused). */
+function githubSource(owner: string, repo: string, stripGit = true): string | null {
   const o = owner.toLowerCase();
-  const r = repo.toLowerCase().replace(/\.git$/, "");
-  if (!GH_OWNER.test(o) || !GH_REPO.test(r) || r === "." || r === "..") return null;
+  const r = stripGit ? repo.toLowerCase().replace(/\.git$/, "") : repo.toLowerCase();
+  if (!GH_OWNER.test(o) || !GH_REPO.test(r) || r === "." || r === ".." || r.endsWith(".git")) return null;
   return `github:${o}/${r}`;
 }
 
@@ -108,7 +113,7 @@ export function normalizeSource(input: string): string | null {
   const lower = s.toLowerCase();
   if (lower.startsWith("github:")) {
     const [owner, repo, ...rest] = s.slice(7).split("/");
-    return rest.length || !owner || !repo ? null : githubSource(owner, repo);
+    return rest.length || !owner || !repo ? null : githubSource(owner, repo, false);
   }
   if (lower.startsWith("domain:")) {
     const host = s.slice(7).toLowerCase();
