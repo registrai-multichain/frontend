@@ -43,6 +43,7 @@ import {
   nextMilestoneThreshold,
   quoteBuy,
   quoteSell,
+  tradeDeadline,
 } from "../src/lib/perennial-market";
 import {
   feeSummary,
@@ -277,7 +278,7 @@ async function main() {
       const floor = minOutWithSlippage(q!.sharesOut, SLIPPAGE_BPS);
       const before = fm.kind === "trade" ? await books(m.id, acct!.address) : undefined;
       await ensureLedger(P.MarketsPerennial!, amount);
-      const r = await send(P.MarketsPerennial!, marketsPerennialAbi, "buy", [m.id, outcome, amount, floor]);
+      const r = await send(P.MarketsPerennial!, marketsPerennialAbi, "buy", [m.id, outcome, amount, floor, tradeDeadline((await pc.getBlock()).timestamp)]);
       const ev = eventArgs(r.logs as never, "Bought");
       if (!ev) die("no Bought event");
       if (ev!.sharesOut !== q!.sharesOut || ev!.fee !== q!.fee) die("chain disagrees with the UI buy quote", { quote: q, chain: ev });
@@ -300,7 +301,7 @@ async function main() {
       if (!q) die("quoteSell returned null");
       const floor = minOutWithSlippage(q!.collateralOut, SLIPPAGE_BPS);
       const before = fm.kind === "trade" ? await books(m.id, acct!.address) : undefined;
-      const r = await send(P.MarketsPerennial!, marketsPerennialAbi, "sell", [m.id, outcome, shares, floor]);
+      const r = await send(P.MarketsPerennial!, marketsPerennialAbi, "sell", [m.id, outcome, shares, floor, tradeDeadline((await pc.getBlock()).timestamp)]);
       const ev = eventArgs(r.logs as never, "Sold");
       if (!ev) die("no Sold event");
       if (ev!.collateralOut !== q!.collateralOut || ev!.fee !== q!.fee) die("chain disagrees with the UI sell quote", { quote: q, chain: ev });

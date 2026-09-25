@@ -18,6 +18,7 @@ import {
   priceOf,
   quoteBuy,
   quoteSell,
+  tradeDeadline,
 } from "@/lib/perennial-market";
 import {
   feeSummary,
@@ -209,7 +210,8 @@ export function NanoMarketPanel({ market }: { market: NanoMarket }) {
     if (!buyQ) return fail(feeBps === undefined ? "reading the market's fee…" : "that amount is too small to buy any shares");
     const minOut = minOutWithSlippage(buyQ.sharesOut, SLIPPAGE_BPS);
     const value = parsed.value;
-    await run(() => w("buy", [market.marketId, outcome, value, minOut]), () => ensureSpender(value));
+    const deadline = tradeDeadline((await client.getBlock({ blockTag: "latest" })).timestamp);
+    await run(() => w("buy", [market.marketId, outcome, value, minOut, deadline]), () => ensureSpender(value));
   }
   async function doSell() {
     if (!parsed) return fail("amount required");
@@ -218,7 +220,8 @@ export function NanoMarketPanel({ market }: { market: NanoMarket }) {
     if (!sellQ) return fail(feeBps === undefined ? "reading the market's fee…" : "that amount is too small to sell");
     const minOut = minOutWithSlippage(sellQ.collateralOut, SLIPPAGE_BPS);
     const value = parsed.value;
-    await run(() => w("sell", [market.marketId, outcome, value, minOut]));
+    const deadline = tradeDeadline((await client.getBlock({ blockTag: "latest" })).timestamp);
+    await run(() => w("sell", [market.marketId, outcome, value, minOut, deadline]));
   }
   async function doClaimFee() {
     await run(() => walletClient!.writeContract({ address: nl!, abi: nanoLedgerAbi, functionName: "claim", args: [market.marketId], chain: walletClient!.chain, account: walletClient!.account! }));

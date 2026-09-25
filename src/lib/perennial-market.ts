@@ -165,6 +165,12 @@ export function quoteSell(r: Reserves, outcome: number, sharesIn: bigint, feeBps
   };
 }
 
+/** How long a signed buy/sell stays valid: the contracts revert a trade mined
+ *  after its `deadline` (DeadlineExpired), so a stuck transaction can never
+ *  fill later at a stale price. Counted from the chain's latest block time. */
+export const TRADE_DEADLINE_SECS = 600n;
+export const tradeDeadline = (chainNow: bigint) => chainNow + TRADE_DEADLINE_SECS;
+
 /** Minimum acceptable output for a slippage tolerance in bps (floor). */
 export function minOutWithSlippage(expected: bigint, slippageBps: bigint): bigint {
   if (slippageBps < 0n || slippageBps >= BPS) throw new Error("slippage out of range");

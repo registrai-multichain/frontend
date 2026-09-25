@@ -40,6 +40,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   // markets: trading
   SlippageExceeded: "The price moved past your slippage tolerance. Refresh the quote and try again, or raise the tolerance.",
   AmountTooLow: "Amount too small to trade — it would round to zero shares.",
+  DeadlineExpired: "The transaction waited too long to be mined and expired, so it did not fill at a stale price. Try again.",
   LiquidityTooLow: "Amount too low. Markets need at least 5 USDC of liquidity, and trades must be above zero.",
   InsufficientShares: "You don't hold enough shares for that (or have nothing left to redeem or refund).",
   NoLPShares: "This address has no liquidity to claim in this market (already claimed, or never provided).",
@@ -205,6 +206,7 @@ export function humanizeError(e: unknown, opts: HumanizeOptions = {}): string {
 
   // Slippage / market state (string fallback for wallets that flatten errors)
   if (s.includes("slippageexceeded")) return ERROR_MESSAGES.SlippageExceeded;
+  if (s.includes("deadlineexpired")) return ERROR_MESSAGES.DeadlineExpired;
   if (s.includes("marketexpired")) return ERROR_MESSAGES.MarketExpired;
   if (s.includes("marketnotexpired") || s.includes("nottrading"))
     return "Market not in tradable state.";

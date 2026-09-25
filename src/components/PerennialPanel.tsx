@@ -29,6 +29,7 @@ import {
   quoteSell,
   settlementRuleText,
   type MarketStatus,
+  tradeDeadline,
 } from "@/lib/perennial-market";
 import {
   feeHeadline,
@@ -426,15 +427,16 @@ function PerennialLive() {
     if (selected.phase !== PHASE.Trading || now >= selected.expiry) return fail("Trading on this market has closed.");
     const value = amt.value;
     const floor = minOut!;
+    const deadline = tradeDeadline(now);
     const ok = await run(
       mode,
       async () => {
         if (mode === "buy") {
-          await publicClient.simulateContract({ address: mp, abi: marketsPerennialAbi, functionName: "buy", args: [selected.id, outcome, value, floor], account: address! });
-          return walletClient!.writeContract({ address: mp, abi: marketsPerennialAbi, functionName: "buy", args: [selected.id, outcome, value, floor], ...w() });
+          await publicClient.simulateContract({ address: mp, abi: marketsPerennialAbi, functionName: "buy", args: [selected.id, outcome, value, floor, deadline], account: address! });
+          return walletClient!.writeContract({ address: mp, abi: marketsPerennialAbi, functionName: "buy", args: [selected.id, outcome, value, floor, deadline], ...w() });
         }
-        await publicClient.simulateContract({ address: mp, abi: marketsPerennialAbi, functionName: "sell", args: [selected.id, outcome, value, floor], account: address! });
-        return walletClient!.writeContract({ address: mp, abi: marketsPerennialAbi, functionName: "sell", args: [selected.id, outcome, value, floor], ...w() });
+        await publicClient.simulateContract({ address: mp, abi: marketsPerennialAbi, functionName: "sell", args: [selected.id, outcome, value, floor, deadline], account: address! });
+        return walletClient!.writeContract({ address: mp, abi: marketsPerennialAbi, functionName: "sell", args: [selected.id, outcome, value, floor, deadline], ...w() });
       },
       mode === "buy" ? () => ensureLedgerAllowance(mp, value) : undefined,
     );
