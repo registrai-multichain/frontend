@@ -1,0 +1,53 @@
+{
+  "network": "testnet",
+  "chainId": 5042002,
+  "rpc": "https://rpc.testnet.arc.io",
+  "explorer": "https://testnet.arcscan.app",
+  "note": "Registrai's common markets on Arc testnet: 5-minute Up/Down price rounds and event markets, opened and settled by the rounds agent (keeper/rounds.py, keeper/config.arc-rounds.json). The UI discovers the agent's feeds (FeedCreated, creator == agent) and markets (MarketCreated on those feeds) from chain; feeds/marketId below are seeds recorded at deploy (2026-09-25) so the page works before its first log scan, never a substitute for it.",
+  "deployBlock": 63984154,
+  "roundSecs": 300,
+  "settlementWindow": 3600,
+  "contracts": {
+    "MarketsV4": "0xC27F9779e7Fb01C64Bb1634191C9E219dA251F4c",
+    "Registry": "0xa3205b555e48e80A49b8464706b1263CdCe67a50",
+    "Attestation": "0xC526Ad338A3562ACd045ECdc317b129876D4cE9c",
+    "NanoLedger": "0x02D278930B67A290fEfE93Ac049a086A9b5e0FB5",
+    "USDC": "0x3600000000000000000000000000000000000000"
+  },
+  "agent": "0x31CCE575eC134bFD57c46997A295Ab14Ab887BB4",
+  "descriptionPrefix": "registrai-data:",
+  "assets": [
+    { "key": "btc-usd", "symbol": "BTC", "name": "Bitcoin", "product": "BTC-USD", "decimals": 2 },
+    { "key": "eth-usd", "symbol": "ETH", "name": "Ether", "product": "ETH-USD", "decimals": 2 },
+    { "key": "sol-usd", "symbol": "SOL", "name": "Solana", "product": "SOL-USD", "decimals": 3 },
+    { "key": "zec-usd", "symbol": "ZEC", "name": "Zcash", "product": "ZEC-USD", "decimals": 2 },
+    { "key": "hype-usd", "symbol": "HYPE", "name": "Hyperliquid", "product": "HYPE-USD", "decimals": 3 }
+  ],
+  "events": [
+    {
+      "key": "arc-token-tradable",
+      "question": "Will the Arc token be publicly tradable before Dec 31, 2026?",
+      "expiry": 1798758000,
+      "rehearsal": false,
+      "marketId": "0xaca268162c452912dcc70396dbdf6921edd7d8908bdb6444281fa5adcef4422a",
+      "evidenceUrl": null
+    },
+    {
+      "key": "arc-token-tradable-test",
+      "question": "Is the Arc token tradable before the rehearsal deadline?",
+      "expiry": 1790368800,
+      "rehearsal": true,
+      "marketId": "0x3cf8aeab214ea8d4d73a0ee8ff944bff65541f20b40bb5751c0dfe3e1824043b",
+      "evidenceUrl": null
+    }
+  ],
+  "feeds": {
+    "btc-usd": { "feedId": "0x860bd4a490e8271755cac0d271ef1a7b8436fac07f4ed6aac603e1c8bff69a4a", "disputeWindow": 600 },
+    "eth-usd": { "feedId": "0x12c869978860797491d1c579b68d377027447a53ae75e03351430e28c5a016a7", "disputeWindow": 600 },
+    "sol-usd": { "feedId": "0xba2b5741d7aa1f2b0b0d67451ed939028af526705acfc58b5555a9fe6d3fc1b4", "disputeWindow": 600 },
+    "zec-usd": { "feedId": "0x8df78bc4ef3226a7f960fad7f78b412e26c453122a4579ad0b6db23c7c5e9947", "disputeWindow": 600 },
+    "hype-usd": { "feedId": "0x7042c6b114991e29f64194073d9562e4b9c21a67df2865bad6e755bdd166b264", "disputeWindow": 600 },
+    "arc-token-tradable": { "feedId": "0xd3afb6af2d19404d56fe960ec4748af5c07694713e4027fa4a7fe0bee577b63a", "disputeWindow": 43200 },
+    "arc-token-tradable-test": { "feedId": "0x332ed62c979999307c854f94621ce37f250460b46e8fc6a629ccedcb885ccc28", "disputeWindow": 600 }
+  }
+}

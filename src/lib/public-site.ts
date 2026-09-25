@@ -35,6 +35,7 @@ export const TESTNET_ROUTES = [
   "pool",
   "pools",
   "profile",
+  "rounds",
   "slash",
   "vault",
 ] as const;
