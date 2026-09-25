@@ -1,12 +1,12 @@
 {
     "network": "testnet",
     "chainId": 5042002,
-    "note": "Perennial extras for Arc testnet. Contract addresses come from live-data.json (synced from contracts/deployments/arc-testnet.json). operator = keeper/config.arc.json operator_addr (the caretaker's bonded milestone agent); deployBlock = contracts/deployments/arc-testnet.json perennial.deployBlock (v4 stack, 2026-09-24). verifiedBuilderBadge = contracts/deployments/arc-testnet.json perennial.verifiedBuilderBadge.address (used until a sync writes contracts.VerifiedBuilderBadge). builderFund / seasonPool = contracts/deployments/arc-testnet.json perennial BuilderFund / SeasonPool (v4, deployed 2026-09-24; used until a sync writes contracts.BuilderFund / contracts.SeasonPool).",
+    "note": "Perennial extras for Arc testnet. Contract addresses come from live-data.json (synced from contracts/deployments/arc-testnet.json). operator = keeper/config.arc.json operator_addr (the caretaker's bonded milestone agent); deployBlock = contracts/deployments/arc-testnet.json perennial.deployBlock (v4 stack, 2026-09-24). verifiedBuilderBadge = contracts/deployments/arc-testnet.json perennial.verifiedBuilderBadge.address (used until a sync writes contracts.VerifiedBuilderBadge). builderFund / seasonPool = contracts/deployments/arc-testnet.json perennial BuilderFund / SeasonPool (v5, deployed 2026-09-25; used until a sync writes contracts.BuilderFund / contracts.SeasonPool).",
     "deployBlock": 63826822,
     "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
     "verifiedBuilderBadge": "0xBF7FF680e0Ee7472E244cf2550EE016939cb6335",
-    "builderFund": "0x7e83096F8Ef50024e7bE106E47F1BD8ce2e882D1",
-    "seasonPool": "0x56b3Ffc1c5DA4F867C3Fd56Be5dA731d457E32aA",
+    "builderFund": "0x06ef72DE4Cb130e7F3EC2807eC34066053c86C8d",
+    "seasonPool": "0x96c7C8E5E2805334c30C23C94930542E91D19567",
     "builders": {
         "note": "The builder registries on Arc testnet, used by /builders and /verify while the mainnet builders block is unset.",
         "deployBlock": 63826822,
