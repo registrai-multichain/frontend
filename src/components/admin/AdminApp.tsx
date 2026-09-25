@@ -49,6 +49,8 @@ import {
   readBuilderForOnboarding,
   recheckOnboardingProofs,
 } from "@/lib/builders-onboarder";
+import { gaslessCandidates, gaslessState, type GaslessRequest } from "@/lib/gasless-registrations";
+import { planOnboarding, safeBatchJson } from "@/lib/onboard-batch";
 import { sendBuildersTx } from "@/components/verify/sendTx";
 import { buildersClient } from "@/components/verify/useMyBuilder";
 
@@ -355,6 +357,8 @@ function Dashboard({
         chainNote={chainNote}
         onChanged={() => invites.mutate()}
       />
+
+      <GaslessSection builders={chain.data ?? null} chainNote={chainNote} onSignedOut={onSignedOut} />
 
       <OnboardingSection
         builders={chain.data ?? null}
@@ -739,6 +743,158 @@ async function ensureBuildersChain(walletChainId: number | undefined, switchChai
   if (Number(id) !== BUILDERS.chainId) {
     throw new Error(`Your wallet is not on ${BUILDERS.label} (chain ${BUILDERS.chainId}). Switch networks and try again.`);
   }
+}
+
+/**
+ * "Register it for me" requests from /verify (builders without gas): each
+ * proof re-checked against the requesting wallet, then registerFor /
+ * addProjectFor in a Safe batch (REGISTRAR = the Safe). A new wallet takes two
+ * batches; a registered request drops out once its project is on-chain, and
+ * the onboarding queue below takes it from there.
+ */
+function GaslessSection({
+  builders,
+  chainNote,
+  onSignedOut,
+}: {
+  builders: GalleryBuilder[] | null;
+  chainNote: string | null;
+  onSignedOut: () => void;
+}) {
+  const requests = useSWR<GaslessRequest[]>(
+    "admin-register-requests",
+    async () => {
+      const r = await call<{ requests?: GaslessRequest[]; error?: string }>("/api/admin/register-requests");
+      if (r.status === 401) throw new SignedOut();
+      if (r.status !== 200 || !r.body.requests) throw new Error(r.body.error ?? `requests (${r.status})`);
+      return r.body.requests;
+    },
+    { revalidateOnFocus: false, shouldRetryOnError: false },
+  );
+  useEffect(() => {
+    if (requests.error instanceof SignedOut) onSignedOut();
+  }, [requests.error, onSignedOut]);
+
+  const open = useMemo(
+    () => (requests.data && builders ? requests.data.filter((r) => gaslessState(r, builders).kind !== "done") : null),
+    [requests.data, builders],
+  );
+  // Re-check every open request's proof against the wallet that asked, now.
+  const proofs = useSWR(
+    open && open.length ? ["admin-register-proofs", ...open.map((r) => `${r.source}|${r.builder}`)] : null,
+    async () => {
+      const out = new Map<string, boolean>();
+      await Promise.all(
+        open!.map(async (r) => {
+          const p = await browserProofCheck({ owner: r.builder, source: r.source }, { chainId: BUILDERS.chainId });
+          out.set(r.source, p.state === "valid");
+        }),
+      );
+      return out;
+    },
+    { revalidateOnFocus: false },
+  );
+  const plan = useMemo(
+    () =>
+      open && builders && proofs.data && REG && CARE && OPERATOR
+        ? planOnboarding({
+            records: [],
+            registrations: gaslessCandidates(open, builders, (s) => proofs.data!.get(s) === true),
+            builderRegistry: REG,
+            caretakerRegistry: CARE,
+            operator: OPERATOR as Address,
+          })
+        : null,
+    [open, builders, proofs.data],
+  );
+
+  async function dismiss(source: string) {
+    await call(`/api/admin/register-requests?source=${encodeURIComponent(source)}`, { method: "DELETE" });
+    await requests.mutate();
+  }
+
+  return (
+    <Section title="Register for builders without gas">
+      {requests.error && !(requests.error instanceof SignedOut) ? (
+        <p className="vf-error">Could not read the requests: {(requests.error as Error).message}</p>
+      ) : !requests.data ? (
+        <p className="vf-hint">Reading requests…</p>
+      ) : !builders ? (
+        <p className="vf-hint">{chainNote}</p>
+      ) : !open || open.length === 0 ? (
+        <p className="vf-hint">No open requests. Builders without gas ask from step 5 of /verify; each request is stored only with a valid published proof.</p>
+      ) : (
+        <>
+          <ul className="adm-list">
+            {open.map((r) => {
+              const st = gaslessState(r, builders);
+              const ok = proofs.data?.get(r.source);
+              return (
+                <li key={r.source}>
+                  <b>{sourceLabel(r.source)}</b>{" "}
+                  <span className="adm-sub">
+                    {shortAddr(r.builder)} · asked {isoDay(r.requestedAt)} ·{" "}
+                    {st.kind === "register"
+                      ? "new wallet: registerFor now, the project in the next batch"
+                      : st.kind === "addProject"
+                        ? `add to builder #${st.builderId}`
+                        : st.kind === "blocked"
+                          ? st.reason
+                          : ""}
+                    {" · "}
+                    {ok === undefined ? "checking proof…" : ok ? "proof valid" : "proof does NOT check out"}
+                  </span>{" "}
+                  <button type="button" className="vf-mini" onClick={() => dismiss(r.source)}>
+                    dismiss
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {plan && plan.txs.length > 0 ? (
+            <>
+              <ol className="adm-txs">
+                {plan.txs.map((t, i) => (
+                  <li key={i}>
+                    <code>{t.label}</code>
+                  </li>
+                ))}
+              </ol>
+              <button
+                type="button"
+                className="vf-primary"
+                onClick={() =>
+                  download(
+                    safeFileName("registrations", Date.now()),
+                    safeBatchJson(plan.txs, { chainId: BUILDERS.chainId, createdAt: Date.now(), name: "Registrai: register for builders without gas" }),
+                  )
+                }
+              >
+                Download Safe batch ({plan.txs.length} tx)
+              </button>
+              <p className="vf-hint">
+                Registration needs the Safe (REGISTRAR). After a registerFor executes, re-read the chain: the same request
+                then plans its addProjectFor, and the onboarding queue below picks the builder up once its project is on-chain.
+              </p>
+            </>
+          ) : plan ? (
+            <p className="vf-hint">Nothing to send right now.</p>
+          ) : (
+            <p className="vf-hint">Checking proofs…</p>
+          )}
+          {plan && plan.skipped.length > 0 && (
+            <ul className="adm-list">
+              {plan.skipped.map((k, i) => (
+                <li key={i} className="adm-sub">
+                  skipped {k.what}: {k.reason}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </Section>
+  );
 }
 
 function OnboardingSection({
