@@ -1,5 +1,5 @@
 /**
- * Season rewards, distribution rule v1 — a public, deterministic computation
+ * Season rewards, distribution rule v2 — a public, deterministic computation
  * from chain data (spec docs/superpowers/specs/2026-09-24-builder-income-tax-design.md,
  * "SeasonPool"). Anyone can re-run it to re-derive a published root. Reads the
  * chain only; never signs, never sends.
@@ -15,12 +15,16 @@
  *   eligible  builders verified at --to-block: active, caretaker = the operator,
  *             at least one active project, and a Verified Builder Badge that is
  *             not lapsed (the keeper lapses it when no project proof holds);
- *   points    for each MarketsPerennial market on one of the builder's project
+ *   volume    per MarketsPerennial market on one of the builder's project
  *             milestone feeds (Registry FeedCreated by the operator, description
  *             `registrai-milestone:<source>`) that RESOLVED YES between the two
- *             blocks with ≥ $500 counted volume: sqrt(volume in USD). Volume is
- *             every Bought.collateralIn and Sold.collateralOut + fee of the
- *             market, except the builder owner's, the creator's and the agent's;
+ *             blocks: the Bought.collateralIn of shares held ≥ 24 hours (or to
+ *             settlement), matched FIFO per (trader, outcome) against Sold.sharesIn
+ *             by block timestamp; sell volume never counts; the builder owner's,
+ *             the creator's and the agent's trades are left out. A market needs
+ *             ≥ $500 of it to qualify;
+ *   points    one square root per builder: sqrt(USD) of its summed counted
+ *             volume over all its qualifying markets;
  *   amounts   pro rata by points, ≤ 20% of --total per builder, the excess
  *             re-spread; floored to the 6-decimal unit. Dust is claimed by no one.
  *
@@ -45,6 +49,7 @@ import {
   seasonFile,
   RULE_VERSION,
   MIN_MARKET_VOLUME,
+  MIN_HOLD_SECS,
   type EligibleBuilder,
   type MarketFacts,
   type Trade,
@@ -184,6 +189,18 @@ async function logsIn(client: PublicClient, params: Record<string, unknown>, fro
   return out as unknown as { args: Record<string, unknown>; blockNumber: bigint; logIndex: number }[];
 }
 
+/** Block timestamps, fetched once per block, 20 at a time. */
+async function blockTimes(client: PublicClient, blocks: readonly bigint[]): Promise<Map<bigint, bigint>> {
+  const out = new Map<bigint, bigint>();
+  const todo = [...new Set(blocks)];
+  for (let i = 0; i < todo.length; i += 20) {
+    const batch = todo.slice(i, i + 20);
+    const got = await Promise.all(batch.map((blockNumber) => client.getBlock({ blockNumber })));
+    batch.forEach((bn, j) => out.set(bn, got[j].timestamp));
+  }
+  return out;
+}
+
 /** First block with timestamp >= t (binary search). */
 async function blockAtOrAfter(client: PublicClient, t: bigint, lo: bigint, hi: bigint): Promise<bigint> {
   while (lo < hi) {
@@ -318,13 +335,25 @@ async function main() {
   if (wanted.length) {
     const bought = await logsIn(client, { address: markets, event: marketsAbi[3], args: { marketId: wanted } }, scanFrom, toBlock);
     const sold = await logsIn(client, { address: markets, event: marketsAbi[4], args: { marketId: wanted } }, scanFrom, toBlock);
-    const push = (marketId: string, trader: string, gross: bigint) => {
-      const k = marketId.toLowerCase();
+    const times = await blockTimes(client, [...bought, ...sold].map((l) => l.blockNumber));
+    type Log = (typeof bought)[number];
+    const push = (l: Log, kind: Trade["kind"], trader: unknown, shares: unknown, collateral: bigint) => {
+      const k = String(l.args.marketId).toLowerCase();
       if (!tradesByMarket.has(k)) tradesByMarket.set(k, []);
-      tradesByMarket.get(k)!.push({ marketId: k, trader: trader.toLowerCase(), gross });
+      tradesByMarket.get(k)!.push({
+        marketId: k,
+        trader: String(trader).toLowerCase(),
+        kind,
+        outcome: Number(l.args.outcome),
+        shares: shares as bigint,
+        collateral,
+        timestamp: times.get(l.blockNumber)!,
+        blockNumber: l.blockNumber,
+        logIndex: l.logIndex,
+      });
     };
-    for (const l of bought) push(String(l.args.marketId), String(l.args.buyer), l.args.collateralIn as bigint);
-    for (const l of sold) push(String(l.args.marketId), String(l.args.seller), (l.args.collateralOut as bigint) + (l.args.fee as bigint));
+    for (const l of bought) push(l, "buy", l.args.buyer, l.args.sharesOut, l.args.collateralIn as bigint);
+    for (const l of sold) push(l, "sell", l.args.seller, l.args.sharesIn, (l.args.collateralOut as bigint) + (l.args.fee as bigint));
   }
 
   // ── points, allocation, tree ──
@@ -348,6 +377,7 @@ async function main() {
     toTime: values["to-time"] ?? null,
     scanFromBlock: scanFrom.toString(),
     minMarketVolume: MIN_MARKET_VOLUME.toString(),
+    minHoldSecs: MIN_HOLD_SECS.toString(),
     capBps: 2000,
     contracts: { MarketsPerennial: markets, SeasonPool: seasonPool, BuilderRegistry: builderRegistry, CaretakerRegistry: caretakerRegistry, VerifiedBuilderBadge: badge, Registry: registry },
     operator,
@@ -358,8 +388,9 @@ async function main() {
   // ── summary (stderr) ──
   log(`eligible builders: ${eligible.length}${skipped.length ? ` (skipped: ${skipped.join("; ")})` : ""}`);
   for (const e of eligible) log(`  #${e.builderId} ${e.owner} · ${e.feeds.length} milestone feed(s)`);
-  log(`markets resolved YES in the window: ${yes.size}; scoring (≥ ${formatUsd(MIN_MARKET_VOLUME)} counted volume, own feeds): ${scored.markets.length}`);
-  for (const m of scored.markets) log(`  ${m.marketId.slice(0, 10)}… builder #${m.builderId} · volume ${formatUsd(m.volume)} · ${(Number(m.points) / 1e6).toFixed(6)} pts`);
+  log(`markets resolved YES in the window: ${yes.size}; qualifying (≥ ${formatUsd(MIN_MARKET_VOLUME)} counted volume held ≥ ${MIN_HOLD_SECS / 3_600n}h, own feeds): ${scored.markets.length}`);
+  for (const m of scored.markets) log(`  ${m.marketId.slice(0, 10)}… builder #${m.builderId} · counted volume ${formatUsd(m.volume)}`);
+  for (const [id, v] of scored.volumes) log(`  builder #${id} · total ${formatUsd(v)} · ${(Number(scored.points.get(id) ?? 0n) / 1e6).toFixed(6)} pts`);
   log();
   log(`allocation (cap ${formatUsd(capFor(total))} per builder):`);
   for (const a of allocations) log(`  #${a.builderId} ${(Number(a.points) / 1e6).toFixed(6)} pts → ${formatUsd(a.amount, 6)}${a.capped ? " (capped)" : ""}`);

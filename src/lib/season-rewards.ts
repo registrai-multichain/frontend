@@ -1,5 +1,5 @@
 /**
- * Season rewards, distribution rule v1 ("building progress traders
+ * Season rewards, distribution rule v2 ("building progress traders
  * confirmed") — pure. Spec: docs/superpowers/specs/2026-09-24-builder-income-tax-design.md
  * ("SeasonPool"). scripts/season-rewards.ts does the chain reads; everything
  * that decides who gets what is here, so it is unit-tested and anyone can
@@ -8,12 +8,25 @@
  *  - eligible: builders verified (caretaker = the operator, an active builder
  *    with an active project) holding a non-lapsed Verified Builder Badge at
  *    the season's last block;
- *  - points: for each MarketsPerennial market on one of the builder's project
- *    milestone feeds (`registrai-milestone:<source>`, created by the operator)
- *    that RESOLVED YES inside the season with at least $500 of counted volume,
- *    sqrt(volume in USD). Counted volume is every Bought (collateralIn) and
- *    Sold (collateralOut + fee: the gross curve amount) of the market, except
- *    trades by the builder's owner wallet, the market's creator and its agent;
+ *  - qualifying markets: MarketsPerennial markets on one of the builder's
+ *    project milestone feeds (`registrai-milestone:<source>`, created by the
+ *    operator) that RESOLVED YES inside the season with at least $500 of
+ *    counted volume (the floor applies per market);
+ *  - counted volume of a market: only BUY volume whose shares were held at
+ *    least MIN_HOLD_SECS (24 hours); sell volume never counts. Trades by the
+ *    builder's owner wallet, the market's creator and its agent are dropped
+ *    first. The rest is matched FIFO per (trader, market, outcome) in chain
+ *    order (block number, then log index): each Bought opens a lot (sharesOut,
+ *    collateralIn, block timestamp); each Sold consumes sharesIn from the oldest
+ *    open lots. Consuming x of a lot's r remaining shares takes
+ *    floor(c * x / r) of its c remaining collateral (all of c when x = r); that
+ *    part counts if sold at or after lot timestamp + MIN_HOLD_SECS and does not
+ *    count if sold before. Whatever collateral a lot still holds at the end
+ *    (held to settlement or past the season's last block) counts. Shares sold
+ *    beyond the open lots consume nothing;
+ *  - points: ONE square root per builder, sqrt(USD) of the builder's counted
+ *    volume summed over all its qualifying markets. Splitting volume over many
+ *    markets earns nothing extra;
  *  - allocation: pro rata by points, at most 20% of the season total per
  *    builder (SeasonPool.CAP_BPS), the excess re-spread over the uncapped until
  *    stable; each amount floored to the 6-decimal unit. The rounding dust (and
@@ -22,15 +35,21 @@
  *    the unallocated balance after the deadline.
  *
  * All arithmetic is bigint: points are sqrt(USD) with 6 decimals, floored
- * (isqrt(volumeUnits * 1e6)), so the output is bit-for-bit reproducible.
+ * (isqrt(summedVolumeUnits * 1e6)), so the output is bit-for-bit reproducible.
+ *
+ * v1 (seasons published before v2): one sqrt per market, summed per builder,
+ * and counted volume was every Bought.collateralIn and Sold.collateralOut + fee
+ * (same exclusions), with no hold time.
  */
 import { StandardMerkleTree } from "@openzeppelin/merkle-tree";
 import { encodeAbiParameters, encodeFunctionData, keccak256, parseAbi, type Address, type Hex } from "viem";
 import { isqrt } from "./perennial-market";
 
-export const RULE_VERSION = "v1";
+export const RULE_VERSION = "v2";
 /** Minimum counted volume of a market for points: $500 (6-decimal USDC). */
 export const MIN_MARKET_VOLUME = 500_000_000n;
+/** Minimum time (seconds) a buy's shares must be held for its volume to count: 24 hours. */
+export const MIN_HOLD_SECS = 86_400n;
 /** SeasonPool.CAP_BPS */
 export const CAP_BPS = 2_000n;
 const BPS = 10_000n;
@@ -41,8 +60,17 @@ export const LEAF_ENCODING = ["uint256", "uint256", "uint256"] as const;
 export interface Trade {
   marketId: string;
   trader: string;
-  /** Gross USDC of the trade: Bought.collateralIn, or Sold.collateralOut + fee. */
-  gross: bigint;
+  kind: "buy" | "sell";
+  /** The outcome (side) traded: Bought/Sold `outcome`. */
+  outcome: number;
+  /** Bought.sharesOut or Sold.sharesIn. */
+  shares: bigint;
+  /** Bought.collateralIn. On a sell (collateralOut + fee) it is informational: sell volume never counts. */
+  collateral: bigint;
+  /** Timestamp (unix seconds) of the trade's block. */
+  timestamp: bigint;
+  blockNumber: bigint;
+  logIndex: number;
 }
 
 export interface MarketFacts {
@@ -60,11 +88,40 @@ export function volumePoints(volumeUnits: bigint): bigint {
   return volumeUnits <= 0n ? 0n : isqrt(volumeUnits * 1_000_000n);
 }
 
-/** A market's counted volume: every trade except the builder owner's, the creator's and the agent's. */
-export function countedVolume(trades: readonly Trade[], excluded: readonly string[]): bigint {
+/**
+ * A market's counted volume: the collateralIn of bought shares held at least
+ * `minHold` seconds (or never sold), FIFO per (trader, outcome), in chain
+ * order; the excluded wallets' trades (builder owner, creator, agent) and all
+ * sell volume left out. See the header for the exact matching.
+ */
+export function countedVolume(trades: readonly Trade[], excluded: readonly string[], minHold = MIN_HOLD_SECS): bigint {
   const skip = new Set(excluded.map((a) => a.toLowerCase()));
+  const ordered = trades
+    .filter((t) => !skip.has(t.trader.toLowerCase()))
+    .sort((a, b) => (a.blockNumber !== b.blockNumber ? (a.blockNumber < b.blockNumber ? -1 : 1) : a.logIndex - b.logIndex));
+  const lots = new Map<string, { shares: bigint; collateral: bigint; timestamp: bigint }[]>();
   let v = 0n;
-  for (const t of trades) if (!skip.has(t.trader.toLowerCase())) v += t.gross;
+  for (const t of ordered) {
+    const key = `${t.trader.toLowerCase()}|${t.outcome}`;
+    if (!lots.has(key)) lots.set(key, []);
+    const open = lots.get(key)!;
+    if (t.kind === "buy") {
+      open.push({ shares: t.shares, collateral: t.collateral, timestamp: t.timestamp });
+      continue;
+    }
+    let left = t.shares;
+    while (left > 0n && open.length > 0) {
+      const lot = open[0];
+      const x = left < lot.shares ? left : lot.shares;
+      const part = x === lot.shares ? lot.collateral : (lot.collateral * x) / lot.shares;
+      if (t.timestamp >= lot.timestamp + minHold) v += part;
+      lot.shares -= x;
+      lot.collateral -= part;
+      left -= x;
+      if (lot.shares === 0n) open.shift(); // fully consumed: its collateral is 0 now
+    }
+  }
+  for (const open of lots.values()) for (const lot of open) v += lot.collateral;
   return v;
 }
 
@@ -79,36 +136,40 @@ export interface MarketScore {
   marketId: string;
   builderId: number;
   feedId: string;
+  /** The market's counted volume (it adds to its builder's total; no per-market points). */
   volume: bigint;
-  points: bigint;
 }
 
 /**
- * Score every qualifying market: on an eligible builder's own project feed,
- * resolved YES in the season, counted volume ≥ $500. Returns builderId ->
- * points, plus the per-market detail (for the output file).
+ * Score the builders: every qualifying market (on an eligible builder's own
+ * project feed, resolved YES in the season, counted volume >= $500) adds its
+ * counted volume to its builder's total; points = sqrt(total USD), one square
+ * root per builder. Returns builderId -> points and -> summed volume, plus the
+ * per-market detail (for the output file).
  */
 export function scoreMarkets(
   builders: readonly EligibleBuilder[],
   markets: readonly MarketFacts[],
   tradesByMarket: ReadonlyMap<string, readonly Trade[]>,
   minVolume = MIN_MARKET_VOLUME,
-): { points: Map<number, bigint>; markets: MarketScore[] } {
+  minHold = MIN_HOLD_SECS,
+): { points: Map<number, bigint>; volumes: Map<number, bigint>; markets: MarketScore[] } {
   const byId = new Map(builders.map((b) => [b.builderId, b]));
-  const points = new Map<number, bigint>();
+  const volumes = new Map<number, bigint>();
   const scored: MarketScore[] = [];
   const sorted = [...markets].sort((a, b) => (a.marketId.toLowerCase() < b.marketId.toLowerCase() ? -1 : 1));
   for (const m of sorted) {
     const b = byId.get(m.builderId);
     if (!b || !m.resolvedYesInSeason) continue;
     if (!b.feeds.some((f) => f.toLowerCase() === m.feedId.toLowerCase())) continue;
-    const volume = countedVolume(tradesByMarket.get(m.marketId.toLowerCase()) ?? [], [b.owner, m.creator, m.agent]);
+    const volume = countedVolume(tradesByMarket.get(m.marketId.toLowerCase()) ?? [], [b.owner, m.creator, m.agent], minHold);
     if (volume < minVolume) continue;
-    const p = volumePoints(volume);
-    scored.push({ marketId: m.marketId.toLowerCase(), builderId: m.builderId, feedId: m.feedId.toLowerCase(), volume, points: p });
-    points.set(m.builderId, (points.get(m.builderId) ?? 0n) + p);
+    scored.push({ marketId: m.marketId.toLowerCase(), builderId: m.builderId, feedId: m.feedId.toLowerCase(), volume });
+    volumes.set(m.builderId, (volumes.get(m.builderId) ?? 0n) + volume);
   }
-  return { points, markets: scored };
+  const points = new Map<number, bigint>();
+  for (const [id, v] of volumes) points.set(id, volumePoints(v));
+  return { points, volumes, markets: scored };
 }
 
 // ───────────────────────────── allocation ─────────────────────────────
@@ -250,15 +311,17 @@ export function seasonFile(i: SeasonFileInput) {
     builders: i.allocations.map((a) => {
       const b = i.eligible.find((e) => e.builderId === a.builderId);
       const t = byId.get(a.builderId);
+      const markets = i.scored.filter((m) => m.builderId === a.builderId);
       return {
         builderId: a.builderId,
         owner: b?.owner.toLowerCase() ?? null,
+        volume: markets.reduce((s, m) => s + m.volume, 0n).toString(),
         points: a.points.toString(),
         amount: a.amount.toString(),
         capped: a.capped,
         leaf: t?.leaf ?? null,
         proof: t?.proof ?? [],
-        markets: i.scored.filter((m) => m.builderId === a.builderId).map((m) => ({ marketId: m.marketId, feedId: m.feedId, volume: m.volume.toString(), points: m.points.toString() })),
+        markets: markets.map((m) => ({ marketId: m.marketId, feedId: m.feedId, volume: m.volume.toString() })),
       };
     }),
     eligible: i.eligible.map((e) => e.builderId),
