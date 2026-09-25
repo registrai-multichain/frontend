@@ -54,8 +54,9 @@ import { gaslessCandidates, gaslessState, type GaslessRequest } from "@/lib/gasl
 import { planOnboarding, safeBatchJson } from "@/lib/onboard-batch";
 import { sendBuildersTx } from "@/components/verify/sendTx";
 import { buildersClient } from "@/components/verify/useMyBuilder";
-import { useWonderStatus } from "@/components/wonder/WonderBits";
-import { cancelReleaseSafeFile, nominateInput, nominateSafeFile, releaseView, usd, waitingAmount, WONDER_ON_BUILDERS, wonderMarketsAbi } from "@/lib/wonder";
+import { useWonderContext, WonderStatusProvider } from "@/components/wonder/WonderBits";
+import { releaseView, usd, waitingAmount, WONDER_ON_BUILDERS, wonderMarketsAbi } from "@/lib/wonder";
+import { cancelReleaseSafeFile, nominateInput, nominateSafeFile } from "@/lib/wonder-admin";
 
 const REG = BUILDERS.contracts.BuilderRegistry;
 const CARE = BUILDERS.contracts.CaretakerRegistry;
@@ -333,59 +334,62 @@ function Dashboard({
         ? `Reading ${BUILDERS.label} and checking every proof…`
         : null;
 
+  const wonderSources = WONDER_ON_BUILDERS ? (invites.data ?? []).map((i) => i.source) : [];
   return (
-    <div className="adm-stack">
-      <div className="adm-bar">
-        <span>
-          Signed in as <b className="tnum">{shortAddr(admin)}</b>
-        </span>
-        <span className="adm-bar-actions">
-          {REG && (
-            <button type="button" className="vf-mini" onClick={() => chain.mutate()} disabled={chain.isValidating}>
-              {chain.isValidating ? "reading chain…" : "re-read chain"}
+    <WonderStatusProvider sources={wonderSources}>
+      <div className="adm-stack">
+        <div className="adm-bar">
+          <span>
+            Signed in as <b className="tnum">{shortAddr(admin)}</b>
+          </span>
+          <span className="adm-bar-actions">
+            {REG && (
+              <button type="button" className="vf-mini" onClick={() => chain.mutate()} disabled={chain.isValidating}>
+                {chain.isValidating ? "reading chain…" : "re-read chain"}
+              </button>
+            )}
+            <button type="button" className="vf-mini" onClick={signOut}>
+              sign out
             </button>
-          )}
-          <button type="button" className="vf-mini" onClick={signOut}>
-            sign out
-          </button>
-        </span>
+          </span>
+        </div>
+
+        <InviteForm onChanged={() => invites.mutate()} />
+
+        <InvitesTable
+          invites={invites.data}
+          error={invites.error && !(invites.error instanceof SignedOut) ? String((invites.error as Error).message) : null}
+          builders={chain.data ?? null}
+          chainNote={chainNote}
+          onChanged={() => invites.mutate()}
+        />
+
+        <GaslessSection builders={chain.data ?? null} chainNote={chainNote} onSignedOut={onSignedOut} />
+
+        <OnboardingSection
+          builders={chain.data ?? null}
+          chainNote={chainNote}
+          nameOf={nameOf}
+          revocationCheckpoint={revocationCheckpoint}
+          onChainChanged={() => chain.mutate()}
+        />
+
+        <BadgeSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
+
+        <RecoverySection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
+
+        <ProjectsSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
+
+        {WONDER_ON_BUILDERS && <WonderSection invites={invites.data ?? []} />}
       </div>
-
-      <InviteForm onChanged={() => invites.mutate()} />
-
-      <InvitesTable
-        invites={invites.data}
-        error={invites.error && !(invites.error instanceof SignedOut) ? String((invites.error as Error).message) : null}
-        builders={chain.data ?? null}
-        chainNote={chainNote}
-        onChanged={() => invites.mutate()}
-      />
-
-      <GaslessSection builders={chain.data ?? null} chainNote={chainNote} onSignedOut={onSignedOut} />
-
-      <OnboardingSection
-        builders={chain.data ?? null}
-        chainNote={chainNote}
-        nameOf={nameOf}
-        revocationCheckpoint={revocationCheckpoint}
-        onChainChanged={() => chain.mutate()}
-      />
-
-      <BadgeSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
-
-      <RecoverySection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
-
-      <ProjectsSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
-
-      {WONDER_ON_BUILDERS && <WonderSection invites={invites.data ?? []} />}
-    </div>
+    </WonderStatusProvider>
   );
 }
 
 // ───────────────────────────── invite a project ─────────────────────────────
 
 function InviteLink({ invite, existed }: { invite: AdminInvite; existed: boolean }) {
-  const wonder = useWonderStatus(WONDER_ON_BUILDERS ? [invite.source] : []);
+  const wonder = useWonderContext();
   const dm = inviteDm(invite, invite.claimLink, waitingAmount(wonder.status[invite.source], Math.floor(Date.now() / 1000), wonder.expiry));
   return (
     <div className="adm-result">
@@ -530,7 +534,7 @@ function StatusChip({ s }: { s: InviteChainStatus | null }) {
 }
 
 function InviteRow({ inv, status, onChanged }: { inv: AdminInvite; status: InviteChainStatus | null; onChanged: () => void }) {
-  const wonder = useWonderStatus(WONDER_ON_BUILDERS ? [inv.source] : []);
+  const wonder = useWonderContext();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(inv.name ?? "");
   const [x, setX] = useState(inv.x ?? "");
@@ -1625,13 +1629,16 @@ function WonderSection({ invites }: { invites: AdminInvite[] }) {
   const { address, walletClient, walletChainId, switchChain } = useWallet();
   const [input, setInput] = useState("");
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
+  const [busy, setBusy] = useState(false);
   const invited = useMemo(() => new Set(invites.map((i) => i.source)), [invites]);
   const sources = useMemo(() => [...invited], [invited]);
-  const wonder = useWonderStatus(sources);
+  const wonder = useWonderContext();
   const now = useTick(60_000); // unix seconds
 
   async function send(source: string, on: boolean) {
     if (!address || !walletClient) return setMsg({ error: "Connect the onboarder wallet (or download the Safe file)." });
+    if (busy) return;
+    setBusy(true);
     try {
       if (walletChainId !== BUILDERS.chainId) await switchChain(BUILDERS.chainId);
       const pc = buildersClient();
@@ -1643,8 +1650,11 @@ function WonderSection({ invites }: { invites: AdminInvite[] }) {
       const rc = await pc.waitForTransactionReceipt({ hash });
       if (rc.status !== "success") throw new Error("the transaction reverted");
       setMsg({ ok: `${on ? "Nominated" : "Un-nominated"} ${source}.` });
+      wonder.refresh();
     } catch (e) {
       setMsg({ error: humanizeError(e, HUMAN) });
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -1675,8 +1685,8 @@ function WonderSection({ invites }: { invites: AdminInvite[] }) {
           <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="github:owner/repo or domain" spellCheck={false} autoCapitalize="off" />
           <em />
         </label>
-        <button type="button" className="vf-primary" onClick={() => act(true, "wallet")} disabled={!input.trim()}>Nominate</button>
-        <button type="button" onClick={() => act(false, "wallet")} disabled={!input.trim()}>Un-nominate</button>
+        <button type="button" className="vf-primary" onClick={() => act(true, "wallet")} disabled={busy || !input.trim()}>{busy ? "Sending…" : "Nominate"}</button>
+        <button type="button" onClick={() => act(false, "wallet")} disabled={busy || !input.trim()}>Un-nominate</button>
         <button type="button" onClick={() => act(true, "safe")} disabled={!input.trim()}>Safe file: nominate</button>
         <button type="button" onClick={() => act(false, "safe")} disabled={!input.trim()}>Safe file: un-nominate</button>
       </div>

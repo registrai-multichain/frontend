@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { createPublicClient, type Address, type Hex, type PublicClient } from "viem";
 import { useWallet } from "@/components/WalletProvider";
-import { MarketLabels } from "@/components/wonder/WonderBits";
+import { MarketLabels } from "@/components/wonder/MarketLabels";
 import { nanoLedgerAbi } from "@/lib/abi";
 import { transportFor } from "@/lib/chains";
 import { humanizeError } from "@/lib/humanize-error";
@@ -21,10 +21,10 @@ import { COMPARATOR, formatUsdc, parseDays, parseUsdcInput, questionText } from 
 import { PERENNIAL } from "@/lib/perennial-network";
 import { normalizeSource, sourceLabel } from "@/lib/verified-builders";
 import {
-  groupWonderMarkets, nextHourExpiry, sourceKey, SUBJECT, waitingLine, wonderContracts, wonderCreateCheck,
+  expiryDaysText, groupWonderMarkets, nextHourExpiry, sourceKey, SUBJECT, waitingLine, wonderAnchor, wonderContracts, wonderCreateCheck,
   wonderFeedFor, wonderMarketsAbi,
 } from "@/lib/wonder";
-import { findFeedLive, readWonderStatus, type WonderReader } from "@/lib/wonder-chain";
+import { findFeedLive, readExpiry, readWonderStatus, type WonderReader } from "@/lib/wonder-chain";
 
 const D = PERENNIAL;
 const W = wonderContracts(D);
@@ -71,8 +71,10 @@ function WonderLive() {
   const status = useSWR(groups.length ? ["wonder-status", groups.map((g) => g.source).join("|")] : null, () =>
     readWonderStatus(pc() as unknown as WonderReader, W!, groups.map((g) => g.source)), { revalidateOnFocus: false });
 
+  const expiry = useSWR(["wonder-expiry", W!.escrow], () => readExpiry(pc() as unknown as WonderReader, W!), { revalidateOnFocus: false });
   return (
     <>
+      <p className="vf-note">Escrow nobody claims within {expiryDaysText(expiry.data ?? null)} of its first fee goes to the season pool.</p>
       <CreateWonderMarket minLiquidity={ov.data?.minLiquidity} attestation={ov.data?.attestation} onCreated={() => void ov.mutate()} />
       {ov.error && <p className="vf-error">Could not read markets: {humanizeError(ov.error, HUMAN)}</p>}
       {!ov.data && !ov.error && <p className="vf-hint">Reading markets…</p>}
@@ -80,7 +82,7 @@ function WonderLive() {
       {groups.map((g) => {
         const waiting = waitingLine(status.data?.[g.source]?.escrow);
         return (
-          <section key={g.source} className="wonder-group pp-card">
+          <section key={g.source} id={wonderAnchor(g.source)} className="wonder-group pp-card">
             <h2>{sourceLabel(g.source)}</h2>
             {waiting && <p className="wonder-waiting">{waiting}</p>}
             <ul>

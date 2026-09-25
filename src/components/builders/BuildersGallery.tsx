@@ -1,7 +1,7 @@
 "use client";
 
 import { useWonderStatus } from "@/components/wonder/WonderBits";
-import { waitingAmount, waitingLine } from "@/lib/wonder";
+import { waitingAmount, waitingLine, wonderMarketsHref } from "@/lib/wonder";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -182,7 +182,7 @@ function StatusNote({ e }: { e: GalleryEntry }) {
   return null;
 }
 
-function BuilderCard({ e, highlighted, waiting }: { e: GalleryEntry; highlighted: boolean; waiting?: bigint }) {
+function BuilderCard({ e, highlighted, waiting, nominated = false }: { e: GalleryEntry; highlighted: boolean; waiting?: bigint; nominated?: boolean }) {
   const b = e.builder;
   const proof = !b && e.source ? proofHref(e.source) : null;
   const projects = b ? b.projects.filter((p) => p.active).length : 0;
@@ -250,6 +250,11 @@ function BuilderCard({ e, highlighted, waiting }: { e: GalleryEntry; highlighted
         {proof && (
           <a href={proof} target="_blank" rel="noreferrer">
             proof ↗
+          </a>
+        )}
+        {e.kind === "invited" && e.source && nominated && (
+          <a href={wonderMarketsHref(e.source)} target="_blank" rel="noreferrer">
+            wonder markets ↗
           </a>
         )}
         {e.kind === "invited" && e.source && (
@@ -529,7 +534,7 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
           ) : (
             <ul className="bld-grid">
               {shown.map((e) => (
-                <BuilderCard key={e.key} e={e} highlighted={Boolean(target && e.builder?.id === target)} waiting={e.source ? waitingAmount(wonder.status[e.source], Math.floor(Date.now() / 1000), wonder.expiry) ?? undefined : undefined} />
+                <BuilderCard key={e.key} e={e} highlighted={Boolean(target && e.builder?.id === target)} waiting={e.source ? waitingAmount(wonder.status[e.source], Math.floor(Date.now() / 1000), wonder.expiry) ?? undefined : undefined} nominated={Boolean(e.source && wonder.status[e.source]?.nominated)} />
               ))}
             </ul>
           )}

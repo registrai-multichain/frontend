@@ -8,11 +8,10 @@
  * wonder-chain.ts. Everything is off (wonderContracts(d) === null) on a deployment
  * without a WonderEscrow — mainnet phase 1, testnet v5.
  */
-import { encodeFunctionData, keccak256, parseAbi, toBytes, type Address, type Hex } from "viem";
+import { keccak256, parseAbi, toBytes, type Address, type Hex } from "viem";
 import { BUILDERS_NETWORK } from "./builders-network";
 import { perennialDeploymentFor, type PerennialDeployment } from "./perennial-network";
-import { singleTxSafeFile, type PlannedTx } from "./onboard-batch";
-import { normalizeSource, sourceLabel } from "./verified-builders";
+import { sourceLabel } from "./verified-builders";
 import { usd } from "./usd";
 
 export const SUBJECT = { None: 0, Builder: 1, Wonder: 2 } as const;
@@ -24,6 +23,12 @@ export const wonderMarketsAbi = parseAbi([
   "function subjectOf(bytes32 marketId) view returns ((uint8 kind, uint256 builderId, bytes32 sourceKey) s, bool bound)",
   "function feedSubjectOf(bytes32 feedId) view returns ((uint8 kind, uint256 builderId, bytes32 sourceKey))",
   "event WonderMarketCreated(bytes32 indexed marketId, bytes32 indexed sourceKey, address indexed creator, string source, bytes32 feedId, address agent, int256 threshold, uint8 comparator, uint256 expiry)",
+  "error NotNominated()",
+  "error NotCanonical()",
+  "error BadgeNotLive()",
+  "error BadSubject()",
+  "error BuilderInactive()",
+  "error AccessControlUnauthorizedAccount(address account, bytes32 neededRole)",
 ]);
 
 export const wonderEscrowAbi = parseAbi([
@@ -33,6 +38,14 @@ export const wonderEscrowAbi = parseAbi([
   "function firstCreditAt(bytes32 key) view returns (uint64)",
   "function EXPIRY() view returns (uint256)",
   "function cancelRelease(bytes32 key)",
+  "error NoPendingRelease()",
+  "error NotAuthorized()",
+  "error NotCanonical()",
+  "error ProjectMismatch()",
+  "error BuilderNotLive()",
+  "error AlreadyReleased()",
+  "error ReleasePending()",
+  "error AccessControlUnauthorizedAccount(address account, bytes32 neededRole)",
 ]);
 
 /** SourceKey.keyOf: keccak256 of the canonical source string. */
@@ -78,6 +91,21 @@ export function marketLabels(s?: MarketSubject): string[] {
 }
 
 export { usd } from "./usd";
+
+/** The labels as short chips for a market row (the full sentence as its title). */
+export function marketLabelsShort(s?: MarketSubject): { short: string; full: string }[] {
+  return marketLabels(s).map((full) => ({ short: full === LABEL_UNCLAIMED ? "Unclaimed" : "Community", full }));
+}
+
+/** Where a project's wonder markets are listed (the markets site's Wonder view). */
+export const MARKETS_ORIGIN = "https://registrai.cc";
+export const wonderAnchor = (source: string) => `wonder-${source.replace(/[^a-z0-9]+/g, "-")}`;
+export const wonderMarketsHref = (source: string) => `${MARKETS_ORIGIN}/perennial/wonder/#${wonderAnchor(source)}`;
+
+/** How long unclaimed escrow waits: the contract's EXPIRY when read, else the default. */
+export function expiryDaysText(expirySec: number | null): string {
+  return expirySec ? `${Math.round(expirySec / 86_400)} days` : "about 180 days";
+}
 
 /** "$X waiting for the team", only for a positive amount. */
 export function waitingLine(amount: bigint | null | undefined): string | null {
@@ -144,55 +172,6 @@ export function nextHourExpiry(nowSec: number, days: number): bigint {
 export function wonderFeedFor(feeds: Record<string, string> | undefined, source: string): Hex | null {
   const f = feeds?.[`registrai-milestone:${source}`];
   return typeof f === "string" && /^0x[0-9a-fA-F]{64}$/.test(f) ? (f as Hex) : null;
-}
-
-/** /admin's nominate box: the canonical source; nominating needs an invite (spec decision 2),
- *  un-nominating (an opt-out) never does — the invite may be gone by then. */
-export function nominateInput(
-  raw: string,
-  invited: ReadonlySet<string>,
-  on = true,
-): { ok: true; source: string } | { ok: false; error: string } {
-  const source = normalizeSource(raw);
-  if (!source) return { ok: false, error: "Not a GitHub repo or domain." };
-  if (on && !invited.has(source)) return { ok: false, error: `Invite ${sourceLabel(source)} first: only invited projects are nominated.` };
-  return { ok: true, source };
-}
-
-export function nominateTx(markets: Address, source: string, on: boolean): PlannedTx {
-  return {
-    kind: "nominate",
-    to: markets,
-    value: "0",
-    data: encodeFunctionData({ abi: wonderMarketsAbi, functionName: "nominate", args: [source, on] }),
-    label: `nominate(${source}, ${on})  # ${on ? "opens" : "closes"} wonder markets on ${sourceLabel(source)}`,
-  };
-}
-
-export function cancelReleaseTx(escrow: Address, key: Hex, source: string): PlannedTx {
-  return {
-    kind: "cancelRelease",
-    to: escrow,
-    value: "0",
-    data: encodeFunctionData({ abi: wonderEscrowAbi, functionName: "cancelRelease", args: [key] }),
-    label: `cancelRelease(${key})  # stops the queued release of ${source}'s escrow`,
-  };
-}
-
-export function nominateSafeFile(o: { markets: Address; source: string; on: boolean; chainId: number; createdAt: number }) {
-  return singleTxSafeFile(nominateTx(o.markets, o.source, o.on), {
-    chainId: o.chainId,
-    createdAt: o.createdAt,
-    name: `Registrai: ${o.on ? "nominate" : "un-nominate"} ${o.source}`,
-  });
-}
-
-export function cancelReleaseSafeFile(o: { escrow: Address; source: string; chainId: number; createdAt: number }) {
-  return singleTxSafeFile(cancelReleaseTx(o.escrow, sourceKey(o.source), o.source), {
-    chainId: o.chainId,
-    createdAt: o.createdAt,
-    name: `Registrai: cancel the wonder release of ${o.source}`,
-  });
 }
 
 /** Why a wonder market cannot be opened on `feed` for `source` (null = it can). */

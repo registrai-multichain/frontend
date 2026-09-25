@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { createPublicClient, createWalletClient, custom, type Address, type Hex, type PublicClient } from "viem";
 import useSWR from "swr";
 import { useWallet } from "./WalletProvider";
-import { MarketLabels } from "@/components/wonder/WonderBits";
+import { MarketLabels } from "@/components/wonder/MarketLabels";
 import { SUBJECT } from "@/lib/wonder";
 import { transportFor, txUrl as txUrlFor } from "@/lib/chains";
 import { usdcAbi, nanoLedgerAbi, builderRegistryAbi, builderFundAbi, marketsPerennialAbi } from "@/lib/abi";
@@ -700,7 +700,7 @@ function PerennialLive() {
                       <strong>{yesPct(m)}¢</strong>
                     </div>
                     <p>{questionFor(m)}</p>
-                    <MarketLabels subject={m.subject} />
+                    <MarketLabels subject={m.subject} compact />
                     <div className="pp-market-row-meta">
                       <span>{st.label}</span>
                       <span>{st.canTrade ? remaining(m.expiry) : subjectTag(m)}</span>

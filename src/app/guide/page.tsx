@@ -5,6 +5,7 @@ import { OpenFromHash } from "@/components/builders/OpenFromHash";
 import { BUILDERS, buildersStatusLine } from "@/lib/builders-network";
 import { MAX_PROJECTS_PER_BUILDER } from "@/lib/verified-builders";
 import { WONDER_ON_BUILDERS } from "@/lib/wonder";
+import { WonderExpiryText } from "@/components/wonder/WonderExpiryText";
 
 export const metadata: Metadata = {
   title: "Builder guide · Registrai",
@@ -104,9 +105,10 @@ export default function GuidePage() {
                 <li>
                   Claim the project on <Link href="/verify">/verify</Link>. Once Registrai onboards you and your proof has held
                   for three checks, the keeper queues the release; it arrives 7 days later as your builder income (the Safe can
-                  cancel a release to the wrong claimant within those 7 days).
+                  cancel a release to the wrong claimant within those 7 days). Claim through /verify: it registers the
+        project under the exact spelling its escrow is kept under.
                 </li>
-                <li>Nobody claims it within about 180 days: the escrow goes to the season pool, never to Registrai.</li>
+                <li>Nobody claims it within <WonderExpiryText /> of the first fee: the escrow goes to the season pool, never to Registrai.</li>
               </ol>
               <p>
                 Don&apos;t want your project listed? Email {CONTACT}: it is un-nominated (no new wonder markets; existing ones
