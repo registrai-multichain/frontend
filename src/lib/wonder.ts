@@ -13,6 +13,7 @@ import { BUILDERS_NETWORK } from "./builders-network";
 import { perennialDeploymentFor, type PerennialDeployment } from "./perennial-network";
 import { safeBatchJson, singleTxSafeFile, type PlannedTx } from "./onboard-batch";
 import { normalizeSource, sourceLabel } from "./verified-builders";
+import { usd } from "./usd";
 
 export const SUBJECT = { None: 0, Builder: 1, Wonder: 2 } as const;
 
@@ -75,12 +76,7 @@ export function marketLabels(s?: MarketSubject): string[] {
   return out;
 }
 
-/** "$1,234.50": raw USDC (6 decimals) to dollars and cents, rounded down. */
-export function usd(amount: bigint): string {
-  const cents = amount / 10_000n;
-  const whole = (cents / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `$${whole}.${(cents % 100n).toString().padStart(2, "0")}`;
-}
+export { usd } from "./usd";
 
 /** "$X waiting for the team", only for a positive amount. */
 export function waitingLine(amount: bigint | null | undefined): string | null {

@@ -4,6 +4,7 @@ import { BuildersShell } from "@/components/BuildersShell";
 import { OpenFromHash } from "@/components/builders/OpenFromHash";
 import { BUILDERS, buildersStatusLine } from "@/lib/builders-network";
 import { MAX_PROJECTS_PER_BUILDER } from "@/lib/verified-builders";
+import { WONDER_ON_BUILDERS } from "@/lib/wonder";
 
 export const metadata: Metadata = {
   title: "Builder guide · Registrai",
@@ -15,9 +16,11 @@ export const metadata: Metadata = {
 const LABEL = BUILDERS.label;
 const CONTACT = "contact@registrai.cc";
 
-/** Every section, in order: its #anchor and title (the table of contents and the <details> ids). */
+/** Every section, in order: its #anchor and title (the table of contents and the <details> ids).
+ *  "Wonder markets" only on a network with wonder markets (a WonderEscrow). */
 const SECTIONS = [
   ["how-it-works", "How verification works"],
+  ...(WONDER_ON_BUILDERS ? ([["wonder", "Wonder markets on your project"]] as const) : []),
   ["publish-proof", "Publishing your proof"],
   ["new-wallet", "Moving to a new wallet"],
   ["lost-wallet", "Lost your wallet (or it was compromised)"],
@@ -87,6 +90,30 @@ export default function GuidePage() {
               published: if it disappears, the project shows as Lapsed until it is back.
             </p>
           </details>
+
+          {WONDER_ON_BUILDERS && (
+            <details className="vf-faq gd-section" id="wonder">
+              <summary>Wonder markets on your project</summary>
+              <p>
+                Registrai may nominate a project it has invited, before the team joins. People can then trade markets about
+                it: these are <b>wonder markets</b>, labelled &ldquo;Unclaimed: this team hasn&apos;t joined Registrai and
+                hasn&apos;t endorsed this market.&rdquo;
+              </p>
+              <ol>
+                <li>Half of every trading fee on a wonder market that uses the project&apos;s milestone feed is held for the team.</li>
+                <li>
+                  Claim the project on <Link href="/verify">/verify</Link>. Once Registrai onboards you and your proof has held
+                  for three checks, the keeper queues the release; it arrives 7 days later as your builder income (the Safe can
+                  cancel a release to the wrong claimant within those 7 days).
+                </li>
+                <li>Nobody claims it within about 180 days: the escrow goes to the season pool, never to Registrai.</li>
+              </ol>
+              <p>
+                Don&apos;t want your project listed? Email {CONTACT}: it is un-nominated (no new wonder markets; existing ones
+                run to settlement and their escrow goes to the season pool).
+              </p>
+            </details>
+          )}
 
           <details className="vf-faq gd-section" id="publish-proof">
             <summary>Publishing your proof</summary>

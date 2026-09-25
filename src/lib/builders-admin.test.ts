@@ -4,6 +4,7 @@ import {
   applyInviteFields,
   claimLink,
   inviteDm,
+  INVITE_OPT_OUT,
   issuedFresh,
   newInvite,
   parseAdminAllowlist,
@@ -125,10 +126,10 @@ describe("invites", () => {
     expect(u.searchParams.get("source")).toBe("github:foo/bar");
     expect(u.searchParams.get("invite")).toBe(rec.code);
     expect(inviteDm(rec, link)).toBe(
-      `Hey Foo, we'd like to list foo/bar as a Registrai verified builder on Arc. Claim it here (takes 2 minutes, signing is free): ${link}`,
+      `Hey Foo, we'd like to list foo/bar as a Registrai verified builder on Arc. Claim it here (takes 2 minutes, signing is free): ${link} Don't want to be listed? Reply and we'll remove it.`,
     );
     expect(inviteDm({ source: "domain:app.example.org" }, "L")).toBe(
-      "Hey, we'd like to list app.example.org as a Registrai verified builder on Arc. Claim it here (takes 2 minutes, signing is free): L",
+      "Hey, we'd like to list app.example.org as a Registrai verified builder on Arc. Claim it here (takes 2 minutes, signing is free): L Don't want to be listed? Reply and we'll remove it.",
     );
   });
 
@@ -137,5 +138,24 @@ describe("invites", () => {
     expect(safeEqual("abc", "abd")).toBe(false);
     expect(safeEqual("abc", "abcd")).toBe(false);
     expect(safeEqual("", "")).toBe(true);
+  });
+});
+
+describe("inviteDm (wonder markets)", () => {
+  const link = "https://builder.registrai.cc/verify/?source=github%3Aacme%2Ftool&invite=abc";
+  test("every invite offers the opt-out", () => {
+    const dm = inviteDm({ source: "github:acme/tool", name: "Ann" }, link);
+    expect(dm.startsWith("Hey Ann, we'd like to list acme/tool as a Registrai verified builder on Arc.")).toBe(true);
+    expect(dm).toContain(`Claim it here (takes 2 minutes, signing is free): ${link}`);
+    expect(dm.endsWith(INVITE_OPT_OUT)).toBe(true);
+    expect(INVITE_OPT_OUT).toBe("Don't want to be listed? Reply and we'll remove it.");
+  });
+  test("with escrow, the spec's line", () => {
+    const dm = inviteDm({ source: "github:acme/tool" }, link, 12_500_000n);
+    expect(dm).toContain(`People are already trading on your project: $12.50 is waiting for you. Claim it here: ${link}`);
+    expect(dm.endsWith(INVITE_OPT_OUT)).toBe(true);
+  });
+  test("inviteDm without escrow says nothing about money", () => {
+    for (const w of [undefined, null, 0n]) expect(inviteDm({ source: "github:acme/tool" }, link, w)).not.toContain("$");
   });
 });

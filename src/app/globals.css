@@ -2033,3 +2033,8 @@ details.bld-legend p { margin: 10px 0 0; }
 .gd-foot { max-width: 820px; margin: 26px 0 0; color: var(--fg-dim); font-size: 12px; }
 .vf-guide-link { margin: 14px 0 0 !important; color: var(--fg-dim) !important; font-size: 12px !important; }
 .gd-section li::marker { color: var(--accent); font-family: var(--font-mono), monospace; font-size: 11px; }
+
+/* wonder markets */
+.wonder-labels { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.wonder-label { font-size: 11px; line-height: 1.35; padding: 2px 8px; border: 1px dashed var(--line, #c9c2ad); color: var(--fg-dim, #6d6758); }
+.wonder-waiting { font-weight: 600; color: var(--accent, #c8741e); }

@@ -1,5 +1,8 @@
 "use client";
 
+import { useWonderStatus } from "@/components/wonder/WonderBits";
+import { waitingLine } from "@/lib/wonder";
+
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -179,7 +182,7 @@ function StatusNote({ e }: { e: GalleryEntry }) {
   return null;
 }
 
-function BuilderCard({ e, highlighted }: { e: GalleryEntry; highlighted: boolean }) {
+function BuilderCard({ e, highlighted, waiting }: { e: GalleryEntry; highlighted: boolean; waiting?: bigint }) {
   const b = e.builder;
   const proof = !b && e.source ? proofHref(e.source) : null;
   const projects = b ? b.projects.filter((p) => p.active).length : 0;
@@ -241,6 +244,7 @@ function BuilderCard({ e, highlighted }: { e: GalleryEntry; highlighted: boolean
       )}
 
       <StatusNote e={e} />
+      {e.kind === "invited" && waitingLine(waiting) && <p className="wonder-waiting">{waitingLine(waiting)}</p>}
 
       <div className="bld-card-foot">
         {proof && (
@@ -408,6 +412,8 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
   const builders = useLiveBuilders(snapshot);
   const nominees = useNominees(fileNominees);
   const entries = useMemo(() => mergeGallery(builders, nominees), [builders, nominees]);
+  const invitedSources = useMemo(() => entries.filter((e) => e.kind === "invited" && e.source).map((e) => e.source!), [entries]);
+  const wonder = useWonderStatus(invitedSources);
   const counts = useMemo(() => galleryCounts(entries), [entries]);
 
   const [filter, setFilter] = useState<GalleryFilter>("all");
@@ -523,7 +529,7 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
           ) : (
             <ul className="bld-grid">
               {shown.map((e) => (
-                <BuilderCard key={e.key} e={e} highlighted={Boolean(target && e.builder?.id === target)} />
+                <BuilderCard key={e.key} e={e} highlighted={Boolean(target && e.builder?.id === target)} waiting={e.source ? wonder.status[e.source]?.escrow : undefined} />
               ))}
             </ul>
           )}

@@ -1,5 +1,8 @@
 "use client";
 
+import { useWonderStatus } from "@/components/wonder/WonderBits";
+import { releaseView } from "@/lib/wonder";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getAddress, isAddress, zeroAddress, type Abi, type Address, type Hex } from "viem";
@@ -110,7 +113,9 @@ function ProjectRows({
   onRemove: (p: MyBuilder["projects"][number]) => void;
   busy: boolean;
 }) {
+  const wonder = useWonderStatus(b.projects.filter((p) => p.active).map((p) => p.source));
   if (!b.projects.length) return <p className="vf-hint">No projects yet. Add one below.</p>;
+  const nowSec = Math.floor(Date.now() / 1000);
   return (
     <ul className="vf-projects">
       {b.projects.map((p) => {
@@ -128,6 +133,11 @@ function ProjectRows({
               <b>{STATUS_TEXT[st]}</b>
             </div>
             {detail && <p className="vf-hint">{detail}</p>}
+            {(() => {
+              const s = wonder.status[p.source];
+              const v = s && wonder.expiry !== null ? releaseView(s, nowSec, wonder.expiry) : null;
+              return v?.line && v.state !== "empty" ? <p className="vf-note wonder-waiting">Wonder markets: {v.line}</p> : null;
+            })()}
             {fixable && (
               <button type="button" className="vf-mini vf-mini-strong" onClick={() => onPick(p.source)}>
                 {st === "resign" ? "re-sign this proof" : "sign a new proof"}

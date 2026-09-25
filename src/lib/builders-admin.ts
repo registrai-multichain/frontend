@@ -9,6 +9,7 @@
  */
 import { isAddress } from "viem";
 import { normalizeSource, sourceLabel } from "./verified-builders";
+import { usd } from "./usd";
 
 // ───────────────────────────── sign-in ─────────────────────────────
 
@@ -184,9 +185,17 @@ export function claimLink(origin: string, source: string, code: string): string 
   return `${origin.replace(/\/+$/, "")}/verify/?source=${encodeURIComponent(source)}&invite=${encodeURIComponent(code)}`;
 }
 
-/** The copy-ready X DM. */
-export function inviteDm(inv: { source: string; name?: string }, link: string): string {
-  return `Hey${inv.name ? ` ${inv.name}` : ""}, we'd like to list ${sourceLabel(inv.source)} as a Registrai verified builder on Arc. Claim it here (takes 2 minutes, signing is free): ${link}`;
+/** The line every invite ends with (spec decision 2: a team may opt out). */
+export const INVITE_OPT_OUT = "Don't want to be listed? Reply and we'll remove it.";
+
+/** The copy-ready X DM. `waiting`: the project's wonder escrow (raw USDC), when there is some. */
+export function inviteDm(inv: { source: string; name?: string }, link: string, waiting?: bigint | null): string {
+  const hey = `Hey${inv.name ? ` ${inv.name}` : ""}, we'd like to list ${sourceLabel(inv.source)} as a Registrai verified builder on Arc.`;
+  const claim =
+    typeof waiting === "bigint" && waiting > 0n
+      ? `People are already trading on your project: ${usd(waiting)} is waiting for you. Claim it here: ${link}`
+      : `Claim it here (takes 2 minutes, signing is free): ${link}`;
+  return `${hey} ${claim} ${INVITE_OPT_OUT}`;
 }
 
 /** Length-independent-time string comparison (secrets: invite codes). */
