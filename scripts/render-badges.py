@@ -9,11 +9,18 @@ freshly issued badge already has its picture before the next site deploy.
 
     python3 scripts/render-badges.py                      # networks + counts from live-data.json
     python3 scripts/render-badges.py --network arc --upto 60
+    python3 scripts/render-badges.py --generic            # only the generic images
 
 Output: public/badge/<network>/<serial>.jpg and <serial>-lapsed.jpg, plus the
 X share-card background card.jpg (git-ignored,
 regenerated on deploy). Existing files are kept unless the art/renderer changed
 (a stamp file records the input hash).
+
+Every run also writes, for EVERY network, the generic badge-generic.jpg and
+badge-generic-lapsed.jpg: the art with no serial number ("VERIFIED BUILDER"
+and the network only). The builders site serves them for a serial past the
+pre-rendered ones (builders-site/functions/badge/[net]/[file].ts), so a badge
+issued before the next deploy still has a picture.
 
 Art: art/verified-builder-badge.png (1254x1254). The two pieces of per-token
 text — "NO. 001" and "ARC MAINNET" — are cleared with texture copied from the
@@ -101,12 +108,17 @@ def serial_text(serial):
     return f"NO. {serial:03d}"
 
 
+GENERIC = "badge-generic"
+
+
 def render(serial, network, lapsed, base=None):
+    """One badge; serial None = the generic one (no number at all)."""
     im = (base or Image.open(ART).convert("RGB")).copy()
     font = _cap_font(FONT_MEDIUM, CAP)
-    no = serial_text(serial)
     _erase(im, NO_BOX)
-    _cells(im, no, NO_RIGHT - len(no) * PITCH, font)
+    if serial is not None:
+        no = serial_text(serial)
+        _cells(im, no, NO_RIGHT - len(no) * PITCH, font)
     label = NETWORKS[network]
     if label != "ARC MAINNET":
         _erase(im, LABEL_BOX)
@@ -195,18 +207,34 @@ def main(argv=None):
     ap.add_argument("--min", type=int, default=50, dest="minimum")
     ap.add_argument("--out", default=str(OUT))
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--generic", action="store_true", help="only the generic (no-number) images, every network")
     a = ap.parse_args(argv)
+
+    stamp = _stamp()
+    base = Image.open(ART).convert("RGB")
+    # The generic fallback images: every network, every run (cheap).
+    for net in NETWORKS:
+        d = pathlib.Path(a.out) / net
+        d.mkdir(parents=True, exist_ok=True)
+        gs = d / ".stamp-generic"
+        fresh = a.force or not gs.exists() or gs.read_text().strip() != stamp
+        for lapsed in (False, True):
+            f = d / f"{GENERIC}{'-lapsed' if lapsed else ''}.jpg"
+            if fresh or not f.exists():
+                render(None, net, lapsed, base).save(f, quality=QUALITY, optimize=True, progressive=True)
+        gs.write_text(stamp + "\n")
+    print(f"render-badges: generic images for {', '.join(NETWORKS)}")
+    if a.generic:
+        return 0
 
     if a.network:
         targets = {a.network: a.upto or a.minimum}
     else:
         targets = targets_from_live(a.ahead, a.minimum)
         if not targets:
-            print("render-badges: no badge contract in live-data.json; nothing to render")
+            print("render-badges: no badge contract in live-data.json; no numbered badges to render")
             return 0
 
-    stamp = _stamp()
-    base = Image.open(ART).convert("RGB")
     for net, upto in targets.items():
         d = pathlib.Path(a.out) / net
         d.mkdir(parents=True, exist_ok=True)

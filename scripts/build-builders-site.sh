@@ -14,6 +14,15 @@ for x in 404 404.html _headers _next _not-found apple-icon.png icon.png admin ba
          mark.png mark-ring.svg mark-ring-512.png wordmark.png wordmark-dark.png; do
   [ -e "out/$x" ] && cp -R "out/$x" "$D/"
 done
+# The badge art (public/badge, rendered by scripts/render-badges.py) includes the
+# generic pictures builders-site/functions/badge serves for a serial not
+# rendered yet. Mainnet's imageBase is https://builder.registrai.cc/badge/arc/.
+for n in arc arc-testnet; do
+  [ -f "$D/badge/$n/badge-generic.jpg" ] && [ -f "$D/badge/$n/badge-generic-lapsed.jpg" ] || {
+    echo "build-builders-site: no generic badge art in $D/badge/$n: run python3 scripts/render-badges.py (then next build) first" >&2
+    exit 1
+  }
+done
 # the gallery's social preview image
 mkdir -p "$D/social" && cp out/social/registrai-landing-regi.png "$D/social/"
 {

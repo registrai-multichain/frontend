@@ -21,8 +21,15 @@ export interface KV {
   }>;
 }
 
+/** Pages' static assets binding (the packaged dist-builders files). */
+export interface AssetsFetcher {
+  fetch(input: Request | string): Promise<Response>;
+}
+
 /** builders-site/wrangler.toml */
 export interface Env {
+  /** Pages' own binding: the static files (present on every Pages deployment). */
+  ASSETS?: AssetsFetcher;
   /** Invites, sign-in nonces, admin sessions. */
   INVITES: KV;
   /** Comma-separated admin addresses (lowercase). Empty = nobody can sign in. */

@@ -5,7 +5,9 @@ import {
   badgeAbi,
   badgeNeedsSync,
   readBadgeHolder,
+  badgeDisplayBase,
   badgeImageBase,
+  badgeOriginFor,
   badgeImageUrl,
   badgeNetworkKey,
   badgeTokenUrl,
@@ -37,6 +39,16 @@ describe("names and URLs", () => {
     expect(badgeImageUrl(base, 7, false)).toBe("https://registrai.cc/badge/arc-testnet/7.jpg");
     expect(badgeImageUrl(base, 7, true)).toBe("https://registrai.cc/badge/arc-testnet/7-lapsed.jpg");
     expect(badgeImageUrl("/badge/arc/", 12, false)).toBe("/badge/arc/12.jpg");
+  });
+
+  test("mainnet badge art comes from the builders site (the imageBase DeployBuilders must set)", () => {
+    expect(badgeOriginFor("arc")).toBe("https://builder.registrai.cc");
+    expect(badgeImageBase("arc")).toBe("https://builder.registrai.cc/badge/arc/");
+    expect(badgeDisplayBase("arc")).toBe("https://builder.registrai.cc/badge/arc/");
+    // testnet / local keep their deployed imageBase, and pages show their own copies
+    expect(badgeOriginFor("arc-testnet")).toBe("https://registrai.cc");
+    expect(badgeDisplayBase("arc-testnet")).toBe("/badge/arc-testnet/");
+    expect(badgeImageBase("arc", "https://x.example")).toBe("https://x.example/badge/arc/");
   });
 
   test("serial label, explorer link, deep link", () => {

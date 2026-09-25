@@ -25,4 +25,25 @@ describe("builders-site packaging", () => {
     expect(toml).toMatch(/^pages_build_output_dir = "\.\.\/dist-builders"$/m);
     expect(toml).toMatch(/^binding = "INVITES"$/m);
   });
+
+  test("the builders site serves badge art with the generic fallback, and ships the generic pictures", () => {
+    expect(existsSync(resolve(FRONTEND, "builders-site/functions/badge/[net]/[file].ts"))).toBe(true);
+    expect(existsSync(resolve(FRONTEND, "builders-site/functions/api/proof.ts"))).toBe(true);
+    const build = readFileSync(resolve(FRONTEND, "scripts/build-builders-site.sh"), "utf8");
+    expect(build).toMatch(/for x in [^\n]*\bbadge\b/);
+    expect(build).toContain("badge-generic.jpg");
+    expect(build).toContain("badge-generic-lapsed.jpg");
+    const render = readFileSync(resolve(FRONTEND, "scripts/render-badges.py"), "utf8");
+    expect(render).toContain('GENERIC = "badge-generic"');
+    expect(render).toContain('"--generic"');
+    const pkg = JSON.parse(readFileSync(resolve(FRONTEND, "package.json"), "utf8"));
+    expect(pkg.scripts["deploy:builders"]).toMatch(/^python3 scripts\/render-badges\.py && next build && bash scripts\/build-builders-site\.sh/);
+  });
+
+  test("NONCE_SECRET is documented where the deploy happens (a Pages secret, never in wrangler.toml)", () => {
+    const toml = readFileSync(resolve(FRONTEND, "builders-site/wrangler.toml"), "utf8");
+    expect(toml).toContain("wrangler pages secret put NONCE_SECRET");
+    expect(toml).not.toMatch(/^NONCE_SECRET\s*=/m);
+    expect(readFileSync(resolve(FRONTEND, "scripts/deploy-builders-site.sh"), "utf8")).toContain("NONCE_SECRET");
+  });
 });

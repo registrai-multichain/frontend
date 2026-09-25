@@ -7,6 +7,7 @@ import { shortAddr } from "@/lib/format";
 import { PERENNIAL } from "@/lib/perennial-network";
 import { isoDay } from "@/lib/share-card";
 import {
+  badgeDisplayBase,
   badgeImageBase,
   badgeImageUrl,
   badgeNetworkKey,
@@ -71,9 +72,9 @@ export function useBuilderBadge(
   return on ? (data ?? null) : null;
 }
 
-/** The badge as the site serves it (same art as the on-chain image, served locally). */
+/** The badge picture (same art as the on-chain image): mainnet from the builders site, which falls back to a generic picture for a serial not rendered yet; other networks from this site. */
 export const badgeSrc = (b: BadgeInfo, network: string | null = BADGE_NETWORK) =>
-  badgeImageUrl(`/badge/${network}/`, b.serial, b.lapsed);
+  badgeImageUrl(badgeDisplayBase(network ?? "arc"), b.serial, b.lapsed);
 
 /** The badge on a builder's detail: image, number, status, explorer link. */
 export function BuilderBadgeCard({ badge, owner, net = PERENNIAL_BADGE_NET }: { badge: BadgeInfo; owner: string; net?: BadgeNet }) {

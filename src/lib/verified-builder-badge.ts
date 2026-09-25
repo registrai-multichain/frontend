@@ -38,12 +38,34 @@ export function badgeNetworkKey(chainId: number): string | null {
   return NETWORK_KEYS[chainId] ?? null;
 }
 
-/** Where the site serves a network's badge art (the contract's imageBase). */
+/** The main site: testnet (and local) badge art, as the testnet badge's imageBase names it. */
 export const BADGE_ORIGIN = "https://registrai.cc";
 /** The standalone builders site (the /builders gallery, /verify, badge art). */
 export const BUILDERS_ORIGIN = "https://builder.registrai.cc";
-export function badgeImageBase(network: string, origin = BADGE_ORIGIN): string {
+
+/**
+ * Who serves a network's badge art. Mainnet ("arc"): the builders site, whose
+ * /badge/arc/<n>.jpg function falls back to a generic image for a serial not
+ * rendered yet (DeployBuilders' BADGE_IMAGE_BASE must be
+ * https://builder.registrai.cc/badge/arc/). Other networks: registrai.cc, as
+ * their contracts were deployed.
+ */
+export function badgeOriginFor(network: string): string {
+  return network === "arc" ? BUILDERS_ORIGIN : BADGE_ORIGIN;
+}
+
+/** The contract's imageBase for a network (what tokenURI's image starts with). */
+export function badgeImageBase(network: string, origin = badgeOriginFor(network)): string {
   return `${origin}/badge/${network}/`;
+}
+
+/**
+ * Where a page loads a badge picture from: mainnet from the builders site
+ * (authoritative, with the generic fallback); other networks from the site
+ * itself (its own pre-rendered copies).
+ */
+export function badgeDisplayBase(network: string): string {
+  return network === "arc" ? badgeImageBase(network) : `/badge/${network}/`;
 }
 
 /** Mirrors tokenURI's image: imageBase + serial + ("-lapsed")? + ".jpg". */
