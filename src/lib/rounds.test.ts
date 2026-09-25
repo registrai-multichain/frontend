@@ -4,11 +4,14 @@ import {
   LOG_CHUNK_BLOCKS,
   RECENT_ROUNDS,
   ROUNDS,
+  candleCloseAt,
   claimList,
   clockUtc,
   eventVisible,
   evidenceNote,
   feedKeyFromDescription,
+  feedKind,
+  formatChange,
   formatPrice,
   formatScaled,
   groupRounds,
@@ -21,6 +24,7 @@ import {
   parseMarketLogs,
   roundLabel,
   roundStart,
+  roundWindow,
   roundStatus,
   roundTradeDeadline,
   scanLogs,
@@ -108,6 +112,18 @@ describe("feed discovery (FeedCreated logs)", () => {
     expect(feedKeyFromDescription("registrai-data:")).toBeNull();
     expect(feedKeyFromDescription("registrai-data:Bad Key")).toBeNull();
     expect(feedKeyFromDescription(undefined)).toBeNull();
+  });
+
+  test("change feeds: description -> the agent's key; the book knows the asset", () => {
+    expect(feedKeyFromDescription("registrai-data:btc-usd-5m-change-0")).toBe("btc-usd:5m-0");
+    expect(feedKeyFromDescription("registrai-data:hype-usd-5m-change-12")).toBe("hype-usd:5m-12");
+    expect(feedKind("btc-usd:5m-12")).toEqual({ asset: "btc-usd", change: true });
+    expect(feedKind("btc-usd")).toEqual({ asset: "btc-usd", change: false });
+    const FEED_CH = hex(0xc4a);
+    const b = mergeFeedLogs(book, [feedLog(FEED_CH, "registrai-data:btc-usd-5m-change-7", 10n)], AGENT);
+    expect(b.byId[FEED_CH]).toMatchObject({ key: "btc-usd:5m-7", asset: "btc-usd", change: true });
+    const [m] = parseMarketLogs([marketLog(9, FEED_CH, 1_790_367_300, { threshold: 0n })], b, AGENT);
+    expect(m).toMatchObject({ key: "btc-usd", change: true, threshold: 0n });
   });
 
   test("maps the agent's feeds by key and id, with their challenge windows", () => {
@@ -244,6 +260,7 @@ describe("grouping rounds per asset", () => {
     marketId: hex(id),
     feedId: key === "btc-usd" ? FEED_BTC : FEED_ETH,
     key,
+    change: false,
     agent: AGENT,
     threshold: 1n,
     comparator: 0,
@@ -282,6 +299,21 @@ describe("grouping rounds per asset", () => {
     expect(Object.keys(g)).toEqual(["btc-usd", "eth-usd"]);
   });
 
+  test("next-round markets: betting (current), in play, then recent by the round's end", () => {
+    const ch = (id: number, expiry: number): RoundMarket => ({ ...mk(id, "btc-usd", expiry), change: true, threshold: 0n });
+    // at B+10: [B+300, B+600] takes bets, [B, B+300] is in play, [B-300, B] ended
+    const g = groupRounds([ch(1, B - 300), ch(2, B), ch(3, B + 300)], ["btc-usd"], B + 10);
+    expect(g["btc-usd"].current?.marketId).toBe(hex(3));
+    expect(g["btc-usd"].inPlay?.marketId).toBe(hex(2));
+    expect(g["btc-usd"].recent.map((m) => m.marketId)).toEqual([hex(1)]);
+    // a legacy price round closing at B ended at B: recent, never in play
+    const l = groupRounds([mk(4, "btc-usd", B), ch(2, B)], ["btc-usd"], B + 10);
+    expect(l["btc-usd"].inPlay?.marketId).toBe(hex(2));
+    expect(l["btc-usd"].recent.map((m) => m.marketId)).toEqual([hex(4)]);
+    expect(roundWindow(ch(2, B))).toEqual({ start: B, end: B + 300 });
+    expect(roundWindow(mk(4, "btc-usd", B))).toEqual({ start: B - 300, end: B });
+  });
+
   test("a custom recent count", () => {
     const ms = [mk(1, "btc-usd", B - 300), mk(2, "btc-usd", B)];
     expect(groupRounds(ms, ["btc-usd"], B + 1, {}, 1)["btc-usd"].recent.map((m) => m.marketId)).toEqual([hex(2)]);
@@ -296,6 +328,16 @@ describe("round status", () => {
   test("live before the close", () => {
     const s = roundStatus({ ...base, now: expiry - 1 });
     expect(s.key).toBe("live");
+  });
+
+  test("next-round market: betting, then in play, then waiting for the change", () => {
+    const ch = { ...base, threshold: 0n, change: true, roundSecs: 300 };
+    expect(roundStatus({ ...ch, now: expiry - 1 })).toMatchObject({ key: "live", label: "Betting" });
+    expect(roundStatus({ ...ch, now: expiry + 150 }).key).toBe("in-play");
+    expect(roundStatus({ ...ch, now: expiry + 301 })).toMatchObject({ key: "awaiting-reading", label: "Ended" });
+    const up = roundStatus({ ...ch, now: expiry + 310, reading: reading(1n, expiry + 305) });
+    expect(up).toMatchObject({ key: "settling", provisional: "up", finalAt: expiry + 905 });
+    expect(roundStatus({ ...ch, now: expiry + 310, reading: reading(0n, expiry + 305) }).provisional).toBe("down");
   });
 
   test("closed, awaiting the reading", () => {
@@ -366,7 +408,7 @@ describe("round status", () => {
 
 describe("claims", () => {
   test("only markets with something to redeem, earliest close first", () => {
-    const m = (id: number, expiry: number) => ({ marketId: hex(id), feedId: FEED_BTC, key: "btc-usd", agent: AGENT, threshold: 1n, comparator: 0, expiry, liquidity: 0n, blockNumber: 1n });
+    const m = (id: number, expiry: number) => ({ marketId: hex(id), feedId: FEED_BTC, key: "btc-usd", change: false, agent: AGENT, threshold: 1n, comparator: 0, expiry, liquidity: 0n, blockNumber: 1n });
     const list = claimList([m(1, 300), m(2, 100), m(3, 200)], { [hex(1)]: 5n, [hex(2)]: 7n, [hex(3)]: 0n });
     expect(list.map((c) => [c.market.marketId, c.amount])).toEqual([
       [hex(2), 7n],
@@ -444,6 +486,19 @@ describe("formatting", () => {
     expect(roundTradeDeadline(1_000n, 5_000n)).toBe(1_120n);
     expect(roundTradeDeadline(4_950n, 5_000n)).toBe(5_000n);
     expect(roundTradeDeadline(1_000n, 1_000_000n, 600n)).toBe(1_600n);
+  });
+
+  test("formatChange", () => {
+    expect(formatChange(19_000n, 2)).toBe("+190.00");
+    expect(formatChange(-35n, 2)).toBe("−0.35");
+    expect(formatChange(0n, 3)).toBe("±0.000");
+  });
+
+  test("candleCloseAt: the close of the minute ending exactly at `at`", () => {
+    const rows = [[1_790_367_240, 1, 3, 2, 80_310.04, 5], [1_790_367_180, 1, 3, 2, 80_300, 5]];
+    expect(candleCloseAt(rows, 1_790_367_300)).toBe(80_310.04);
+    expect(candleCloseAt(rows, 1_790_367_360)).toBeUndefined();
+    expect(candleCloseAt({ message: "rate limited" }, 1_790_367_300)).toBeUndefined();
   });
 
   test("Coinbase ticker parsing", () => {

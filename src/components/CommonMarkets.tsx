@@ -3,10 +3,12 @@
 /**
  * Common markets: Registrai's 5-minute Up/Down rounds and event markets.
  *
- * Every asset shares one round clock (rounds open on wall-clock 5-minute
- * boundaries), so the page leads with that single clock and lets each asset
- * card stay quiet: the live price against the strike, the pool's Up/Down split,
- * and a strip of how the last rounds closed.
+ * "Bet now on the next 5 minutes": every asset shares one round clock
+ * (wall-clock 5-minute boundaries). At each boundary the agent opens the NEXT
+ * round, and betting on it closes as it starts, so nobody trades a round whose
+ * move is already on the chart. The page leads with that clock (time left to
+ * bet); each card shows the round taking bets, the round in play (its move
+ * since it started), and a strip of how the last rounds settled.
  *
  * Reads are pinned to Arc testnet through the official RPC (batched); writes go
  * through the connected wallet on that chain. Collateral lives on NanoLedger:
@@ -42,12 +44,15 @@ import {
   utcStamp,
 } from "@/lib/perennial-market";
 import {
+  BLOCK_SECS,
   ROUNDS,
   ROUND_TRADE_WINDOW_SECS,
+  candleCloseAt,
   claimList,
   clockUtc,
   eventVisible,
   evidenceNote,
+  formatChange,
   formatPrice,
   formatScaled,
   groupRounds,
@@ -55,11 +60,10 @@ import {
   latestMarketFor,
   mergeFeedLogs,
   nextBoundary,
-  parseCoinbaseTicker,
   parseMarketLogs,
   roundLabel,
-  roundStart,
   roundStatus,
+  roundWindow,
   roundTradeDeadline,
   scanLogs,
   scanStart,
@@ -76,6 +80,8 @@ import {
   type RoundMarket,
   type RoundStatus,
 } from "@/lib/rounds";
+import { cashOutValue, pnl, replayPool, type Trade } from "@/lib/rounds-chart";
+import { OddsChart, PriceChart, usePriceStream, type PriceStream } from "./RoundCharts";
 
 // ───────────────────────────── chain wiring ─────────────────────────────
 
@@ -94,6 +100,9 @@ const MARKET_CREATED = parseAbiItem(
 const BOUGHT = parseAbiItem(
   "event Bought(bytes32 indexed marketId, address indexed buyer, uint8 outcome, uint256 collateralIn, uint256 sharesOut, uint256 fee)",
 );
+const SOLD = parseAbiItem(
+  "event Sold(bytes32 indexed marketId, address indexed seller, uint8 outcome, uint256 sharesIn, uint256 collateralOut, uint256 fee)",
+);
 
 const SLIPPAGES = [50n, 100n, 200n] as const; // bps
 const fmt = (v: bigint, dp = 2) => formatUsdc(v, dp);
@@ -109,14 +118,18 @@ type MarketState = {
   yesPrice: bigint;
   noPrice: bigint;
 };
-type Holding = { yes: bigint; no: bigint };
+/** Shares held, and the net cost the contract records (what a void refunds). */
+type Holding = { yes: bigint; no: bigint; cost: bigint };
 type EventReading = { value: bigint; timestamp: number };
 
 type Snapshot = {
   /** Chain time at the read, and the client clock it was read at. */
   chainNow: number;
   readAt: number;
+  head: bigint;
   markets: RoundMarket[];
+  /** Bought / Sold logs of the rounds taking bets and in play (for the odds chart). */
+  trades: Record<string, Trade[]>;
   book: FeedBook;
   state: Record<string, MarketState>;
   readings: Record<string, Reading>;
@@ -147,6 +160,9 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
     /** Settled markets never change again: read once. */
     final: new Map<string, MarketState>(),
     feeBps: undefined as bigint | undefined,
+    /** Trade logs per tracked market, and how far each was scanned. */
+    trades: new Map<string, Map<string, Trade>>(),
+    tradeCursor: new Map<string, bigint>(),
   });
   const busy = useRef(false);
 
@@ -221,11 +237,43 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
         const found = latestMarketFor(markets, e.key)?.marketId ?? (e.marketId ? (e.marketId.toLowerCase() as Hex) : undefined);
         if (found) eventMarkets[e.key] = found;
       }
-      const current = Object.values(groups).flatMap((g) => (g.current ? [g.current.marketId] : []));
+      const current = Object.values(groups).flatMap((g) => [g.current?.marketId, g.inPlay?.marketId].filter((x): x is Hex => Boolean(x)));
       const recent = Object.values(groups).flatMap((g) => g.recent);
       const eventIds = Object.values(eventMarkets);
       const mine = [...d.mine];
       const toRead = [...new Set([...current, ...recent.map((m) => m.marketId), ...eventIds, ...mine])].filter((id) => !d.final.has(id));
+
+      // 3b. Trades on the rounds taking bets and in play: the odds chart replays
+      //     the pool from them. Each market is scanned from its creation block.
+      const tracked = Object.values(groups).flatMap((g) => [g.current, g.inPlay].filter((m): m is RoundMarket => Boolean(m)));
+      for (const id of [...d.trades.keys()]) if (!tracked.some((m) => m.marketId === id)) {
+        d.trades.delete(id);
+        d.tradeCursor.delete(id);
+      }
+      for (const m of tracked) {
+        if (!d.trades.has(m.marketId)) d.trades.set(m.marketId, new Map());
+        if (!d.tradeCursor.has(m.marketId)) d.tradeCursor.set(m.marketId, m.blockNumber - 1n);
+      }
+      if (tracked.length) {
+        const ids = tracked.map((m) => m.marketId);
+        const tFrom = tracked.reduce((x, m) => (d.tradeCursor.get(m.marketId)! < x ? d.tradeCursor.get(m.marketId)! : x), head) + 1n;
+        if (tFrom <= head) {
+          const [bs, ss] = await Promise.all([
+            scanLogs((a, b) => client.getLogs({ address: C.MarketsV4, event: BOUGHT, args: { marketId: ids }, fromBlock: a, toBlock: b }), tFrom, head),
+            scanLogs((a, b) => client.getLogs({ address: C.MarketsV4, event: SOLD, args: { marketId: ids }, fromBlock: a, toBlock: b }), tFrom, head),
+          ]);
+          const put = (lg: { args: { marketId?: Hex; outcome?: number }; blockNumber: bigint | null; logIndex: number | null }, t: Omit<Trade, "block" | "logIndex" | "outcome">) => {
+            const id = lg.args.marketId?.toLowerCase();
+            const book = id ? d.trades.get(id) : undefined;
+            if (!book || lg.blockNumber === null) return;
+            book.set(`${lg.blockNumber}:${lg.logIndex}`, { ...t, block: lg.blockNumber, logIndex: lg.logIndex ?? 0, outcome: Number(lg.args.outcome ?? 0) });
+          };
+          for (const lg of bs.logs) put(lg, { kind: "buy", collateral: lg.args.collateralIn ?? 0n, shares: lg.args.sharesOut ?? 0n, fee: lg.args.fee ?? 0n });
+          for (const lg of ss.logs) put(lg, { kind: "sell", collateral: lg.args.collateralOut ?? 0n, shares: lg.args.sharesIn ?? 0n, fee: lg.args.fee ?? 0n });
+          const reached = bs.scannedTo < ss.scannedTo ? bs.scannedTo : ss.scannedTo;
+          for (const id of ids) if (d.tradeCursor.get(id)! < reached) d.tradeCursor.set(id, reached);
+        }
+      }
 
       // 4. Reads (the batched transport coalesces them into a few requests).
       const readMarket = async (id: string): Promise<[string, MarketState]> => {
@@ -248,11 +296,12 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
         return [m.marketId, { found, value, timestamp: Number(timestamp), finalized }];
       };
       const holdingFor = async (id: string): Promise<[string, Holding]> => {
-        const [yes, no] = await Promise.all([
+        const [yes, no, cost] = await Promise.all([
           client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "yesBalance", args: [id as Hex, address!] }) as Promise<bigint>,
           client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "noBalance", args: [id as Hex, address!] }) as Promise<bigint>,
+          client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "netCost", args: [id as Hex, address!] }) as Promise<bigint>,
         ]);
-        return [id, { yes, no }];
+        return [id, { yes, no, cost }];
       };
 
       const [states, feeBps, eventReadings, ledgerBal, walletBal] = await Promise.all([
@@ -302,7 +351,9 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
       setSnap({
         chainNow,
         readAt: Date.now() / 1000,
+        head,
         markets,
+        trades: Object.fromEntries([...d.trades].map(([id, m]) => [id, [...m.values()]])),
         book: d.book,
         state,
         readings: Object.fromEntries(readings),
@@ -326,47 +377,40 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
   return { snap, loadError, refresh };
 }
 
-/** Coinbase public ticker, polled from the browser every 2 s (paused when hidden). */
-function useLivePrices(assets: AssetMeta[]) {
-  const [prices, setPrices] = useState<Record<string, { price: number; dir: "up" | "down" | "flat" }>>({});
+/** The price each in-play round started at: Coinbase's 1-minute close ending at
+ *  the round's start (what the agent reads), fetched once per round. */
+function useStartPrices(rounds: Array<{ asset: AssetMeta; start: number }>) {
+  const [got, setGot] = useState<Record<string, number>>({});
+  const want = rounds.map((r) => `${r.asset.product}@${r.start}`).join(",");
   useEffect(() => {
+    if (!want) return;
     let alive = true;
-    const poll = async (force = false) => {
-      if (!force && typeof document !== "undefined" && document.hidden) return;
-      const got = await Promise.all(
-        assets.map(async (a) => {
-          try {
-            const r = await fetch(`https://api.exchange.coinbase.com/products/${a.product}/ticker`, { cache: "no-store" });
-            return [a.key, parseCoinbaseTicker(await r.json())] as const;
-          } catch {
-            return [a.key, undefined] as const;
-          }
-        }),
-      );
-      if (!alive) return;
-      setPrices((prev) => {
-        const next = { ...prev };
-        for (const [k, p] of got) {
-          if (p === undefined) continue;
-          const last = prev[k]?.price;
-          next[k] = { price: p, dir: last === undefined || last === p ? prev[k]?.dir ?? "flat" : p > last ? "up" : "down" };
+    const fetchMissing = async () => {
+      for (const r of rounds) {
+        const k = `${r.asset.product}@${r.start}`;
+        if (got[k] !== undefined) continue;
+        try {
+          const iso = (t: number) => new Date(t * 1000).toISOString();
+          const res = await fetch(
+            `https://api.exchange.coinbase.com/products/${r.asset.product}/candles?granularity=60&start=${iso(r.start - 300)}&end=${iso(r.start)}`,
+            { cache: "no-store" },
+          );
+          const close = candleCloseAt(await res.json(), r.start);
+          if (alive && close !== undefined) setGot((prev) => ({ ...prev, [k]: close }));
+        } catch {
+          /* retried below */
         }
-        return next;
-      });
+      }
     };
-    void poll(true);
-    const id = setInterval(() => void poll(), 2_000);
-    const onVisible = () => {
-      if (!document.hidden) void poll();
-    };
-    document.addEventListener("visibilitychange", onVisible);
+    void fetchMissing();
+    const id = setInterval(() => void fetchMissing(), 5_000); // the minute is published a few seconds late
     return () => {
       alive = false;
       clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [assets]);
-  return prices;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [want, got]);
+  return got;
 }
 
 // ───────────────────────────── transactions ─────────────────────────────
@@ -446,7 +490,7 @@ export function CommonMarkets() {
     [],
   );
   const { snap, loadError, refresh } = useRoundsData(client, address);
-  const prices = useLivePrices(D.assets);
+  const stream = usePriceStream(useMemo(() => D.assets.map((a) => a.product), []));
   const tx = useTx(client, refresh);
 
   // Client clock, corrected to chain time at the last read.
@@ -463,7 +507,7 @@ export function CommonMarkets() {
   // the new round a few seconds after it, so look again shortly after).
   useEffect(() => {
     void refresh();
-    const id = setInterval(() => void refresh(), 5_000);
+    const id = setInterval(() => void refresh(), 3_000); // pool odds and position values stay live
     return () => clearInterval(id);
   }, [refresh]);
   const boundary = now ? Math.floor(now / D.roundSecs) : 0;
@@ -494,8 +538,18 @@ export function CommonMarkets() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snap, boundary]);
 
+  // Betting on the next round closes at the next boundary.
   const roundEnd = now ? nextBoundary(now) : 0;
   const onChain = walletChainId === D.chainId;
+  const inPlay = useMemo(
+    () =>
+      D.assets.flatMap((a) => {
+        const m = groups?.[a.key]?.inPlay;
+        return m?.change ? [{ asset: a, start: m.expiry }] : [];
+      }),
+    [groups],
+  );
+  const startPrices = useStartPrices(inPlay);
 
   return (
     <div className="pt-10 sm:pt-14 fade-up">
@@ -516,8 +570,12 @@ export function CommonMarkets() {
             asset={a}
             snap={snap}
             current={groups?.[a.key]?.current}
+            inPlay={groups?.[a.key]?.inPlay}
+            startPrice={groups?.[a.key]?.inPlay ? startPrices[`${a.product}@${groups[a.key].inPlay!.expiry}`] : undefined}
             recent={groups?.[a.key]?.recent ?? []}
-            live={prices[a.key]}
+            live={stream.last[a.product]}
+            stream={stream}
+            skew={skew}
             now={now}
             open={open}
             setOpen={setOpen}
@@ -527,11 +585,11 @@ export function CommonMarkets() {
         ))}
       </section>
       <p className="mt-3 max-w-[72ch] text-2xs leading-relaxed text-fg-dim">
-        Prices are live · Coinbase, for reference — the round settles on the agent&apos;s on-chain reading of the
-        1-minute close at the end of the round. Up wins only if that reading is strictly higher than the strike; a tie is
-        Down. The reading becomes final after a 10-minute challenge window and the agent resolves the round right after,
-        about 10–11 minutes after the close; in the last-rounds strip, a countdown is the time left until that round&apos;s
-        reading is final.
+        Prices are live · Coinbase, for reference. You bet on the next round; betting closes the moment it starts. When
+        it ends, the agent attests the round&apos;s change on chain: the 1-minute close at its end minus the one at its
+        start. Up wins only if the change is above zero; no change is Down. The reading becomes final after a 10-minute
+        challenge window and the agent resolves the round right after, about 10–11 minutes after the round ends; in the
+        last-rounds strip, a countdown is the time left until that round&apos;s reading is final.
       </p>
 
       {address && <Claims snap={snap} tx={tx} now={now} />}
@@ -565,19 +623,19 @@ function Header({ now, roundEnd }: { now: number; roundEnd: number }) {
       <div>
         <h1 className="font-serif text-[40px] leading-none tracking-tightest sm:text-[52px]">Common markets</h1>
         <p className="mt-3 max-w-[56ch] text-[13px] leading-relaxed text-fg-mute">
-          Will it be higher in five minutes? A new Up/Down round opens on BTC, ETH, SOL, ZEC and HYPE every five
-          minutes, struck at the price when it opens. Trade in and out until the close.
+          Up or down over the next five minutes? Bet on the next round of BTC, ETH, SOL, ZEC and HYPE; betting closes
+          as the round starts, so nobody trades on a move already on the chart. Buy and sell until then.
         </p>
       </div>
       <div className="sm:w-[240px]" aria-live="off">
         <div className="flex items-baseline justify-between gap-4 text-2xs text-fg-dim">
-          <span>{now ? `Round ${roundLabel(roundEnd - D.roundSecs, roundEnd)}` : "Round"}</span>
-          <span>closes in</span>
+          <span>{now ? `Next round ${roundLabel(roundEnd, roundEnd + D.roundSecs)}` : "Next round"}</span>
+          <span>betting closes in</span>
         </div>
         <div
           className={`tnum mt-1 text-right font-serif text-[56px] leading-none tracking-tightest ${closing ? "text-down" : "text-fg"}`}
           role="timer"
-          aria-label="Time left in the current round"
+          aria-label="Time left to bet on the next round"
         >
           {now ? timeLeft(left) : "–:––"}
         </div>
@@ -721,8 +779,12 @@ function AssetCard({
   asset,
   snap,
   current,
+  inPlay,
+  startPrice,
   recent,
   live,
+  stream,
+  skew,
   now,
   open,
   setOpen,
@@ -732,8 +794,13 @@ function AssetCard({
   asset: AssetMeta;
   snap?: Snapshot;
   current?: RoundMarket;
+  inPlay?: RoundMarket;
+  /** The in-play round's start price (Coinbase, the minute the agent reads). */
+  startPrice?: number;
   recent: RoundMarket[];
   live?: { price: number; dir: "up" | "down" | "flat" };
+  stream: PriceStream;
+  skew: number;
   now: number;
   open: OpenTrade;
   setOpen: (o: OpenTrade) => void;
@@ -741,14 +808,28 @@ function AssetCard({
   canTrade: boolean;
 }) {
   const st = current ? snap?.state[current.marketId] : undefined;
-  const strike = current?.threshold;
   const liveScaled = live ? toScaled(live.price, asset.decimals) : undefined;
-  const delta = liveScaled !== undefined && strike !== undefined ? strikeDelta(liveScaled, strike) : undefined;
+  // A legacy price round compares the live price with its strike; the round in
+  // play compares it with the price the round started at.
+  const legacy = current && !current.change ? current : undefined;
+  const ref = legacy ? legacy.threshold : inPlay?.change && startPrice !== undefined ? toScaled(startPrice, asset.decimals) : undefined;
+  const refName = legacy ? "strike" : "start";
+  const delta = liveScaled !== undefined && ref !== undefined ? strikeDelta(liveScaled, ref) : undefined;
+  const playLeft = inPlay && now ? roundWindow(inPlay).end - now : 0;
+  const playHold = inPlay ? snap?.holdings[inPlay.marketId] : undefined;
   const upPct = st ? impliedPct(st.yesPrice) : 50;
   const left = current && now ? current.expiry - now : 0;
   const trading = Boolean(current && st && st.phase === PHASE.Trading && left > 0);
   const hold = current ? snap?.holdings[current.marketId] : undefined;
   const isOpen = current && open?.id === current.marketId;
+  const odds = useMemo(() => {
+    if (!current || !snap || !st) return undefined;
+    const at = (block: bigint) => snap.chainNow - Number(snap.head - block) * BLOCK_SECS;
+    const pts = replayPool(current.liquidity, current.blockNumber, snap.trades[current.marketId] ?? []).map((q) => ({ t: at(q.block), up: q.up }));
+    pts.push({ t: snap.chainNow, up: impliedPct(st.yesPrice) / 100 }); // the live pool
+    return { pts, open: at(current.blockNumber) };
+  }, [current, snap, st]);
+  const played = inPlay?.change ? roundWindow(inPlay) : undefined;
 
   return (
     <article className="border border-line bg-bg-elev p-4 sm:p-5">
@@ -763,43 +844,61 @@ function AssetCard({
           }`}
         >
           {live ? formatPrice(live.price, asset.decimals) : "—"}
+          {!stream.live && live && <span className="ml-1 align-middle text-2xs text-fg-dim" title="Live stream reconnecting; polling">·</span>}
         </div>
       </div>
       <div className="mt-2 flex flex-wrap justify-between gap-x-4 gap-y-1 text-2xs text-fg-dim">
         <div className="min-w-0">
           {current ? (
             <>
-              Round {roundLabel(roundStart(current.expiry), current.expiry)} · strike{" "}
-              <span className="tnum text-fg-mute">{formatScaled(current.threshold, asset.decimals)}</span>
+              {current.change ? "Next round" : "Round"} {roundLabel(roundWindow(current).start, roundWindow(current).end)}
+              {!current.change && (
+                <>
+                  {" "}
+                  · strike <span className="tnum text-fg-mute">{formatScaled(current.threshold, asset.decimals)}</span>
+                </>
+              )}
               {trading && (
                 <>
                   {" "}
-                  · closes in <span className="tnum text-fg-mute">{timeLeft(left)}</span>
+                  · {current.change ? "betting closes in" : "closes in"} <span className="tnum text-fg-mute">{timeLeft(left)}</span>
                 </>
               )}
             </>
           ) : snap && now ? (
-            // The agent opens a round only while at least 2 minutes of trading remain.
+            // The agent opens the next round only while at least 2 minutes of betting remain.
             now - Math.floor(now / D.roundSecs) * D.roundSecs < D.roundSecs - 120 ? (
-              <>Waiting for the agent to open the {roundLabel(nextBoundary(now) - D.roundSecs, nextBoundary(now))} round…</>
+              <>Waiting for the agent to open the {roundLabel(nextBoundary(now), nextBoundary(now) + D.roundSecs)} round…</>
             ) : (
-              <>No round this period. The next one opens at {clockUtc(nextBoundary(now))} UTC.</>
+              <>No round to bet on this period. The next opens at {clockUtc(nextBoundary(now))} UTC.</>
             )
           ) : (
-            "Reading the current round…"
+            "Reading the rounds…"
           )}
         </div>
         <div className="sm:text-right">
-          {delta && current ? (
+          {delta ? (
             <span className={delta.dir === "above" ? "text-up" : delta.dir === "below" ? "text-down" : "text-fg-mute"}>
+              {!legacy && "in play · "}
               {delta.dir === "at"
-                ? "live · at the strike (a tie is Down)"
-                : `live ${delta.dir === "above" ? "▲" : "▼"} ${formatScaled(delta.diff < 0n ? -delta.diff : delta.diff, asset.decimals)} ${delta.dir} strike (${delta.pct >= 0 ? "+" : ""}${delta.pct.toFixed(3)}%)`}
+                ? `at the ${refName} (a tie is Down)`
+                : `${delta.dir === "above" ? "▲" : "▼"} ${formatScaled(delta.diff < 0n ? -delta.diff : delta.diff, asset.decimals)} ${delta.dir} ${refName} (${delta.pct >= 0 ? "+" : ""}${delta.pct.toFixed(3)}%)`}
             </span>
           ) : (
             "live · Coinbase"
           )}
         </div>
+      </div>
+
+      <div className="mt-3 -mx-1">
+        <PriceChart
+          series={stream.series[asset.product]}
+          decimals={asset.decimals}
+          skew={skew}
+          startPrice={played ? startPrice : undefined}
+          roundStart={played?.start}
+          roundEnd={played?.end}
+        />
       </div>
 
       {current && st && (
@@ -812,6 +911,11 @@ function AssetCard({
           <div className="flex h-2 w-full overflow-hidden bg-down">
             <div className="h-full bg-up transition-[width] duration-500" style={{ width: `${upPct}%` }} />
           </div>
+          {odds && current.change && (
+            <div className="mt-2">
+              <OddsChart points={odds.pts} open={odds.open} close={current.expiry} skew={skew} />
+            </div>
+          )}
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {trading ? (
@@ -838,20 +942,20 @@ function AssetCard({
                 )}
               </>
             ) : (
-              <span className="text-2xs text-fg-dim">Trading closed at {clockUtc(current.expiry)} UTC.</span>
-            )}
-            {hold && (hold.yes > 0n || hold.no > 0n) && (
-              <span className="tnum ml-auto text-2xs text-fg-dim">
-                You hold {fmt(hold.yes)} Up · {fmt(hold.no)} Down
+              <span className="text-2xs text-fg-dim">
+                {current.change ? "Betting closed" : "Trading closed"} at {clockUtc(current.expiry)} UTC.
               </span>
             )}
           </div>
+          {hold && (hold.yes > 0n || hold.no > 0n) && (
+            <Position hold={hold} value={trading && snap?.feeBps !== undefined ? cashOutValue({ yes: st.yesReserve, no: st.noReserve }, hold, snap.feeBps) : undefined} />
+          )}
 
           {isOpen && trading && (
             <TradeBox
               market={current}
               st={st}
-              hold={hold ?? { yes: 0n, no: 0n }}
+              hold={hold ?? { yes: 0n, no: 0n, cost: 0n }}
               ledgerBal={snap?.ledgerBal ?? 0n}
               feeBps={snap?.feeBps}
               labels={["Up", "Down"]}
@@ -865,8 +969,69 @@ function AssetCard({
         </div>
       )}
 
+      {inPlay?.change && (
+        <div className="mt-3 flex flex-wrap justify-between gap-x-4 gap-y-1 border-t border-line pt-2 text-2xs text-fg-dim">
+          <span>
+            In play {roundLabel(roundWindow(inPlay).start, roundWindow(inPlay).end)}
+            {startPrice !== undefined && (
+              <>
+                {" "}
+                · started at <span className="tnum text-fg-mute">{formatPrice(startPrice, asset.decimals)}</span>
+              </>
+            )}{" "}
+            · ends in <span className="tnum text-fg-mute">{timeLeft(playLeft)}</span>
+          </span>
+        </div>
+      )}
+      {inPlay?.change && playHold && (playHold.yes > 0n || playHold.no > 0n) && (
+        <Position
+          hold={playHold}
+          value={delta ? (delta.dir === "above" ? playHold.yes : playHold.no) : undefined}
+          valueLabel="Pays if it ends now"
+        />
+      )}
+
       <RecentStrip asset={asset} recent={recent} snap={snap} now={now} />
     </article>
+  );
+}
+
+/** A holding: shares per side, what it is worth now against what it cost (the
+ *  contract's net cost), and what each outcome pays. `value` updates with every
+ *  pool read (cash-out on the live curve) or, in play, with every price tick. */
+function Position({ hold, value, valueLabel = "Value now" }: { hold: Holding; value?: bigint; valueLabel?: string }) {
+  const r = value !== undefined ? pnl(value, hold.cost) : undefined;
+  const tone = !r || r.diff === 0n ? "text-fg-mute" : r.diff > 0n ? "text-up" : "text-down";
+  return (
+    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border border-line bg-bg px-3 py-2.5 text-2xs sm:grid-cols-4">
+      <div>
+        <div className="text-fg-dim">Your shares</div>
+        <div className="tnum mt-0.5 text-[13px]">
+          {hold.yes > 0n && <span className="text-up">{fmt(hold.yes)} Up</span>}
+          {hold.yes > 0n && hold.no > 0n && <span className="text-fg-dim"> · </span>}
+          {hold.no > 0n && <span className="text-down">{fmt(hold.no)} Down</span>}
+        </div>
+      </div>
+      <div>
+        <div className="text-fg-dim">Cost</div>
+        <div className="tnum mt-0.5 text-[13px] text-fg-mute">${fmt(hold.cost)}</div>
+      </div>
+      <div>
+        <div className="text-fg-dim">{valueLabel}</div>
+        <div className="tnum mt-0.5 text-[13px] transition-colors duration-300">{value !== undefined ? `$${fmt(value)}` : "—"}</div>
+      </div>
+      <div>
+        <div className="text-fg-dim">P&amp;L</div>
+        <div className={`tnum mt-0.5 text-[13px] transition-colors duration-300 ${tone}`}>
+          {r ? `${r.diff >= 0n ? "+" : "−"}$${fmt(r.diff < 0n ? -r.diff : r.diff)} (${r.pct >= 0 ? "+" : ""}${r.pct.toFixed(1)}%)` : "—"}
+        </div>
+      </div>
+      <div className="col-span-2 text-fg-dim sm:col-span-4">
+        {hold.yes > 0n && <>Up pays ${fmt(hold.yes)}</>}
+        {hold.yes > 0n && hold.no > 0n && " · "}
+        {hold.no > 0n && <>Down pays ${fmt(hold.no)}</>}
+      </div>
+    </div>
   );
 }
 
@@ -1093,6 +1258,8 @@ function statusFor(m: RoundMarket, snap: Snapshot | undefined, now: number): Rou
     disputeWindow: snap?.book.byId[m.feedId]?.disputeWindow ?? 600,
     threshold: m.threshold,
     comparator: m.comparator,
+    change: m.change,
+    roundSecs: D.roundSecs,
   });
 }
 
@@ -1109,17 +1276,21 @@ function RecentStrip({ asset, recent, snap, now }: { asset: AssetMeta; recent: R
           {cells.map((m) => {
             const s = statusFor(m, snap, now);
             const rd = snap.readings[m.marketId];
-            const settleVal = rd?.found ? formatScaled(rd.value, asset.decimals) : undefined;
+            const w = roundWindow(m);
             const title = [
-              roundLabel(roundStart(m.expiry), m.expiry),
-              `strike ${formatScaled(m.threshold, asset.decimals)}${settleVal ? ` → close ${settleVal}` : ""}`,
+              roundLabel(w.start, w.end),
+              m.change
+                ? rd?.found
+                  ? `change ${formatChange(rd.value, asset.decimals)}`
+                  : undefined
+                : `strike ${formatScaled(m.threshold, asset.decimals)}${rd?.found ? ` → close ${formatScaled(rd.value, asset.decimals)}` : ""}`,
               s?.detail,
             ]
               .filter(Boolean)
               .join(" · ");
             return (
               <li key={m.marketId} className="border border-line px-2 py-1.5" title={title}>
-                <div className="tnum text-2xs text-fg-dim">{clockUtc(roundStart(m.expiry))}</div>
+                <div className="tnum text-2xs text-fg-dim">{clockUtc(w.start)}</div>
                 <StatusCell s={s} now={now} />
               </li>
             );
@@ -1182,7 +1353,7 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
               <li key={m.marketId} className="border-b border-line px-4 py-3 last:border-b-0">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="text-[14px]">{a ? `${a.symbol} · ${roundLabel(roundStart(m.expiry), m.expiry)}` : ev?.question ?? m.key}</div>
+                    <div className="text-[14px]">{a ? `${a.symbol} · ${roundLabel(roundWindow(m).start, roundWindow(m).end)}` : ev?.question ?? m.key}</div>
                     <div className="text-2xs text-fg-dim">
                       {s?.key === "voided" ? "Voided: your net cost comes back." : s?.key === "resolved-up" ? (a ? "Closed Up." : "Resolved Yes.") : a ? "Closed Down." : "Resolved No."}
                     </div>
@@ -1275,6 +1446,7 @@ function EventCard({
           marketId: id,
           feedId: feed.feedId,
           key: ev.key,
+          change: false,
           agent: D.agent,
           threshold: st.threshold,
           comparator: 1,
@@ -1394,7 +1566,7 @@ function EventCard({
             <TradeBox
               market={market}
               st={st}
-              hold={hold ?? { yes: 0n, no: 0n }}
+              hold={hold ?? { yes: 0n, no: 0n, cost: 0n }}
               ledgerBal={snap?.ledgerBal ?? 0n}
               feeBps={snap?.feeBps}
               labels={["Yes", "No"]}

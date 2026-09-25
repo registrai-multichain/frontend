@@ -3,7 +3,7 @@
   "chainId": 5042002,
   "rpc": "https://rpc.testnet.arc.io",
   "explorer": "https://testnet.arcscan.app",
-  "note": "Registrai's common markets on Arc testnet: 5-minute Up/Down price rounds and event markets, opened and settled by the rounds agent (keeper/rounds.py, keeper/config.arc-rounds.json). The UI discovers the agent's feeds (FeedCreated, creator == agent) and markets (MarketCreated on those feeds) from chain; feeds/marketId below are seeds recorded at deploy (2026-09-25) so the page works before its first log scan, never a substitute for it.",
+  "note": "Registrai's common markets on Arc testnet: 5-minute Up/Down price rounds and event markets, opened and settled by the rounds agent (keeper/rounds.py, keeper/config.arc-rounds.json). The UI discovers the agent's feeds (FeedCreated, creator == agent) and markets (MarketCreated on those feeds) from chain; feeds/marketId below are seeds (the price feeds, the rotating 5-minute change feeds \"<asset>:5m-<n>\" and the events) recorded at deploy (2026-09-25) so the page works before its first log scan, never a substitute for it.",
   "deployBlock": 63984154,
   "roundSecs": 300,
   "settlementWindow": 3600,
@@ -17,11 +17,41 @@
   "agent": "0x31CCE575eC134bFD57c46997A295Ab14Ab887BB4",
   "descriptionPrefix": "registrai-data:",
   "assets": [
-    { "key": "btc-usd", "symbol": "BTC", "name": "Bitcoin", "product": "BTC-USD", "decimals": 2 },
-    { "key": "eth-usd", "symbol": "ETH", "name": "Ether", "product": "ETH-USD", "decimals": 2 },
-    { "key": "sol-usd", "symbol": "SOL", "name": "Solana", "product": "SOL-USD", "decimals": 3 },
-    { "key": "zec-usd", "symbol": "ZEC", "name": "Zcash", "product": "ZEC-USD", "decimals": 2 },
-    { "key": "hype-usd", "symbol": "HYPE", "name": "Hyperliquid", "product": "HYPE-USD", "decimals": 3 }
+    {
+      "key": "btc-usd",
+      "symbol": "BTC",
+      "name": "Bitcoin",
+      "product": "BTC-USD",
+      "decimals": 2
+    },
+    {
+      "key": "eth-usd",
+      "symbol": "ETH",
+      "name": "Ether",
+      "product": "ETH-USD",
+      "decimals": 2
+    },
+    {
+      "key": "sol-usd",
+      "symbol": "SOL",
+      "name": "Solana",
+      "product": "SOL-USD",
+      "decimals": 3
+    },
+    {
+      "key": "zec-usd",
+      "symbol": "ZEC",
+      "name": "Zcash",
+      "product": "ZEC-USD",
+      "decimals": 2
+    },
+    {
+      "key": "hype-usd",
+      "symbol": "HYPE",
+      "name": "Hyperliquid",
+      "product": "HYPE-USD",
+      "decimals": 3
+    }
   ],
   "events": [
     {
@@ -42,12 +72,57 @@
     }
   ],
   "feeds": {
-    "btc-usd": { "feedId": "0x860bd4a490e8271755cac0d271ef1a7b8436fac07f4ed6aac603e1c8bff69a4a", "disputeWindow": 600 },
-    "eth-usd": { "feedId": "0x12c869978860797491d1c579b68d377027447a53ae75e03351430e28c5a016a7", "disputeWindow": 600 },
-    "sol-usd": { "feedId": "0xba2b5741d7aa1f2b0b0d67451ed939028af526705acfc58b5555a9fe6d3fc1b4", "disputeWindow": 600 },
-    "zec-usd": { "feedId": "0x8df78bc4ef3226a7f960fad7f78b412e26c453122a4579ad0b6db23c7c5e9947", "disputeWindow": 600 },
-    "hype-usd": { "feedId": "0x7042c6b114991e29f64194073d9562e4b9c21a67df2865bad6e755bdd166b264", "disputeWindow": 600 },
-    "arc-token-tradable": { "feedId": "0xd3afb6af2d19404d56fe960ec4748af5c07694713e4027fa4a7fe0bee577b63a", "disputeWindow": 43200 },
-    "arc-token-tradable-test": { "feedId": "0x332ed62c979999307c854f94621ce37f250460b46e8fc6a629ccedcb885ccc28", "disputeWindow": 600 }
+    "btc-usd": {
+      "feedId": "0x860bd4a490e8271755cac0d271ef1a7b8436fac07f4ed6aac603e1c8bff69a4a",
+      "disputeWindow": 600
+    },
+    "eth-usd": {
+      "feedId": "0x12c869978860797491d1c579b68d377027447a53ae75e03351430e28c5a016a7",
+      "disputeWindow": 600
+    },
+    "sol-usd": {
+      "feedId": "0xba2b5741d7aa1f2b0b0d67451ed939028af526705acfc58b5555a9fe6d3fc1b4",
+      "disputeWindow": 600
+    },
+    "zec-usd": {
+      "feedId": "0x8df78bc4ef3226a7f960fad7f78b412e26c453122a4579ad0b6db23c7c5e9947",
+      "disputeWindow": 600
+    },
+    "hype-usd": {
+      "feedId": "0x7042c6b114991e29f64194073d9562e4b9c21a67df2865bad6e755bdd166b264",
+      "disputeWindow": 600
+    },
+    "arc-token-tradable": {
+      "feedId": "0xd3afb6af2d19404d56fe960ec4748af5c07694713e4027fa4a7fe0bee577b63a",
+      "disputeWindow": 43200
+    },
+    "arc-token-tradable-test": {
+      "feedId": "0x332ed62c979999307c854f94621ce37f250460b46e8fc6a629ccedcb885ccc28",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-0": {
+      "feedId": "0xdcf52eb1e262ddae874adef3918a6fc7aaaa97c0ff4b041ccb10ffc46e08f341",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-1": {
+      "feedId": "0x30774af52f9c8ae458ec0e5d9b921dc55078de037f24d481d49e3ed7bb9b0962",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-2": {
+      "feedId": "0xd143a4f3d8519f139726a52e53de8ad36432dbdfeeac5fca1b0191dd039dff3d",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-3": {
+      "feedId": "0x290ff96d43eda091cd17144484032760d97146bee2c990cf9cb3ad37ddada208",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-4": {
+      "feedId": "0x9df5bd16be103bfad6279a94e103b32cdd67db191585d6bf0cb6243925412623",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-5": {
+      "feedId": "0x7c12442dc4702d2ec2f3d62d0dfcc3fab3be24d2c1ce2f6abc9ca5051e74108b",
+      "disputeWindow": 600
+    }
   }
 }
