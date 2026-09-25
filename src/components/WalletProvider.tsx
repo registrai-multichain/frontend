@@ -66,6 +66,10 @@ interface WalletContextValue {
 
 const Ctx = createContext<WalletContextValue | undefined>(undefined);
 
+const CONNECT_TIMEOUT_MS = 20_000;
+const WALLET_PENDING_HINT =
+  "Your wallet hasn't answered. Open the wallet extension (e.g. click the MetaMask icon): a connection request may be waiting there. Then try again.";
+
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<Address | undefined>();
   const [walletChainId, setWalletChainId] = useState<number | undefined>();
@@ -118,17 +122,29 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
     setIsConnecting(true);
     setError(undefined);
+    // A wallet whose approval window was closed or is hidden behind the browser
+    // may never answer. Stop waiting after CONNECT_TIMEOUT_MS so the button works
+    // again; a late approval still lands through the accountsChanged listener.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<"timeout">((resolve) => {
+      timer = setTimeout(() => resolve("timeout"), CONNECT_TIMEOUT_MS);
+    });
     try {
-      const accounts = (await window.ethereum.request({
-        method: "eth_requestAccounts",
-      })) as Address[];
-      if (accounts && accounts[0]) {
+      const accounts = await Promise.race([
+        window.ethereum.request({ method: "eth_requestAccounts" }) as Promise<Address[]>,
+        timeout,
+      ]);
+      if (accounts === "timeout") {
+        setError(WALLET_PENDING_HINT);
+      } else if (accounts && accounts[0]) {
         setAddress(accounts[0]);
         await refreshChain();
       }
     } catch (e) {
-      setError((e as Error).message);
+      // -32002: a connection request is already waiting in the wallet.
+      setError((e as { code?: number }).code === -32002 ? WALLET_PENDING_HINT : (e as Error).message);
     } finally {
+      clearTimeout(timer);
       setIsConnecting(false);
     }
   }, [refreshChain]);
