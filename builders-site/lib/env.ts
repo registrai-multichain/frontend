@@ -38,6 +38,8 @@ export interface Env {
   SITE_ORIGIN?: string;
   /** Pages SECRET (never in wrangler.toml): the HMAC key of the stateless sign-in nonces. Unset = sign-in fails closed (500). */
   NONCE_SECRET?: string;
+  /** Pages SECRET: the Telegram bot's bearer for /api/bot/invites. Unset = that route fails closed (503). */
+  BOT_SECRET?: string;
 }
 
 export interface PagesContext<D extends Record<string, unknown> = Record<string, unknown>> {
