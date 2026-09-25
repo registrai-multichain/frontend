@@ -1973,3 +1973,15 @@ details.bld-legend p { margin: 10px 0 0; }
   .vf-option .vf-primary, .vf-option .vf-secondary, .vf-mobile-wallet .vf-primary, .bld-founding .vf-primary { justify-self: stretch; width: 100%; }
   details.bld-legend summary { text-align: left; }
 }
+
+/* /verify step 4: "How to publish it" */
+.vf-guide > * + * { margin-top: 10px; }
+.vf-guide .vf-note b { overflow-wrap: anywhere; }
+.vf-guide-recipe summary { padding: 10px 0; font-size: 12.5px; }
+.vf-guide-recipe ol { margin: 0 0 12px; padding-left: 18px; color: var(--fg-mute); font-size: 12px; line-height: 1.6; }
+.vf-guide-recipe li + li { margin-top: 4px; }
+.vf-guide-code { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 12px; }
+.vf-guide-code .vf-pre { flex: 1; min-width: 0; margin: 0; }
+.vf-guide-rules { margin: 12px 0 0; padding-left: 16px; color: var(--fg-dim); font-size: 11.5px; line-height: 1.6; }
+.vf-guide-rules li { overflow-wrap: anywhere; }
+.vf-guide-rules li::marker { color: var(--accent); }

@@ -29,6 +29,7 @@ import { MAX_NAME_LEN } from "@/lib/builders-gallery";
 import { displayNameError, finalStepTitle, planClaim, projectSlots, sourceError, stepStates } from "@/lib/verify-plan";
 import { GaslessRequest } from "./GaslessRequest";
 import { MobileWalletLink, useMobileWithoutWallet } from "./MobileWalletLink";
+import { PublishGuide } from "./PublishGuide";
 import { sendBuildersTx } from "./sendTx";
 import { buildersClient, useMyBuilder } from "./useMyBuilder";
 
@@ -614,6 +615,7 @@ export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
               </div>
               <pre className="vf-pre">{fileText}</pre>
             </div>
+            <PublishGuide source={claim.source} />
             <button type="button" className="vf-primary" onClick={runCheck} disabled={check.state === "checking"}>
               {check.state === "checking" ? "checking…" : "check it's live"}
             </button>
