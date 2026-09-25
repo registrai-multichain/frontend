@@ -35,16 +35,21 @@ describe("selectBuildersNetwork", () => {
 });
 
 describe("resolveBuildersDeployment", () => {
-  test("the shipped records: mainnet unset, so testnet with the known registries", () => {
-    expect(BUILDERS_SOURCES.mainnet.BuilderRegistry).toBeNull();
-    expect(BUILDERS.network).toBe("testnet");
-    expect(BUILDERS.chainId).toBe(5042002);
-    expect(BUILDERS.rpc).toBe("https://rpc.testnet.arc.io");
+  test("the shipped records: mainnet phase 1 is set, so the builders network is Arc mainnet", () => {
+    expect(BUILDERS_SOURCES.mainnet.BuilderRegistry).toBe("0xBB6F4B18776Fd20Bb53a1205375273373DD1E5bA");
+    expect(BUILDERS.network).toBe("mainnet");
+    expect(BUILDERS.chainId).toBe(5042);
+    expect(BUILDERS.rpc).toBe("https://rpc.mainnet.arc.io");
     expect(BUILDERS.contracts).toEqual({
-      BuilderRegistry: "0xB52FC2AB9b2457D8c56d3b4A624543aD61c70D9C",
-      CaretakerRegistry: "0x7adDA1fe8c6F3A5D405dc1F1aF68B42f2F6CAa78",
-      VerifiedBuilderBadge: "0xBF7FF680e0Ee7472E244cf2550EE016939cb6335",
+      BuilderRegistry: "0xBB6F4B18776Fd20Bb53a1205375273373DD1E5bA",
+      CaretakerRegistry: "0x64725935d90F0aa6f3c8642Bb9cACF44CAA46224",
+      VerifiedBuilderBadge: "0xF229d2Ed13Cc35d46fa7676a579495E5C80CFEB2",
     });
+    expect(BUILDERS.operator).toBe("0xe528487069a24DA29c0360e61378db07ECAE88c9");
+    expect(BUILDERS.deployBlock).toBe(22642042n);
+    expect(BUILDERS.badgeNetwork).toBe("arc");
+    expect(BUILDERS.deployed && BUILDERS.badgesOn).toBe(true);
+  });
     expect(BUILDERS.operator).toBe("0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263");
     expect(BUILDERS.deployBlock).toBe(BigInt(testnet.builders.deployBlock));
     expect(BUILDERS.badgeNetwork).toBe("arc-testnet");
