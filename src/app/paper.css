@@ -164,3 +164,21 @@
 /* the global .caption (uppercase mono) and the shared wallet button, in paper frames */
 .paper-type .caption { font-family: inherit; font-size: 13px; letter-spacing: 0; text-transform: none; }
 .paper-type .pa-top-right button { border-radius: 999px; padding: 5px 14px; font-size: 14px; letter-spacing: 0; text-transform: capitalize; }
+.paper-type .bld-card { display: flex; flex-direction: column; box-shadow: none; clip-path: none; }
+.paper-type .bld-card[data-highlight="true"] { border-color: var(--accent); }
+.paper-type .bld-avatar { flex: none; width: 48px; height: 48px; border-color: var(--line); background: var(--bg); }
+.paper-type .bld-avatar span { font-family: var(--font-serif), Georgia, serif; font-size: 24px; font-weight: 400; color: var(--fg); }
+.paper-type .bld-avatar[data-tone="ok"] span { color: var(--up); }
+.paper-type .bld-avatar[data-tone="invited"] span { color: var(--accent); }
+.paper-type .bld-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); margin: 0; padding: 0; list-style: none; }
+@media (min-width: 640px) { .paper-type .bld-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .paper-type .bld-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.paper-type .vf-steps { border: 0; background: transparent; }
+.paper-type .vf-step { grid-template-columns: 44px minmax(0, 1fr); border-bottom: 1px solid var(--line); }
+.paper-type .vf-step-num { display: grid; place-items: center; width: 28px; height: 28px; margin: 20px 0 0; padding: 0; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--fg-mute); font-size: 13px; }
+.paper-type .vf-step[data-state="active"] .vf-step-num { border-color: var(--fg); background: var(--fg); color: var(--bg); }
+.paper-type .vf-step[data-state="done"] .vf-step-num { border-color: var(--up); background: var(--up); color: var(--bg); }
+.paper-type .vf-step h2 { font-family: var(--font-serif), Georgia, serif; font-size: 21px; font-weight: 400; letter-spacing: 0; }
+.paper-type .vf-step[data-state="todo"] h2 { color: var(--fg-mute); }
+.paper-type .vf-primary { border-radius: 10px; background: var(--fg); color: var(--bg); font-size: 15px; font-weight: 600; clip-path: none; }
+.paper-type .vf-facts b { font-family: var(--font-serif), Georgia, serif; font-weight: 400; font-size: 22px; }

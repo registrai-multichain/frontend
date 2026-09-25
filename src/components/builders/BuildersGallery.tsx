@@ -20,7 +20,6 @@ import {
   galleryCounts,
   showGalleryStats,
   greyReason,
-  initialOf,
   labelOf,
   mergeGallery,
   mergeNominees,
@@ -28,6 +27,7 @@ import {
   parsePublicInvites,
   projectChipKind,
   proofHref,
+  removeHref,
   readLiveGallery,
   sourceHref,
   toneOf,
@@ -48,6 +48,7 @@ import { useWallet } from "@/components/WalletProvider";
 import { sourceLabel } from "@/lib/verified-builders";
 import { BuilderEconomyFacts } from "@/components/builders/BuilderEconomyFacts";
 import { nextBadgeImage } from "@/lib/verify-invite";
+import { Avatar, BuilderCardView } from "./BuilderCardView";
 
 const REG = BUILDERS.contracts.BuilderRegistry;
 const BADGE = BUILDERS.contracts.VerifiedBuilderBadge;
@@ -127,21 +128,6 @@ function BuilderParam({ onBuilder }: { onBuilder: (id: number | null) => void })
 
 const detailHref = (id: number) => `/builders/?builder=${id}`;
 
-/** The builder's avatar (GitHub owner, or a domain's site icon), else (none, or a failed load) the name's initial. */
-function Avatar({ url, name }: { url: string | null; name: string }) {
-  const [failed, setFailed] = useState(false);
-  return (
-    <div className="bld-avatar" aria-hidden="true">
-      {url && !failed ? (
-        // Static export: next/image optimisation is off; a plain lazy img is the same thing.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt="" width={56} height={56} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
-      ) : (
-        <span>{initialOf(name)}</span>
-      )}
-    </div>
-  );
-}
 
 const CHIP_TITLE: Record<ProjectChip["kind"], string> = {
   verified: "verified project",
@@ -176,9 +162,9 @@ function ProjectChips({ chips }: { chips: ProjectChip[] }) {
 /** What a card and the detail view both say about a builder's state. */
 function StatusNote({ e }: { e: GalleryEntry }) {
   const b = e.builder;
-  if (e.kind === "nominated") return <p className="bld-note">Claimed and registered · verified once Registrai issues its badge</p>;
+  if (e.kind === "nominated") return <p className="bld-note">Proof checked. We add it within a day.</p>;
   if ((e.kind === "lapsed" || e.kind === "unconfirmed") && b) return <p className="bld-note">{greyReason(b)}</p>;
-  if (e.kind === "invited") return <p className="bld-note">Invited · not claimed yet</p>;
+  if (e.kind === "invited") return <p className="bld-note">Invited: not claimed yet.</p>;
   return null;
 }
 
@@ -186,89 +172,47 @@ function BuilderCard({ e, highlighted, waiting, nominated = false }: { e: Galler
   const b = e.builder;
   const proof = !b && e.source ? proofHref(e.source) : null;
   const projects = b ? b.projects.filter((p) => p.active).length : 0;
+  const waitingText = e.kind === "invited" ? waitingLine(waiting) : null;
+  const facts = [
+    ...(b ? [{ label: "No.", value: <span className="tnum">{b.id}</span> }] : []),
+    ...(b?.country && (e.kind === "verified" || e.kind === "nominated") ? [{ label: "from", value: <span title={regionName(b.country)}>{b.country}</span> }] : []),
+    ...(e.x ? [{ label: "on X", value: <a className="pa-link" href={xHref(e.x)} target="_blank" rel="noreferrer">{e.x}</a> }] : []),
+  ];
   return (
-    <li
+    <BuilderCardView
       id={b ? builderAnchor(b.id) : e.key}
-      className="bld-card"
-      data-kind={e.kind}
-      data-tone={toneOf(e.kind)}
-      data-highlight={highlighted ? "true" : undefined}
+      kind={e.kind}
+      nameText={e.name}
+      name={b ? <Link href={detailHref(b.id)} scroll={false} className="hover:text-accent">{e.name}</Link> : e.name}
+      avatar={e.avatar}
+      tone={e.kind === "verified" ? "ok" : e.kind === "invited" ? "invited" : "plain"}
+      pill={{ text: e.kind === "verified" ? "✓ Verified" : labelOf(e.kind), tone: e.kind === "verified" ? "ok" : e.kind === "invited" ? "unclaimed" : "muted" }}
+      sub={b ? (projects === 1 ? "1 project" : `${projects} projects`) : e.source ? <a href={sourceHref(e.source)} target="_blank" rel="noreferrer">{sourceLabel(e.source)} ↗</a> : undefined}
+      facts={facts}
+      grey={toneOf(e.kind) === "grayscale"}
+      highlighted={highlighted}
+      note={
+        <>
+          <StatusNote e={e} />
+          {waitingText && <p className="wonder-waiting">{waitingText}</p>}
+        </>
+      }
+      foot={
+        <>
+          {proof && <a className="pa-link" href={proof} target="_blank" rel="noreferrer">proof ↗</a>}
+          {e.kind === "invited" && e.source && nominated && <a className="pa-link" href={wonderMarketsHref(e.source)} target="_blank" rel="noreferrer">its markets ↗</a>}
+          {e.kind === "invited" && e.source && (
+            <span>
+              Is this yours? <Link className="pa-link" href={claimHref(e.source)}>Claim it</Link> ·{" "}
+              <a className="pa-link" href={removeHref(e.source)}>Ask us to remove it</a>
+            </span>
+          )}
+          {b && <Link className="pa-link" href={detailHref(b.id)} scroll={false}>details →</Link>}
+        </>
+      }
     >
-      <div className="bld-card-top">
-        <Avatar url={e.avatar} name={e.name} />
-        <div className="bld-card-title">
-          <h2 title={e.name}>
-            {b ? (
-              <Link href={detailHref(b.id)} scroll={false} className="bld-card-open">
-                {e.name}
-              </Link>
-            ) : (
-              e.name
-            )}
-          </h2>
-          {!b && e.source && (
-            <a href={sourceHref(e.source)} target="_blank" rel="noreferrer">
-              {sourceLabel(e.source)} ↗
-            </a>
-          )}
-          {b && <span className="bld-card-sub">{projects === 1 ? "1 project" : `${projects} projects`}</span>}
-        </div>
-        <span className="bld-chip" data-kind={e.kind}>{labelOf(e.kind)}</span>
-      </div>
-
       <ProjectChips chips={e.chips} />
-
-      {(b || e.x) && (
-        <dl className="bld-facts">
-          {b && (
-            <div>
-              <dt>builder</dt>
-              <dd className="tnum">#{b.id}</dd>
-            </div>
-          )}
-          {b?.country && (e.kind === "verified" || e.kind === "nominated") && (
-            <div>
-              <dt>country</dt>
-              <dd title={regionName(b.country)}>{b.country}</dd>
-            </div>
-          )}
-          {e.x && (
-            <div>
-              <dt>X</dt>
-              <dd>
-                <a href={xHref(e.x)} target="_blank" rel="noreferrer">{e.x}</a>
-              </dd>
-            </div>
-          )}
-        </dl>
-      )}
-
-      <StatusNote e={e} />
-      {e.kind === "invited" && waitingLine(waiting) && <p className="wonder-waiting">{waitingLine(waiting)}</p>}
-
-      <div className="bld-card-foot">
-        {proof && (
-          <a href={proof} target="_blank" rel="noreferrer">
-            proof ↗
-          </a>
-        )}
-        {e.kind === "invited" && e.source && nominated && (
-          <a href={wonderMarketsHref(e.source)} target="_blank" rel="noreferrer">
-            wonder markets ↗
-          </a>
-        )}
-        {e.kind === "invited" && e.source && (
-          <Link className="bld-claim" href={claimHref(e.source)}>
-            Claim this project →
-          </Link>
-        )}
-        {b && (
-          <Link className="bld-claim" href={detailHref(b.id)} scroll={false}>
-            details →
-          </Link>
-        )}
-      </div>
-    </li>
+    </BuilderCardView>
   );
 }
 
@@ -350,7 +294,7 @@ function BuilderDetail({ e, onClose }: { e: GalleryEntry; onClose: () => void })
           ×
         </button>
         <div className="bld-card-top">
-          <Avatar url={e.avatar} name={e.name} />
+          <Avatar url={e.avatar} name={e.name} tone={e.kind === "verified" ? "ok" : e.kind === "invited" ? "invited" : "plain"} />
           <div className="bld-card-title">
             <h2 title={e.name}>{e.name}</h2>
             <span className="bld-card-sub">builder #{b.id}</span>
@@ -442,40 +386,25 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
         <BuilderParam onBuilder={setTarget} />
       </Suspense>
 
-      <header className="perennial-app-header bld-header">
-        <div>
-          <div className="perennial-app-status">
-            <i /> {buildersStatusLine(BUILDERS)}
-          </div>
-          <h1>Verified builders</h1>
-          <p className="bld-deck">
-            Builders on Arc and their projects, each project claimed by the builder&apos;s wallet with a signed proof in
-            its repo or on its domain, and registered on-chain.
-          </p>
-          <div className="vf-invite mt-3">
-            Building on Arc? <Link href="/verify">Claim your project →</Link>
-          </div>
+      <header className="bld-header mb-7">
+        <div className="perennial-app-status">
+          <i /> {buildersStatusLine(BUILDERS)}
         </div>
-        {showGalleryStats(counts) && (
-        <dl className="bld-stats" aria-label="Gallery counts">
-          <div>
-            <dt>verified</dt>
-            <dd className="tnum">{counts.verified}</dd>
-          </div>
-          <div>
-            <dt>nominated</dt>
-            <dd className="tnum">{counts.nominated}</dd>
-          </div>
-          <div>
-            <dt>invited</dt>
-            <dd className="tnum">{counts.invited}</dd>
-          </div>
-          <div>
-            <dt>countries</dt>
-            <dd className="tnum">{counts.countries}</dd>
-          </div>
-        </dl>
+        <h1 className="pa-h1">Who&apos;s building on Arc</h1>
+        {showGalleryStats(counts) ? (
+          <p className="pa-lede">
+            Every project here claimed its place with a signed proof. {counts.verified} verified, {counts.nominated} waiting for
+            onboarding, {counts.invited} invited{counts.countries ? `, from ${counts.countries} ${counts.countries === 1 ? "country" : "countries"}` : ""}.
+          </p>
+        ) : (
+          <p className="pa-lede">
+            Builders on Arc and their projects, each project claimed by the builder&apos;s wallet with a signed proof in its repo or on
+            its domain, and registered on-chain.
+          </p>
         )}
+        <p className="mt-3">
+          <Link className="pa-link" href="/verify">Building on Arc? Claim your project →</Link>
+        </p>
       </header>
 
       {entries.length === 0 ? (
@@ -497,17 +426,18 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
       ) : (
         <>
           <div className="bld-toolbar">
-            <div className="bld-chips" role="group" aria-label="Filter builders">
+            <nav className="pa-tabs" aria-label="Filter builders">
               {FILTERS.filter((f) => f !== "unconfirmed" || counts.unconfirmed > 0).map((f) => (
-                <button key={f} type="button" aria-pressed={filter === f} data-kind={f} onClick={() => setFilter(f)}>
-                  {f === "all" ? "All" : labelOf(f)} <span className="tnum">{chipCount(f)}</span>
+                <button key={f} type="button" className="pa-tab" aria-pressed={filter === f} data-kind={f} onClick={() => setFilter(f)}>
+                  {f === "all" ? "All" : labelOf(f)} <span className="tnum opacity-70">{chipCount(f)}</span>
                 </button>
               ))}
-            </div>
+            </nav>
             <label className="bld-search">
               <span className="sr-only">Search builders</span>
               <input
                 type="search"
+                className="pa-input"
                 value={query}
                 onChange={(ev) => setQuery(ev.target.value)}
                 placeholder="search builder, project, @handle, country, No."

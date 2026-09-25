@@ -129,11 +129,10 @@ function reportInviteOpen(source: string, code: string) {
 function Step({ n, title, state, children }: { n: number; title: string; state: "done" | "active" | "todo"; children?: ReactNode }) {
   return (
     <li className="vf-step" data-state={state}>
-      <div className="vf-step-num tnum">{String(n).padStart(2, "0")}</div>
+      <div className="vf-step-num tnum" aria-hidden="true">{state === "done" ? "✓" : n}</div>
       <div className="vf-step-body">
         <h2>
           {title}
-          {state === "done" && <span className="vf-done">done</span>}
         </h2>
         {state !== "todo" && children}
       </div>

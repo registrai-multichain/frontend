@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { PerennialShell } from "@/components/PerennialShell";
+import { BuildersPage } from "@/components/perennial/BuildersPage";
 
 export const metadata: Metadata = {
   title: "Builders · Perennial · Registrai",
@@ -11,10 +11,7 @@ export const metadata: Metadata = {
 export default function PerennialBuildersPage() {
   return (
     <PerennialShell>
-      <h1 className="pa-h1">Builders</h1>
-      <p className="pa-lede">
-        Coming together here. Meanwhile, see the <Link className="pa-link" href="/perennial/">markets</Link>.
-      </p>
+      <BuildersPage />
     </PerennialShell>
   );
 }
