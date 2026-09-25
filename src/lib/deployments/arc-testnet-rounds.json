@@ -151,6 +151,58 @@
     "btc-usd:5m-9": {
       "feedId": "0x28494042f6ecbf43dd970a253f20a81f43b5a161b2a17e263a95e4f4a6ed0804",
       "disputeWindow": 600
+    },
+    "eth-usd:5m-0": {
+      "feedId": "0x2c68c85218a09bbf4853e881dfe3968783c13e9924cd52da62556de6bffaf413",
+      "disputeWindow": 600
+    },
+    "eth-usd:5m-1": {
+      "feedId": "0x0d8d1d40bced29d251141b81d0e305541b705bbdc42a7bd9bc6f0dbc5bf377d6",
+      "disputeWindow": 600
+    },
+    "eth-usd:5m-10": {
+      "feedId": "0xd3028c15e1e0236391a396649e4cf552fdb4c7a9170c62657311c5a7f1e14166",
+      "disputeWindow": 600
+    },
+    "eth-usd:5m-11": {
+      "feedId": "0x4218a88761e58d1b251338392c7131dca9cace20557973d0c6f85ead75d9dea4",
+      "disputeWindow": 600
+    },
+    "eth-usd:5m-12": {
+      "feedId": "0x3fe877e803a28a1823b6af3e8ed81c5f8c095f9dc14e0a5b4cddd2682d4292ca",
+      "disputeWindow": 600
+    },
+    "eth-usd:5m-2": {
+      "feedId": "0x1676a2d217e5663cae088919b350704e669b8f22f7b245c1507fbb4120021631",
+      "disputeWindow": 600
+    },
+    "eth-usd:5m-3": {
+      "feedId": "0x2a18f51ce5bd0d38dc7f0923294edfa2f814ec1c04da071d3ddffeaf174d1b02",
+      "disputeWindow": 600
+    },
+    "eth-usd:5m-4": {
+      "feedId": "0xc31baff20239f24948f7105840439e45d0815c5ef55a6da952f41385aed33f8f",
+      "disputeWindow": 600
+    },
+    "eth-usd:5m-5": {
+      "feedId": "0x80cbc9bd9f861fe80dd3a54f2e5d165da0e8d075601394bbd003a019b1d5f7a5",
+      "disputeWindow": 600
+    },
+    "eth-usd:5m-6": {
+      "feedId": "0x0af05c15ec0c9af7a519acabc757af0df2c7f641b11a6c7ff0533c8237aac548",
+      "disputeWindow": 600
+    },
+    "eth-usd:5m-7": {
+      "feedId": "0xc603b4551decbbc9278edb038bb430592f9d774b3ea1da8ebbd97761f4f85633",
+      "disputeWindow": 600
+    },
+    "eth-usd:5m-8": {
+      "feedId": "0xbd704b8f58e16924e1727ebe43458079431338b205d4430ee6b8b8fb652ab519",
+      "disputeWindow": 600
+    },
+    "eth-usd:5m-9": {
+      "feedId": "0x5f35d6d26b705cc194762936613148218b4d693ee9fe94b08a074338bf0c5992",
+      "disputeWindow": 600
     }
   }
 }

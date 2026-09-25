@@ -696,6 +696,7 @@ export function CommonMarkets() {
             snap={snap}
             current={groups?.[a.key]?.current}
             inPlay={groups?.[a.key]?.inPlay}
+            running={Boolean(groups?.[a.key] && (groups[a.key].current || groups[a.key].inPlay || groups[a.key].recent.length))}
             startPrice={groups?.[a.key]?.inPlay ? startPrices[`${a.product}@${groups[a.key].inPlay!.expiry}`] : undefined}
             live={stream.last[a.product]}
             stream={stream}
@@ -957,6 +958,7 @@ function AssetCard({
   snap,
   current,
   inPlay,
+  running,
   startPrice,
   live,
   stream,
@@ -971,6 +973,8 @@ function AssetCard({
   snap?: Snapshot;
   current?: RoundMarket;
   inPlay?: RoundMarket;
+  /** The agent has run rounds on this asset recently (else: not started / paused). */
+  running: boolean;
   /** The in-play round's start price (Coinbase, the minute the agent reads). */
   startPrice?: number;
   live?: { price: number; dir: "up" | "down" | "flat" };
@@ -1033,6 +1037,8 @@ function AssetCard({
               {current.change ? "Next" : "Round"} {roundLabel(roundWindow(current).start, roundWindow(current).end)}
               {!current.change && <> · strike {formatScaled(current.threshold, asset.decimals)}</>}
             </>
+          ) : snap && now && !running ? (
+            <>No {asset.symbol} rounds running yet · live price only</>
           ) : snap && now ? (
             now - Math.floor(now / D.roundSecs) * D.roundSecs < D.roundSecs - 120 ? (
               <>Opening {roundLabel(nextBoundary(now), nextBoundary(now) + D.roundSecs)}…</>
