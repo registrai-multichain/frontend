@@ -70,7 +70,7 @@ function Calculator({ schedules }: { schedules: { label: string; brackets: reado
           </select>
         )}
       </div>
-      {parsed && !parsed.ok && <p className="mt-2 text-2xs text-down">{parsed.error}</p>}
+      {parsed && !parsed.ok && <p className="mt-2 text-[13px] text-down">{parsed.error}</p>}
       {s && (
         <div className="econ-calc-out">
           <div><span>gross</span><strong>{$(s.gross)}</strong></div>
@@ -79,7 +79,7 @@ function Calculator({ schedules }: { schedules: { label: string; brackets: reado
           <div><span>net → builder</span><strong>{$(s.net)}</strong></div>
         </div>
       )}
-      <p className="mt-2 text-2xs text-fg-dim">
+      <p className="mt-2 text-[13px] text-fg-dim">
         Exactly the contract&apos;s math: each rate applies only to its slice, floored per slice to the
         millionth of a dollar (USDC&apos;s 6 decimals); the fee is 1% of what is left after tax, floored; the net takes the rest.
       </p>
@@ -122,11 +122,11 @@ export function EconomyPanel() {
   return (
     <div className="econ space-y-3">
       {note && (
-        <div className="pp-notice border border-line bg-bg-elev p-3 text-2xs text-fg-dim">
+        <div className="pp-notice border border-line bg-bg-elev p-3 text-[13px] text-fg-dim">
           {note} Until then the numbers below are the launch parameters from the spec, not chain reads.
         </div>
       )}
-      {error && <div className="pp-notice border border-down/35 bg-down/5 p-3 text-2xs text-down">Couldn&apos;t read {D.label}: {String((error as Error).message ?? error).split("\n")[0]}</div>}
+      {error && <div className="pp-notice border border-down/35 bg-down/5 p-3 text-[13px] text-down">Couldn&apos;t read {D.label}: {String((error as Error).message ?? error).split("\n")[0]}</div>}
 
       <div className="pp-market-status econ-status">
         <div title="BuilderFund.outstanding"><span>builder income held</span><strong>{econ ? $(econ.outstanding) : "—"}</strong></div>
@@ -153,7 +153,7 @@ export function EconomyPanel() {
             <div className="is-builder"><b>net</b><span>the rest → the builder&apos;s payout address</span></div>
           </div>
         </div>
-        <p className="mt-3 text-2xs text-fg-dim">
+        <p className="mt-3 text-[13px] text-fg-dim">
           Common markets (MarketsV4) keep their own split: 30% creator, 20% agent, 50% Registrai treasury. A deactivated
           builder&apos;s claim reverts; the Safe can sweep that frozen income, untaxed, to the season pool.
         </p>
@@ -161,21 +161,21 @@ export function EconomyPanel() {
 
       <section className="pp-action-card">
         <div className="pp-panel-heading"><span>Progressive tax</span><b>{econ ? `schedule of epoch ${econ.epoch}` : "launch schedule"}</b></div>
-        <p className="mb-3 text-2xs text-fg-dim">
+        <p className="mb-3 text-[13px] text-fg-dim">
           Marginal, like income tax, on a builder&apos;s income per epoch: each rate applies only to the slice inside its
           bracket, so earning more never lowers take-home. E.g. $800 → $0; $60,000 → $0 + $900 + $8,000 + $3,000 = $11,900.
         </p>
         <TaxTable brackets={schedules[0].brackets} caption="Current tax schedule" />
         {econ?.upcoming.map((u) => (
           <div key={u.effectiveEpoch.toString()} className="mt-4">
-            <p className="mb-2 text-2xs text-fg">
+            <p className="mb-2 text-[13px] text-fg">
               Announced for epoch {u.effectiveEpoch.toString()} onward
               {u.effectiveEpoch === econ.epoch + 1n ? " (final)" : " (may still be replaced this epoch)"}:
             </p>
             <TaxTable brackets={u.brackets} caption={`Schedule from epoch ${u.effectiveEpoch}`} />
           </div>
         ))}
-        <p className="mt-3 text-2xs text-fg-dim">
+        <p className="mt-3 text-[13px] text-fg-dim">
           The Safe (GOVERNOR) sets a new schedule; it takes effect two epochs later, and an epoch&apos;s schedule is fixed
           once that epoch is next. Bounds enforced on-chain: up to 8 brackets, thresholds strictly increasing, rates
           non-decreasing, none above 40%, and the first bracket 0% up to at least $100.
@@ -189,7 +189,7 @@ export function EconomyPanel() {
 
       <section className="pp-action-card">
         <div className="pp-panel-heading"><span>Season pool</span><b>SeasonPool</b></div>
-        <p className="text-2xs text-fg-dim">
+        <p className="text-[13px] text-fg-dim">
           The shared pool: it receives the tax, frozen income swept from deactivated builders, and the agent escrow of
           voided markets nobody successfully challenged. The Safe publishes seasons as merkle roots over (season, builder,
           amount), allocating at most the unallocated balance; builders, or anyone for them, claim with a proof, paid to the
@@ -225,7 +225,7 @@ export function EconomyPanel() {
             ))}
           </div>
         )}
-        {history.data?.partial && <p className="mt-1 text-2xs text-fg-dim">Still indexing older events…</p>}
+        {history.data?.partial && <p className="mt-1 text-[13px] text-fg-dim">Still indexing older events…</p>}
         <h3 className="econ-sub">Distribution rule v2: building progress traders confirmed</h3>
         <ul className="econ-list">
           <li>Eligible: builders verified with a non-lapsed badge at the season&apos;s end.</li>

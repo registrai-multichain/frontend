@@ -73,21 +73,21 @@ export function BuilderProfile({
     <div className="border border-line bg-bg-elev p-5 space-y-4">
       {/* header */}
       <div>
-        <div className="caption text-[10px] text-fg-dim mb-1">builder profile</div>
+        <div className="caption text-[13px] text-fg-dim mb-1">builder profile</div>
         <div className="flex items-baseline justify-between gap-3 flex-wrap">
           <h3 className="font-serif text-[18px] flex items-center gap-2">
             {digest.name}
             <VerifiedBadge verification={verification} />
           </h3>
           {digest.latestRelease && (
-            <span className="text-2xs text-up">release {digest.latestRelease}</span>
+            <span className="text-[13px] text-up">release {digest.latestRelease}</span>
           )}
         </div>
         <a
           href={`https://github.com/${repoSlug}`}
           target="_blank"
           rel="noreferrer"
-          className="text-2xs text-accent hover:underline"
+          className="text-[13px] text-accent hover:underline"
         >
           github.com/{repoSlug} ↗
         </a>
@@ -96,9 +96,9 @@ export function BuilderProfile({
       {/* challenge / dispute banner */}
       {challenges.length > 0 && (
         <div className="border border-down/30 bg-down/5 p-3 space-y-1">
-          <div className="caption text-[10px] text-down">open disputes</div>
+          <div className="caption text-[13px] text-down">open disputes</div>
           {challenges.map((c) => (
-            <div key={`${c.kind}-${c.id}`} className="text-2xs text-down flex flex-wrap gap-x-2">
+            <div key={`${c.kind}-${c.id}`} className="text-[13px] text-down flex flex-wrap gap-x-2">
               <span>⚠ {c.kind}</span>
               <span className="text-fg-dim">{c.artifact}</span>
               <span>· {c.status}</span>
@@ -109,9 +109,9 @@ export function BuilderProfile({
 
       {/* progress timeline */}
       <div>
-        <div className="caption text-[10px] text-fg-dim mb-2">progress timeline</div>
+        <div className="caption text-[13px] text-fg-dim mb-2">progress timeline</div>
         {progress.length === 0 ? (
-          <p className="text-2xs text-fg-dim">no progress yet</p>
+          <p className="text-[13px] text-fg-dim">no progress yet</p>
         ) : (
           <div className="space-y-px">
             {progress.map((p) => {
@@ -123,9 +123,9 @@ export function BuilderProfile({
                 >
                   <div className="min-w-0 flex items-center gap-2">
                     <span className="text-[13px] truncate">{p.artifact}</span>
-                    <span className="text-up tabular-nums text-2xs">+{p.weight}</span>
+                    <span className="text-up tabular-nums text-[13px]">+{p.weight}</span>
                   </div>
-                  <span className={`text-2xs shrink-0 ${cue.cls}`}>{cue.label}</span>
+                  <span className={`text-[13px] shrink-0 ${cue.cls}`}>{cue.label}</span>
                 </div>
               );
             })}
@@ -135,8 +135,8 @@ export function BuilderProfile({
 
       {/* keeper status */}
       <div className="border-t border-line pt-3">
-        <div className="caption text-[10px] text-fg-dim mb-2">keeper status</div>
-        <div className="flex flex-wrap gap-x-6 gap-y-1 text-2xs">
+        <div className="caption text-[13px] text-fg-dim mb-2">keeper status</div>
+        <div className="flex flex-wrap gap-x-6 gap-y-1 text-[13px]">
           {digest.bond != null && (
             <span className="text-fg-dim">
               operator bond <span className="text-accent tabular-nums">${fmtUsdc(digest.bond)}</span>
@@ -144,13 +144,13 @@ export function BuilderProfile({
           )}
           <span className="text-fg-dim">builder #{digest.builderId} · {digest.chain}</span>
         </div>
-        {digest.summary && <p className="text-2xs text-fg-dim leading-relaxed mt-2">{digest.summary}</p>}
+        {digest.summary && <p className="text-[13px] text-fg-dim leading-relaxed mt-2">{digest.summary}</p>}
       </div>
 
       {/* milestone market (on-chain odds passed in from parent) */}
       {digest.milestoneMarketId && milestone && (
         <div className="border-t border-line pt-3">
-          <div className="caption text-[10px] text-fg-dim mb-1">milestone market</div>
+          <div className="caption text-[13px] text-fg-dim mb-1">milestone market</div>
           {milestone}
         </div>
       )}

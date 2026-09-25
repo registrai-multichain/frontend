@@ -161,3 +161,6 @@
 .paper-type .bld-card[data-tone="grayscale"] { filter: grayscale(1); opacity: .82; }
 .paper-type .bld-card[data-tone="grayscale"]:hover,
 .paper-type .bld-card[data-tone="grayscale"]:focus-within { opacity: 1; }
+/* the global .caption (uppercase mono) and the shared wallet button, in paper frames */
+.paper-type .caption { font-family: inherit; font-size: 13px; letter-spacing: 0; text-transform: none; }
+.paper-type .pa-top-right button { border-radius: 999px; padding: 5px 14px; font-size: 14px; letter-spacing: 0; text-transform: capitalize; }

@@ -95,8 +95,8 @@ export function AgentBadge({ agent, rep, className = "" }: { agent: Address | un
   const warning = a ? coverageWarning(a) : undefined;
   const tierClass = a?.tier === "thin" ? "text-down" : a?.tier === "partial" ? "text-accent" : "text-up";
   return (
-    <div className={`agent-badge text-2xs ${className}`} data-level={a?.level}>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10.5px] text-fg-mute">
+    <div className={`agent-badge text-[13px] ${className}`} data-level={a?.level}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[13px] text-fg-mute">
         <span className="text-fg-dim">agent {short(agent)}</span>
         {a ? (
           <>
@@ -141,8 +141,8 @@ export function CaughtAgentBanner({
   const dispute = rep.dispute;
   const href = a.caughtTx ? `${explorer}/tx/${a.caughtTx}` : dispute ? `${explorer}/address/${dispute}` : undefined;
   return (
-    <div className={`caught-banner border border-down/50 bg-down/10 p-3 text-2xs text-down ${className}`} role="alert">
-      <strong className="block text-[12px]">{CAUGHT_BANNER}.</strong>
+    <div className={`caught-banner border border-down/50 bg-down/10 p-3 text-[13px] text-down ${className}`} role="alert">
+      <strong className="block text-[13px]">{CAUGHT_BANNER}.</strong>
       <span className="text-fg-mute">
         A dispute ruled one of its answers invalid, so its reputation was reset. This market keeps trading; you can sell your
         position at any time before it closes.

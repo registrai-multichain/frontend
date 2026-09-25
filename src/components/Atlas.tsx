@@ -159,7 +159,7 @@ export function Atlas() {
             </div>
 
             {inCell.length === 0 && (
-              <div className="atlas-builder text-2xs text-fg-dim">No builders in this cell.</div>
+              <div className="atlas-builder text-[13px] text-fg-dim">No builders in this cell.</div>
             )}
 
             {openBuilder === null
@@ -197,18 +197,18 @@ export function Atlas() {
                   return (
                     <div className="atlas-builder">
                       <div className="flex items-baseline justify-between gap-4 flex-wrap">
-                        <span className="text-2xs text-fg-dim tnum flex items-center gap-2 flex-wrap">
+                        <span className="text-[13px] text-fg-dim tnum flex items-center gap-2 flex-wrap">
                           {v && <span className="text-fg">{sourceLabel(v.source)}</span>}
                           <VerifiedBadge verification={v} />
                           {b.address}
                         </span>
-                        <span className="text-2xs text-fg-dim tnum">
+                        <span className="text-[13px] text-fg-dim tnum">
                           {b.lifetimeProgress} progress · {usdc(b.volume)} USDC volume
                         </span>
                       </div>
 
                       {mine.length === 0 ? (
-                        <div className="text-2xs text-fg-dim mt-3">No markets yet.</div>
+                        <div className="text-[13px] text-fg-dim mt-3">No markets yet.</div>
                       ) : (
                         <ul className="atlas-markets">
                           {mine.map((m) => {

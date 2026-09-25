@@ -93,13 +93,13 @@ export function BuilderIncomeCard(props: {
         <b>{econ ? `epoch ${econ.epoch} · ends in ${chainNow ? durationText(econ.epochEndsAt - chainNow) : "…"}` : "BuilderFund"}</b>
       </div>
       {!fundStatus ? (
-        <p className="text-2xs text-fg-dim">Reading the BuilderFund…</p>
+        <p className="text-[13px] text-fg-dim">Reading the BuilderFund…</p>
       ) : note ? (
-        <p className="text-2xs text-fg-dim">{note}</p>
+        <p className="text-[13px] text-fg-dim">{note}</p>
       ) : error ? (
-        <p className="text-2xs text-down">Couldn&apos;t read this builder&apos;s income: {String((error as Error).message ?? error).split("\n")[0]}</p>
+        <p className="text-[13px] text-down">Couldn&apos;t read this builder&apos;s income: {String((error as Error).message ?? error).split("\n")[0]}</p>
       ) : !rows || !econ ? (
-        <p className="text-2xs text-fg-dim">Reading income…</p>
+        <p className="text-[13px] text-fg-dim">Reading income…</p>
       ) : (
         <>
           <div className="pp-income-now">
@@ -108,13 +108,13 @@ export function BuilderIncomeCard(props: {
             <div><span>1% fee</span><strong>{$(current?.fee ?? 0n)}</strong></div>
             <div><span>est. net</span><strong>{$(current?.net ?? 0n)}</strong></div>
           </div>
-          <p className="mt-2 text-2xs text-fg-dim">
+          <p className="mt-2 text-[13px] text-fg-dim">
             50% of every trading fee on {name}&apos;s markets, credited this epoch. The tax is estimated with this
             epoch&apos;s schedule (next dollar taxed at {bpsPct(BigInt(marginalRateBps(current?.gross ?? 0n, econ.schedule)))});
             it is final once the epoch ends. <Link href="/perennial/economy" className="text-accent hover:underline">Tax schedule →</Link>
           </p>
           {!props.active && (
-            <p className="mt-2 text-2xs text-down">
+            <p className="mt-2 text-[13px] text-down">
               This builder is deactivated: its income is frozen (claims revert) until it is reactivated, or the Safe sweeps
               it to the season pool.
             </p>
@@ -138,13 +138,13 @@ export function BuilderIncomeCard(props: {
             ))}
           </div>
           {past.some((e) => epochState(e) === "claimable") && (
-            <p className="mt-2 text-2xs text-fg-dim">
+            <p className="mt-2 text-[13px] text-fg-dim">
               Anyone can send a claim (the keeper does it too): the tax goes to the season pool, 1% of the rest to
               Registrai, and the net to the builder&apos;s payout address, whoever sends it.
               {props.canClaim ? "" : " Connect a wallet to send one."}
             </p>
           )}
-          {history.data?.partial && <p className="mt-1 text-2xs text-fg-dim">Still indexing older fund events…</p>}
+          {history.data?.partial && <p className="mt-1 text-[13px] text-fg-dim">Still indexing older fund events…</p>}
         </>
       )}
     </div>
