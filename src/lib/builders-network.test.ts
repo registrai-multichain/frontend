@@ -50,11 +50,6 @@ describe("resolveBuildersDeployment", () => {
     expect(BUILDERS.badgeNetwork).toBe("arc");
     expect(BUILDERS.deployed && BUILDERS.badgesOn).toBe(true);
   });
-    expect(BUILDERS.operator).toBe("0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263");
-    expect(BUILDERS.deployBlock).toBe(BigInt(testnet.builders.deployBlock));
-    expect(BUILDERS.badgeNetwork).toBe("arc-testnet");
-    expect(BUILDERS.deployed && BUILDERS.badgesOn).toBe(true);
-  });
 
   test("mainnet: Circle's RPC, the mainnet explorer, badge art key 'arc'", () => {
     const d = resolveBuildersDeployment("mainnet", { BuilderRegistry: A, CaretakerRegistry: B, VerifiedBuilderBadge: A, operator: B, deployBlock: 12 });
