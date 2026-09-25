@@ -47,10 +47,10 @@ export default function AtlasPage() {
         {PERENNIAL.deployed && SNAPSHOT_MATCHES_NETWORK ? (
           <Atlas />
         ) : (
-          <div className="pp-notice border border-line bg-bg-elev p-5 text-[13px] text-fg-dim">
+          <p className="pa-notice">
             No {PERENNIAL.label} atlas yet — Perennial is not deployed there, or this build has no{" "}
             {PERENNIAL.label} snapshot.
-          </div>
+          </p>
         )}
       </article>
     </PerennialShell>

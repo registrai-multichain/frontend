@@ -182,3 +182,9 @@
 .paper-type .vf-step[data-state="todo"] h2 { color: var(--fg-mute); }
 .paper-type .vf-primary { border-radius: 10px; background: var(--fg); color: var(--bg); font-size: 15px; font-weight: 600; clip-path: none; }
 .paper-type .vf-facts b { font-family: var(--font-serif), Georgia, serif; font-weight: 400; font-size: 22px; }
+.paper-type .gd-toc a { border-radius: 999px; font-family: inherit; font-size: 13px; }
+.paper-type .gd-sections, .paper-type .gd-foot { max-width: 65ch; }
+.paper-type .gd-section summary { font-family: var(--font-serif), Georgia, serif; font-size: 22px !important; font-weight: 400; }
+.paper-type .gd-section ol, .paper-type .gd-section p { font-size: 16px !important; line-height: 1.65 !important; color: var(--fg); }
+.paper-type .gd-section code { color: var(--accent-deep); }
+.paper-type .gd-section li::marker { font-family: inherit; font-size: 15px; }

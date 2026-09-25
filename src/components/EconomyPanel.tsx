@@ -128,39 +128,38 @@ export function EconomyPanel() {
       )}
       {error && <div className="pp-notice border border-down/35 bg-down/5 p-3 text-[13px] text-down">Couldn&apos;t read {D.label}: {String((error as Error).message ?? error).split("\n")[0]}</div>}
 
-      <div className="pp-market-status econ-status">
-        <div title="BuilderFund.outstanding"><span>builder income held</span><strong>{econ ? $(econ.outstanding) : "—"}</strong></div>
-        <div title="SeasonPool.unallocated"><span>season pool</span><strong>{econ ? $(econ.unallocated) : "—"}</strong></div>
-        <div title="SeasonPool.reserved"><span>reserved for seasons</span><strong>{econ ? $(econ.reserved) : "—"}</strong></div>
-        <div><span>epoch</span><strong>{econ && live ? `${econ.epoch} · ${durationText(econ.epochEndsAt - live.chainNow)} left` : "—"}</strong></div>
-        <div><span>epoch length</span><strong>{econ ? durationText(econ.epochLength) : "30d (mainnet)"}</strong></div>
-        <div><span>network</span><strong>{D.label}</strong></div>
-      </div>
+      <section className="pa-strip" aria-label="Right now">
+        <div className="pa-card"><span className="pa-muted pa-small">Builder income held</span><b>{econ ? $(econ.outstanding) : "—"}</b></div>
+        <div className="pa-card"><span className="pa-muted pa-small">Season pool</span><b>{econ ? $(econ.unallocated) : "—"}</b></div>
+        <div className="pa-card"><span className="pa-muted pa-small">Reserved for seasons</span><b>{econ ? $(econ.reserved) : "—"}</b></div>
+        <div className="pa-card"><span className="pa-muted pa-small">Epoch {econ ? econ.epoch.toString() : ""} ends in</span><b>{econ && live ? durationText(econ.epochEndsAt - live.chainNow) : "—"}</b></div>
+      </section>
 
-      <section className="pp-action-card">
-        <div className="pp-panel-heading"><span>Where the fee goes</span><b>MarketsPerennial</b></div>
-        <div className="econ-flow">
-          <div className="econ-flow-step"><b>{bpsPct(BigInt(FEE_SPLIT.tradeFeeBps))}</b><span>of every buy and sell</span></div>
-          <div className="econ-flow-legs">
-            <div><b>{pct(FEE_SPLIT.creatorBps)}</b><span>market creator, paid on the trade</span></div>
-            <div><b>{pct(FEE_SPLIT.agentBps)}</b><span>bonded agent, held until the market settles. On a void: the successful challenger, else the season pool</span></div>
-            <div className="is-builder"><b>{pct(FEE_SPLIT.builderBps)}</b><span>the builder the market is about: credited as that builder&apos;s income for the current epoch</span></div>
-          </div>
-          <div className="econ-flow-step"><b>claimFor</b><span>after the epoch ends, sent by anyone (the keeper cranks it)</span></div>
-          <div className="econ-flow-legs">
-            <div><b>tax</b><span>progressive, by the epoch&apos;s schedule → the season pool</span></div>
-            <div><b>1%</b><span>of the after-tax income → Registrai (it pays for the caretaker that monitors milestones)</span></div>
-            <div className="is-builder"><b>net</b><span>the rest → the builder&apos;s payout address</span></div>
-          </div>
+      <section className="pa-stack">
+        <h2 className="pa-h2">Where the money goes</h2>
+        <div className="flex flex-wrap items-stretch gap-3">
+          <div className="pa-card text-center"><b className="pa-serif block text-[28px]">{bpsPct(BigInt(FEE_SPLIT.tradeFeeBps))}</b>fee on every buy and sell</div>
+          <span className="self-center text-accent" aria-hidden="true">→</span>
+          <div className="pa-card text-center"><b className="pa-serif block text-[28px]">{pct(FEE_SPLIT.builderBps)}</b>the builder the market is about</div>
+          <div className="pa-card text-center"><b className="pa-serif block text-[28px]">{pct(FEE_SPLIT.creatorBps)}</b>whoever opened the market</div>
+          <div className="pa-card text-center"><b className="pa-serif block text-[28px]">{pct(FEE_SPLIT.agentBps)}</b>the agent that settles it, held until it does</div>
         </div>
-        <p className="mt-3 text-[13px] text-fg-dim">
-          Common markets (MarketsV4) keep their own split: 30% creator, 20% agent, 50% Registrai treasury. A deactivated
-          builder&apos;s claim reverts; the Safe can sweep that frozen income, untaxed, to the season pool.
+        <p>
+          The builder&apos;s share is collected after each epoch; anyone can send the payout (the keeper does it automatically). A progressive tax on
+          it goes to the season pool, 1% of the rest pays for the caretaker that watches milestones, and the rest goes to the builder&apos;s payout address.
+        </p>
+        <p className="pa-muted pa-small">
+          If a market is voided, the agent&apos;s held share goes to whoever successfully challenged its answer, otherwise to the season pool. Common
+          markets (the 5-minute rounds) keep their own split: 30% creator, 20% agent, 50% Registrai. A deactivated builder&apos;s income can&apos;t be
+          paid out; the Safe can move it, untaxed, to the season pool.
         </p>
       </section>
 
       <section className="pp-action-card">
         <div className="pp-panel-heading"><span>Progressive tax</span><b>{econ ? `schedule of epoch ${econ.epoch}` : "launch schedule"}</b></div>
+        <details className="pa-details">
+          <summary>Show the full tax table</summary>
+          <div className="mt-3">
         <p className="mb-3 text-[13px] text-fg-dim">
           Marginal, like income tax, on a builder&apos;s income per epoch: each rate applies only to the slice inside its
           bracket, so earning more never lowers take-home. E.g. $800 → $0; $60,000 → $0 + $900 + $8,000 + $3,000 = $11,900.
@@ -180,6 +179,8 @@ export function EconomyPanel() {
           once that epoch is next. Bounds enforced on-chain: up to 8 brackets, thresholds strictly increasing, rates
           non-decreasing, none above 40%, and the first bracket 0% up to at least $100.
         </p>
+          </div>
+        </details>
       </section>
 
       <section className="pp-action-card">
@@ -204,6 +205,8 @@ export function EconomyPanel() {
             <div><span>seasons</span><strong>{history.data ? String(seasonIds.length) : "…"}</strong></div>
           </div>
         )}
+        <details className="pa-details mt-3">
+          <summary>Published seasons and how they are shared</summary>
         {econ && (
           <div className="econ-table mt-3" role="table" aria-label="Published seasons">
             <div role="row" className="econ-row econ-row--season is-head">
@@ -241,6 +244,7 @@ export function EconomyPanel() {
             can evolve per season (published with each root), the on-chain caps cannot be bypassed.
           </li>
         </ul>
+        </details>
       </section>
 
       <section className="pp-action-card">
@@ -257,6 +261,23 @@ export function EconomyPanel() {
           <li>Season distribution is Safe-published: a trusted computation, verifiable by re-running the script.</li>
         </ul>
       </section>
+      <details className="pa-details">
+        <summary>The fine print</summary>
+        <p className="pa-small mt-2">
+          {PERENNIAL.chain.testnet ? "Testnet: test USDC only. " : ""}Markets are settled by the
+          protocol&apos;s bonded milestone agent (the caretaker operator) on the first valid attestation
+          after expiry. Every buy and sell pays a 1% trading fee, 30% to the market creator, 20% to
+          the bonded agent (held until the market settles), 50% to the builder the market is about;
+          nothing is charged at settlement. The builder&apos;s 50% is its income for the epoch: once
+          the epoch ends, anyone can claim it for the builder, which pays a progressive tax to the
+          season pool, 1% of the rest to Registrai (the caretaker&apos;s monitoring fee) and the net
+          to the builder (see above). An incorrect
+          attestation can be challenged and its bond slashed; a market that can&apos;t be settled
+          voids, every trader gets their net cost back (what they put in after fees, minus what they
+          took out), and the agent&apos;s held 20% goes to a successful challenger, otherwise the
+          season pool. GitHub releases and tags are keeper-detected in this MVP.
+        </p>
+      </details>
     </div>
   );
 }
