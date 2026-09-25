@@ -1,20 +1,20 @@
 {
-  "syncedAt": "2026-09-25T14:05:20.177Z",
+  "syncedAt": "2026-09-25T20:46:16.065Z",
   "builders": [],
   "perennialBuilders": [
     {
       "builderId": 1,
       "owner": "0x6e5f89011fefe7435c7b509f5d3f83c42621d840",
       "source": "domain:registrai-proof-test.pages.dev",
-      "status": "inactive",
+      "status": "lapsed",
       "country": null,
-      "proofUrl": null,
+      "proofUrl": "https://registrai-proof-test.pages.dev/.well-known/registrai.json",
       "milestoneFeedId": "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601",
       "projects": [
         {
           "id": 1,
           "source": "domain:registrai-proof-test.pages.dev",
-          "status": "inactive",
+          "status": "lapsed",
           "milestoneFeedId": "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601"
         }
       ],
@@ -25,23 +25,57 @@
     "chainId": 5042002,
     "registry": "0x770d0feedcDa264c9d5C835D56fA7903cbC5719c",
     "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
-    "lastScannedBlock": "63941231",
+    "lastScannedBlock": "63988515",
     "feeds": {
-      "registrai-milestone:domain:registrai-proof-test.pages.dev": "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601"
+      "registrai-milestone:domain:registrai-proof-test.pages.dev": "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601",
+      "registrai-data:btc-usd": "0xd2f96305ff376028d69a5d0c19b873f484a7ba337ce05e8676d7f9796373089d"
     }
   },
-  "perennialMarkets": [],
+  "perennialMarkets": [
+    {
+      "marketId": "0x165856fc133ab2e4b70c8f0d7220143366ecc0a18a33a2fdefd59a2156bce1f9",
+      "builderId": 1,
+      "expiry": 1790350217,
+      "phase": "trading",
+      "yesWon": false,
+      "yesReserve": "7687176",
+      "noReserve": "3252171",
+      "feedId": "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601",
+      "agent": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
+      "threshold": "2",
+      "comparator": 1,
+      "creator": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e"
+    }
+  ],
   "atlas": {
-    "lastScannedBlock": "63941231",
-    "volumeByBuilderId": {},
-    "marketToBuilder": {},
+    "lastScannedBlock": "63988515",
+    "volumeByBuilderId": {
+      "1": "5000000"
+    },
+    "marketToBuilder": {
+      "0x165856fc133ab2e4b70c8f0d7220143366ecc0a18a33a2fdefd59a2156bce1f9": 1
+    },
     "pnl": {
-      "positions": {},
-      "realised": {}
+      "positions": {
+        "0x165856fc133ab2e4b70c8f0d7220143366ecc0a18a33a2fdefd59a2156bce1f9|0xae1a21be03a9099971aafc1dfdc9544c3b07f0af|0": {
+          "shares": "1699169",
+          "cost": "1000000"
+        },
+        "0x165856fc133ab2e4b70c8f0d7220143366ecc0a18a33a2fdefd59a2156bce1f9|0xa9fa24e1147e8337c3d25b084890121be10a132b|1": {
+          "shares": "6134174",
+          "cost": "3000000"
+        }
+      },
+      "realised": {
+        "1": {
+          "0xae1a21be03a9099971aafc1dfdc9544c3b07f0af": "-441981"
+        }
+      }
     },
     "milestones": {
       "latestByFeed": {
-        "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601": "1"
+        "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601": "1",
+        "0xd2f96305ff376028d69a5d0c19b873f484a7ba337ce05e8676d7f9796373089d": "8397671"
       },
       "bySeason": {
         "1": {
@@ -60,9 +94,13 @@
     "chainId": 5042002,
     "fund": "0x06ef72DE4Cb130e7F3EC2807eC34066053c86C8d",
     "pool": "0x96c7C8E5E2805334c30C23C94930542E91D19567",
-    "scannedTo": "63941231",
+    "scannedTo": "63988515",
     "ledger": {
-      "income": {},
+      "income": {
+        "1": {
+          "0": "27819"
+        }
+      },
       "claims": {},
       "swept": {},
       "schedules": [
@@ -85,7 +123,12 @@
   ],
   "seasonBoards": {
     "1": {
-      "traders": [],
+      "traders": [
+        [
+          "0xae1a21be03a9099971aafc1dfdc9544c3b07f0af",
+          "-441981"
+        ]
+      ],
       "builders": []
     }
   },
@@ -111,7 +154,7 @@
         "Dispute": "0x9c0c81c11fe510eb89ade831c13c066cc5dad411"
       },
       "fromBlock": "63826822",
-      "lastScannedBlock": "63941231",
+      "lastScannedBlock": "63988515",
       "state": {
         "agents": {
           "0xa9fa24e1147e8337c3d25b084890121be10a132b": {
@@ -124,7 +167,18 @@
             "settledMarkets": 1
           }
         },
-        "open": {}
+        "open": {
+          "0xfa2034ea39fb6e04137239e1dfb0bec995938e9e:0x165856fc133ab2e4b70c8f0d7220143366ecc0a18a33a2fdefd59a2156bce1f9": {
+            "agent": "0xf26db19bc8dc33c9a72399128cf5cfb5ddc76263",
+            "feed": "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601",
+            "volume": "5563655"
+          },
+          "0xff3dcbb85ed027395c915e1eef7353453a84a594:0x8a95b46e961d3bfa0d8912a2b4b8641f72f74f5e2b3dc3ce1a4701cb5d195159": {
+            "agent": "0xf26db19bc8dc33c9a72399128cf5cfb5ddc76263",
+            "feed": "0xd2f96305ff376028d69a5d0c19b873f484a7ba337ce05e8676d7f9796373089d",
+            "volume": "2500000"
+          }
+        }
       },
       "challenges": {},
       "attesters": {}
@@ -144,7 +198,7 @@
     "network": "mainnet",
     "chainId": 5042,
     "builderRegistry": "0xBB6F4B18776Fd20Bb53a1205375273373DD1E5bA",
-    "syncedAt": "2026-09-25T14:05:20.177Z",
+    "syncedAt": "2026-09-25T20:46:16.065Z",
     "nextId": 3,
     "builders": [
       {
@@ -203,7 +257,7 @@
     "chainId": 5042,
     "badge": "0xF229d2Ed13Cc35d46fa7676a579495E5C80CFEB2",
     "registry": "0xBB6F4B18776Fd20Bb53a1205375273373DD1E5bA",
-    "toBlock": "22699214",
+    "toBlock": "22746604",
     "revokes": [],
     "statuses": []
   },
