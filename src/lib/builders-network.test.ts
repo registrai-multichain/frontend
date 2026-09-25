@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 import mainnet from "./deployments/arc-mainnet.json";
-import testnet from "./deployments/arc-testnet-perennial.json";
 import {
   BUILDERS,
   BUILDERS_SOURCES,

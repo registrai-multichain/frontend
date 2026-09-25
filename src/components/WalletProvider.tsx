@@ -26,6 +26,7 @@ import {
   isSupportedChain,
   type ChainEntry,
 } from "@/lib/chains";
+import { isMobileUserAgent, metamaskDappLink } from "@/lib/verify-invite";
 
 type EthereumProvider = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
@@ -117,6 +118,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const connect = useCallback(async () => {
     if (typeof window === "undefined" || !window.ethereum) {
+      // A phone with no wallet in this browser: reopen the page in MetaMask's.
+      const mm = typeof window !== "undefined" && isMobileUserAgent(navigator.userAgent) ? metamaskDappLink(window.location.href) : null;
+      if (mm) {
+        window.location.href = mm;
+        return;
+      }
       setError("No wallet found. Install MetaMask or another EVM wallet.");
       return;
     }

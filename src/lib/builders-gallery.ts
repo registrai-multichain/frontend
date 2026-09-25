@@ -667,6 +667,15 @@ export function galleryCounts(entries: GalleryEntry[]): GalleryCounts {
   return c;
 }
 
+/**
+ * Pure: whether the gallery shows its counters. All zeros read as a dead
+ * registry to the first invitees; the "founding builders" panel speaks for an
+ * empty gallery instead.
+ */
+export function showGalleryStats(c: Pick<GalleryCounts, "all">): boolean {
+  return c.all > 0;
+}
+
 // ───────────────────────────── links ─────────────────────────────
 
 /** GitHub owner avatar (CORS-enabled, cached by GitHub); null for domains. */

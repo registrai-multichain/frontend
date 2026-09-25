@@ -19,7 +19,7 @@ export function BuildersShell({ children, wallet = false }: { children: ReactNod
         <div className="mx-auto grid h-[70px] w-full max-w-[1280px] grid-cols-[1fr_auto] items-center gap-4 px-5 sm:h-[82px] sm:grid-cols-[1fr_auto_1fr] sm:px-10">
           <Link href="/" className="flex w-max items-center gap-2.5 transition-opacity hover:opacity-80" aria-label="Registrai home">
             <BrandLockup markClassName="h-7 w-7 sm:h-8 sm:w-8" wordmarkClassName="text-[19px] sm:text-[21px]" />
-            <span className="border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-[0.15em] text-fg-mute">builders</span>
+            <span className="hidden border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-[0.15em] text-fg-mute min-[420px]:inline">builders</span>
           </Link>
 
           <div className="hidden items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-fg-mute sm:flex">
@@ -27,7 +27,7 @@ export function BuildersShell({ children, wallet = false }: { children: ReactNod
             {buildersStatusLine(BUILDERS)}
           </div>
 
-          <nav className="flex items-center justify-self-end gap-4">
+          <nav className="flex items-center justify-self-end gap-3 sm:gap-4">
             <Link href="/builders" className="font-mono text-[10.5px] uppercase tracking-[0.13em] text-fg-mute transition-colors hover:text-fg">
               gallery
             </Link>

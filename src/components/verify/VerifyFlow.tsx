@@ -27,6 +27,8 @@ import {
 import { verifiedBuilderAbi } from "@/lib/verified-builders-chain";
 import { MAX_NAME_LEN } from "@/lib/builders-gallery";
 import { displayNameError, finalStepTitle, planClaim, projectSlots, sourceError, stepStates } from "@/lib/verify-plan";
+import { GaslessRequest } from "./GaslessRequest";
+import { MobileWalletLink, useMobileWithoutWallet } from "./MobileWalletLink";
 import { sendBuildersTx } from "./sendTx";
 import { buildersClient, useMyBuilder } from "./useMyBuilder";
 
@@ -152,6 +154,7 @@ export interface ProjectPick {
  */
 export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
   const { address, walletChainId, connect, switchChain, isConnecting, error: walletError } = useWallet();
+  const mobileNoWallet = useMobileWithoutWallet();
 
   const [path, setPath] = useState<Path>("repo");
   const [sourceInput, setSourceInput] = useState("");
@@ -414,10 +417,16 @@ export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
               <p className="vf-hint">Claiming {sourceLabel(invitedSource)}. Connect to continue; it&apos;s prefilled below.</p>
             )}
             <p className="vf-note">The wallet that will own the project on {LABEL}. Signing is free; it sends nothing.</p>
-            <button type="button" className="vf-primary" onClick={connect} disabled={isConnecting}>
-              {isConnecting ? "connecting…" : "connect wallet"}
-            </button>
-            {walletError && <p className="vf-error">{walletError}</p>}
+            {mobileNoWallet ? (
+              <MobileWalletLink href={mobileNoWallet} />
+            ) : (
+              <>
+                <button type="button" className="vf-primary" onClick={connect} disabled={isConnecting}>
+                  {isConnecting ? "connecting…" : "connect wallet"}
+                </button>
+                {walletError && <p className="vf-error">{walletError}</p>}
+              </>
+            )}
           </>
         )}
       </Step>
@@ -686,23 +695,31 @@ export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
                 </>
               )}
             </p>
-            {gas?.needsGas ? (
-              gasless
-            ) : !isBuilderWallet ? (
-              <p className="vf-error">Switch your wallet back to the builder wallet {builder ? shortAddr(builder) : ""} to register.</p>
-            ) : !onChain ? (
-              <button type="button" className="vf-primary" onClick={() => switchChain(CHAIN.id)}>switch to {LABEL}</button>
-            ) : (
-              <button type="button" className="vf-primary" onClick={register} disabled={txState.pending || !PERENNIAL_WRITES_ENABLED}>
-                {txState.pending ? "sending…" : target.kind === "register" ? "register" : "add project"}
-              </button>
-            )}
-            {!gas?.needsGas && (
-              <details className="vf-details">
-                <summary>No USDC for gas?</summary>
-                {gasless}
-              </details>
-            )}
+            <div className="vf-choice">
+              <div className="vf-option">
+                <b>Register it yourself</b>
+                <span>One transaction from your builder wallet. Needs a little USDC for gas on {LABEL}.</span>
+                {gas?.needsGas ? (
+                  <p className="vf-hint">This wallet has no USDC for gas on {LABEL}: use the free option.</p>
+                ) : !isBuilderWallet ? (
+                  <p className="vf-error">Switch your wallet back to the builder wallet {builder ? shortAddr(builder) : ""} to register.</p>
+                ) : !onChain ? (
+                  <button type="button" className="vf-primary" onClick={() => switchChain(CHAIN.id)}>switch to {LABEL}</button>
+                ) : (
+                  <button type="button" className="vf-primary" onClick={register} disabled={txState.pending || !PERENNIAL_WRITES_ENABLED}>
+                    {txState.pending ? "sending…" : target.kind === "register" ? "register" : "add project"}
+                  </button>
+                )}
+              </div>
+              <div className="vf-option" data-recommended={gas?.needsGas ? "true" : undefined}>
+                <b>We register it for you · free</b>
+                <span>
+                  The Registrai Safe registers it in its next batch after checking your proof. Your wallet stays the owner;
+                  nothing is signed on your behalf.
+                </span>
+                {claim && <GaslessRequest source={claim.source} proofLive={proofLive} />}
+              </div>
+            </div>
             {txState.error && <p className="vf-error">{txState.error}</p>}
             {txState.hash && <a className="vf-link" href={txUrl(CHAIN, txState.hash)} target="_blank" rel="noreferrer">view transaction ↗</a>}
           </>

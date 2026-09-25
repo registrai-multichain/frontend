@@ -12,6 +12,7 @@ import {
   displayKind,
   filterGallery,
   galleryCounts,
+  showGalleryStats,
   galleryRowsFromRecords,
   gallerySyncPlan,
   labelOf,
@@ -267,6 +268,12 @@ describe("mergeGallery", () => {
     // unconfirmed builders are listed but never counted as claimed, nor their country
     const withUnconfirmed = mergeGallery([...builders, row(8, { status: "unconfirmed", country: "FR", projects: [proj(80, "domain:u.example.org", { status: "unconfirmed" })] })], nominees);
     expect(galleryCounts(withUnconfirmed)).toMatchObject({ verified: 2, nominated: 1, unconfirmed: 1, countries: 2 });
+  });
+
+  test("counters show only once the gallery has an entry (an empty one shows the founding panel)", () => {
+    expect(showGalleryStats(galleryCounts([]))).toBe(false);
+    expect(showGalleryStats(galleryCounts(entries))).toBe(true);
+    expect(showGalleryStats(galleryCounts(mergeGallery([], nominees)))).toBe(nominees.length > 0);
   });
 
   test("filters and search", () => {

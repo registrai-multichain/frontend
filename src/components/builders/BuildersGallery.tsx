@@ -15,6 +15,7 @@ import {
   claimHref,
   filterGallery,
   galleryCounts,
+  showGalleryStats,
   greyReason,
   initialOf,
   labelOf,
@@ -43,6 +44,7 @@ import type { BadgeNet } from "@/components/BuilderBadgeCard";
 import { useWallet } from "@/components/WalletProvider";
 import { sourceLabel } from "@/lib/verified-builders";
 import { BuilderEconomyFacts } from "@/components/builders/BuilderEconomyFacts";
+import { nextBadgeImage } from "@/lib/verify-invite";
 
 const REG = BUILDERS.contracts.BuilderRegistry;
 const BADGE = BUILDERS.contracts.VerifiedBuilderBadge;
@@ -443,6 +445,7 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
             Building on Arc? <Link href="/verify">Claim your project →</Link>
           </div>
         </div>
+        {showGalleryStats(counts) && (
         <dl className="bld-stats" aria-label="Gallery counts">
           <div>
             <dt>verified</dt>
@@ -461,13 +464,25 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
             <dd className="tnum">{counts.countries}</dd>
           </div>
         </dl>
+        )}
       </header>
 
       {entries.length === 0 ? (
-        <div className="bld-empty">
-          <p>No builders yet. The first ones appear here as soon as they claim their project.</p>
-          <Link className="vf-link" href="/verify">Building on Arc? Claim your project →</Link>
-        </div>
+        <section className="bld-founding" aria-label="Founding builders">
+          {BUILDERS.badgesOn && (
+            // eslint-disable-next-line @next/next/no-img-element -- static export: no image optimizer
+            <img src={nextBadgeImage(BUILDERS.badgeNetwork ?? "arc", 1)} alt="Verified Builder Badge No. 001" width={176} height={176} decoding="async" />
+          )}
+          <div>
+            <p className="vf-hero-kicker">Founding builders</p>
+            <h2>The first verified builders on Arc are being listed now.</h2>
+            <p>
+              Each gets a soulbound Verified Builder Badge, numbered in the order builders are verified: the first to
+              claim get the lowest numbers. Claiming takes about five minutes, costs nothing, and needs no gas.
+            </p>
+            <Link className="vf-primary" href="/verify">Claim your project</Link>
+          </div>
+        </section>
       ) : (
         <>
           <div className="bld-toolbar">
@@ -517,14 +532,16 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
 
       {openEntry && <BuilderDetail e={openEntry} onClose={closeDetail} />}
 
-      <p className="bld-legend">
-        In colour: claimed builders (verified, or nominated and awaiting the multisig&apos;s onboarding batch), each
-        project proof re-checked as this page loads. In grayscale: builders with no project proof that checks out,
-        builders whose proof couldn&apos;t be read right now (unconfirmed, not counted), and invited projects that
-        haven&apos;t claimed yet. Project chips: verified, nominated, or greyed when that project&apos;s proof has
-        lapsed or couldn&apos;t be read.
-        {snapshot?.syncedAt ? ` Snapshot ${snapshot.syncedAt.slice(0, 10)}, updated live from ${BUILDERS.label}.` : ""}
-      </p>
+      <details className="bld-legend">
+        <summary>How statuses work</summary>
+        <p>
+          In colour: builders who claimed a project, either verified or waiting for their badge in the next Registrai
+          batch. Every project&apos;s proof is re-checked as this page loads. In grey: invited projects that haven&apos;t
+          claimed yet, builders whose proof no longer checks out, and builders whose proof couldn&apos;t be read just now
+          (not counted). A project chip is greyed when that project&apos;s proof has lapsed or couldn&apos;t be read.
+          {snapshot?.syncedAt ? ` Snapshot ${snapshot.syncedAt.slice(0, 10)}, updated live from ${BUILDERS.label}.` : ""}
+        </p>
+      </details>
     </>
   );
 }
