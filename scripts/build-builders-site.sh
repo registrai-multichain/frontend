@@ -56,7 +56,7 @@ cat > "$D/_headers" <<'HEADERS'
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  Strict-Transport-Security: max-age=63072000; includeSubDomains
   Permissions-Policy: accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(self), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=(), interest-cohort=()
   Cross-Origin-Opener-Policy: same-origin-allow-popups
 
