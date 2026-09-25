@@ -26,7 +26,9 @@ export interface PlannedTx {
     | "startRecovery"
     | "cancelRecovery"
     | "setProjectActive"
-    | "setActive";
+    | "setActive"
+    | "nominate"
+    | "cancelRelease";
   to: Address;
   value: "0";
   data: Hex;

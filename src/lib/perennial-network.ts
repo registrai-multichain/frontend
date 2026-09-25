@@ -30,6 +30,8 @@ export interface PerennialContracts {
   CaretakerRegistry: Address | null;
   /** Optional: the soulbound Verified Builder Badge. null = badges off. */
   VerifiedBuilderBadge: Address | null;
+  /** Optional: the wonder-markets escrow (phase 2). null = no wonder markets. */
+  WonderEscrow: Address | null;
 }
 
 const REQUIRED: (keyof PerennialContracts)[] = [
@@ -83,6 +85,7 @@ export function resolvePerennialDeployment(
     SeasonPool: addr(source.contracts.SeasonPool),
     CaretakerRegistry: addr(source.contracts.CaretakerRegistry),
     VerifiedBuilderBadge: addr(source.contracts.VerifiedBuilderBadge),
+    WonderEscrow: addr(source.contracts.WonderEscrow),
   };
   const missing = REQUIRED.filter((k) => contracts[k] === null);
   return {
@@ -149,6 +152,7 @@ function sourceFor(network: PerennialNetwork): DeploymentSource {
       CaretakerRegistry: c.CaretakerRegistry,
       // Deployed after the last sync may have run: the extras file carries it too.
       VerifiedBuilderBadge: c.VerifiedBuilderBadge ?? testnetExtras.verifiedBuilderBadge,
+      WonderEscrow: c.WonderEscrow ?? (testnetExtras as { wonderEscrow?: string | null }).wonderEscrow ?? null,
     },
     operator: testnetExtras.operator,
     deployBlock: testnetExtras.deployBlock,

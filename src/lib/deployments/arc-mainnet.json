@@ -11,7 +11,8 @@
         "MarketsPerennial": null,
         "BuilderFund": null,
         "SeasonPool": null,
-        "VerifiedBuilderBadge": null
+        "VerifiedBuilderBadge": null,
+        "WonderEscrow": null
     },
     "builders": {
         "note": "Mainnet PHASE 1 (contracts/script/DeployBuilders.s.sol): BuilderRegistry + CaretakerRegistry + VerifiedBuilderBadge only. Fill from the deploy log. Once BuilderRegistry is set, /builders, /verify and the gallery sync run on Arc mainnet even while every market contract above is still null. operator = the keeper's OPERATOR (caretaker + badge STATUS); deployBlock = the block DeployBuilders ran in.",
