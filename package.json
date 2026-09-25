@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "sync": "tsx scripts/sync.ts",
-    "deploy": "python3 scripts/render-badges.py && next build && wrangler pages deploy out --project-name=registrai-web --branch=main",
+    "deploy": "python3 scripts/render-badges.py && next build && tsx scripts/write-public-redirects.ts && wrangler pages deploy out --project-name=registrai-web --branch=main",
     "deploy:builders": "python3 scripts/render-badges.py && next build && bash scripts/build-builders-site.sh && bash scripts/deploy-builders-site.sh",
     "typecheck": "tsc --noEmit && tsc --noEmit -p builders-site"
   },

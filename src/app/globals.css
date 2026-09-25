@@ -1988,3 +1988,19 @@ details.bld-legend p { margin: 10px 0 0; }
 .vf-banner-ok { border-color: rgba(215,255,86,.45); background: rgba(215,255,86,.05); }
 .vf-banner-ok strong { color: var(--up); }
 .vf-banner-ok p b { color: var(--fg); font-weight: 560; }
+
+/* Landing while markets are not on mainnet: the registry link, the preview card. */
+.lp-nav-links { justify-self: end; display: flex; align-items: center; gap: 10px; }
+.lp-hero-live { display: inline-flex; align-items: center; gap: 10px; margin-top: 26px; padding: 11px 15px; color: #f1eddc; border: 1px solid rgba(215,255,86,.45); background: rgba(215,255,86,.06); font-family: var(--font-mono), monospace; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; transition: background .2s; }
+.lp-hero-live i { width: 7px; height: 7px; border-radius: 50%; background: #d7ff56; box-shadow: 0 0 0 4px rgba(215,255,86,.14); }
+.lp-hero-live span { color: #d7ff56; }
+.lp-hero-live:hover { background: rgba(215,255,86,.14); }
+.lp-soon { padding: 4px 8px; border: 1px dashed rgba(13,13,12,.45); font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; }
+@media (max-width: 640px) {
+  .lp-nav-links { gap: 6px; }
+  .lp-nav-links .lp-bridge-link:first-child { display: none; }
+  .lp-hero-live { font-size: 9.5px; }
+}
+.lp-404 { min-height: 60vh; padding-block: 90px 120px; }
+.lp-404 h1 { margin: 12px 0 18px; font-size: clamp(44px, 7vw, 84px); line-height: 1; letter-spacing: -.05em; }
+.lp-404-links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }

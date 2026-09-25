@@ -1,41 +1,20 @@
 import type { MetadataRoute } from "next";
-import { DEMO_MARKETS } from "@/lib/markets-demo";
-import { ALL_FEEDS } from "@/lib/demo";
 
 const BASE = "https://registrai.cc";
 
 export const dynamic = "force-static";
 
+/**
+ * The public registrai.cc only: the landing and the bridge. The builder
+ * registry is on builder.registrai.cc; every other app route runs on testnet
+ * and redirects to the landing (src/lib/public-site.ts), so none is listed.
+ */
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
-  const staticRoutes = [
-    "",
-    "/bridge",
-    "/builders",
-    "/markets",
-    "/markets/create",
-    "/vault",
-    "/agents",
-    "/agents/create",
-    "/docs",
-    "/devlog",
-    "/about",
-    "/profile",
-  ].map((path) => ({ url: `${BASE}${path}`, lastModified: now, changeFrequency: "weekly" as const, priority: path === "" ? 1 : 0.7 }));
-
-  const marketRoutes = DEMO_MARKETS.map((m) => ({
-    url: `${BASE}/markets/${m.id}`,
+  return ["", "/bridge"].map((path) => ({
+    url: `${BASE}${path}`,
     lastModified: now,
-    changeFrequency: "daily" as const,
-    priority: 0.6,
+    changeFrequency: "weekly" as const,
+    priority: path === "" ? 1 : 0.7,
   }));
-
-  const feedRoutes = ALL_FEEDS.map((f) => ({
-    url: `${BASE}/feed/${f.id}`,
-    lastModified: now,
-    changeFrequency: "daily" as const,
-    priority: 0.6,
-  }));
-
-  return [...staticRoutes, ...marketRoutes, ...feedRoutes];
 }

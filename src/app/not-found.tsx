@@ -1,42 +1,36 @@
 import Link from "next/link";
-import { Shell } from "@/components/Shell";
+import { BrandLockup } from "@/components/Brand";
 
+/**
+ * The 404 for every Registrai site. Deliberately not the app's Shell: that
+ * shell is the testnet app's (its nav and footer point into testnet), and the
+ * public registrai.cc must not lead there.
+ */
 export default function NotFound() {
   return (
-    <Shell>
-      <article className="pt-16 sm:pt-24 fade-up">
-        <div className="caption text-fg-dim mb-3">404</div>
-        <h1 className="font-serif text-[42px] sm:text-[58px] leading-[1.04] tracking-tightest mb-6 max-w-[20ch]">
-          That page isn&apos;t{" "}
-          <span className="italic text-accent">here</span>.
+    <div className="lp">
+      <header className="lp-nav lp-frame">
+        <Link href="/" className="lp-brand" aria-label="Registrai home">
+          <BrandLockup markClassName="lp-brand-mark" wordmarkClassName="lp-brand-name" />
+        </Link>
+        <span />
+        <span />
+      </header>
+      <main className="lp-frame lp-404">
+        <p className="lp-kicker">404</p>
+        <h1>
+          That page isn&apos;t <em>here</em>.
         </h1>
-        <p className="text-fg-mute text-[15px] max-w-[58ch] leading-relaxed mb-10">
-          Either the URL is mistyped, or — if you got here from a market
-          link — the market was created after this site was last built and
-          hasn&apos;t propagated to a static page yet. The protocol still
-          knows about it; it&apos;s readable on ArcScan, and your trade
-          would still work via the contract.
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-line">
-          <Tile href="/" title="home" />
-          <Tile href="/markets/" title="markets" />
-          <Tile href="/agents/" title="agents" />
+        <p className="lp-deck">The address may be mistyped, or the page has moved.</p>
+        <div className="lp-404-links">
+          <Link href="/" className="lp-bridge-link">
+            Home <span>→</span>
+          </Link>
+          <a href="https://builder.registrai.cc/builders/" className="lp-bridge-link">
+            Verified builders <span>→</span>
+          </a>
         </div>
-      </article>
-    </Shell>
-  );
-}
-
-function Tile({ href, title }: { href: string; title: string }) {
-  return (
-    <Link
-      href={href}
-      className="bg-bg p-6 flex items-center justify-between hover:bg-bg transition-colors group"
-    >
-      <span className="caption text-fg">{title}</span>
-      <span className="text-accent group-hover:tracking-widest transition-all">
-        →
-      </span>
-    </Link>
+      </main>
+    </div>
   );
 }
