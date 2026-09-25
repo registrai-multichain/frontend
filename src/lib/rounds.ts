@@ -5,11 +5,17 @@
  * Pure logic only (discovery log parsing, round grouping, status derivation,
  * formatting) so all of it is unit-tested; the page does the I/O.
  *
- * How a round works on chain: at each 5-minute boundary B the agent attests the
- * asset's price as of B (the exchange's 1-minute close ending at B) and opens a
- * market "strictly higher at B+5m than the strike?" (YES = Up, comparator
- * GreaterThan, so a tie is Down) with that reading as the strike. The reading
- * at B+5m settles it: final after the feed's challenge window, then resolved.
+ * How a round works on chain ("bet now on the next 5 minutes"): at each
+ * 5-minute boundary B the agent opens the market for the NEXT round [B+5m,
+ * B+10m]. Its expiry is B+5m, so betting closes as the round starts, before any
+ * of its price path is known. At B+10m the agent attests the round's CHANGE,
+ * close(B+10m) − close(B+5m), on one of the asset's rotating change feeds
+ * ("registrai-data:btc-usd-5m-change-<n>"); YES = Up iff the change > 0
+ * (threshold 0, GreaterThan, so a tie is Down). Final after the feed's
+ * challenge window, then resolved.
+ *
+ * Markets on the legacy price feeds ("registrai-data:btc-usd": the strike is
+ * the price at open, the round is [expiry − 5m, expiry]) still settle and show.
  */
 import type { Address, Hex } from "viem";
 import deployment from "./deployments/arc-testnet-rounds.json";
@@ -89,15 +95,34 @@ export const ROUND_TRADE_WINDOW_SECS = 120n;
 
 // ───────────────────────────── discovery: feeds ─────────────────────────────
 
-/** "registrai-data:btc-usd" -> "btc-usd"; anything else -> null. */
+const CHANGE_DESC = /^([a-z0-9][a-z0-9-]*)-5m-change-(\d+)$/;
+const CHANGE_KEY = /^([a-z0-9][a-z0-9-]*):5m-(\d+)$/;
+
+/** "registrai-data:btc-usd" -> "btc-usd"; a change feed
+ *  "registrai-data:btc-usd-5m-change-3" -> "btc-usd:5m-3" (the agent's key);
+ *  anything else -> null. */
 export function feedKeyFromDescription(desc: string | undefined, prefix = ROUNDS.descriptionPrefix): string | null {
   if (!desc || !desc.startsWith(prefix)) return null;
   const key = desc.slice(prefix.length).trim();
+  const ch = CHANGE_DESC.exec(key);
+  if (ch) return `${ch[1]}:5m-${ch[2]}`;
   return /^[a-z0-9][a-z0-9-]*$/.test(key) ? key : null;
 }
 
+/** A feed key's asset (or event) and whether it is a round-change feed:
+ *  "btc-usd:5m-3" -> { asset: "btc-usd", change: true }. */
+export function feedKind(key: string): { asset: string; change: boolean } {
+  const ch = CHANGE_KEY.exec(key);
+  return ch ? { asset: ch[1], change: true } : { asset: key, change: false };
+}
+
 export interface AgentFeed {
+  /** The agent's feed key: "btc-usd", "btc-usd:5m-3", "arc-token-tradable". */
   key: string;
+  /** The asset (or event) the feed is about. */
+  asset: string;
+  /** A round-change feed (next-round markets settle on it). */
+  change: boolean;
   /** Lower-case bytes32. */
   feedId: Hex;
   /** Challenge window in seconds: a reading is final this long after it lands. */
@@ -124,7 +149,7 @@ export interface FeedCreatedLog {
 export function seedFeedBook(feeds: RoundsDeployment["feeds"]): FeedBook {
   const book: FeedBook = { byKey: {}, byId: {} };
   for (const [key, f] of Object.entries(feeds)) {
-    const feed: AgentFeed = { key, feedId: f.feedId.toLowerCase() as Hex, disputeWindow: f.disputeWindow, blockNumber: -1n };
+    const feed: AgentFeed = { key, ...feedKind(key), feedId: f.feedId.toLowerCase() as Hex, disputeWindow: f.disputeWindow, blockNumber: -1n };
     book.byKey[key] = feed;
     book.byId[feed.feedId] = feed;
   }
@@ -150,6 +175,7 @@ export function mergeFeedLogs(book: FeedBook, logs: readonly FeedCreatedLog[], a
     if (!key) continue;
     const feed: AgentFeed = {
       key,
+      ...feedKind(key),
       feedId: feedId.toLowerCase() as Hex,
       disputeWindow: Number(disputeWindow ?? 0n),
       blockNumber: lg.blockNumber ?? 0n,
@@ -167,12 +193,16 @@ export interface RoundMarket {
   /** Lower-case bytes32. */
   marketId: Hex;
   feedId: Hex;
-  /** The feed's key (asset or event). */
+  /** The asset (or event) key: "btc-usd". */
   key: string;
+  /** A next-round market (on a change feed): betting until `expiry`, the round
+   *  is [expiry, expiry + roundSecs] and settles on its change. Otherwise a
+   *  legacy price round [expiry − roundSecs, expiry] against its strike. */
+  change: boolean;
   agent: Address;
   threshold: bigint;
   comparator: number;
-  /** Unix seconds. For a round: its close; the round opened at expiry − roundSecs. */
+  /** Unix seconds: when trading closes. */
   expiry: number;
   liquidity: bigint;
   blockNumber: bigint;
@@ -213,7 +243,8 @@ export function parseMarketLogs(logs: readonly MarketCreatedLog[], book: FeedBoo
     out.push({
       marketId: id,
       feedId: feed.feedId,
-      key: feed.key,
+      key: feed.asset,
+      change: feed.change,
       agent: a.agent as Address,
       threshold: a.threshold,
       comparator: Number(a.comparator ?? COMPARATOR.GreaterThan),
@@ -271,16 +302,25 @@ export async function scanLogs<T>(
 
 // ───────────────────────────── grouping ─────────────────────────────
 
+/** The price window a round is about: a next-round market's round starts when
+ *  its betting closes; a legacy round ends at its close. */
+export function roundWindow(m: Pick<RoundMarket, "expiry" | "change">, roundSecs: number = ROUNDS.roundSecs): { start: number; end: number } {
+  return m.change ? { start: m.expiry, end: m.expiry + roundSecs } : { start: m.expiry - roundSecs, end: m.expiry };
+}
+
 export interface AssetRounds {
-  /** The round trading now: phase Trading and expiry > now (earliest such). */
+  /** The round taking bets now: phase Trading and expiry > now (soonest first). */
   current?: RoundMarket;
-  /** Closed rounds, newest first, at most RECENT_ROUNDS. */
+  /** The round playing out now: betting closed, its window not over. */
+  inPlay?: RoundMarket;
+  /** Rounds whose window is over, newest first, at most RECENT_ROUNDS. */
   recent: RoundMarket[];
 }
 
 /**
- * Per asset: the current round and the recent ones. `phases` (marketId ->
- * phase) is optional: an unread market counts as trading until its expiry.
+ * Per asset: the round taking bets, the round in play, and the recent ones.
+ * `phases` (marketId -> phase) is optional: an unread market counts as trading
+ * until its expiry.
  */
 export function groupRounds(
   markets: readonly RoundMarket[],
@@ -288,24 +328,27 @@ export function groupRounds(
   now: number,
   phases: Record<string, number | undefined> = {},
   recent: number = RECENT_ROUNDS,
+  roundSecs: number = ROUNDS.roundSecs,
 ): Record<string, AssetRounds> {
   const out: Record<string, AssetRounds> = {};
   for (const key of assetKeys) out[key] = { recent: [] };
+  const newer = (a: RoundMarket, b: RoundMarket) => a.blockNumber > b.blockNumber;
   for (const m of markets) {
     const g = out[m.key];
     if (!g) continue;
     const phase = phases[m.marketId];
     if (m.expiry > now) {
       if (phase !== undefined && phase !== PHASE.Trading) continue;
-      if (!g.current || m.expiry < g.current.expiry || (m.expiry === g.current.expiry && m.blockNumber > g.current.blockNumber)) {
-        g.current = m;
-      }
+      if (!g.current || m.expiry < g.current.expiry || (m.expiry === g.current.expiry && newer(m, g.current))) g.current = m;
+    } else if (roundWindow(m, roundSecs).end > now) {
+      if (!g.inPlay || m.expiry > g.inPlay.expiry || (m.expiry === g.inPlay.expiry && newer(m, g.inPlay))) g.inPlay = m;
     } else {
       g.recent.push(m);
     }
   }
   for (const key of Object.keys(out)) {
-    out[key].recent.sort((a, b) => b.expiry - a.expiry || (a.blockNumber < b.blockNumber ? 1 : a.blockNumber > b.blockNumber ? -1 : 0));
+    const end = (m: RoundMarket) => roundWindow(m, roundSecs).end;
+    out[key].recent.sort((a, b) => end(b) - end(a) || (a.blockNumber < b.blockNumber ? 1 : a.blockNumber > b.blockNumber ? -1 : 0));
     out[key].recent = out[key].recent.slice(0, recent);
   }
   return out;
@@ -332,7 +375,7 @@ export interface Reading {
   finalized: boolean;
 }
 
-export type RoundStatusKey = "live" | "awaiting-reading" | "settling" | "resolved-up" | "resolved-down" | "voided";
+export type RoundStatusKey = "live" | "in-play" | "awaiting-reading" | "settling" | "resolved-up" | "resolved-down" | "voided";
 
 export interface RoundStatus {
   key: RoundStatusKey;
@@ -380,6 +423,9 @@ export interface StatusInput {
   comparator: number;
   /** MarketsV4 settlement window (default: the deployment's). */
   settlementWindow?: number;
+  /** A next-round market: the round runs [expiry, expiry + roundSecs] after betting closes. */
+  change?: boolean;
+  roundSecs?: number;
 }
 
 export function roundStatus(s: StatusInput): RoundStatus {
@@ -392,9 +438,19 @@ export function roundStatus(s: StatusInput): RoundStatus {
     return { key: "voided", label: "Voided", detail: "Voided: every trader gets their net cost back." };
   }
   if (s.now < s.expiry) {
-    return { key: "live", label: "Live", detail: "Trading until the close." };
+    return s.change
+      ? { key: "live", label: "Betting", detail: "Betting is open until the round starts." }
+      : { key: "live", label: "Live", detail: "Trading until the close." };
   }
   const r = s.reading;
+  const roundEnd = s.expiry + (s.roundSecs ?? ROUNDS.roundSecs);
+  if (s.change && (!r || !r.found) && s.now < roundEnd) {
+    return {
+      key: "in-play",
+      label: "In play",
+      detail: "Betting closed when the round started. It settles on the price change over the round.",
+    };
+  }
   if (!r || !r.found) {
     const window = s.settlementWindow ?? ROUNDS.settlementWindow;
     if (s.now >= s.expiry + window) {
@@ -407,8 +463,10 @@ export function roundStatus(s: StatusInput): RoundStatus {
     }
     return {
       key: "awaiting-reading",
-      label: "Closed",
-      detail: "Trading closed. Waiting for the agent's reading of the close.",
+      label: s.change ? "Ended" : "Closed",
+      detail: s.change
+        ? "The round ended. Waiting for the agent's reading of its change."
+        : "Trading closed. Waiting for the agent's reading of the close.",
     };
   }
   const up = yesWins(r.value, s.threshold, s.comparator);
@@ -506,6 +564,12 @@ export function timeLeft(secs: number): string {
   return `${Math.floor(s / 86_400)}d ${Math.floor((s % 86_400) / 3600)}h`;
 }
 
+/** A round's change, signed: "+190.00", "−0.35", "±0.00" (a tie is Down). */
+export function formatChange(value: bigint, decimals: number): string {
+  const abs = formatScaled(value < 0n ? -value : value, decimals);
+  return value > 0n ? `+${abs}` : value < 0n ? `−${abs}` : `±${abs}`;
+}
+
 /** Where the live price sits against the strike (both at the asset's scale). */
 export function strikeDelta(live: bigint, strike: bigint): { dir: "above" | "below" | "at"; diff: bigint; pct: number } {
   const diff = live - strike;
@@ -532,7 +596,20 @@ export function parseCoinbaseTicker(json: unknown): number | undefined {
   return Number.isFinite(p) && p > 0 ? p : undefined;
 }
 
-/** Start of the round a boundary-aligned expiry closes. */
+/** Coinbase Exchange 1-minute candles ([[time, low, high, open, close, volume], ...])
+ *  -> the close of the minute ending exactly at `at` (as the agent reads it), or undefined. */
+export function candleCloseAt(json: unknown, at: number): number | undefined {
+  if (!Array.isArray(json)) return undefined;
+  for (const r of json) {
+    if (Array.isArray(r) && r.length >= 5 && Number(r[0]) + 60 === at) {
+      const c = Number(r[4]);
+      return Number.isFinite(c) && c > 0 ? c : undefined;
+    }
+  }
+  return undefined;
+}
+
+/** Start of the round a boundary-aligned expiry closes (legacy price rounds). */
 export const roundStart = (expiry: number, roundSecs: number = ROUNDS.roundSecs) => expiry - roundSecs;
 
 /** The next 5-minute boundary after `now` (when a new round opens). */
