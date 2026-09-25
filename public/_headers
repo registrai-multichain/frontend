@@ -1,12 +1,19 @@
 # Security headers for every path. frame-ancestors/X-Frame-Options stop the
-# app being framed (clickjacking a wallet prompt). No script-src CSP: Next's
-# static export relies on inline scripts, and a strict policy would need
-# per-build hashes.
+# app being framed (clickjacking a wallet prompt). No script-src/connect-src
+# CSP here: Next's static export relies on per-build inline scripts, and the
+# bridge page on this (main) site talks to many chains' RPCs/explorers, so a
+# tight allowlist would break it. object-src/base-uri still close off two
+# common injection sinks. The standalone builders site (builder.registrai.cc,
+# scripts/build-builders-site.sh) ships a full, tight CSP because it has no
+# bridge and reads proofs server-side.
 /*
   X-Frame-Options: DENY
-  Content-Security-Policy: frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self' https: wss: data: blob: 'unsafe-inline'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'; upgrade-insecure-requests
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  Permissions-Policy: accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(self), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=(), interest-cohort=()
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
 
 # Next's generated OG route emits an extensionless file, so Cloudflare Pages
 # serves it as application/octet-stream and social scrapers reject the card.

@@ -40,6 +40,28 @@ describe("builders-site packaging", () => {
     expect(pkg.scripts["deploy:builders"]).toMatch(/^python3 scripts\/render-badges\.py && next build && bash scripts\/build-builders-site\.sh/);
   });
 
+  test("the builders site ships a tight CSP and the security headers", () => {
+    const build = readFileSync(resolve(FRONTEND, "scripts/build-builders-site.sh"), "utf8");
+    // The full _headers is written fresh by the build (not inherited from public/_headers).
+    const csp = build.match(/Content-Security-Policy: ([^\n]+)/)?.[1] ?? "";
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).toContain("object-src 'none'");
+    expect(csp).toContain("base-uri 'none'");
+    expect(csp).toContain("frame-ancestors 'none'");
+    // Injected wallet does its own RPC; the read client + proof fallback are the only egress.
+    expect(csp).toContain("connect-src 'self' https://rpc.mainnet.arc.io https://rpc.testnet.arc.io https://raw.githubusercontent.com");
+    expect(csp).toContain("img-src 'self' data: blob: https://avatars.githubusercontent.com");
+    // Next static export emits per-build inline hydration scripts: 'unsafe-inline' is required.
+    expect(csp).toMatch(/script-src 'self' 'unsafe-inline'/);
+    expect(build).toMatch(/Strict-Transport-Security: max-age=\d+; includeSubDomains/);
+    expect(build).toContain("Permissions-Policy:");
+    expect(build).toContain("Cross-Origin-Opener-Policy: same-origin-allow-popups");
+    // The badges must stay cross-origin embeddable, and there must be no global
+    // CORP that Cloudflare would combine into an invalid doubled header.
+    expect(build).toMatch(/\/badge\/\*\n(?:[^\n]*\n)*?\s+Cross-Origin-Resource-Policy: cross-origin/);
+    expect(build).not.toMatch(/\/\*\n(?:[^\n]*\n)*?\s+Cross-Origin-Resource-Policy: same-origin/);
+  });
+
   test("NONCE_SECRET is documented where the deploy happens (a Pages secret, never in wrangler.toml)", () => {
     const toml = readFileSync(resolve(FRONTEND, "builders-site/wrangler.toml"), "utf8");
     expect(toml).toContain("wrangler pages secret put NONCE_SECRET");
