@@ -2016,3 +2016,20 @@ details.bld-legend p { margin: 10px 0 0; }
 .wallet-picker li button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 12px; color: #fbf8ea; border: 1px solid #4a4c43; background: #0d0f0b; font-size: 14px; text-align: left; transition: border-color .15s, background .15s; }
 .wallet-picker li button:hover, .wallet-picker li button:focus-visible { border-color: #ff7038; background: rgba(255,112,56,.08); outline: none; }
 .wallet-picker img { width: 28px; height: 28px; border-radius: 6px; }
+
+/* /guide — the builder guide */
+.gd-toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 22px; }
+.gd-toc a { padding: 7px 11px; color: var(--fg-mute); border: 1px solid var(--line); font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .04em; transition: color .15s, border-color .15s; }
+.gd-toc a:hover { color: var(--fg); border-color: var(--accent); }
+.gd-sections { max-width: 820px; }
+.gd-section { scroll-margin-top: 100px; }
+.gd-section summary { font-size: 17px !important; padding: 16px 0 !important; }
+.gd-section ol { margin: 0 0 14px; padding-left: 20px; list-style: decimal; color: var(--fg-mute); font-size: 13.5px; line-height: 1.65; }
+.gd-section li + li { margin-top: 7px; }
+.gd-section li b, .gd-section p b { color: var(--fg); font-weight: 560; }
+.gd-section p { margin: 0 0 12px !important; font-size: 13.5px !important; line-height: 1.65 !important; }
+.gd-section code { color: var(--up); font-size: 12px; overflow-wrap: anywhere; }
+.gd-section a, .vf-guide-link a { color: var(--accent); }
+.gd-foot { max-width: 820px; margin: 26px 0 0; color: var(--fg-dim); font-size: 12px; }
+.vf-guide-link { margin: 14px 0 0 !important; color: var(--fg-dim) !important; font-size: 12px !important; }
+.gd-section li::marker { color: var(--accent); font-family: var(--font-mono), monospace; font-size: 11px; }

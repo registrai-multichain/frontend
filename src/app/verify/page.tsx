@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
 import { VerifyApp } from "@/components/verify/VerifyApp";
 import { VerifyHero } from "@/components/verify/VerifyHero";
@@ -92,6 +93,9 @@ export default function VerifyPage() {
                 Milestone markets are builder-triggered: you decide when to ship, and every milestone market says so to its traders.
               </p>
             </details>
+            <p className="vf-guide-link">
+              Changing wallet, lost a key, moved a repo? <Link href="/guide">Read the builder guide →</Link>
+            </p>
           </aside>
         </div>
       </article>

@@ -216,7 +216,7 @@ function MoveWallet({ b, pendingOwner, run, busy }: { b: MyBuilder; pendingOwner
       <p className="vf-note">
         Two steps: propose the new wallet here, then connect that wallet on this page and accept. The new wallet must not
         hold a builder. Afterwards every project proof names this old wallet, so re-sign each one with the new wallet, and
-        sync the badge.
+        sync the badge. Lost this wallet instead? See <Link href="/guide#lost-wallet">the builder guide</Link>.
       </p>
       {pendingOwner && (
         <div className="vf-copyline">

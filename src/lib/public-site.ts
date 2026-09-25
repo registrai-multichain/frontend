@@ -15,7 +15,7 @@ export const BUILDERS_SITE = "https://builder.registrai.cc";
 export const PUBLIC_ROUTES = ["bridge"] as const;
 
 /** App routes that move to the builders site (same path). */
-export const BUILDERS_SITE_ROUTES = ["builders", "verify", "admin"] as const;
+export const BUILDERS_SITE_ROUTES = ["builders", "verify", "admin", "guide"] as const;
 
 /** App routes that run on testnet: redirected to the landing on the public site. */
 export const TESTNET_ROUTES = [
