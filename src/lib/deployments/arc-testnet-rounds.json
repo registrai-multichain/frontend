@@ -203,6 +203,110 @@
     "eth-usd:5m-9": {
       "feedId": "0x5f35d6d26b705cc194762936613148218b4d693ee9fe94b08a074338bf0c5992",
       "disputeWindow": 600
+    },
+    "sol-usd:5m-0": {
+      "feedId": "0x4010bfef92a1f8b9836c336616304f594288c7850fa9ff9d7376ecbc6e67109c",
+      "disputeWindow": 600
+    },
+    "sol-usd:5m-1": {
+      "feedId": "0x42e63fc4ce4aa401d1293f550dd74fcb27579baf16e3742f81c3a2bf172df2c7",
+      "disputeWindow": 600
+    },
+    "sol-usd:5m-10": {
+      "feedId": "0x96eed075f706ac2c102e8fc3b1dc60591e132c5443332014e377d501445e2441",
+      "disputeWindow": 600
+    },
+    "sol-usd:5m-11": {
+      "feedId": "0xda8537f0bb087e2015cd0dc49b256019f07e1ae3372ea4a69f79103eb0bbb2e2",
+      "disputeWindow": 600
+    },
+    "sol-usd:5m-12": {
+      "feedId": "0xd68a1ff8b4fb3395a375312d0d0447654482a5b139316dd2721d05f26c8f6064",
+      "disputeWindow": 600
+    },
+    "sol-usd:5m-2": {
+      "feedId": "0x4e7fcef1c86f3aa47a5722793b56acce4e561d1987dbb4e544a8e1b6e26d2050",
+      "disputeWindow": 600
+    },
+    "sol-usd:5m-3": {
+      "feedId": "0x8c1b44253342b45a0ba5422aadbcd94bf115e2ddc30195fecf3356cc306fbf72",
+      "disputeWindow": 600
+    },
+    "sol-usd:5m-4": {
+      "feedId": "0xb2c5f424e8743f3d078a4e8230ffa6ccd00b58db9860bc54edf201d140a98d48",
+      "disputeWindow": 600
+    },
+    "sol-usd:5m-5": {
+      "feedId": "0xc3ee15e0148403901db9525c1cda847975f986af9ede845972fcd2453a24a30d",
+      "disputeWindow": 600
+    },
+    "sol-usd:5m-6": {
+      "feedId": "0xe2a1ef5203fd4004f023c228fbca1a4b9c400bf79da860077fa3c83a3539c854",
+      "disputeWindow": 600
+    },
+    "sol-usd:5m-7": {
+      "feedId": "0xf18f9547dfeaa17edddf18918b00a4f349b3d9f82f4e93aefb0421aa7235c692",
+      "disputeWindow": 600
+    },
+    "sol-usd:5m-8": {
+      "feedId": "0x3a8b5de5513794a8d91339aaacd750932ba48d0f9091b6e157e69e9a06247ba4",
+      "disputeWindow": 600
+    },
+    "sol-usd:5m-9": {
+      "feedId": "0xb31428873b94a6a4845f2f1a0c2b21bea89fd5f0b810dd81a9104da29886696e",
+      "disputeWindow": 600
+    },
+    "zec-usd:5m-0": {
+      "feedId": "0xd6f4a47d575203160e4a5089cbadac00ab4e7f940a0c9b621975fc7c85500f71",
+      "disputeWindow": 600
+    },
+    "zec-usd:5m-1": {
+      "feedId": "0xed80a4e9a68a54dbff30a83ca56a22b49a7742ca7a025e89be94b280bfc13c13",
+      "disputeWindow": 600
+    },
+    "zec-usd:5m-10": {
+      "feedId": "0x6127e5bebce643b80ad4eef1aad3803493986dda42168788379964b8e5131d9f",
+      "disputeWindow": 600
+    },
+    "zec-usd:5m-11": {
+      "feedId": "0xad6bc04f6f0b350ea7a5d750417caae719fbc55697d100a8049aa9049a77952e",
+      "disputeWindow": 600
+    },
+    "zec-usd:5m-12": {
+      "feedId": "0x2bd34921cec7037c1ca5488dd1fdec168ec7748651480abc043adbe6492a5279",
+      "disputeWindow": 600
+    },
+    "zec-usd:5m-2": {
+      "feedId": "0xec41e902d8678749618c1c6e900c1e24dd36a4f0b4c16a2a85aa6d37e9a87e1f",
+      "disputeWindow": 600
+    },
+    "zec-usd:5m-3": {
+      "feedId": "0xa318c293879fc547ede76e2828946e62c98db7d1f897a76e41297de082fe6db7",
+      "disputeWindow": 600
+    },
+    "zec-usd:5m-4": {
+      "feedId": "0xf307eda4f61f232e2af6ece8995dad2ec18d414df1615dd8f661f541407712a3",
+      "disputeWindow": 600
+    },
+    "zec-usd:5m-5": {
+      "feedId": "0xaf70c4316dcb065f0dba84ed5ce935630a1f7b14d6e796b187cd04c142086da1",
+      "disputeWindow": 600
+    },
+    "zec-usd:5m-6": {
+      "feedId": "0x1cade1e84b42c623906e8f7df381568ad7dcd9bcea428dda8c65b967d2ab4889",
+      "disputeWindow": 600
+    },
+    "zec-usd:5m-7": {
+      "feedId": "0xd43360fa0519d7523cf969d13e10530a916d0364dfcb36cf42011679b33537d6",
+      "disputeWindow": 600
+    },
+    "zec-usd:5m-8": {
+      "feedId": "0x6ef3c1104c8778fb664d47563497f912f246f87e3a53c47846953fc7355829eb",
+      "disputeWindow": 600
+    },
+    "zec-usd:5m-9": {
+      "feedId": "0xa6b0ef02ca330b814cf88f5f01fbeffc6774b7eef5084b976533454ff753f3b7",
+      "disputeWindow": 600
     }
   }
 }
