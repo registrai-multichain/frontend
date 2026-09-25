@@ -11,6 +11,7 @@ import { usePathname } from "next/navigation";
  */
 const VIEWS = [
   { href: "/perennial", label: "markets" },
+  { href: "/perennial/wonder", label: "wonder" },
   { href: "/perennial/economy", label: "economy" },
   { href: "/atlas", label: "atlas" },
 ] as const;

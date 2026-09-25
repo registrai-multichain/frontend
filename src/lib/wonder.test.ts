@@ -3,7 +3,7 @@ import { decodeFunctionData, keccak256, toBytes, type Address, type Hex } from "
 import {
   cancelReleaseSafeFile, cancelReleaseTx, groupWonderMarkets, LABEL_COMMUNITY, LABEL_UNCLAIMED, marketLabels,
   nextHourExpiry, nominateInput, nominateSafeFile, nominateTx, releaseView, sourceKey, SUBJECT, waitingLine,
-  wonderContracts, wonderEscrowAbi, wonderFeedFor, wonderMarketsAbi, type WonderStatus,
+  wonderContracts, wonderCreateCheck, wonderEscrowAbi, wonderFeedFor, wonderMarketsAbi, type WonderStatus,
 } from "./wonder";
 
 const MK = "0x00000000000000000000000000000000000000a1" as Address;
@@ -122,5 +122,17 @@ describe("Safe files", () => {
     expect(f.transactions).toHaveLength(1);
     expect(f.meta.name).toContain("un-nominate");
     expect(cancelReleaseSafeFile({ escrow: ESC, source: SRC, chainId: 5042, createdAt: 1 }).meta.name).toContain(SRC);
+  });
+});
+
+
+describe("wonderCreateCheck", () => {
+  const feed = `0x${"f1".repeat(32)}` as Hex;
+  test("wonderCreateCheck requires the source's bound feed", () => {
+    expect(wonderCreateCheck({ source: SRC, feed, feedSubject: { kind: 2, sourceKey: KEY }, nominated: true })).toBeNull();
+    expect(wonderCreateCheck({ source: SRC, feed: null, feedSubject: null, nominated: true })).toMatch(/milestone feed/);
+    expect(wonderCreateCheck({ source: SRC, feed, feedSubject: { kind: 0, sourceKey: `0x${"0".repeat(64)}` as Hex }, nominated: true })).toMatch(/not bound/);
+    expect(wonderCreateCheck({ source: SRC, feed, feedSubject: { kind: 2, sourceKey: sourceKey("github:x/y") }, nominated: true })).toMatch(/not bound/);
+    expect(wonderCreateCheck({ source: SRC, feed, feedSubject: { kind: 2, sourceKey: KEY }, nominated: false })).toMatch(/not nominated/);
   });
 });

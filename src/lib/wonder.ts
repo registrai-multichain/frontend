@@ -184,3 +184,18 @@ export function cancelReleaseSafeFile(o: { escrow: Address; source: string; chai
     name: `Registrai: cancel the wonder release of ${o.source}`,
   });
 }
+
+/** Why a wonder market cannot be opened on `feed` for `source` (null = it can). */
+export function wonderCreateCheck(o: {
+  source: string;
+  feed: Hex | null;
+  feedSubject: { kind: number; sourceKey: Hex } | null;
+  nominated: boolean;
+}): string | null {
+  if (!o.nominated) return `${sourceLabel(o.source)} is not nominated: wonder markets open only on nominated projects.`;
+  if (!o.feed) return `${sourceLabel(o.source)} has no milestone feed yet: the keeper provisions it within about 10 minutes of the nomination.`;
+  if (!o.feedSubject || o.feedSubject.kind !== SUBJECT.Wonder || o.feedSubject.sourceKey.toLowerCase() !== sourceKey(o.source).toLowerCase()) {
+    return "This feed is not bound to the project yet: its fees would go to the season pool, not the team. Try again after the keeper's next check.";
+  }
+  return null;
+}

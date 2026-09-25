@@ -16,6 +16,8 @@ import live from "./live-data.json";
 import { PERENNIAL_BUILDERS } from "./perennial";
 import { blockChunks } from "./perennial-market";
 import { SNAPSHOT_MATCHES_NETWORK, type PerennialDeployment } from "./perennial-network";
+import { wonderContracts, wonderMarketsAbi, type MarketSubject } from "./wonder";
+import { readMarketSubjects } from "./wonder-chain";
 import { isRevert, readFeeModel, readMarketSettlement } from "./market-fees-chain";
 import { snapshotBadgeFor, snapshotBuilders, snapshotRowFor, verificationFor, type Verification } from "./builder-verification";
 import type { BadgeInfo } from "./verified-builder-badge";
@@ -41,10 +43,13 @@ export const attestationViewsAbi = parseAbi([
 const MARKET_CREATED = marketsPerennialAbi.find(
   (e) => e.type === "event" && e.name === "MarketCreated",
 )!;
+/** Wonder markets (a deployment with a WonderEscrow): created by createWonderMarket. */
+const WONDER_CREATED = wonderMarketsAbi.find((e) => e.type === "event" && e.name === "WonderMarketCreated")!;
 
 // ───────────────────────────── discovery ─────────────────────────────
 
-type DiscoveryCache = { ids: string[]; scannedTo: string };
+/** `wonder`: market id (lowercase) -> source, for the wonder markets found. */
+type DiscoveryCache = { ids: string[]; scannedTo: string; wonder?: Record<string, string> };
 
 const cacheKey = (d: PerennialDeployment) =>
   `perennial:markets:v1:${d.chain.id}:${(d.contracts.MarketsPerennial ?? "").toLowerCase()}`;
@@ -109,6 +114,8 @@ export interface Discovery {
   scannedTo: bigint;
   /** True when older blocks are still unscanned (resumes on the next refresh). */
   partial: boolean;
+  /** Wonder market id (lowercase) -> its project source (WonderMarketCreated). */
+  wonderSources: Record<string, string>;
 }
 
 /**
@@ -127,6 +134,8 @@ export async function discoverMarkets(
   const seed = snapshotSeed(d);
   const cache = typeof window !== "undefined" ? readCache(d) : undefined;
   const ids = new Set<string>([...seed.ids, ...(cache?.ids ?? [])]);
+  const wonderOn = wonderContracts(d) !== null;
+  const wonderSources: Record<string, string> = { ...(cache?.wonder ?? {}) };
   let from = seed.scannedTo;
   const cached = cache ? BigInt(cache.scannedTo) : 0n;
   if (cached > from) from = cached;
@@ -139,7 +148,11 @@ export async function discoverMarkets(
   for (let i = 0; i < chunks.length && !failed; i += 2) {
     const pair = chunks.slice(i, i + 2);
     const res = await Promise.allSettled(
-      pair.map(([a, b]) => client.getLogs({ address: mp, event: MARKET_CREATED as never, fromBlock: a, toBlock: b })),
+      pair.map(([a, b]) =>
+        wonderOn
+          ? client.getLogs({ address: mp, events: [MARKET_CREATED, WONDER_CREATED] as never, fromBlock: a, toBlock: b })
+          : client.getLogs({ address: mp, event: MARKET_CREATED as never, fromBlock: a, toBlock: b }),
+      ),
     );
     for (let j = 0; j < res.length; j++) {
       const r = res[j];
@@ -147,12 +160,16 @@ export async function discoverMarkets(
       for (const lg of r.value as Log[]) {
         const id = lg.topics[1];
         if (id) ids.add(id.toLowerCase());
+        const ev = lg as unknown as { eventName?: string; args?: { source?: string } };
+        if (id && ev.eventName === "WonderMarketCreated" && typeof ev.args?.source === "string") {
+          wonderSources[id.toLowerCase()] = ev.args.source;
+        }
       }
       scannedTo = pair[j][1];
     }
   }
-  const out = { ids: [...ids] as Hex[], scannedTo, partial: scannedTo < head };
-  if (typeof window !== "undefined") writeCache(d, { ids: out.ids, scannedTo: scannedTo.toString() });
+  const out = { ids: [...ids] as Hex[], scannedTo, partial: scannedTo < head, wonderSources };
+  if (typeof window !== "undefined") writeCache(d, { ids: out.ids, scannedTo: scannedTo.toString(), wonder: wonderSources });
   return out;
 }
 
@@ -199,6 +216,8 @@ export interface ChainMarket {
   agentEscrow?: bigint;
   voidTraderPool?: bigint;
   voidNetCostTotal?: bigint;
+  /** subjectOf (a deployment with wonder markets): builder or wonder, and whether its feed pays it. */
+  subject?: MarketSubject;
 }
 
 export interface BuilderRow {
@@ -308,6 +327,8 @@ export async function readOverview(client: PublicClient, d: PerennialDeployment)
     return { ...m, id, comparator: Number(m.comparator), phase: Number(m.phase), seeded, lpPot } as ChainMarket;
   });
   let markets = raws.filter((m) => m.createdAt > 0n);
+  const subjects = await subjectsFor(client, d, markets.map((m) => m.id), discovery.wonderSources);
+  for (const m of markets) m.subject = subjects[m.id.toLowerCase()];
 
   // v3 accounting: the pot and agent escrow while unsettled, the void snapshot
   // once voided (for the local payout mirror). Skipped on legacy.
@@ -458,4 +479,16 @@ export async function readLatestValue(
   })) as readonly [bigint, bigint, boolean];
   if (timestamp === 0n) return null;
   return { value, timestamp, finalized };
+}
+
+/** Each market's subject (subjectOf) on a deployment with wonder markets; {} otherwise
+ *  (subjectOf does not exist before the wonder contracts: never called there). */
+export async function subjectsFor(
+  client: { readContract: PublicClient["readContract"] },
+  d: Pick<PerennialDeployment, "contracts">,
+  ids: Hex[],
+  wonderSources: Record<string, string>,
+): Promise<Record<string, MarketSubject>> {
+  const w = wonderContracts(d);
+  return w ? readMarketSubjects(client as never, w.markets, ids, wonderSources) : {};
 }

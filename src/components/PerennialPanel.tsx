@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { createPublicClient, createWalletClient, custom, type Address, type Hex, type PublicClient } from "viem";
 import useSWR from "swr";
 import { useWallet } from "./WalletProvider";
+import { MarketLabels } from "@/components/wonder/WonderBits";
+import { SUBJECT } from "@/lib/wonder";
 import { transportFor, txUrl as txUrlFor } from "@/lib/chains";
 import { usdcAbi, nanoLedgerAbi, builderRegistryAbi, builderFundAbi, marketsPerennialAbi } from "@/lib/abi";
 import { explainMinedRevert, humanizeError } from "@/lib/humanize-error";
@@ -133,6 +135,15 @@ function BuilderParam({ onBuilder }: { onBuilder: (id: number) => void }) {
   useEffect(() => {
     if (id) onBuilder(id);
   }, [id, onBuilder]);
+  return null;
+}
+
+/** `?market=<id>` (links from the Wonder markets view): select that market. */
+function MarketParam({ onMarket }: { onMarket: (id: Hex) => void }) {
+  const raw = useSearchParams()?.get("market");
+  useEffect(() => {
+    if (raw && /^0x[0-9a-fA-F]{64}$/.test(raw)) onMarket(raw.toLowerCase() as Hex);
+  }, [raw, onMarket]);
   return null;
 }
 
@@ -288,7 +299,11 @@ function PerennialLive() {
     fallback: { attestation: ov?.attestation },
   });
 
-  const subjectFor = (m: ChainMarket) => builderById(m.builderId)?.name ?? `Builder #${m.builderId}`;
+  const isWonder = (m: ChainMarket) => m.subject?.kind === SUBJECT.Wonder && Boolean(m.subject.source);
+  const subjectFor = (m: ChainMarket) =>
+    isWonder(m) ? sourceLabel(m.subject!.source!) : builderById(m.builderId)?.name ?? `Builder #${m.builderId}`;
+  /** The short tag under a card: "builder #7", or "wonder market" for an unclaimed project. */
+  const subjectTag = (m: ChainMarket) => (isWonder(m) ? "wonder market" : `builder #${m.builderId}`);
   // Milestones are per project: a market on any of the builder's project feeds
   // (or its legacy single feed), resolved by the operator, is a milestone market.
   const isMilestoneMarket = (m: ChainMarket) => {
@@ -623,6 +638,7 @@ function PerennialLive() {
   return (
     <div className="perennial-panel space-y-3">
       <Suspense fallback={null}><BuilderParam onBuilder={setLinkedId} /></Suspense>
+      <Suspense fallback={null}><MarketParam onMarket={setSelectedId} /></Suspense>
       {!PERENNIAL_WRITES_ENABLED && (
         <div className="pp-notice border border-down/35 bg-down/5 p-3 text-2xs text-down">
           Perennial transactions are paused. Live data remains available.
@@ -683,9 +699,10 @@ function PerennialLive() {
                       <strong>{yesPct(m)}¢</strong>
                     </div>
                     <p>{questionFor(m)}</p>
+                    <MarketLabels subject={m.subject} />
                     <div className="pp-market-row-meta">
                       <span>{st.label}</span>
-                      <span>{st.canTrade ? remaining(m.expiry) : `builder #${m.builderId}`}</span>
+                      <span>{st.canTrade ? remaining(m.expiry) : subjectTag(m)}</span>
                     </div>
                   </button>
                 );
@@ -720,8 +737,9 @@ function PerennialLive() {
               <div className="pp-market-focus">
                 <div className="pp-market-focus-head">
                   <div>
-                    <div className="pp-card-label">{selected ? `${selStatus?.label} · builder #${selected.builderId}${projectForFeed(selBuilder, selected.feedId) ? ` · ${sourceLabel(projectForFeed(selBuilder, selected.feedId)!.source)}` : ""}` : "Market"}</div>
+                    <div className="pp-card-label">{selected ? `${selStatus?.label} · ${subjectTag(selected)}${projectForFeed(selBuilder, selected.feedId) ? ` · ${sourceLabel(projectForFeed(selBuilder, selected.feedId)!.source)}` : ""}` : "Market"}</div>
                     <h2>{selected ? questionFor(selected) : ov ? "No market selected" : "Loading…"}</h2>
+                    {selected && <MarketLabels subject={selected.subject} />}
                     {selBuilder && <div className="flex items-center gap-2"><button className="pp-builder-link" onClick={() => setRole("build")}>{selBuilder.name} <span>↗</span></button><VerifiedBadge verification={selBuilder.verification} /></div>}
                   </div>
                   <div className="pp-market-price"><strong>{selected ? `${yp}¢` : "—"}</strong><span>YES price</span></div>
