@@ -58,6 +58,7 @@ import {
 } from "@/lib/perennial-chain";
 import { BuilderProfile, findDigest } from "./BuilderProfile";
 import { AgentBadge, CaughtAgentBanner, useAgentReputation } from "./AgentBadge";
+import { activeProvider } from "@/lib/wallets";
 import { MilestoneDisclosure, VerifiedBadge } from "./VerifiedBadge";
 import { milestoneMetric } from "@/lib/builder-verification";
 import { parseBuilderParam } from "@/lib/verified-builder-badge";
@@ -151,8 +152,9 @@ function PerennialLive() {
   // Writes go through the wallet, bound to the Perennial chain (which may not be
   // the app-wide chain the shared wallet client follows).
   const walletClient = useMemo(() => {
-    if (typeof window === "undefined" || !window.ethereum || !address || !onPerennialChain) return undefined;
-    return createWalletClient({ chain: CHAIN.viemChain, transport: custom(window.ethereum), account: address });
+    const eth = activeProvider();
+    if (!eth || !address || !onPerennialChain) return undefined;
+    return createWalletClient({ chain: CHAIN.viemChain, transport: custom(eth), account: address });
   }, [address, onPerennialChain]);
 
   const [role, setRole] = useState<Role>("bet");

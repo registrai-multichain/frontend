@@ -14,7 +14,20 @@ export function useMobileWithoutWallet(): string | null {
   const [href, setHref] = useState<string | null>(null);
   useEffect(() => {
     if (window.ethereum || !isMobileUserAgent(navigator.userAgent)) return;
-    setHref(window.location.href);
+    // Give EIP-6963 wallets a moment to announce before offering MetaMask.
+    let announced = false;
+    const onAnnounce = () => {
+      announced = true;
+    };
+    window.addEventListener("eip6963:announceProvider", onAnnounce);
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+    const t = setTimeout(() => {
+      if (!announced) setHref(window.location.href);
+    }, 400);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("eip6963:announceProvider", onAnnounce);
+    };
   }, []);
   return href;
 }

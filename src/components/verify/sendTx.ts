@@ -3,6 +3,7 @@
 import { createWalletClient, custom, type Abi, type Address, type Hex } from "viem";
 import { BUILDERS } from "@/lib/builders-network";
 import { explainMinedRevert } from "@/lib/humanize-error";
+import { activeProvider } from "@/lib/wallets";
 import { buildersClient } from "./useMyBuilder";
 
 const CHAIN = BUILDERS.chain;
@@ -21,11 +22,12 @@ export async function sendBuildersTx(o: {
   args: readonly unknown[];
   onHash?: (hash: Hex) => void;
 }): Promise<Hex> {
-  if (typeof window === "undefined" || !window.ethereum) throw new Error("No wallet found in this browser.");
+  const eth = activeProvider();
+  if (!eth) throw new Error("No wallet found in this browser.");
   const pc = buildersClient();
   const call = { address: o.address, abi: o.abi, functionName: o.functionName, args: o.args, account: o.account } as const;
   await pc.simulateContract(call as never);
-  const wallet = createWalletClient({ chain: CHAIN.viemChain, transport: custom(window.ethereum), account: o.account });
+  const wallet = createWalletClient({ chain: CHAIN.viemChain, transport: custom(eth), account: o.account });
   const hash = await wallet.writeContract({ ...call, chain: CHAIN.viemChain } as never);
   o.onHash?.(hash);
   const r = await pc.waitForTransactionReceipt({ hash });

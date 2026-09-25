@@ -49,6 +49,7 @@ import {
   readBuilderForOnboarding,
   recheckOnboardingProofs,
 } from "@/lib/builders-onboarder";
+import { activeProvider } from "@/lib/wallets";
 import { gaslessCandidates, gaslessState, type GaslessRequest } from "@/lib/gasless-registrations";
 import { planOnboarding, safeBatchJson } from "@/lib/onboard-batch";
 import { sendBuildersTx } from "@/components/verify/sendTx";
@@ -739,7 +740,7 @@ function OnboardRunLine({ run }: { run: OnboardRun }) {
 /** The wallet must be on the builders chain: switch it, then check it really is (a rejected switch does not throw). */
 async function ensureBuildersChain(walletChainId: number | undefined, switchChain: (id?: number) => Promise<void>) {
   if (walletChainId !== BUILDERS.chainId) await switchChain(BUILDERS.chainId);
-  const id = await window.ethereum?.request({ method: "eth_chainId" }).catch(() => undefined);
+  const id = await activeProvider()?.request({ method: "eth_chainId" }).catch(() => undefined);
   if (Number(id) !== BUILDERS.chainId) {
     throw new Error(`Your wallet is not on ${BUILDERS.label} (chain ${BUILDERS.chainId}). Switch networks and try again.`);
   }

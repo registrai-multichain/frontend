@@ -27,18 +27,16 @@ import {
   type ChainEntry,
 } from "@/lib/chains";
 import { isMobileUserAgent, metamaskDappLink } from "@/lib/verify-invite";
+import {
+  defaultWallet,
+  discoverWallets,
+  readLastWallet,
+  saveLastWallet,
+  setActiveProvider,
+  type EthereumProvider,
+  type InjectedWallet,
+} from "@/lib/wallets";
 
-type EthereumProvider = {
-  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-  on?: (event: string, cb: (...args: unknown[]) => void) => void;
-  removeListener?: (event: string, cb: (...args: unknown[]) => void) => void;
-};
-
-declare global {
-  interface Window {
-    ethereum?: EthereumProvider;
-  }
-}
 
 interface WalletContextValue {
   /** User's connected address, if any. */
@@ -57,6 +55,10 @@ interface WalletContextValue {
   error: string | undefined;
   connect: () => Promise<void>;
   disconnect: () => void;
+  /** Browser wallets that announced themselves (EIP-6963). */
+  wallets: InjectedWallet[];
+  /** Open the wallet picker (to switch to another installed wallet). */
+  pickWallet: () => void;
   /** Switch the wallet to a chain the app knows (Arc testnet or mainnet),
    *  adding it with the official RPC if the wallet lacks it. Defaults to the
    *  protocol's default chain (Arc testnet today). */
@@ -69,13 +71,31 @@ const Ctx = createContext<WalletContextValue | undefined>(undefined);
 
 const CONNECT_TIMEOUT_MS = 20_000;
 const WALLET_PENDING_HINT =
-  "Your wallet hasn't answered. Open the wallet extension (e.g. click the MetaMask icon): a connection request may be waiting there. Then try again.";
+  "Your wallet hasn't answered. Open the wallet extension (e.g. click the MetaMask icon): a connection request may be waiting there. Then try again, or choose a different wallet.";
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<Address | undefined>();
   const [walletChainId, setWalletChainId] = useState<number | undefined>();
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  // EIP-6963: every installed wallet, and the one in use (window.ethereum is
+  // only whichever extension grabbed it; see src/lib/wallets.ts).
+  const [wallets, setWallets] = useState<InjectedWallet[]>([]);
+  const [prov, setProv] = useState<EthereumProvider | undefined>();
+  const [picking, setPicking] = useState(false);
+  useEffect(() => discoverWallets(setWallets), []);
+  const selectProvider = useCallback((p: EthereumProvider | undefined) => {
+    setActiveProvider(p ?? null);
+    setProv(p);
+  }, []);
+  // The wallet picked last time (or the only one) is used without asking.
+  useEffect(() => {
+    if (prov) return;
+    const d = defaultWallet(wallets, readLastWallet());
+    if (d) selectProvider(d.provider);
+  }, [wallets, prov, selectProvider]);
+  /** The provider calls go to: the chosen wallet, else the legacy window.ethereum. */
+  const eth = prov ?? (typeof window === "undefined" ? undefined : window.ethereum);
 
   // The chain we drive contract reads/writes against. If the wallet is on
   // one we support, follow it; otherwise pin to the protocol's default chain
@@ -98,28 +118,71 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   );
 
   const walletClient = useMemo(() => {
-    if (typeof window === "undefined" || !window.ethereum || !address) return undefined;
+    if (!eth || !address) return undefined;
     return createWalletClient({
       chain: currentChain.viemChain,
-      transport: custom(window.ethereum),
+      transport: custom(eth),
       account: address,
     });
-  }, [address, currentChain]);
+  }, [address, currentChain, eth]);
 
   const refreshChain = useCallback(async () => {
-    if (typeof window === "undefined" || !window.ethereum) return;
+    if (!eth) return;
     try {
-      const hex = (await window.ethereum.request({ method: "eth_chainId" })) as string;
+      const hex = (await eth.request({ method: "eth_chainId" })) as string;
       setWalletChainId(parseInt(hex, 16));
     } catch {
       // ignore
     }
-  }, []);
+  }, [eth]);
 
+  /** Ask `target` for accounts (the picked wallet, or the default one). */
+  /** Ask one wallet for its accounts; give up waiting after CONNECT_TIMEOUT_MS. */
+  const requestAccounts = useCallback(
+    async (target: EthereumProvider) => {
+      setIsConnecting(true);
+      setError(undefined);
+      // A wallet whose approval window was closed or is hidden behind the browser
+      // may never answer. Stop waiting after CONNECT_TIMEOUT_MS so the button works
+      // again; a late approval still lands through the accountsChanged listener.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<"timeout">((resolve) => {
+        timer = setTimeout(() => resolve("timeout"), CONNECT_TIMEOUT_MS);
+      });
+      try {
+        const accounts = await Promise.race([target.request({ method: "eth_requestAccounts" }) as Promise<Address[]>, timeout]);
+        if (accounts === "timeout") {
+          setError(WALLET_PENDING_HINT);
+        } else if (accounts && accounts[0]) {
+          setAddress(accounts[0]);
+          const hex = (await target.request({ method: "eth_chainId" }).catch(() => null)) as string | null;
+          if (hex) setWalletChainId(parseInt(hex, 16));
+        }
+      } catch (e) {
+        // -32002: a connection request is already waiting in the wallet.
+        setError((e as { code?: number }).code === -32002 ? WALLET_PENDING_HINT : (e as Error).message);
+      } finally {
+        clearTimeout(timer);
+        setIsConnecting(false);
+      }
+    },
+    [],
+  );
+
+  /** Connect: the chosen wallet; with several installed and none chosen yet, the picker. */
   const connect = useCallback(async () => {
-    if (typeof window === "undefined" || !window.ethereum) {
+    if (typeof window === "undefined") return;
+    const d = prov ? null : defaultWallet(wallets, readLastWallet());
+    if (d) selectProvider(d.provider);
+    const target = prov ?? d?.provider ?? (wallets.length === 0 ? window.ethereum : undefined);
+    if (!target && wallets.length > 1) {
+      setError(undefined);
+      setPicking(true);
+      return;
+    }
+    if (!target) {
       // A phone with no wallet in this browser: reopen the page in MetaMask's.
-      const mm = typeof window !== "undefined" && isMobileUserAgent(navigator.userAgent) ? metamaskDappLink(window.location.href) : null;
+      const mm = isMobileUserAgent(navigator.userAgent) ? metamaskDappLink(window.location.href) : null;
       if (mm) {
         window.location.href = mm;
         return;
@@ -127,34 +190,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setError("No wallet found. Install MetaMask or another EVM wallet.");
       return;
     }
-    setIsConnecting(true);
+    await requestAccounts(target);
+  }, [prov, wallets, selectProvider, requestAccounts]);
+
+  /** The user picked a wallet in the picker: remember it and connect with it. */
+  const choose = useCallback(
+    async (w: InjectedWallet) => {
+      setPicking(false);
+      saveLastWallet(w.rdns);
+      setAddress(undefined);
+      selectProvider(w.provider);
+      await requestAccounts(w.provider);
+    },
+    [selectProvider, requestAccounts],
+  );
+
+  const pickWallet = useCallback(() => {
     setError(undefined);
-    // A wallet whose approval window was closed or is hidden behind the browser
-    // may never answer. Stop waiting after CONNECT_TIMEOUT_MS so the button works
-    // again; a late approval still lands through the accountsChanged listener.
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<"timeout">((resolve) => {
-      timer = setTimeout(() => resolve("timeout"), CONNECT_TIMEOUT_MS);
-    });
-    try {
-      const accounts = await Promise.race([
-        window.ethereum.request({ method: "eth_requestAccounts" }) as Promise<Address[]>,
-        timeout,
-      ]);
-      if (accounts === "timeout") {
-        setError(WALLET_PENDING_HINT);
-      } else if (accounts && accounts[0]) {
-        setAddress(accounts[0]);
-        await refreshChain();
-      }
-    } catch (e) {
-      // -32002: a connection request is already waiting in the wallet.
-      setError((e as { code?: number }).code === -32002 ? WALLET_PENDING_HINT : (e as Error).message);
-    } finally {
-      clearTimeout(timer);
-      setIsConnecting(false);
-    }
-  }, [refreshChain]);
+    if (wallets.length > 1) setPicking(true);
+  }, [wallets]);
 
   const disconnect = useCallback(() => {
     setAddress(undefined);
@@ -162,8 +216,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const switchChain = useCallback(
     async (targetId?: number) => {
-      if (typeof window === "undefined" || !window.ethereum) return;
-      const eth = window.ethereum;
+      if (!eth) return;
       // Any chain the app can point a wallet at (testnet and mainnet), not
       // only chains with the full contract stack.
       const target = getWalletChain(targetId ?? DEFAULT_CHAIN_ID);
@@ -209,12 +262,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
       await refreshChain();
     },
-    [refreshChain],
+    [refreshChain, eth],
   );
 
   useEffect(() => {
-    if (typeof window === "undefined" || !window.ethereum) return;
-    const eth = window.ethereum;
+    if (!eth) return;
 
     const onAccountsChanged = (...args: unknown[]) => {
       const accounts = args[0] as Address[];
@@ -242,7 +294,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       eth.removeListener?.("accountsChanged", onAccountsChanged);
       eth.removeListener?.("chainChanged", onChainChanged);
     };
-  }, [refreshChain]);
+  }, [refreshChain, eth]);
 
   const value: WalletContextValue = {
     address,
@@ -254,12 +306,52 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     error,
     connect,
     disconnect,
+    wallets,
+    pickWallet,
     switchChain,
     publicClient,
     walletClient,
   };
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={value}>
+      {children}
+      {picking && <WalletPicker wallets={wallets} onPick={choose} onClose={() => setPicking(false)} />}
+    </Ctx.Provider>
+  );
+}
+
+/** The installed wallets (EIP-6963), each with its own icon: the user picks the one to use. */
+function WalletPicker({ wallets, onPick, onClose }: { wallets: InjectedWallet[]; onPick: (w: InjectedWallet) => void; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="wallet-picker-backdrop" role="presentation" onClick={onClose}>
+      <div className="wallet-picker" role="dialog" aria-modal="true" aria-label="Choose a wallet" onClick={(e) => e.stopPropagation()}>
+        <div className="wallet-picker-head">
+          <b>Choose a wallet</b>
+          <button type="button" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        </div>
+        <p>Several wallets are installed in this browser. Pick the one to connect.</p>
+        <ul>
+          {wallets.map((w) => (
+            <li key={w.uuid}>
+              <button type="button" onClick={() => onPick(w)}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- a data: URI from the wallet itself */}
+                <img src={w.icon} alt="" width={28} height={28} />
+                <span>{w.name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
 }
 
 function errCode(e: unknown): number | undefined {

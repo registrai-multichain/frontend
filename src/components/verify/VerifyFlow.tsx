@@ -27,6 +27,7 @@ import {
 import { verifiedBuilderAbi } from "@/lib/verified-builders-chain";
 import { MAX_NAME_LEN } from "@/lib/builders-gallery";
 import { displayNameError, finalStepTitle, planClaim, projectSlots, sourceError, stepStates } from "@/lib/verify-plan";
+import { activeProvider } from "@/lib/wallets";
 import { GaslessRequest } from "./GaslessRequest";
 import { MobileWalletLink, useMobileWithoutWallet } from "./MobileWalletLink";
 import { PublishGuide } from "./PublishGuide";
@@ -154,7 +155,7 @@ export interface ProjectPick {
  * an owner change). See src/lib/verify-plan.ts.
  */
 export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
-  const { address, walletChainId, connect, switchChain, isConnecting, error: walletError } = useWallet();
+  const { address, walletChainId, connect, switchChain, isConnecting, error: walletError, wallets, pickWallet } = useWallet();
   const mobileNoWallet = useMobileWithoutWallet();
 
   const [path, setPath] = useState<Path>("repo");
@@ -214,8 +215,9 @@ export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
   const url = claim ? proofUrl(claim.source) : null;
 
   async function sign(expected: string): Promise<Hex | undefined> {
-    if (!message || !address || typeof window === "undefined" || !window.ethereum) return undefined;
-    const wallet = createWalletClient({ chain: CHAIN.viemChain, transport: custom(window.ethereum), account: address });
+    const eth = activeProvider();
+    if (!message || !address || !eth) return undefined;
+    const wallet = createWalletClient({ chain: CHAIN.viemChain, transport: custom(eth), account: address });
     const sig = await wallet.signMessage({ account: address, message });
     const who = await recoverMessageAddress({ message, signature: sig });
     if (who.toLowerCase() !== expected) throw new Error(`That signature came from ${shortAddr(who)}, not ${shortAddr(expected)}.`);
@@ -237,7 +239,7 @@ export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
     setClaim(frozen);
     try {
       const message = canonicalClaimMessage(frozen);
-      const wallet = createWalletClient({ chain: CHAIN.viemChain, transport: custom(window.ethereum!), account: address });
+      const wallet = createWalletClient({ chain: CHAIN.viemChain, transport: custom(activeProvider()!), account: address });
       const sig = await wallet.signMessage({ account: address, message });
       const who = await recoverMessageAddress({ message, signature: sig });
       if (who.toLowerCase() !== frozen.builder) throw new Error(`That signature came from ${shortAddr(who)}, not your builder wallet.`);
@@ -265,7 +267,7 @@ export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
 
   async function pickAccount() {
     try {
-      await window.ethereum?.request({ method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] });
+      await activeProvider()?.request({ method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] });
     } catch {
       // not supported or cancelled — switching in the wallet itself works too
     }
@@ -426,6 +428,11 @@ export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
                   {isConnecting ? "connecting…" : "connect wallet"}
                 </button>
                 {walletError && <p className="vf-error">{walletError}</p>}
+                {wallets.length > 1 && (
+                  <button type="button" className="vf-link" onClick={pickWallet}>
+                    use a different wallet ({wallets.length} installed)
+                  </button>
+                )}
               </>
             )}
           </>
