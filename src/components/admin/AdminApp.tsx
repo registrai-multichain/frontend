@@ -54,6 +54,8 @@ import { gaslessCandidates, gaslessState, type GaslessRequest } from "@/lib/gasl
 import { planOnboarding, safeBatchJson } from "@/lib/onboard-batch";
 import { sendBuildersTx } from "@/components/verify/sendTx";
 import { buildersClient } from "@/components/verify/useMyBuilder";
+import { useWonderStatus } from "@/components/wonder/WonderBits";
+import { cancelReleaseSafeFile, nominateInput, nominateSafeFile, releaseView, usd, WONDER_ON_BUILDERS, wonderMarketsAbi } from "@/lib/wonder";
 
 const REG = BUILDERS.contracts.BuilderRegistry;
 const CARE = BUILDERS.contracts.CaretakerRegistry;
@@ -374,6 +376,8 @@ function Dashboard({
       <RecoverySection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
 
       <ProjectsSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
+
+      {WONDER_ON_BUILDERS && <WonderSection invites={invites.data ?? []} />}
     </div>
   );
 }
@@ -381,7 +385,8 @@ function Dashboard({
 // ───────────────────────────── invite a project ─────────────────────────────
 
 function InviteLink({ invite, existed }: { invite: AdminInvite; existed: boolean }) {
-  const dm = inviteDm(invite, invite.claimLink);
+  const wonder = useWonderStatus(WONDER_ON_BUILDERS ? [invite.source] : []);
+  const dm = inviteDm(invite, invite.claimLink, wonder.status[invite.source]?.escrow);
   return (
     <div className="adm-result">
       <p className={existed ? "vf-error" : "vf-ok"}>
@@ -525,6 +530,7 @@ function StatusChip({ s }: { s: InviteChainStatus | null }) {
 }
 
 function InviteRow({ inv, status, onChanged }: { inv: AdminInvite; status: InviteChainStatus | null; onChanged: () => void }) {
+  const wonder = useWonderStatus(WONDER_ON_BUILDERS ? [inv.source] : []);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(inv.name ?? "");
   const [x, setX] = useState(inv.x ?? "");
@@ -608,7 +614,7 @@ function InviteRow({ inv, status, onChanged }: { inv: AdminInvite; status: Invit
       <td>
         <span className="adm-actions">
           <CopyButton text={inv.claimLink} label="link" />
-          <CopyButton text={inviteDm(inv, inv.claimLink)} label="DM" />
+          <CopyButton text={inviteDm(inv, inv.claimLink, wonder.status[inv.source]?.escrow)} label="DM" />
         </span>
       </td>
       <td className="tnum">
@@ -1604,6 +1610,105 @@ function ProjectsSection({
                   </td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+// ───────────────────────────── wonder markets ─────────────────────────────
+
+function WonderSection({ invites }: { invites: AdminInvite[] }) {
+  const w = WONDER_ON_BUILDERS!;
+  const { address, walletClient, walletChainId, switchChain } = useWallet();
+  const [input, setInput] = useState("");
+  const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
+  const invited = useMemo(() => new Set(invites.map((i) => i.source)), [invites]);
+  const sources = useMemo(() => [...invited], [invited]);
+  const wonder = useWonderStatus(sources);
+  const now = useTick(60_000); // unix seconds
+
+  async function send(source: string, on: boolean) {
+    if (!address || !walletClient) return setMsg({ error: "Connect the onboarder wallet (or download the Safe file)." });
+    try {
+      if (walletChainId !== BUILDERS.chainId) await switchChain(BUILDERS.chainId);
+      const pc = buildersClient();
+      await pc.simulateContract({ address: w.markets, abi: wonderMarketsAbi, functionName: "nominate", args: [source, on], account: address as Address });
+      const hash = await walletClient.writeContract({
+        address: w.markets, abi: wonderMarketsAbi, functionName: "nominate", args: [source, on],
+        account: address as Address, chain: BUILDERS.chain.viemChain,
+      });
+      const rc = await pc.waitForTransactionReceipt({ hash });
+      if (rc.status !== "success") throw new Error("the transaction reverted");
+      setMsg({ ok: `${on ? "Nominated" : "Un-nominated"} ${source}.` });
+    } catch (e) {
+      setMsg({ error: humanizeError(e, HUMAN) });
+    }
+  }
+
+  function act(on: boolean, how: "wallet" | "safe") {
+    const r = nominateInput(input, invited);
+    if (!r.ok) return setMsg({ error: r.error });
+    if (how === "safe") {
+      download(safeFileName(`${on ? "nominate" : "unnominate"}-${r.source.replace(/[^a-z0-9]+/g, "-")}`, Date.now()),
+        nominateSafeFile({ markets: w.markets, source: r.source, on, chainId: BUILDERS.chainId, createdAt: Date.now() }));
+      return setMsg({ ok: "Safe file downloaded." });
+    }
+    void send(r.source, on);
+  }
+
+  const rows = sources
+    .map((s) => ({ s, st: wonder.status[s] }))
+    .filter((r) => r.st && (r.st.nominated || r.st.escrow > 0n || r.st.pending || r.st.releasedTo));
+  return (
+    <Section title="Wonder markets">
+      <p className="vf-note">
+        Nominate an invited project to open wonder markets on it (the onboarder wallet or the Safe). Un-nominate when a
+        team opts out: no new wonder markets; existing ones settle and their escrow expires to the season pool. The
+        keeper queues a release once the team&apos;s claim has held three checks; cancel a wrong one here within 7 days.
+      </p>
+      <div className="adm-inline">
+        <label className="vf-field">
+          <span>Invited project</span>
+          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="github:owner/repo or domain" spellCheck={false} autoCapitalize="off" />
+          <em />
+        </label>
+        <button type="button" className="vf-primary" onClick={() => act(true, "wallet")} disabled={!input.trim()}>Nominate</button>
+        <button type="button" onClick={() => act(false, "wallet")} disabled={!input.trim()}>Un-nominate</button>
+        <button type="button" onClick={() => act(true, "safe")} disabled={!input.trim()}>Safe file: nominate</button>
+        <button type="button" onClick={() => act(false, "safe")} disabled={!input.trim()}>Safe file: un-nominate</button>
+      </div>
+      {msg.ok && <p className="vf-ok">{msg.ok}</p>}
+      {msg.error && <p className="vf-error">{msg.error}</p>}
+
+      <div className="pp-card-label">Escrow</div>
+      {rows.length === 0 ? (
+        <p className="vf-hint">No nominated project, no escrow.</p>
+      ) : (
+        <div className="adm-table-wrap">
+          <table className="adm-table">
+            <thead><tr><th>Project</th><th>Nominated</th><th>Escrow</th><th /></tr></thead>
+            <tbody>
+              {rows.map(({ s, st }) => {
+                const v = wonder.expiry !== null ? releaseView(st!, now, wonder.expiry) : null;
+                return (
+                  <tr key={s}>
+                    <td><b>{sourceLabel(s)}</b><span className="adm-sub">{s}</span></td>
+                    <td>{st!.nominated ? "yes" : "no"}</td>
+                    <td>{v?.line ?? usd(st!.escrow)}</td>
+                    <td>
+                      {st!.pending && (
+                        <button type="button" onClick={() => download(safeFileName(`cancel-release-${s.replace(/[^a-z0-9]+/g, "-")}`, Date.now()),
+                          cancelReleaseSafeFile({ escrow: w.escrow, source: s, chainId: BUILDERS.chainId, createdAt: Date.now() }))}>
+                          Safe file: cancel release
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
