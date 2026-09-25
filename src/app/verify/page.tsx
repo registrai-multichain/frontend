@@ -54,6 +54,14 @@ export default function VerifyPage() {
               </p>
             </details>
             <details className="vf-faq">
+              <summary>I registered. How do I become verified?</summary>
+              <p>
+                After you register you show as <b>Nominated</b>. Registrai reviews the claim and onboards your builder in its
+                next batch, which issues your Verified Builder Badge; your card then shows as Verified. You don&apos;t need to do
+                anything else, just keep the proof file published.
+              </p>
+            </details>
+            <details className="vf-faq">
               <summary>Why a file in my repo or on my domain?</summary>
               <p>
                 Only you can publish there, so a small signed file proves the project is yours without giving us any access.

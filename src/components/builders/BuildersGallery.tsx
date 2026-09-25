@@ -173,7 +173,7 @@ function ProjectChips({ chips }: { chips: ProjectChip[] }) {
 /** What a card and the detail view both say about a builder's state. */
 function StatusNote({ e }: { e: GalleryEntry }) {
   const b = e.builder;
-  if (e.kind === "nominated") return <p className="bld-note">Claimed and registered · awaiting onboarding</p>;
+  if (e.kind === "nominated") return <p className="bld-note">Claimed and registered · verified once Registrai issues its badge</p>;
   if ((e.kind === "lapsed" || e.kind === "unconfirmed") && b) return <p className="bld-note">{greyReason(b)}</p>;
   if (e.kind === "invited") return <p className="bld-note">Invited · not claimed yet</p>;
   return null;

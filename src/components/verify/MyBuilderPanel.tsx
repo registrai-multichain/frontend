@@ -247,6 +247,36 @@ function MoveWallet({ b, pendingOwner, run, busy }: { b: MyBuilder; pendingOwner
 }
 
 /**
+ * Where the builder stands and what happens next: nominated (registered, the
+ * badge not issued yet) needs nothing from the builder but a published proof;
+ * Registrai onboards it (caretaker + badge) in its next batch.
+ */
+function BuilderStatus({ active, hasBadge, proofsBroken }: { active: boolean; hasBadge: boolean; proofsBroken: boolean }) {
+  if (!BADGE || !active || hasBadge) return null;
+  if (proofsBroken) {
+    return (
+      <div className="vf-banner" role="status">
+        <strong>Registered · proof not found</strong>
+        <p>
+          None of your projects&apos; proof files checks out right now, so you can&apos;t be verified yet. Publish the file
+          again (or re-sign it below), then reload this page.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="vf-banner vf-banner-ok" role="status">
+      <strong>Nominated · waiting for Registrai</strong>
+      <p>
+        Your claim is registered and checks out. To become <b>verified</b>, Registrai reviews it and onboards your builder
+        in its next batch: that issues your Verified Builder Badge to this wallet. There&apos;s nothing else for you to do;
+        just keep the proof file published. Your gallery card turns from Nominated to Verified when the badge is issued.
+      </p>
+    </div>
+  );
+}
+
+/**
  * On /verify, for the connected wallet: its builder's projects with their
  * proof status (and re-sign prompts after an owner change), the project-slot
  * limit, moving to a new wallet, a pending recovery with its cancel, and the
@@ -334,6 +364,18 @@ export function MyBuilderPanel({ onPick }: { onPick: (source: string) => void })
         <span>{name}</span>
         <b>builder #{b.id}</b>
       </div>
+
+      <BuilderStatus
+        active={b.active}
+        hasBadge={Boolean(badge)}
+        proofsBroken={
+          Boolean(proofs.data) &&
+          b.projects.filter((p) => p.active).every((p) => {
+            const st = proofs.data?.get(p.id)?.state;
+            return st !== undefined && st !== "valid" && st !== "unchecked";
+          })
+        }
+      />
 
       {rec.kind !== "none" && (
         <div className="vf-banner" role="alert">
