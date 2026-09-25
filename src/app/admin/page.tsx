@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { BuildersShell } from "@/components/BuildersShell";
 import { AdminApp } from "@/components/admin/AdminApp";
+import live from "@/lib/live-data.json";
 
 export const metadata: Metadata = {
   title: "Admin · Registrai builders",
@@ -19,7 +20,7 @@ export default function AdminPage() {
   return (
     <BuildersShell wallet>
       <article className="perennial-app-page">
-        <AdminApp />
+        <AdminApp revocationCheckpoint={(live as { revocations?: unknown }).revocations ?? null} />
       </article>
     </BuildersShell>
   );

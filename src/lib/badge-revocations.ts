@@ -54,26 +54,108 @@ export interface LogReader {
   getLogs(args: { address: Address; event: unknown; fromBlock: bigint; toBlock: bigint }): Promise<unknown[]>;
 }
 
-export type RevocationRead = { ok: true; revoked: Set<number>; toBlock: bigint } | { ok: false; error: string };
+/**
+ * The raw revocation history up to `toBlock` of one badge + registry pair: a
+ * checkpoint that a later read resumes from instead of the deploy block (Arc
+ * mainnet makes ~170k blocks a day, so a full rescan grows by ~34 log ranges
+ * per event per day). scripts/sync.ts carries one in live-data.json
+ * `revocations`; /admin also keeps its latest in the browser.
+ */
+export interface RevocationCheckpoint {
+  chainId: number;
+  badge: Address;
+  registry: Address;
+  toBlock: bigint;
+  revokes: RevokeLog[];
+  statuses: StatusLog[];
+}
+
+export type RevocationRead =
+  | { ok: true; revoked: Set<number>; toBlock: bigint; checkpoint: RevocationCheckpoint }
+  | { ok: false; error: string };
+
+const sameAddr = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** A checkpoint as JSON (block numbers as decimal strings). */
+export function checkpointToJson(c: RevocationCheckpoint) {
+  return {
+    chainId: c.chainId,
+    badge: c.badge,
+    registry: c.registry,
+    toBlock: c.toBlock.toString(),
+    revokes: c.revokes.map((r) => ({ builderId: r.builderId, block: r.block.toString(), index: r.index })),
+    statuses: c.statuses.map((r) => ({ builderId: r.builderId, active: r.active, block: r.block.toString(), index: r.index })),
+  };
+}
+
+const uint = (v: unknown) => (typeof v === "string" && /^\d{1,30}$/.test(v) ? BigInt(v) : null);
+const smallInt = (v: unknown) => (typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : null);
+
+/**
+ * A checkpoint from JSON, only if it is well-formed AND describes this chain,
+ * badge and registry (a checkpoint of another deployment is not history of
+ * this one); otherwise null, and the caller reads from the deploy block.
+ */
+export function checkpointFromJson(
+  raw: unknown,
+  want: { chainId: number; badge: Address; registry: Address },
+): RevocationCheckpoint | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (o.chainId !== want.chainId || typeof o.badge !== "string" || typeof o.registry !== "string") return null;
+  if (!sameAddr(o.badge, want.badge) || !sameAddr(o.registry, want.registry)) return null;
+  const toBlock = uint(o.toBlock);
+  if (toBlock === null || !Array.isArray(o.revokes) || !Array.isArray(o.statuses)) return null;
+  const revokes: RevokeLog[] = [];
+  for (const r of o.revokes as Record<string, unknown>[]) {
+    const builderId = smallInt(r?.builderId), block = uint(r?.block), index = smallInt(r?.index);
+    if (builderId === null || block === null || index === null || block > toBlock) return null;
+    revokes.push({ builderId, block, index });
+  }
+  const statuses: StatusLog[] = [];
+  for (const r of o.statuses as Record<string, unknown>[]) {
+    const builderId = smallInt(r?.builderId), block = uint(r?.block), index = smallInt(r?.index);
+    if (builderId === null || block === null || index === null || typeof r?.active !== "boolean" || block > toBlock) return null;
+    statuses.push({ builderId, active: r.active, block, index });
+  }
+  return { chainId: want.chainId, badge: want.badge, registry: want.registry, toBlock, revokes, statuses };
+}
 
 /**
  * Every Revoked (badge) and BuilderStatusSet (registry) log from `fromBlock`
  * to the head, in ≤`chunk`-block getLogs (Arc caps the range), `parallel` at
- * a time. With `maxChunks`, a longer history is not read at all (ok: false):
- * the caller then treats the history as unknown.
+ * a time. With `prior` (a checkpoint of this chain, badge and registry), only
+ * the blocks after it are read and its logs are kept. With `maxChunks`, a
+ * longer read is not done at all (ok: false): the caller then treats the
+ * history as unknown.
  */
 export async function readRevokedBuilders(
   client: LogReader,
-  o: { badge: Address; registry: Address; fromBlock: bigint; chunk?: bigint; maxChunks?: number; parallel?: number },
+  o: {
+    badge: Address;
+    registry: Address;
+    fromBlock: bigint;
+    chainId?: number;
+    prior?: RevocationCheckpoint | null;
+    chunk?: bigint;
+    maxChunks?: number;
+    parallel?: number;
+  },
 ): Promise<RevocationRead> {
   try {
+    const prior =
+      o.prior && sameAddr(o.prior.badge, o.badge) && sameAddr(o.prior.registry, o.registry) &&
+      (o.chainId === undefined || o.prior.chainId === o.chainId) && o.prior.toBlock >= o.fromBlock
+        ? o.prior
+        : null;
     const head = await client.getBlockNumber();
-    const ranges = blockRanges(o.fromBlock, head, o.chunk ?? 5_000n);
+    const start = prior ? prior.toBlock + 1n : o.fromBlock;
+    const ranges = blockRanges(start, head, o.chunk ?? 5_000n);
     if (o.maxChunks !== undefined && ranges.length > o.maxChunks) {
-      return { ok: false, error: `${ranges.length} log ranges since block ${o.fromBlock}: more than this page reads (${o.maxChunks})` };
+      return { ok: false, error: `${ranges.length} log ranges since block ${start}: more than this page reads (${o.maxChunks})` };
     }
-    const revokes: RevokeLog[] = [];
-    const statuses: StatusLog[] = [];
+    const revokes: RevokeLog[] = prior ? [...prior.revokes] : [];
+    const statuses: StatusLog[] = prior ? [...prior.statuses] : [];
     const queue = [...ranges];
     const worker = async () => {
       for (let r = queue.shift(); r; r = queue.shift()) {
@@ -91,7 +173,13 @@ export async function readRevokedBuilders(
       }
     };
     await Promise.all(Array.from({ length: Math.min(o.parallel ?? 4, queue.length) }, worker));
-    return { ok: true, revoked: revokedBuilders(revokes, statuses), toBlock: head };
+    const toBlock = head > (prior?.toBlock ?? -1n) ? head : prior!.toBlock;
+    return {
+      ok: true,
+      revoked: revokedBuilders(revokes, statuses),
+      toBlock,
+      checkpoint: { chainId: o.chainId ?? prior?.chainId ?? 0, badge: o.badge, registry: o.registry, toBlock, revokes, statuses },
+    };
   } catch (e) {
     return { ok: false, error: (e as Error)?.message?.split("\n")[0] ?? "log read failed" };
   }

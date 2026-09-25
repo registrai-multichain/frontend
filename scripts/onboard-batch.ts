@@ -59,7 +59,7 @@ import {
   type OnboardNetworkDefaults,
   type RegistrationCandidate,
 } from "../src/lib/onboard-batch";
-import { readRevokedBuilders, type LogReader } from "../src/lib/badge-revocations";
+import { checkpointFromJson, readRevokedBuilders, type LogReader } from "../src/lib/badge-revocations";
 import { makeFetchJson, readBuilderRecords, verifiedBuilderAbi, type RegistryReader } from "../src/lib/verified-builders-chain";
 import { normalizeSource, proofConfigFromEnv, proofUrl, validateProof } from "../src/lib/verified-builders";
 import { badgeAbi, serialLabel } from "../src/lib/verified-builder-badge";
@@ -221,7 +221,24 @@ async function main() {
     if (from === null || !Number.isSafeInteger(from) || from < 0) {
       die(`no deploy block for --network ${network} to read badge revocations from: pass --from-block N`);
     }
-    const r = await readRevokedBuilders(client as unknown as LogReader, { badge, registry: builderRegistry, fromBlock: BigInt(from as number) });
+    // Resume from the checkpoint scripts/sync.ts wrote into live-data.json, if
+    // it is of this chain, badge and registry (and no custom --from-block).
+    let prior = null;
+    if (values["from-block"] === undefined) {
+      try {
+        prior = checkpointFromJson(readJson("../src/lib/live-data.json").revocations, { chainId, badge, registry: builderRegistry });
+      } catch {
+        // no live-data.json: read from the deploy block
+      }
+    }
+    if (prior) log(`badge revocations: resuming from the live-data.json checkpoint at block ${prior.toBlock}`);
+    const r = await readRevokedBuilders(client as unknown as LogReader, {
+      badge,
+      registry: builderRegistry,
+      chainId,
+      fromBlock: BigInt(from as number),
+      prior,
+    });
     if (!r.ok) die(`could not read the badge revocation history: ${r.error}`);
     revoked = (r as { revoked: Set<number> }).revoked;
     log(`revoked badges (not reactivated since block ${from}): ${revoked.size ? [...revoked].map((id) => `#${id}`).join(", ") : "none"}`);

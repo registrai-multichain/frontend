@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import type { Address } from "viem";
-import { blockRanges, readRevokedBuilders, revokedBuilders, type LogReader } from "./badge-revocations";
+import {
+  blockRanges, checkpointFromJson, checkpointToJson, readRevokedBuilders, revokedBuilders, type LogReader,
+} from "./badge-revocations";
 
 const BADGE = "0x05de78E9Ff17ccE47D7F4E9170fdfC130Abe278c" as Address;
 const REG = "0x10F8D6D5905E2C4dc565a1894c102B25E9d21DF4" as Address;
@@ -62,7 +64,7 @@ describe("readRevokedBuilders", () => {
       { address: REG, block: 11_000n, args: { id: 8n, active: true } },
     ]);
     const r = await readRevokedBuilders(client, { badge: BADGE, registry: REG, fromBlock: 1_000n });
-    expect(r).toEqual({ ok: true, revoked: new Set([7]), toBlock: 12_000n });
+    expect(r).toMatchObject({ ok: true, revoked: new Set([7]), toBlock: 12_000n });
     expect(ranges.sort((a, b) => Number(a[0] - b[0]))).toEqual([
       [1_000n, 5_999n],
       [6_000n, 10_999n],
@@ -75,6 +77,50 @@ describe("readRevokedBuilders", () => {
     expect(await readRevokedBuilders(client, { badge: BADGE, registry: REG, fromBlock: 0n, maxChunks: 10 })).toMatchObject({ ok: false });
     const broken: LogReader = { getBlockNumber: async () => 10n, getLogs: async () => Promise.reject(new Error("range too large\nmore")) };
     expect(await readRevokedBuilders(broken, { badge: BADGE, registry: REG, fromBlock: 0n })).toEqual({ ok: false, error: "range too large" });
+  });
+
+  test("resumes from a checkpoint: reads only the blocks after it and keeps its logs", async () => {
+    const { client, ranges } = fake([
+      { address: REG, block: 11_000n, args: { id: 8n, active: true } },
+      { address: BADGE, block: 11_500n, args: { builderId: 9n, serial: 5n } },
+    ]);
+    const prior = {
+      chainId: 5042, badge: BADGE, registry: REG, toBlock: 10_000n,
+      revokes: [{ builderId: 7, block: 1_500n, index: 0 }, { builderId: 8, block: 6_000n, index: 0 }],
+      statuses: [],
+    };
+    const r = await readRevokedBuilders(client, { badge: BADGE, registry: REG, fromBlock: 1_000n, chainId: 5042, prior, maxChunks: 1 });
+    expect(ranges).toEqual([[10_001n, 12_000n]]);
+    expect(r.ok && [...r.revoked].sort()).toEqual([7, 9]);
+    expect(r.ok && r.checkpoint.toBlock).toBe(12_000n);
+    // A checkpoint of another badge, registry or chain is ignored: full read from the deploy block.
+    for (const other of [{ ...prior, badge: REG }, { ...prior, registry: BADGE }, { ...prior, chainId: 5042002 }]) {
+      const f = fake([]);
+      await readRevokedBuilders(f.client, { badge: BADGE, registry: REG, fromBlock: 1_000n, chainId: 5042, prior: other });
+      expect(f.ranges[0]).toEqual([1_000n, 5_999n]);
+    }
+    // A head behind the checkpoint (a lagging RPC) keeps the checkpoint's block.
+    const lag = fake([], 9_000n);
+    const l = await readRevokedBuilders(lag.client, { badge: BADGE, registry: REG, fromBlock: 1_000n, chainId: 5042, prior });
+    expect(lag.ranges).toEqual([]);
+    expect(l.ok && l.checkpoint.toBlock).toBe(10_000n);
+  });
+
+  test("checkpoint JSON round-trips and is refused for another deployment or when malformed", () => {
+    const c = {
+      chainId: 5042, badge: BADGE, registry: REG, toBlock: 10_000n,
+      revokes: [{ builderId: 7, block: 1_500n, index: 2 }],
+      statuses: [{ builderId: 7, active: false, block: 1_500n, index: 3 }],
+    };
+    const json = JSON.parse(JSON.stringify(checkpointToJson(c)));
+    const want = { chainId: 5042, badge: BADGE, registry: REG };
+    expect(checkpointFromJson(json, want)).toEqual(c);
+    expect(checkpointFromJson(json, { ...want, badge: REG })).toBeNull();
+    expect(checkpointFromJson(json, { ...want, chainId: 1 })).toBeNull();
+    expect(checkpointFromJson({ ...json, toBlock: "-1" }, want)).toBeNull();
+    expect(checkpointFromJson({ ...json, revokes: [{ builderId: 7, block: "20000", index: 0 }] }, want)).toBeNull(); // after toBlock
+    expect(checkpointFromJson({ ...json, statuses: [{ builderId: 7, active: "yes", block: "1", index: 0 }] }, want)).toBeNull();
+    expect(checkpointFromJson(null, want)).toBeNull();
   });
 
   test("blockRanges", () => {

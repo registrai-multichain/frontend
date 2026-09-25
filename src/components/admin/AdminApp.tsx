@@ -18,7 +18,9 @@ import {
   type GalleryBuilder,
   type GalleryReader,
 } from "@/lib/builders-gallery";
-import { readRevokedBuilders, type LogReader } from "@/lib/badge-revocations";
+import {
+  checkpointFromJson, checkpointToJson, readRevokedBuilders, type LogReader, type RevocationCheckpoint,
+} from "@/lib/badge-revocations";
 import { ADMIN_SERVICE, adminLoginMessage, inviteDm, type InviteRecord } from "@/lib/builders-admin";
 import {
   cancelRecoverySafeFile,
@@ -130,7 +132,36 @@ function Section({ title, aside, children }: { title: string; aside?: ReactNode;
  * /admin. Works only where the builders-site Functions run (builder.registrai.cc):
  * anywhere else /api/auth/me is not the admin API and the page says so.
  */
-export function AdminApp() {
+/** Revocation checkpoints: the one shipped in live-data.json and, newer, the last one this browser read. */
+const REVOCATION_CACHE = (chainId: number, badge: string) => `registrai-admin:revocations:${chainId}:${badge.toLowerCase()}`;
+
+function bestRevocationCheckpoint(
+  shipped: unknown,
+  want: { chainId: number; badge: Address; registry: Address },
+): RevocationCheckpoint | null {
+  let cached: RevocationCheckpoint | null = null;
+  try {
+    const raw = window.localStorage.getItem(REVOCATION_CACHE(want.chainId, want.badge));
+    cached = raw ? checkpointFromJson(JSON.parse(raw), want) : null;
+  } catch {
+    // no storage, or unreadable: the shipped checkpoint (or the deploy block) it is
+  }
+  const fromBuild = checkpointFromJson(shipped, want);
+  if (!cached) return fromBuild;
+  if (!fromBuild) return cached;
+  return cached.toBlock > fromBuild.toBlock ? cached : fromBuild;
+}
+
+function saveRevocationCheckpoint(c: RevocationCheckpoint) {
+  try {
+    window.localStorage.setItem(REVOCATION_CACHE(c.chainId, c.badge), JSON.stringify(checkpointToJson(c)));
+  } catch {
+    // storage full or blocked: the next visit reads from the shipped checkpoint again
+  }
+}
+
+/** `revocationCheckpoint`: live-data.json `revocations` (scripts/sync.ts), passed by the page. */
+export function AdminApp({ revocationCheckpoint = null }: { revocationCheckpoint?: unknown }) {
   const [api, setApi] = useState<ApiState>({ state: "checking" });
   useEffect(() => {
     let off = false;
@@ -177,7 +208,7 @@ export function AdminApp() {
       )}
       {api.state === "ready" && !api.address && <SignIn onSignedIn={(address) => setApi({ state: "ready", address })} />}
       {api.state === "ready" && api.address && (
-        <Dashboard admin={api.address} onSignedOut={() => setApi({ state: "ready", address: null })} />
+        <Dashboard admin={api.address} revocationCheckpoint={revocationCheckpoint} onSignedOut={() => setApi({ state: "ready", address: null })} />
       )}
     </>
   );
@@ -244,7 +275,15 @@ async function readChain(): Promise<GalleryBuilder[]> {
   });
 }
 
-function Dashboard({ admin, onSignedOut }: { admin: string; onSignedOut: () => void }) {
+function Dashboard({
+  admin,
+  revocationCheckpoint,
+  onSignedOut,
+}: {
+  admin: string;
+  revocationCheckpoint: unknown;
+  onSignedOut: () => void;
+}) {
   const invites = useSWR<AdminInvite[]>(
     "admin-invites",
     async () => {
@@ -317,7 +356,13 @@ function Dashboard({ admin, onSignedOut }: { admin: string; onSignedOut: () => v
         onChanged={() => invites.mutate()}
       />
 
-      <OnboardingSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} onChainChanged={() => chain.mutate()} />
+      <OnboardingSection
+        builders={chain.data ?? null}
+        chainNote={chainNote}
+        nameOf={nameOf}
+        revocationCheckpoint={revocationCheckpoint}
+        onChainChanged={() => chain.mutate()}
+      />
 
       <BadgeSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
 
@@ -700,11 +745,13 @@ function OnboardingSection({
   builders,
   chainNote,
   nameOf,
+  revocationCheckpoint,
   onChainChanged,
 }: {
   builders: GalleryBuilder[] | null;
   chainNote: string | null;
   nameOf: (b: GalleryBuilder) => string;
+  revocationCheckpoint: unknown;
   onChainChanged: () => void;
 }) {
   const { address, walletChainId, switchChain, connect, isConnecting } = useWallet();
@@ -713,13 +760,20 @@ function OnboardingSection({
   // Revoked badges (Revoked logs not followed by a reactivation): never re-onboarded.
   const revocations = useSWR(
     badge && REG ? ["admin-revocations", BUILDERS.chainId, badge, builders?.length ?? 0] : null,
-    () =>
-      readRevokedBuilders(buildersClient() as unknown as LogReader, {
-        badge: badge!,
-        registry: REG!,
+    async () => {
+      // Resume from the newest checkpoint (the build's, or this browser's last
+      // read) so only recent blocks are scanned; 400 chunks ≈ 2M blocks ≈ 12
+      // days of Arc mainnet since that checkpoint.
+      const want = { chainId: BUILDERS.chainId, badge: badge!, registry: REG! };
+      const r = await readRevokedBuilders(buildersClient() as unknown as LogReader, {
+        ...want,
         fromBlock: BUILDERS.deployBlock ?? 0n,
+        prior: bestRevocationCheckpoint(revocationCheckpoint, want),
         maxChunks: 400,
-      }),
+      });
+      if (r.ok) saveRevocationCheckpoint(r.checkpoint);
+      return r;
+    },
     { revalidateOnFocus: false, shouldRetryOnError: false },
   );
   // No badge contract: nothing can have been revoked. Otherwise null (unknown) until the logs are read.

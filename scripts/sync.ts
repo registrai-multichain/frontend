@@ -30,6 +30,7 @@ import {
   type RegistryReader,
 } from "../src/lib/verified-builders-chain";
 import { BUILDERS } from "../src/lib/builders-network";
+import { checkpointFromJson, checkpointToJson, readRevokedBuilders, type LogReader } from "../src/lib/badge-revocations";
 import {
   buildGallerySnapshot,
   gallerySyncPlan,
@@ -1341,6 +1342,43 @@ async function main(): Promise<void> {
   }
   if (gallery) console.log(`  ${gallery.builders.length} builder(s) in the gallery snapshot`);
 
+  // ── badge revocation checkpoint (/admin + onboard-batch) ────────────────
+  // Revoked (badge) + BuilderStatusSet (registry) logs of the BUILDERS network
+  // up to the latest block, resumed from the previous checkpoint of the same
+  // chain, badge and registry. /admin and scripts/onboard-batch.ts read only
+  // the blocks after it. A failed read keeps the previous checkpoint.
+  let revocations: ReturnType<typeof checkpointToJson> | null = null;
+  const revBadge = BUILDERS.contracts.VerifiedBuilderBadge;
+  const revRegistry = BUILDERS.contracts.BuilderRegistry;
+  if (revBadge && revRegistry && BUILDERS.deployBlock !== null) {
+    const want = { chainId: BUILDERS.chainId, badge: revBadge, registry: revRegistry };
+    let prior = null;
+    try {
+      prior = checkpointFromJson(JSON.parse(readFileSync(resolve(__dirname, "../src/lib/live-data.json"), "utf8"))?.revocations, want);
+    } catch {
+      // no previous checkpoint: read from the deploy block
+    }
+    const rc = createPublicClient({
+      chain: BUILDERS.chain.viemChain,
+      transport: http(process.env.BUILDERS_RPC ?? BUILDERS.rpc, { retryCount: 8, retryDelay: 1_200, batch: false }),
+    });
+    const r = await readRevokedBuilders(rc as unknown as LogReader, {
+      badge: revBadge,
+      registry: revRegistry,
+      chainId: BUILDERS.chainId,
+      fromBlock: BUILDERS.deployBlock,
+      prior,
+      parallel: 2,
+    });
+    if (r.ok) {
+      revocations = checkpointToJson(r.checkpoint);
+      console.log(`badge revocations: checkpoint at block ${r.toBlock}, revoked ${r.revoked.size ? [...r.revoked].map((id) => `#${id}`).join(", ") : "none"}`);
+    } else {
+      console.warn(`  badge revocation read failed, keeping the previous checkpoint: ${r.error}`);
+      revocations = prior ? checkpointToJson(prior) : null;
+    }
+  }
+
   const out = {
     syncedAt,
     builders: builderAgg,
@@ -1354,6 +1392,7 @@ async function main(): Promise<void> {
     reputation,
     badges,
     gallery,
+    revocations,
     chainId: DEPLOYMENT.chainId,
     explorer: DEPLOYMENT.explorer,
     contracts: liveContracts(DEPLOYMENT.contracts, { VerifiedBuilderBadge: badgeAddr, BuilderFund: fundAddr, SeasonPool: seasonPoolAddr }),

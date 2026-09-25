@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-09-25T06:07:10.546Z",
+  "syncedAt": "2026-09-25T06:38:22.047Z",
   "builders": [],
   "perennialBuilders": [
     {
@@ -25,14 +25,14 @@
     "chainId": 5042002,
     "registry": "0x770d0feedcDa264c9d5C835D56fA7903cbC5719c",
     "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
-    "lastScannedBlock": "63885417",
+    "lastScannedBlock": "63889278",
     "feeds": {
       "registrai-milestone:domain:registrai-proof-test.pages.dev": "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601"
     }
   },
   "perennialMarkets": [],
   "atlas": {
-    "lastScannedBlock": "63885417",
+    "lastScannedBlock": "63889278",
     "volumeByBuilderId": {},
     "marketToBuilder": {},
     "pnl": {
@@ -60,7 +60,7 @@
     "chainId": 5042002,
     "fund": "0x7e83096F8Ef50024e7bE106E47F1BD8ce2e882D1",
     "pool": "0x56b3Ffc1c5DA4F867C3Fd56Be5dA731d457E32aA",
-    "scannedTo": "63885417",
+    "scannedTo": "63889278",
     "ledger": {
       "income": {},
       "claims": {},
@@ -101,7 +101,7 @@
         "Dispute": "0x9c0c81c11fe510eb89ade831c13c066cc5dad411"
       },
       "fromBlock": "63826822",
-      "lastScannedBlock": "63885417",
+      "lastScannedBlock": "63889278",
       "state": {
         "agents": {},
         "open": {}
@@ -124,9 +124,17 @@
     "network": "mainnet",
     "chainId": 5042,
     "builderRegistry": "0xBB6F4B18776Fd20Bb53a1205375273373DD1E5bA",
-    "syncedAt": "2026-09-25T06:07:10.546Z",
+    "syncedAt": "2026-09-25T06:38:22.047Z",
     "nextId": 1,
     "builders": []
+  },
+  "revocations": {
+    "chainId": 5042,
+    "badge": "0xF229d2Ed13Cc35d46fa7676a579495E5C80CFEB2",
+    "registry": "0xBB6F4B18776Fd20Bb53a1205375273373DD1E5bA",
+    "toBlock": "22646345",
+    "revokes": [],
+    "statuses": []
   },
   "chainId": 5042002,
   "explorer": "https://testnet.arcscan.app",
