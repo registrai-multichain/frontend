@@ -44,6 +44,7 @@ import {
   quoteBuy,
   quoteSell,
   tradeDeadline,
+  expiryOnTheHour,
 } from "../src/lib/perennial-market";
 import {
   feeSummary,
@@ -257,7 +258,7 @@ async function main() {
       if (!latest) die("no on-chain reading of this feed yet — the create form refuses");
       const threshold = nextMilestoneThreshold(latest.value);
       const now = BigInt((await pc.getBlock()).timestamp);
-      const expiry = now + BigInt(Number(args.expiryIn));
+      const expiry = expiryOnTheHour(now + BigInt(Number(args.expiryIn))); // markets expire on the hour
       const liq = BigInt(String(args.liquidity));
       await ensureLedger(P.MarketsPerennial!, liq);
       const r = await send(P.MarketsPerennial!, marketsPerennialAbi, "createMarket",

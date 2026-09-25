@@ -62,5 +62,7 @@ export function snapshotBadgeFor(rows: SnapshotBuilder[], b: { builderId: number
 
 /** What a builder's milestone counts, for the disclosure line. */
 export function milestoneMetric(source: string | null | undefined): string {
-  return source?.startsWith("domain:") ? "contracts its deployers create" : "releases and tags";
+  return source?.startsWith("domain:")
+    ? "contracts its deployers create"
+    : "published GitHub releases, counted at most one a day (not tags, drafts or pre-releases)";
 }

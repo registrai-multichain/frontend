@@ -6,8 +6,8 @@
  * weights). The pool is gone (spec 2026-09-24-builder-income-tax-design.md);
  * what remains on chain is the milestone feed of each verified project
  * (`registrai-milestone:<source>`), whose value the operator attests: the
- * project's count of verified artifacts (releases and tags, or contracts its
- * deployers create). A builder's progress is therefore:
+ * project's milestone count (published GitHub releases at least a day apart, or
+ * contracts its deployers create). A builder's progress is therefore:
  *
  *   lifetime   = the sum, over its project feeds, of the latest attested count;
  *   per season = the sum of the count's increases attested inside the season

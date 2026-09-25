@@ -226,12 +226,13 @@ export function EconomyPanel() {
           </div>
         )}
         {history.data?.partial && <p className="mt-1 text-2xs text-fg-dim">Still indexing older events…</p>}
-        <h3 className="econ-sub">Distribution rule v1: building progress traders confirmed</h3>
+        <h3 className="econ-sub">Distribution rule v2: building progress traders confirmed</h3>
         <ul className="econ-list">
           <li>Eligible: builders verified with a non-lapsed badge at the season&apos;s end.</li>
           <li>
-            Points: for each milestone market on one of the builder&apos;s project feeds that resolved YES during the season
-            with at least $500 traded, √(volume in USD). Volume by the builder&apos;s own wallet, the market creator and the
+            Points: √(counted volume in USD), once per builder, over its milestone markets that resolved YES during the
+            season with at least $500 counted each. Only positions held at least 24 hours count (a buy sold back sooner
+            counts nothing; sells never count), and volume by the builder&apos;s own wallet, the market creator and the
             agent does not count.
           </li>
           <li>Allocation: pro rata by points, at most {bpsPct(SEASON_CAP_BPS)} per builder, the excess re-spread over the uncapped; amounts floored to the 6-decimal unit, the dust stays in the pool.</li>

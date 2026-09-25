@@ -169,6 +169,13 @@ export function quoteSell(r: Reserves, outcome: number, sharesIn: bigint, feeBps
  *  after its `deadline` (DeadlineExpired), so a stuck transaction can never
  *  fill later at a stale price. Counted from the chain's latest block time. */
 export const TRADE_DEADLINE_SECS = 600n;
+
+/** BinaryMarket.EXPIRY_GRID: every market expires on the hour (createMarket
+ *  reverts ExpiryOffGrid otherwise), so markets on one feed that expire between
+ *  two agent ticks share one expiry and one settlement reading. */
+export const EXPIRY_GRID = 3600n;
+/** `t` rounded UP to the next hour (unchanged when already on it). */
+export const expiryOnTheHour = (t: bigint) => ((t + EXPIRY_GRID - 1n) / EXPIRY_GRID) * EXPIRY_GRID;
 export const tradeDeadline = (chainNow: bigint) => chainNow + TRADE_DEADLINE_SECS;
 
 /** Minimum acceptable output for a slippage tolerance in bps (floor). */
@@ -337,7 +344,7 @@ export const shortHex = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`;
  */
 export function questionText(q: {
   subject: string;
-  /** "verified artifacts" for a builder milestone feed, else undefined. */
+  /** "milestones" for a builder milestone feed, else undefined. */
   metric?: string;
   feedId: string;
   threshold: bigint;
@@ -351,8 +358,8 @@ export function questionText(q: {
   return `${q.subject}: ${metric} ${comparatorSymbol(q.comparator)} ${q.threshold.toString()} ${when}?`;
 }
 
-/** Threshold for a new milestone market: one more verified artifact than the
- *  latest attested count. No attestation yet counts as 0. */
+/** Threshold for a new milestone market: one more milestone than the latest
+ *  attested count. No attestation yet counts as 0. */
 export function nextMilestoneThreshold(latest: bigint | null | undefined): bigint {
   if (latest === null || latest === undefined || latest < 0n) return 1n;
   return latest + 1n;

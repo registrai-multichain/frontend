@@ -32,6 +32,7 @@ import {
   settlementRuleText,
   type MarketStatus,
   tradeDeadline,
+  expiryOnTheHour,
 } from "@/lib/perennial-market";
 import {
   feeHeadline,
@@ -316,7 +317,7 @@ function PerennialLive() {
   const questionFor = (m: ChainMarket) =>
     questionText({
       subject: subjectFor(m),
-      metric: isMilestoneMarket(m) ? "verified artifacts" : undefined,
+      metric: isMilestoneMarket(m) ? "milestones" : undefined,
       feedId: m.feedId, threshold: m.threshold, comparator: m.comparator, expiry: m.expiry,
       legacy: ov ? !ov.supportsSettlement : false,
     });
@@ -523,7 +524,7 @@ function PerennialLive() {
     await run(
       "create",
       async () => {
-        const expiry = (await latestChainTime()) + BigInt(days.value * 86_400);
+        const expiry = expiryOnTheHour((await latestChainTime()) + BigInt(days.value * 86_400)); // markets expire on the hour
         const args = [builderId, feed, agent, threshold, COMPARATOR.GreaterOrEqual, expiry, liq.value] as const;
         await publicClient.simulateContract({ address: mp, abi: marketsPerennialAbi, functionName: "createMarket", args, account: address! });
         return walletClient!.writeContract({ address: mp, abi: marketsPerennialAbi, functionName: "createMarket", args, ...w() });
@@ -911,7 +912,7 @@ function PerennialLive() {
                         </div>
                       )}
                       <p className="text-2xs text-fg-dim">
-                        YES if the builder&apos;s verified-artifact count reaches{" "}
+                        YES if the project&apos;s milestone count, as of the market&apos;s expiry, reaches{" "}
                         <b className="text-fg">{cThreshold !== undefined ? `≥ ${cThreshold}` : "latest + 1"}</b>
                         {latest ? ` (latest attested: ${latest.value}${latest.finalized ? "" : ", not yet final"})` : latest === null ? " (nothing attested yet)" : ""}.
                         {" "}Agent: the caretaker operator{D.operator ? ` ${D.operator.slice(0, 6)}…${D.operator.slice(-4)}` : ""}.{" "}
@@ -927,7 +928,7 @@ function PerennialLive() {
                         </p>
                       )}
                       <div className="grid gap-2 sm:grid-cols-[1fr_90px_110px]">
-                        <div><label className="caption text-[10px] text-fg-dim">condition</label><div className="w-full bg-bg border border-line px-3 py-2 text-[14px] text-fg-mute">artifacts ≥ {cThreshold?.toString() ?? "…"}</div></div>
+                        <div><label className="caption text-[10px] text-fg-dim">condition</label><div className="w-full bg-bg border border-line px-3 py-2 text-[14px] text-fg-mute">milestones ≥ {cThreshold?.toString() ?? "…"}</div></div>
                         <div><label className="caption text-[10px] text-fg-dim">days</label><input value={cDays} onChange={(e) => setCDays(e.target.value)} inputMode="numeric" className="w-full bg-bg border border-line px-3 py-2 text-[14px] outline-none focus:border-accent/60" /></div>
                         <div><label className="caption text-[10px] text-fg-dim">liquidity (min {ov ? fmt(ov.minLiquidity) : "5"})</label><input value={cLiq} onChange={(e) => setCLiq(e.target.value)} inputMode="decimal" className="w-full bg-bg border border-line px-3 py-2 text-[14px] outline-none focus:border-accent/60" /></div>
                       </div>

@@ -458,8 +458,8 @@ export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
               <span>
                 {p === "repo" ? "a file in your GitHub repo" : "a file on your domain"}
                 {MARKETS_OPEN
-                  ? p === "repo" ? "; releases and tags count" : "; contracts your deployers create count"
-                  : p === "repo" ? "; releases and tags count once milestone tracking starts" : "; contracts your deployers create count once milestone tracking starts"}
+                  ? p === "repo" ? "; published releases a day apart count" : "; contracts your deployers create count"
+                  : p === "repo" ? "; published releases a day apart count once milestone tracking starts" : "; contracts your deployers create count once milestone tracking starts"}
               </span>
             </button>
           ))}

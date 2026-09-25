@@ -31,7 +31,7 @@ describe("verificationFor", () => {
     expect(verificationFor([row({ status: "inactive" })], b)).toBeNull();
   });
   test("milestone metric by proof path", () => {
-    expect(milestoneMetric("github:o/r")).toBe("releases and tags");
+    expect(milestoneMetric("github:o/r")).toBe("published GitHub releases, counted at most one a day (not tags, drafts or pre-releases)");
     expect(milestoneMetric("domain:x.org")).toBe("contracts its deployers create");
   });
 });

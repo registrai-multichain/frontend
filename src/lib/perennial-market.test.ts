@@ -290,3 +290,14 @@ describe("quoteSell matches the contract's protocol-favouring rounding", () => {
     expect([0n, 1n, 2n, 4n, 5n, 99n, 100n].map(isqrtCeil)).toEqual([0n, 1n, 2n, 2n, 3n, 10n, 10n]);
   });
 });
+
+import { EXPIRY_GRID, expiryOnTheHour } from "./perennial-market";
+
+describe("expiryOnTheHour (BinaryMarket.EXPIRY_GRID)", () => {
+  test("rounds up to the next hour and leaves an on-the-hour time alone", () => {
+    expect(EXPIRY_GRID).toBe(3600n);
+    expect(expiryOnTheHour(3600n * 5n)).toBe(3600n * 5n);
+    expect(expiryOnTheHour(3600n * 5n + 1n)).toBe(3600n * 6n);
+    expect(expiryOnTheHour(3600n * 6n - 1n)).toBe(3600n * 6n);
+  });
+});
