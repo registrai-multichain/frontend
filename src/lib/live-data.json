@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-09-25T07:26:05.091Z",
+  "syncedAt": "2026-09-25T14:05:20.177Z",
   "builders": [],
   "perennialBuilders": [
     {
@@ -25,14 +25,14 @@
     "chainId": 5042002,
     "registry": "0x770d0feedcDa264c9d5C835D56fA7903cbC5719c",
     "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
-    "lastScannedBlock": "63894808",
+    "lastScannedBlock": "63941231",
     "feeds": {
       "registrai-milestone:domain:registrai-proof-test.pages.dev": "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601"
     }
   },
   "perennialMarkets": [],
   "atlas": {
-    "lastScannedBlock": "63894808",
+    "lastScannedBlock": "63941231",
     "volumeByBuilderId": {},
     "marketToBuilder": {},
     "pnl": {
@@ -54,13 +54,13 @@
     },
     "seasonsVersion": 4,
     "chainId": 5042002,
-    "markets": "0xF12F3427d9b47f4019809E7B753494A32C3e3a3B"
+    "markets": "0xFA2034ea39Fb6e04137239e1dfb0beC995938E9e"
   },
   "economy": {
     "chainId": 5042002,
-    "fund": "0x7e83096F8Ef50024e7bE106E47F1BD8ce2e882D1",
-    "pool": "0x56b3Ffc1c5DA4F867C3Fd56Be5dA731d457E32aA",
-    "scannedTo": "63894808",
+    "fund": "0x06ef72DE4Cb130e7F3EC2807eC34066053c86C8d",
+    "pool": "0x96c7C8E5E2805334c30C23C94930542E91D19567",
+    "scannedTo": "63941231",
     "ledger": {
       "income": {},
       "claims": {},
@@ -90,20 +90,40 @@
     }
   },
   "reputation": {
-    "agents": {},
+    "agents": {
+      "0xa9fa24e1147e8337c3d25b084890121be10a132b": {
+        "score": "6254030",
+        "level": 1,
+        "caught": false,
+        "caughtAt": null,
+        "lastDisputeId": null,
+        "caughtTx": null,
+        "settledMarkets": 1
+      }
+    },
     "cursor": {
       "version": 1,
       "chainId": 5042002,
       "contracts": {
-        "MarketsPerennial": "0xf12f3427d9b47f4019809e7b753494a32c3e3a3b",
-        "MarketsV4": "0xccf185a2200b24624c404ff373bbef1423ae09c6",
+        "MarketsPerennial": "0xfa2034ea39fb6e04137239e1dfb0bec995938e9e",
+        "MarketsV4": "0xff3dcbb85ed027395c915e1eef7353453a84a594",
         "Attestation": "0xea2804de57ac57d17e77fc7ad5f55726636e74b7",
         "Dispute": "0x9c0c81c11fe510eb89ade831c13c066cc5dad411"
       },
       "fromBlock": "63826822",
-      "lastScannedBlock": "63894808",
+      "lastScannedBlock": "63941231",
       "state": {
-        "agents": {},
+        "agents": {
+          "0xa9fa24e1147e8337c3d25b084890121be10a132b": {
+            "score": "6254030",
+            "level": 1,
+            "caught": false,
+            "caughtAt": null,
+            "lastDisputeId": null,
+            "caughtTx": null,
+            "settledMarkets": 1
+          }
+        },
         "open": {}
       },
       "challenges": {},
@@ -117,22 +137,73 @@
     },
     "arc": {
       "address": "0xF229d2Ed13Cc35d46fa7676a579495E5C80CFEB2",
-      "maxSerial": 0
+      "maxSerial": 2
     }
   },
   "gallery": {
     "network": "mainnet",
     "chainId": 5042,
     "builderRegistry": "0xBB6F4B18776Fd20Bb53a1205375273373DD1E5bA",
-    "syncedAt": "2026-09-25T07:26:05.091Z",
-    "nextId": 1,
-    "builders": []
+    "syncedAt": "2026-09-25T14:05:20.177Z",
+    "nextId": 3,
+    "builders": [
+      {
+        "id": 1,
+        "owner": "0xb7ecf980a4732b75e57e2ec80903dee3964f2573",
+        "status": "verified",
+        "profileURI": "RegistrDev",
+        "projects": [
+          {
+            "id": 1,
+            "source": "domain:registrai.cc",
+            "active": true,
+            "status": "verified",
+            "country": "PL",
+            "proofUrl": "https://registrai.cc/.well-known/registrai.json"
+          }
+        ],
+        "country": "PL",
+        "badge": {
+          "serial": 1,
+          "lapsed": false,
+          "issuedAt": 1790332588,
+          "image": "https://builder.registrai.cc/badge/arc/1.jpg"
+        },
+        "createdAt": 1790331946,
+        "onboarded": true
+      },
+      {
+        "id": 2,
+        "owner": "0xd4885a5aa53446843cabcde1f35de9b4e906030e",
+        "status": "verified",
+        "profileURI": "Story91",
+        "projects": [
+          {
+            "id": 2,
+            "source": "domain:mysphere.fun",
+            "active": true,
+            "status": "verified",
+            "country": "PL",
+            "proofUrl": "https://mysphere.fun/.well-known/registrai.json"
+          }
+        ],
+        "country": "PL",
+        "badge": {
+          "serial": 2,
+          "lapsed": false,
+          "issuedAt": 1790343014,
+          "image": "https://builder.registrai.cc/badge/arc/2.jpg"
+        },
+        "createdAt": 1790341113,
+        "onboarded": true
+      }
+    ]
   },
   "revocations": {
     "chainId": 5042,
     "badge": "0xF229d2Ed13Cc35d46fa7676a579495E5C80CFEB2",
     "registry": "0xBB6F4B18776Fd20Bb53a1205375273373DD1E5bA",
-    "toBlock": "22651990",
+    "toBlock": "22699214",
     "revokes": [],
     "statuses": []
   },
@@ -189,16 +260,20 @@
     "MarketsPerennial_v3": "0x6a25D79D7664c284c0D130B0a385b9cAdf3481c7",
     "ProgressArbiter_v3": "0x8Cb2FAD547cFc42081CA04f4c3c03588E27E0e98",
     "NanoLedger": "0x02D278930B67A290fEfE93Ac049a086A9b5e0FB5",
-    "MarketsV4": "0xCcf185a2200B24624c404fF373BbEf1423aE09c6",
+    "MarketsV4": "0xff3dcbB85ED027395C915e1EeF7353453A84a594",
     "BuilderRegistry": "0xB52FC2AB9b2457D8c56d3b4A624543aD61c70D9C",
     "CaretakerRegistry": "0x7adDA1fe8c6F3A5D405dc1F1aF68B42f2F6CAa78",
-    "MarketsPerennial": "0xF12F3427d9b47f4019809E7B753494A32C3e3a3B",
-    "BuilderFund": "0x7e83096F8Ef50024e7bE106E47F1BD8ce2e882D1",
-    "SeasonPool": "0x56b3Ffc1c5DA4F867C3Fd56Be5dA731d457E32aA",
+    "MarketsPerennial": "0xFA2034ea39Fb6e04137239e1dfb0beC995938E9e",
+    "BuilderFund": "0x06ef72DE4Cb130e7F3EC2807eC34066053c86C8d",
+    "SeasonPool": "0x96c7C8E5E2805334c30C23C94930542E91D19567",
     "VerifiedBuilderBadge": "0xBF7FF680e0Ee7472E244cf2550EE016939cb6335",
     "Registry_v4": "0x770d0feedcDa264c9d5C835D56fA7903cbC5719c",
     "Attestation_v4": "0xeA2804dE57Ac57D17E77fC7ad5F55726636E74B7",
-    "Dispute_v4": "0x9c0C81C11Fe510EB89adE831c13C066Cc5Dad411"
+    "Dispute_v4": "0x9c0C81C11Fe510EB89adE831c13C066Cc5Dad411",
+    "MarketsPerennial_v4": "0xF12F3427d9b47f4019809E7B753494A32C3e3a3B",
+    "MarketsV4_v4": "0xCcf185a2200B24624c404fF373BbEf1423aE09c6",
+    "BuilderFund_v4": "0x7e83096F8Ef50024e7bE106E47F1BD8ce2e882D1",
+    "SeasonPool_v4": "0x56b3Ffc1c5DA4F867C3Fd56Be5dA731d457E32aA"
   },
   "feed": {
     "id": "0xf4968db834c4e03f9c2e10bb883fe74f84c850cfacac058a1b520a8d8fa37c0b",
