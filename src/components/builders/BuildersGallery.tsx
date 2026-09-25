@@ -124,7 +124,7 @@ function BuilderParam({ onBuilder }: { onBuilder: (id: number | null) => void })
 
 const detailHref = (id: number) => `/builders/?builder=${id}`;
 
-/** The builder's avatar (first verified GitHub project's owner), else (domain, none, or a failed load) the name's initial. */
+/** The builder's avatar (GitHub owner, or a domain's site icon), else (none, or a failed load) the name's initial. */
 function Avatar({ url, name }: { url: string | null; name: string }) {
   const [failed, setFailed] = useState(false);
   return (

@@ -44,7 +44,7 @@ function loadImage(src: string, crossOrigin = false): Promise<HTMLImageElement> 
  * previewed at container width. X's intent cannot carry an image, so the
  * builder downloads the card and attaches it to the post.
  */
-/** The builder's picture: an uploaded file, else the GitHub owner's avatar, else none (initial). */
+/** The builder's picture: an uploaded file, else the GitHub avatar or the site icon, else none (initial). */
 async function loadPicture(upload: string | null, source: string | null): Promise<CardPicture | null> {
   const url = upload ?? defaultPictureUrl(source);
   if (!url) return null;
@@ -128,7 +128,7 @@ export function ShareCard(d: Omit<ShareCardData, "picture"> & { network?: string
         </label>
         {upload && (
           <button type="button" className="vf-mini" onClick={() => setUpload(null)}>
-            {defaultPictureUrl(source) ? "Use GitHub avatar" : "Remove picture"}
+            {defaultPictureUrl(source) ? (source?.startsWith("github:") ? "Use GitHub avatar" : "Use site icon") : "Remove picture"}
           </button>
         )}
       </div>

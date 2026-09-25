@@ -73,6 +73,7 @@ import {
 import { browserProofReader, createProofReader, type ProofReader } from "./proof-fetch";
 import type { BuilderRecord } from "./verified-builders-chain";
 import { parseSnapshotBadge, readBadge, serialDigits, type BadgeInfo, type BadgeReader } from "./verified-builder-badge";
+import { siteIconPath } from "./site-icon";
 
 // ───────────────────────────── snapshot ─────────────────────────────
 
@@ -421,10 +422,11 @@ export function builderName(
   return lead ? sourceLabel(lead.source) : `Builder #${b.id}`;
 }
 
-/** Pure: the builder's avatar — its first verified GitHub project's owner, else null (show the initial). */
+/** Pure: the builder's avatar — its first verified GitHub project's owner, else its first verified domain's site icon, else null (the initial). */
 export function builderAvatarUrl(b: Pick<GalleryBuilder, "projects">, size = 96): string | null {
-  const gh = b.projects.find((p) => p.status === "verified" && p.source.startsWith("github:"));
-  return gh ? avatarUrl(gh.source, size) : null;
+  const verified = b.projects.filter((p) => p.status === "verified");
+  const pick = verified.find((p) => p.source.startsWith("github:")) ?? verified.find((p) => p.source.startsWith("domain:"));
+  return pick ? avatarUrl(pick.source, size) : null;
 }
 
 /** The name's first letter or digit, for a card without an avatar. */
@@ -678,10 +680,15 @@ export function showGalleryStats(c: Pick<GalleryCounts, "all">): boolean {
 
 // ───────────────────────────── links ─────────────────────────────
 
-/** GitHub owner avatar (CORS-enabled, cached by GitHub); null for domains. */
+/**
+ * A project's picture: the GitHub owner's avatar (CORS-enabled, cached by
+ * GitHub), or a domain's own site icon through this site's /api/icon (same
+ * origin; where that API is absent the image fails and the initial shows).
+ */
 export function avatarUrl(source: string | null | undefined, size = 96): string | null {
   const m = /^github:([^/]+)\//.exec(source ?? "");
-  return m ? `https://avatars.githubusercontent.com/${encodeURIComponent(m[1])}?size=${size}` : null;
+  if (m) return `https://avatars.githubusercontent.com/${encodeURIComponent(m[1])}?size=${size}`;
+  return source && source.startsWith("domain:") ? siteIconPath(source) : null;
 }
 
 /** The project itself: the repo on GitHub, or the site. */

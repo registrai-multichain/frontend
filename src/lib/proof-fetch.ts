@@ -89,7 +89,7 @@ export function proofCacheKey(requestUrl: string, source: string): string {
 }
 
 /** Read at most `max` bytes of a body; null when it is longer. */
-async function readCapped(res: Response, max: number): Promise<Uint8Array | null> {
+export async function readCapped(res: Response, max: number): Promise<Uint8Array | null> {
   const declared = Number(res.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > max) return null;
   if (!res.body) {

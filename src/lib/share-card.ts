@@ -13,6 +13,7 @@
  */
 import { builderDeepLink, serialDigits, serialLabel } from "./verified-builder-badge";
 import { sourceLabel } from "./verified-builders";
+import { siteIconPath } from "./site-icon";
 
 export const CARD_W = 1881;
 export const CARD_H = 836;
@@ -39,10 +40,15 @@ export function projectName(source: string | null | undefined, builderId?: numbe
   return builderId !== undefined ? `Builder #${builderId}` : "";
 }
 
-/** GitHub avatar of the repo owner (CORS-enabled, so the canvas stays exportable); null for domains. */
+/**
+ * The card's default picture: the GitHub owner's avatar (CORS-enabled), or a
+ * domain's site icon through this site's /api/icon (same origin); either way
+ * the canvas stays exportable.
+ */
 export function defaultPictureUrl(source: string | null | undefined): string | null {
   const m = /^github:([^/]+)\//.exec(source ?? "");
-  return m ? `https://avatars.githubusercontent.com/${encodeURIComponent(m[1])}?size=400` : null;
+  if (m) return `https://avatars.githubusercontent.com/${encodeURIComponent(m[1])}?size=400`;
+  return source && source.startsWith("domain:") ? siteIconPath(source) : null;
 }
 
 /** First letter of the project, for a builder without a picture. */

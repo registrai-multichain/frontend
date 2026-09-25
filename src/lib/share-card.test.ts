@@ -37,7 +37,8 @@ describe("text", () => {
     expect(tagText(7)).toBe("#007");
     expect(tagText(1234)).toBe("#1234");
     expect(defaultPictureUrl("github:acme/tool")).toBe("https://avatars.githubusercontent.com/acme?size=400");
-    expect(defaultPictureUrl("domain:acme.xyz")).toBeNull();
+    expect(defaultPictureUrl("domain:acme.xyz")).toBe("/api/icon?source=domain%3Aacme.xyz");
+    expect(defaultPictureUrl(null)).toBeNull();
     expect(defaultPictureUrl(null)).toBeNull();
     expect(initialOf("github:acme/tool", 3)).toBe("A");
     expect(initialOf("domain:9lives.io", 3)).toBe("9");
