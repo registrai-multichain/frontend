@@ -1,17 +1,38 @@
 {
-  "syncedAt": "2026-09-24T21:52:28.572Z",
+  "syncedAt": "2026-09-25T00:10:07.871Z",
   "builders": [],
-  "perennialBuilders": [],
+  "perennialBuilders": [
+    {
+      "builderId": 1,
+      "owner": "0x6e5f89011fefe7435c7b509f5d3f83c42621d840",
+      "source": "domain:registrai-proof-test.pages.dev",
+      "status": "inactive",
+      "country": null,
+      "proofUrl": null,
+      "milestoneFeedId": "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601",
+      "projects": [
+        {
+          "id": 1,
+          "source": "domain:registrai-proof-test.pages.dev",
+          "status": "inactive",
+          "milestoneFeedId": "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601"
+        }
+      ],
+      "badge": null
+    }
+  ],
   "builderFeeds": {
     "chainId": 5042002,
     "registry": "0x770d0feedcDa264c9d5C835D56fA7903cbC5719c",
     "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
-    "lastScannedBlock": "63827494",
-    "feeds": {}
+    "lastScannedBlock": "63843515",
+    "feeds": {
+      "registrai-milestone:domain:registrai-proof-test.pages.dev": "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601"
+    }
   },
   "perennialMarkets": [],
   "atlas": {
-    "lastScannedBlock": "63827494",
+    "lastScannedBlock": "63843515",
     "volumeByBuilderId": {},
     "marketToBuilder": {},
     "pnl": {
@@ -19,8 +40,14 @@
       "realised": {}
     },
     "milestones": {
-      "latestByFeed": {},
-      "bySeason": {}
+      "latestByFeed": {
+        "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601": "1"
+      },
+      "bySeason": {
+        "1": {
+          "0x6e5f89011fefe7435c7b509f5d3f83c42621d840": 1
+        }
+      }
     },
     "seasonStartBlocks": {
       "1": "63826822"
@@ -33,7 +60,7 @@
     "chainId": 5042002,
     "fund": "0x7e83096F8Ef50024e7bE106E47F1BD8ce2e882D1",
     "pool": "0x56b3Ffc1c5DA4F867C3Fd56Be5dA731d457E32aA",
-    "scannedTo": "63827494",
+    "scannedTo": "63843515",
     "ledger": {
       "income": {},
       "claims": {},
@@ -74,7 +101,7 @@
         "Dispute": "0x9c0c81c11fe510eb89ade831c13c066cc5dad411"
       },
       "fromBlock": "63826822",
-      "lastScannedBlock": "63827494",
+      "lastScannedBlock": "63843515",
       "state": {
         "agents": {},
         "open": {}
@@ -86,16 +113,37 @@
   "badges": {
     "arc-testnet": {
       "address": "0xBF7FF680e0Ee7472E244cf2550EE016939cb6335",
-      "maxSerial": 0
+      "maxSerial": 1
     }
   },
   "gallery": {
     "network": "testnet",
     "chainId": 5042002,
     "builderRegistry": "0xB52FC2AB9b2457D8c56d3b4A624543aD61c70D9C",
-    "syncedAt": "2026-09-24T21:52:28.572Z",
-    "nextId": 1,
-    "builders": []
+    "syncedAt": "2026-09-25T00:10:07.871Z",
+    "nextId": 2,
+    "builders": [
+      {
+        "id": 1,
+        "owner": "0x6e5f89011fefe7435c7b509f5d3f83c42621d840",
+        "status": "inactive",
+        "profileURI": "",
+        "projects": [
+          {
+            "id": 1,
+            "source": "domain:registrai-proof-test.pages.dev",
+            "active": true,
+            "status": "inactive",
+            "country": null,
+            "proofUrl": null
+          }
+        ],
+        "country": null,
+        "badge": null,
+        "createdAt": 1790292253,
+        "onboarded": true
+      }
+    ]
   },
   "chainId": 5042002,
   "explorer": "https://testnet.arcscan.app",
