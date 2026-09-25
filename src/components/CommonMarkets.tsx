@@ -16,7 +16,7 @@
  * approvals, never unlimited). Live prices are Coinbase's public ticker, shown
  * for reference only: a round settles on the agent's on-chain reading.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   createPublicClient,
   createWalletClient,
@@ -26,6 +26,7 @@ import {
   type Hex,
   type PublicClient,
 } from "viem";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { useWallet } from "./WalletProvider";
 import { getWalletChain, transportFor, txUrl as txUrlFor, type WalletChain } from "@/lib/chains";
 import { activeProvider } from "@/lib/wallets";
@@ -52,7 +53,6 @@ import {
   clockUtc,
   eventVisible,
   evidenceNote,
-  formatChange,
   formatPrice,
   formatScaled,
   groupRounds,
@@ -82,6 +82,19 @@ import {
 } from "@/lib/rounds";
 import { cashOutValue, pnl, replayPool, type Trade } from "@/lib/rounds-chart";
 import { OddsChart, PriceChart, usePriceStream, type PriceStream } from "./RoundCharts";
+import {
+  SESSION_CAP,
+  SESSION_GAS,
+  SESSION_SECS,
+  clearSession,
+  loadSession,
+  saveSession,
+  sessionCovers,
+  sessionStatus,
+  type LocalSession,
+  type SessionChain,
+  type SessionStatus,
+} from "@/lib/session";
 
 // ───────────────────────────── chain wiring ─────────────────────────────
 
@@ -415,7 +428,8 @@ function useStartPrices(rounds: Array<{ asset: AssetMeta; start: number }>) {
 
 // ───────────────────────────── transactions ─────────────────────────────
 
-type TxState = { pending: string; error?: string; hash?: Hex; done?: string; scope?: string };
+/** `oneClick`: sent from the session key, so no wallet confirmation is coming. */
+type TxState = { pending: string; error?: string; hash?: Hex; done?: string; scope?: string; oneClick?: boolean };
 
 function useTx(client: PublicClient, refresh: () => Promise<void>) {
   const { address, walletChainId } = useWallet();
@@ -428,15 +442,15 @@ function useTx(client: PublicClient, refresh: () => Promise<void>) {
   const [st, setSt] = useState<TxState>({ pending: "" });
 
   const run = useCallback(
-    async (scope: string, label: string, steps: () => Promise<Hex>, doneText: string) => {
+    async (scope: string, label: string, steps: () => Promise<Hex>, doneText: string, oneClick = false) => {
       if (!wallet || !address) {
         setSt({ pending: "", scope, error: "Connect a wallet on Arc testnet first." });
         return false;
       }
-      setSt({ pending: label, scope });
+      setSt({ pending: label, scope, oneClick });
       try {
         const hash = await steps();
-        setSt({ pending: label, scope, hash });
+        setSt({ pending: label, scope, hash, oneClick });
         const r = await client.waitForTransactionReceipt({ hash });
         if (r.status !== "success") throw new Error("transaction reverted");
         setSt({ pending: "", scope, hash, done: doneText });
@@ -451,9 +465,9 @@ function useTx(client: PublicClient, refresh: () => Promise<void>) {
   );
 
   const send = useCallback(
-    async (to: Address, abi: readonly unknown[], functionName: string, args: readonly unknown[]) => {
-      await client.simulateContract({ address: to, abi: abi as never, functionName: functionName as never, args: args as never, account: address! });
-      return wallet!.writeContract({ address: to, abi: abi as never, functionName: functionName as never, args: args as never, chain: CHAIN.viemChain, account: address! });
+    async (to: Address, abi: readonly unknown[], functionName: string, args: readonly unknown[], value?: bigint) => {
+      await client.simulateContract({ address: to, abi: abi as never, functionName: functionName as never, args: args as never, account: address!, value } as never);
+      return wallet!.writeContract({ address: to, abi: abi as never, functionName: functionName as never, args: args as never, chain: CHAIN.viemChain, account: address!, value } as never);
     },
     [client, wallet, address],
   );
@@ -481,6 +495,115 @@ function useTx(client: PublicClient, refresh: () => Promise<void>) {
 
 type Tx = ReturnType<typeof useTx>;
 
+// ───────────────────────────── one-click sessions ─────────────────────────────
+
+/** The owner's session key for one-click betting (lib/session.ts): its stored key,
+ *  its on-chain grant, the owner's ledger allowance, and a sender that trades
+ *  through MarketsV4's *For functions without the wallet. */
+function useSession(client: PublicClient, address: Address | undefined, tx: Tx) {
+  const [local, setLocal] = useState<LocalSession>();
+  const [chain, setChain] = useState<SessionChain>();
+  const [allowance, setAllowance] = useState(0n);
+  const [clock, setClock] = useState(0);
+  useEffect(() => {
+    setLocal(address ? loadSession(D.chainId, address) : undefined);
+    setChain(undefined);
+  }, [address]);
+
+  const read = useCallback(async () => {
+    if (!address) return;
+    try {
+      const [allow, grant, gas, block] = await Promise.all([
+        client.readContract({ address: C.NanoLedger, abi: nanoLedgerAbi, functionName: "allowance", args: [address, C.MarketsV4] }) as Promise<bigint>,
+        local
+          ? (client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "sessions", args: [address, local.delegate] }) as Promise<readonly [bigint, bigint]>)
+          : undefined,
+        local ? client.getBalance({ address: local.delegate }) : undefined,
+        client.getBlock({ blockTag: "latest" }),
+      ]);
+      setAllowance(allow);
+      setClock(Number(block.timestamp));
+      setChain(grant && gas !== undefined ? { spendLeft: grant[0], expiry: Number(grant[1]), gas } : undefined);
+    } catch {
+      /* next read */
+    }
+  }, [client, address, local]);
+  useEffect(() => {
+    void read();
+    const id = setInterval(() => void read(), 5_000);
+    return () => clearInterval(id);
+  }, [read]);
+
+  const wallet = useMemo(
+    () => (local ? createWalletClient({ chain: CHAIN.viemChain, transport: transportFor(CHAIN), account: privateKeyToAccount(local.pk) }) : undefined),
+    [local],
+  );
+  const status: SessionStatus = sessionStatus(local, chain, clock || Date.now() / 1000);
+  const covers = (mode: "buy" | "sell" | "redeem", amount: bigint) => Boolean(wallet) && sessionCovers(status, chain, mode, amount, allowance);
+
+  /** Send a MarketsV4 call from the session key (no wallet pop-up). */
+  const send = useCallback(
+    async (functionName: "buyFor" | "sellFor" | "redeemFor", args: readonly unknown[]) => {
+      if (!wallet) throw new Error("No one-click session in this browser.");
+      await client.simulateContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName, args: args as never, account: wallet.account });
+      const hash = await wallet.writeContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName, args: args as never, chain: CHAIN.viemChain, account: wallet.account });
+      setTimeout(() => void read(), 1_500);
+      return hash;
+    },
+    [client, wallet, read],
+  );
+
+  /** Two wallet confirmations: the ledger allowance, then setSession (with gas for the key). */
+  const enable = useCallback(async () => {
+    if (!address) return;
+    await tx.run(
+      "session",
+      "session",
+      async () => {
+        const block = await client.getBlock({ blockTag: "latest" });
+        // Renewing keeps this browser's key (and whatever gas it still has).
+        const pk = local?.pk ?? generatePrivateKey();
+        const acct = privateKeyToAccount(pk);
+        const s: LocalSession = { pk, delegate: acct.address, owner: address, chainId: D.chainId, expiry: Number(block.timestamp) + SESSION_SECS };
+        saveSession(s); // before any transaction: gas sent to the key is never orphaned
+        setLocal(s);
+        if (allowance < SESSION_CAP) await tx.waitOk(await tx.send(C.NanoLedger, nanoLedgerAbi, "approveSpender", [C.MarketsV4, SESSION_CAP]));
+        return tx.send(C.MarketsV4, marketsV4Abi, "setSession", [acct.address, SESSION_CAP, BigInt(s.expiry)], SESSION_GAS);
+      },
+      `One-click betting is on for 24 hours (up to ${fmt(SESSION_CAP)} USDC of bets).`,
+    );
+    void read();
+  }, [address, client, local, allowance, tx, read]);
+
+  /** Revoke on chain, send the key's leftover gas back, forget the key. */
+  const end = useCallback(async () => {
+    if (!address || !local) return;
+    const ok = await tx.run(
+      "session",
+      "ending",
+      () => tx.send(C.MarketsV4, marketsV4Abi, "revokeSession", [local.delegate]),
+      "One-click betting is off; its leftover gas went back to your wallet.",
+    );
+    if (!ok || !wallet) return;
+    try {
+      const [bal, gasPrice] = await Promise.all([client.getBalance({ address: local.delegate }), client.getGasPrice()]);
+      const fee = 21_000n * gasPrice * 2n;
+      if (bal > fee) await wallet.sendTransaction({ to: address, value: bal - fee, gas: 21_000n, chain: CHAIN.viemChain, account: wallet.account });
+    } catch {
+      /* the key keeps a few cents; renewing reuses it */
+      return;
+    }
+    clearSession(D.chainId, address);
+    setLocal(undefined);
+    setChain(undefined);
+  }, [address, local, wallet, client, tx]);
+
+  return { status, chain, allowance, covers, send, enable, end, owner: address };
+}
+
+type Session = ReturnType<typeof useSession>;
+const SessionCtx = createContext<Session | undefined>(undefined);
+
 // ───────────────────────────── page ─────────────────────────────
 
 export function CommonMarkets() {
@@ -492,6 +615,7 @@ export function CommonMarkets() {
   const { snap, loadError, refresh } = useRoundsData(client, address);
   const stream = usePriceStream(useMemo(() => D.assets.map((a) => a.product), []));
   const tx = useTx(client, refresh);
+  const session = useSession(client, address, tx);
 
   // Client clock, corrected to chain time at the last read.
   const [clientNow, setClientNow] = useState(0);
@@ -552,6 +676,7 @@ export function CommonMarkets() {
   const startPrices = useStartPrices(inPlay);
 
   return (
+    <SessionCtx.Provider value={session}>
     <div className="pt-10 sm:pt-14 fade-up">
       <Header now={now} roundEnd={roundEnd} />
 
@@ -563,7 +688,7 @@ export function CommonMarkets() {
         </p>
       )}
 
-      <section aria-label="Five-minute rounds" className="space-y-px">
+      <section aria-label="Five-minute rounds" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {D.assets.map((a) => (
           <AssetCard
             key={a.key}
@@ -572,7 +697,6 @@ export function CommonMarkets() {
             current={groups?.[a.key]?.current}
             inPlay={groups?.[a.key]?.inPlay}
             startPrice={groups?.[a.key]?.inPlay ? startPrices[`${a.product}@${groups[a.key].inPlay!.expiry}`] : undefined}
-            recent={groups?.[a.key]?.recent ?? []}
             live={stream.last[a.product]}
             stream={stream}
             skew={skew}
@@ -589,7 +713,7 @@ export function CommonMarkets() {
         it ends, the agent attests the round&apos;s change on chain: the 1-minute close at its end minus the one at its
         start. Up wins only if the change is above zero; no change is Down. The reading becomes final after a 10-minute
         challenge window and the agent resolves the round right after, about 10–11 minutes after the round ends; in the
-        last-rounds strip, a countdown is the time left until that round&apos;s reading is final.
+        meantime your position shows what it pays if the round ended now.
       </p>
 
       {address && <Claims snap={snap} tx={tx} now={now} />}
@@ -609,6 +733,7 @@ export function CommonMarkets() {
         trading fee; nothing is charged at settlement. Testnet USDC only.
       </p>
     </div>
+    </SessionCtx.Provider>
   );
 }
 
@@ -743,6 +868,58 @@ function LedgerBar({
         </div>
       </div>
       <TxLine tx={tx} scope={scope} />
+      <SessionRow tx={tx} />
+    </div>
+  );
+}
+
+/** One-click betting: on/off, what is left of the session, and why it paused. */
+function SessionRow({ tx }: { tx: Tx }) {
+  const ses = useContext(SessionCtx);
+  if (!ses) return null;
+  const busy = Boolean(tx.st.pending);
+  const on = ses.status === "active" || ses.status === "spent";
+  const note: Record<SessionStatus, string> = {
+    none: "Approve once, then bet without a wallet pop-up for 24 hours (up to 50 USDC of bets). Positions and winnings stay in your wallet's balance.",
+    pending: "Waiting for the session to land on chain…",
+    active: "",
+    spent: "This session's 50 USDC of bets is used up; cash-outs and claims still go through. Renew to bet more.",
+    expired: "The session ended. Renew to keep betting without pop-ups.",
+    "low-gas": "The session key is almost out of gas. Renew to top it up.",
+  };
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-3 text-2xs">
+      <span className={`inline-flex items-center gap-1.5 ${on ? "text-up" : "text-fg-mute"}`}>
+        <span aria-hidden className={`inline-block h-1.5 w-1.5 rounded-full ${on ? "bg-up" : "bg-line-strong"}`} />
+        One-click betting {on ? "on" : "off"}
+      </span>
+      {on && ses.chain ? (
+        <span className="tnum text-fg-dim">
+          {fmt(ses.chain.spendLeft)} of {fmt(SESSION_CAP)} USDC left · ends {timeLeft(ses.chain.expiry - Date.now() / 1000)}
+        </span>
+      ) : (
+        <span className="text-fg-dim">{note[ses.status]}</span>
+      )}
+      <span className="ml-auto flex gap-2">
+        {ses.status !== "active" && (
+          <button
+            onClick={() => void ses.enable()}
+            disabled={busy}
+            className="border border-accent px-3 py-1 text-[12px] text-accent transition-colors hover:bg-accent hover:text-bg disabled:opacity-50"
+          >
+            {tx.st.pending === "session" ? "Confirm in wallet…" : ses.status === "none" ? "Enable" : "Renew"}
+          </button>
+        )}
+        {ses.status !== "none" && (
+          <button
+            onClick={() => void ses.end()}
+            disabled={busy}
+            className="border border-line px-3 py-1 text-[12px] text-fg-mute transition-colors hover:border-accent hover:text-fg disabled:opacity-50"
+          >
+            {tx.st.pending === "ending" ? "Ending…" : "End"}
+          </button>
+        )}
+      </span>
     </div>
   );
 }
@@ -759,7 +936,7 @@ function TxLine({ tx, scope }: { tx: Tx; scope: string }) {
   if (st.scope !== scope || (!st.error && !st.hash && !st.done && !st.pending)) return null;
   return (
     <div className="mt-2 text-2xs" aria-live="polite">
-      {st.pending && <span className="text-fg-dim">Confirm in your wallet, then wait for the block… </span>}
+      {st.pending && <span className="text-fg-dim">{st.oneClick ? "Sending (one-click)… " : "Confirm in your wallet, then wait for the block… "}</span>}
       {st.done && <span className="text-up">{st.done} </span>}
       {st.error && <span className="text-down">{st.error} </span>}
       {st.hash && (
@@ -781,7 +958,6 @@ function AssetCard({
   current,
   inPlay,
   startPrice,
-  recent,
   live,
   stream,
   skew,
@@ -797,7 +973,6 @@ function AssetCard({
   inPlay?: RoundMarket;
   /** The in-play round's start price (Coinbase, the minute the agent reads). */
   startPrice?: number;
-  recent: RoundMarket[];
   live?: { price: number; dir: "up" | "down" | "flat" };
   stream: PriceStream;
   skew: number;
@@ -813,7 +988,6 @@ function AssetCard({
   // play compares it with the price the round started at.
   const legacy = current && !current.change ? current : undefined;
   const ref = legacy ? legacy.threshold : inPlay?.change && startPrice !== undefined ? toScaled(startPrice, asset.decimals) : undefined;
-  const refName = legacy ? "strike" : "start";
   const delta = liveScaled !== undefined && ref !== undefined ? strikeDelta(liveScaled, ref) : undefined;
   const playLeft = inPlay && now ? roundWindow(inPlay).end - now : 0;
   const playHold = inPlay ? snap?.holdings[inPlay.marketId] : undefined;
@@ -831,15 +1005,20 @@ function AssetCard({
   }, [current, snap, st]);
   const played = inPlay?.change ? roundWindow(inPlay) : undefined;
 
+  const upPrice = st ? cents(st.yesPrice) : "—";
+  const downPrice = st ? cents(st.noPrice) : "—";
+  const toggle = (side: "yes" | "no", mode: "buy" | "sell") =>
+    current && setOpen(isOpen && open?.mode === mode && open.side === side ? undefined : { id: current.marketId, side, mode });
+
   return (
-    <article className="border border-line bg-bg-elev p-4 sm:p-5">
-      <div className="flex items-baseline justify-between gap-4">
+    <article className="flex min-w-0 flex-col border border-line bg-bg-elev p-4">
+      <div className="flex items-baseline justify-between gap-3">
         <div className="flex min-w-0 items-baseline gap-2">
-          <h2 className="font-serif text-[26px] leading-none">{asset.symbol}</h2>
+          <h2 className="font-serif text-[24px] leading-none">{asset.symbol}</h2>
           <span className="truncate text-2xs text-fg-dim">{asset.name}</span>
         </div>
         <div
-          className={`tnum font-serif text-[30px] leading-none tracking-tightest transition-colors duration-300 ${
+          className={`tnum font-serif text-[24px] leading-none tracking-tightest transition-colors duration-300 ${
             live?.dir === "up" ? "text-up" : live?.dir === "down" ? "text-down" : "text-fg"
           }`}
         >
@@ -847,110 +1026,97 @@ function AssetCard({
           {!stream.live && live && <span className="ml-1 align-middle text-2xs text-fg-dim" title="Live stream reconnecting; polling">·</span>}
         </div>
       </div>
-      <div className="mt-2 flex flex-wrap justify-between gap-x-4 gap-y-1 text-2xs text-fg-dim">
-        <div className="min-w-0">
+      <div className="mt-1.5 flex items-baseline justify-between gap-3 text-2xs text-fg-dim">
+        <span className="min-w-0 truncate">
           {current ? (
             <>
-              {current.change ? "Next round" : "Round"} {roundLabel(roundWindow(current).start, roundWindow(current).end)}
-              {!current.change && (
-                <>
-                  {" "}
-                  · strike <span className="tnum text-fg-mute">{formatScaled(current.threshold, asset.decimals)}</span>
-                </>
-              )}
-              {trading && (
-                <>
-                  {" "}
-                  · {current.change ? "betting closes in" : "closes in"} <span className="tnum text-fg-mute">{timeLeft(left)}</span>
-                </>
-              )}
+              {current.change ? "Next" : "Round"} {roundLabel(roundWindow(current).start, roundWindow(current).end)}
+              {!current.change && <> · strike {formatScaled(current.threshold, asset.decimals)}</>}
             </>
           ) : snap && now ? (
-            // The agent opens the next round only while at least 2 minutes of betting remain.
             now - Math.floor(now / D.roundSecs) * D.roundSecs < D.roundSecs - 120 ? (
-              <>Waiting for the agent to open the {roundLabel(nextBoundary(now), nextBoundary(now) + D.roundSecs)} round…</>
+              <>Opening {roundLabel(nextBoundary(now), nextBoundary(now) + D.roundSecs)}…</>
             ) : (
-              <>No round to bet on this period. The next opens at {clockUtc(nextBoundary(now))} UTC.</>
+              <>Next round opens {clockUtc(nextBoundary(now))} UTC</>
             )
           ) : (
             "Reading the rounds…"
           )}
-        </div>
-        <div className="sm:text-right">
-          {delta ? (
-            <span className={delta.dir === "above" ? "text-up" : delta.dir === "below" ? "text-down" : "text-fg-mute"}>
-              {!legacy && "in play · "}
-              {delta.dir === "at"
-                ? `at the ${refName} (a tie is Down)`
-                : `${delta.dir === "above" ? "▲" : "▼"} ${formatScaled(delta.diff < 0n ? -delta.diff : delta.diff, asset.decimals)} ${delta.dir} ${refName} (${delta.pct >= 0 ? "+" : ""}${delta.pct.toFixed(3)}%)`}
-            </span>
-          ) : (
-            "live · Coinbase"
-          )}
-        </div>
+        </span>
+        {trading && (
+          <span className="shrink-0">
+            closes <span className={`tnum ${left <= 30 ? "text-down" : "text-fg-mute"}`}>{timeLeft(left)}</span>
+          </span>
+        )}
       </div>
 
-      <div className="mt-3 -mx-1">
+      <div className="mt-2 -mx-1">
         <PriceChart
           series={stream.series[asset.product]}
           decimals={asset.decimals}
           skew={skew}
+          height={128}
           startPrice={played ? startPrice : undefined}
           roundStart={played?.start}
           roundEnd={played?.end}
         />
       </div>
 
+      {played && (
+        <div className="mt-1 flex items-baseline justify-between gap-3 text-2xs text-fg-dim">
+          <span>
+            In play · ends <span className="tnum text-fg-mute">{timeLeft(playLeft)}</span>
+          </span>
+          {delta && (
+            <span className={`tnum ${delta.dir === "above" ? "text-up" : "text-down"}`}>
+              {delta.dir === "above" ? "▲ Up" : "▼ Down"} {formatScaled(delta.diff < 0n ? -delta.diff : delta.diff, asset.decimals)}
+            </span>
+          )}
+        </div>
+      )}
+      {played && playHold && (playHold.yes > 0n || playHold.no > 0n) && (
+        <Position
+          hold={playHold}
+          value={delta ? (delta.dir === "above" ? playHold.yes : playHold.no) : undefined}
+          valueLabel="Pays if it ends now"
+        />
+      )}
+
       {current && st && (
-        <div className="mt-4">
-          <div className="mb-1 flex justify-between text-2xs">
-            <span className="text-up">Up {upPct.toFixed(0)}%</span>
-            <span className="text-fg-dim">pool odds</span>
-            <span className="text-down">{(100 - upPct).toFixed(0)}% Down</span>
-          </div>
-          <div className="flex h-2 w-full overflow-hidden bg-down">
-            <div className="h-full bg-up transition-[width] duration-500" style={{ width: `${upPct}%` }} />
-          </div>
+        <div className="mt-3 border-t border-line pt-3">
           {odds && current.change && (
-            <div className="mt-2">
-              <OddsChart points={odds.pts} open={odds.open} close={current.expiry} skew={skew} />
+            <div className="mb-2">
+              <div className="flex items-baseline justify-between text-2xs text-fg-dim">
+                <span>
+                  <span className={upPct >= 50 ? "text-up" : "text-down"}>{upPct.toFixed(0)}% Up</span> · pool odds
+                </span>
+              </div>
+              <OddsChart points={odds.pts} open={odds.open} close={current.expiry} skew={skew} height={48} />
             </div>
           )}
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {trading ? (
-              <>
-                <SideButton
-                  label={`Buy Up · ${cents(st.yesPrice)}`}
-                  tone="up"
-                  active={Boolean(isOpen && open?.mode === "buy" && open.side === "yes")}
-                  onClick={() => setOpen(isOpen && open?.mode === "buy" && open.side === "yes" ? undefined : { id: current.marketId, side: "yes", mode: "buy" })}
-                />
-                <SideButton
-                  label={`Buy Down · ${cents(st.noPrice)}`}
-                  tone="down"
-                  active={Boolean(isOpen && open?.mode === "buy" && open.side === "no")}
-                  onClick={() => setOpen(isOpen && open?.mode === "buy" && open.side === "no" ? undefined : { id: current.marketId, side: "no", mode: "buy" })}
-                />
-                {hold && (hold.yes > 0n || hold.no > 0n) && (
-                  <button
-                    onClick={() => setOpen(isOpen && open?.mode === "sell" ? undefined : { id: current.marketId, side: hold.yes > 0n ? "yes" : "no", mode: "sell" })}
-                    className={`border px-3 py-1.5 text-[13px] transition-colors ${isOpen && open?.mode === "sell" ? "border-accent text-accent" : "border-line text-fg-mute hover:border-accent hover:text-fg"}`}
-                  >
-                    Sell
-                  </button>
-                )}
-              </>
-            ) : (
-              <span className="text-2xs text-fg-dim">
-                {current.change ? "Betting closed" : "Trading closed"} at {clockUtc(current.expiry)} UTC.
-              </span>
-            )}
-          </div>
-          {hold && (hold.yes > 0n || hold.no > 0n) && (
-            <Position hold={hold} value={trading && snap?.feeBps !== undefined ? cashOutValue({ yes: st.yesReserve, no: st.noReserve }, hold, snap.feeBps) : undefined} />
+          {trading ? (
+            <div className="grid grid-cols-2 gap-2">
+              <SideButton label={`Up ${upPrice}`} tone="up" active={Boolean(isOpen && open?.mode === "buy" && open.side === "yes")} onClick={() => toggle("yes", "buy")} />
+              <SideButton label={`Down ${downPrice}`} tone="down" active={Boolean(isOpen && open?.mode === "buy" && open.side === "no")} onClick={() => toggle("no", "buy")} />
+            </div>
+          ) : (
+            <p className="text-2xs text-fg-dim">
+              {current.change ? "Betting closed" : "Trading closed"} at {clockUtc(current.expiry)} UTC.
+            </p>
           )}
-
+          {hold && (hold.yes > 0n || hold.no > 0n) && (
+            <>
+              <Position hold={hold} value={trading && snap?.feeBps !== undefined ? cashOutValue({ yes: st.yesReserve, no: st.noReserve }, hold, snap.feeBps) : undefined} />
+              {trading && (
+                <button
+                  onClick={() => toggle(hold.yes > 0n ? "yes" : "no", "sell")}
+                  className={`mt-2 w-full border px-3 py-1.5 text-[13px] transition-colors ${isOpen && open?.mode === "sell" ? "border-accent text-accent" : "border-line text-fg-mute hover:border-accent hover:text-fg"}`}
+                >
+                  Cash out
+                </button>
+              )}
+            </>
+          )}
           {isOpen && trading && (
             <TradeBox
               market={current}
@@ -968,30 +1134,6 @@ function AssetCard({
           )}
         </div>
       )}
-
-      {inPlay?.change && (
-        <div className="mt-3 flex flex-wrap justify-between gap-x-4 gap-y-1 border-t border-line pt-2 text-2xs text-fg-dim">
-          <span>
-            In play {roundLabel(roundWindow(inPlay).start, roundWindow(inPlay).end)}
-            {startPrice !== undefined && (
-              <>
-                {" "}
-                · started at <span className="tnum text-fg-mute">{formatPrice(startPrice, asset.decimals)}</span>
-              </>
-            )}{" "}
-            · ends in <span className="tnum text-fg-mute">{timeLeft(playLeft)}</span>
-          </span>
-        </div>
-      )}
-      {inPlay?.change && playHold && (playHold.yes > 0n || playHold.no > 0n) && (
-        <Position
-          hold={playHold}
-          value={delta ? (delta.dir === "above" ? playHold.yes : playHold.no) : undefined}
-          valueLabel="Pays if it ends now"
-        />
-      )}
-
-      <RecentStrip asset={asset} recent={recent} snap={snap} now={now} />
     </article>
   );
 }
@@ -1037,9 +1179,12 @@ function Position({ hold, value, valueLabel = "Value now" }: { hold: Holding; va
 
 function SideButton({ label, tone, active, onClick }: { label: string; tone: "up" | "down"; active: boolean; onClick: () => void }) {
   const on = tone === "up" ? "bg-up text-bg-elev border-up" : "bg-down text-bg-elev border-down";
-  const off = tone === "up" ? "border-up text-up hover:bg-bg" : "border-down text-down hover:bg-bg";
+  const off =
+    tone === "up"
+      ? "border-[color-mix(in_srgb,var(--up)_45%,transparent)] bg-[color-mix(in_srgb,var(--up)_9%,transparent)] text-up hover:bg-[color-mix(in_srgb,var(--up)_18%,transparent)]"
+      : "border-[color-mix(in_srgb,var(--down)_45%,transparent)] bg-[color-mix(in_srgb,var(--down)_9%,transparent)] text-down hover:bg-[color-mix(in_srgb,var(--down)_18%,transparent)]";
   return (
-    <button onClick={onClick} aria-pressed={active} className={`tnum border px-3 py-1.5 text-[13px] transition-colors ${active ? on : off}`}>
+    <button onClick={onClick} aria-pressed={active} className={`tnum w-full border px-3 py-2.5 text-[14px] font-medium transition-colors ${active ? on : off}`}>
       {label}
     </button>
   );
@@ -1085,6 +1230,8 @@ function TradeBox({
   const floor = buyQ ? minOutWithSlippage(buyQ.sharesOut, slip) : sellQ ? minOutWithSlippage(sellQ.collateralOut, slip) : undefined;
   const busy = Boolean(tx.st.pending);
   const fail = (error: string) => tx.setSt({ pending: "", scope, error });
+  const ses = useContext(SessionCtx);
+  const oneClick = Boolean(ses?.owner && value !== undefined && ses.covers(open.mode, value));
 
   async function submit() {
     if (!canTrade) return fail("Connect a wallet on Arc testnet first.");
@@ -1107,14 +1254,21 @@ function TradeBox({
         if (open.mode === "buy") {
           const [out] = (await client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "quoteBuy", args: [market.marketId, outcome, v] })) as readonly [bigint, bigint];
           if (out === 0n) throw new Error("That amount is too small to buy any shares.");
+          if (ses?.owner && ses.covers("buy", v)) {
+            return ses.send("buyFor", [ses.owner, market.marketId, outcome, v, minOutWithSlippage(out, slip), deadline]);
+          }
           await tx.ensureSpender(v);
           return tx.send(C.MarketsV4, marketsV4Abi, "buy", [market.marketId, outcome, v, minOutWithSlippage(out, slip), deadline]);
         }
         const [out] = (await client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "quoteSell", args: [market.marketId, outcome, v] })) as readonly [bigint, bigint];
         if (out === 0n) throw new Error("That is too few shares to sell.");
+        if (ses?.owner && ses.covers("sell", v)) {
+          return ses.send("sellFor", [ses.owner, market.marketId, outcome, v, minOutWithSlippage(out, slip), deadline]);
+        }
         return tx.send(C.MarketsV4, marketsV4Abi, "sell", [market.marketId, outcome, v, minOutWithSlippage(out, slip), deadline]);
       },
       `${verb}.`,
+      oneClick,
     );
     if (ok) setAmt("");
   }
@@ -1233,9 +1387,7 @@ function TradeBox({
             ? open.mode === "buy"
               ? "Buying…"
               : "Selling…"
-            : open.mode === "buy"
-              ? `Buy ${label}${value ? ` for ${fmt(value)} USDC` : ""}`
-              : `Sell ${label}`}
+            : `${oneClick ? "⚡ " : ""}${open.mode === "buy" ? `Buy ${label}${value ? ` for ${fmt(value)} USDC` : ""}` : `Sell ${label}`}`}
         </button>
       </div>
       {!canTrade && <p className="mt-2 text-2xs text-fg-dim">Connect a wallet on Arc testnet to trade.</p>}
@@ -1263,70 +1415,10 @@ function statusFor(m: RoundMarket, snap: Snapshot | undefined, now: number): Rou
   });
 }
 
-function RecentStrip({ asset, recent, snap, now }: { asset: AssetMeta; recent: RoundMarket[]; snap?: Snapshot; now: number }) {
-  if (!snap) return null;
-  const cells = [...recent].reverse(); // oldest → newest, ending at now
-  return (
-    <div className="mt-4 border-t border-line pt-3">
-      <div className="mb-1.5 text-2xs text-fg-dim">Last rounds</div>
-      {cells.length === 0 ? (
-        <p className="text-2xs text-fg-dim">No closed rounds in the last two hours yet.</p>
-      ) : (
-        <ol className="grid grid-cols-3 gap-1 sm:grid-cols-6">
-          {cells.map((m) => {
-            const s = statusFor(m, snap, now);
-            const rd = snap.readings[m.marketId];
-            const w = roundWindow(m);
-            const title = [
-              roundLabel(w.start, w.end),
-              m.change
-                ? rd?.found
-                  ? `change ${formatChange(rd.value, asset.decimals)}`
-                  : undefined
-                : `strike ${formatScaled(m.threshold, asset.decimals)}${rd?.found ? ` → close ${formatScaled(rd.value, asset.decimals)}` : ""}`,
-              s?.detail,
-            ]
-              .filter(Boolean)
-              .join(" · ");
-            return (
-              <li key={m.marketId} className="border border-line px-2 py-1.5" title={title}>
-                <div className="tnum text-2xs text-fg-dim">{clockUtc(w.start)}</div>
-                <StatusCell s={s} now={now} />
-              </li>
-            );
-          })}
-        </ol>
-      )}
-    </div>
-  );
-}
-
-function StatusCell({ s, now }: { s?: RoundStatus; now: number }) {
-  if (!s) return <div className="text-[13px] text-fg-dim">…</div>;
-  switch (s.key) {
-    case "resolved-up":
-      return <div className="text-[13px] text-up">▲ Up</div>;
-    case "resolved-down":
-      return <div className="text-[13px] text-down">▼ Down</div>;
-    case "voided":
-      return <div className="text-[13px] text-fg-dim line-through">Voided</div>;
-    case "awaiting-reading":
-      return <div className="text-[13px] text-fg-dim">{s.voidable ? "No reading" : "Closed…"}</div>;
-    case "settling":
-      return (
-        <div className={`tnum text-[13px] ${s.provisional === "up" ? "text-up" : "text-down"}`}>
-          {s.provisional === "up" ? "▲" : "▼"}{" "}
-          {s.final || (s.finalAt ?? 0) <= now ? <span className="text-fg-mute">final</span> : <span className="text-accent">{timeLeft((s.finalAt ?? 0) - now)}</span>}
-        </div>
-      );
-    default:
-      return <div className="text-[13px] text-accent">Live</div>;
-  }
-}
-
 // ───────────────────────────── claims ─────────────────────────────
 
 function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
+  const ses = useContext(SessionCtx);
   if (!snap) return null;
   const known = snap.markets.filter((m) => snap.redeemable[m.marketId] !== undefined);
   const claims = claimList(known, snap.redeemable);
@@ -1360,7 +1452,18 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
                   </div>
                   <button
                     disabled={Boolean(tx.st.pending)}
-                    onClick={() => void tx.run(scope, "redeem", () => tx.send(C.MarketsV4, marketsV4Abi, "redeem", [m.marketId]), `Redeemed ${fmt(amount)} USDC.`)}
+                    onClick={() =>
+                      void tx.run(
+                        scope,
+                        "redeem",
+                        () =>
+                          ses?.owner && ses.covers("redeem", 0n)
+                            ? ses.send("redeemFor", [ses.owner, m.marketId])
+                            : tx.send(C.MarketsV4, marketsV4Abi, "redeem", [m.marketId]),
+                        `Redeemed ${fmt(amount)} USDC.`,
+                        Boolean(ses?.owner && ses.covers("redeem", 0n)),
+                      )
+                    }
                     className="tnum bg-accent px-4 py-2 text-[13px] text-bg transition-colors hover:bg-accent-deep disabled:opacity-50"
                   >
                     {tx.st.pending === "redeem" && tx.st.scope === scope ? "Redeeming…" : `Redeem ${fmt(amount)} USDC`}

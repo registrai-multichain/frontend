@@ -5,22 +5,24 @@ import { NavMenu } from "./NavMenu";
 import { BrandLockup } from "./Brand";
 import { COMMON_MARKETS_HREF } from "@/lib/common-markets";
 
-export function Shell({ children }: { children: React.ReactNode }) {
+/** `wide`: a page of market tiles (the common markets grid) uses a wider column. */
+export function Shell({ children, wide = false }: { children: React.ReactNode; wide?: boolean }) {
+  const w = wide ? "max-w-[1240px]" : "max-w-[920px]";
   return (
     <div className="min-h-screen flex flex-col">
-      <TopNav />
-      <main className="flex-1 w-full max-w-[920px] mx-auto px-6 sm:px-10 pb-24">
+      <TopNav w={w} />
+      <main className={`flex-1 w-full ${w} mx-auto px-6 sm:px-10 pb-24`}>
         {children}
       </main>
-      <Footer />
+      <Footer w={w} />
     </div>
   );
 }
 
-function TopNav() {
+function TopNav({ w }: { w: string }) {
   return (
     <header className="w-full border-b border-line sticky top-0 z-10 bg-bg">
-      <div className="max-w-[920px] mx-auto px-5 sm:px-10 h-14 sm:h-16 flex items-center justify-between gap-3">
+      <div className={`${w} mx-auto px-5 sm:px-10 h-14 sm:h-16 flex items-center justify-between gap-3`}>
         <Link
           href="/"
           className="flex items-center gap-2.5 sm:gap-3 hover:opacity-80 transition-opacity min-w-0"
@@ -58,10 +60,10 @@ function TopNav() {
   );
 }
 
-function Footer() {
+function Footer({ w }: { w: string }) {
   return (
     <footer className="border-t border-line mt-24">
-      <div className="max-w-[920px] mx-auto px-6 sm:px-10 py-10 flex flex-col gap-6">
+      <div className={`${w} mx-auto px-6 sm:px-10 py-10 flex flex-col gap-6`}>
         <div className="flex items-center justify-between">
           <BrandLockup
             markClassName="h-9 w-9"

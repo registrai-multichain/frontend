@@ -5,7 +5,7 @@ import { CommonMarkets } from "@/components/CommonMarkets";
 
 export default function RoundsPage() {
   return (
-    <Shell>
+    <Shell wide>
       <CommonMarkets />
     </Shell>
   );

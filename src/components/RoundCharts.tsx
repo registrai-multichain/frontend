@@ -304,7 +304,8 @@ export function PriceChart({
 
   const above = head !== undefined && startPrice !== undefined ? head > startPrice : undefined;
   const tone = above === undefined ? "var(--accent)" : above ? "var(--up)" : "var(--down)";
-  const ticks = niceTicks(yLo, yHi, 3).filter((v) => Y(v) > 8 && Y(v) < H - 4);
+  // Axis labels, minus any the live price tag would cover.
+  const ticks = niceTicks(yLo, yHi, 3).filter((v) => Y(v) > 8 && Y(v) < H - 4 && (head === undefined || Math.abs(Y(v) - Y(head)) > 14));
   const minutes: number[] = [];
   for (let t = Math.ceil(x0 / 120) * 120; t <= x1; t += 120) minutes.push(t);
   const inPlay = roundStart !== undefined && roundEnd !== undefined;
