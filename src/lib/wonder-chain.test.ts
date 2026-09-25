@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Address, Hex } from "viem";
-import { readExpiry, readMarketSubjects, readWonderStatus, type WonderReader } from "./wonder-chain";
+import { findFeedLive, readExpiry, readMarketSubjects, readWonderStatus, type WonderReader } from "./wonder-chain";
 import { sourceKey } from "./wonder";
 
 const W = { markets: "0x00000000000000000000000000000000000000a1" as Address, escrow: "0x00000000000000000000000000000000000000e5" as Address };
@@ -58,5 +58,25 @@ describe("readMarketSubjects", () => {
   });
   test("a failed read is absent", async () => {
     expect(await readMarketSubjects(fake({}, () => true), W.markets, [id], {})).toEqual({});
+  });
+});
+
+
+describe("findFeedLive", () => {
+  const op = "0x00000000000000000000000000000000000000f2" as Address;
+  const reg = "0x00000000000000000000000000000000000000b1" as Address;
+  test("the operator's registrai-milestone:<source> feed created after the snapshot", async () => {
+    const logs = [
+      { args: { feedId: `0x${"11".repeat(32)}`, description: "registrai-milestone:github:other/x" }, blockNumber: 105n },
+      { args: { feedId: `0x${"22".repeat(32)}`, description: "registrai-milestone:github:acme/tool" }, blockNumber: 120n },
+    ];
+    const client = {
+      async getLogs(a: { fromBlock: bigint; toBlock: bigint; args?: { creator?: string } }) {
+        expect(a.args?.creator).toBe(op);
+        return logs.filter((l) => l.blockNumber >= a.fromBlock && l.blockNumber <= a.toBlock);
+      },
+    };
+    expect(await findFeedLive(client as never, reg, op, 100n, 130n, "github:acme/tool")).toBe(`0x${"22".repeat(32)}`);
+    expect(await findFeedLive(client as never, reg, op, 100n, 130n, "github:none/here")).toBeNull();
   });
 });

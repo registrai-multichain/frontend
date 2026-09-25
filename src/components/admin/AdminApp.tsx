@@ -55,7 +55,7 @@ import { planOnboarding, safeBatchJson } from "@/lib/onboard-batch";
 import { sendBuildersTx } from "@/components/verify/sendTx";
 import { buildersClient } from "@/components/verify/useMyBuilder";
 import { useWonderStatus } from "@/components/wonder/WonderBits";
-import { cancelReleaseSafeFile, nominateInput, nominateSafeFile, releaseView, usd, WONDER_ON_BUILDERS, wonderMarketsAbi } from "@/lib/wonder";
+import { cancelReleaseSafeFile, nominateInput, nominateSafeFile, releaseView, usd, waitingAmount, WONDER_ON_BUILDERS, wonderMarketsAbi } from "@/lib/wonder";
 
 const REG = BUILDERS.contracts.BuilderRegistry;
 const CARE = BUILDERS.contracts.CaretakerRegistry;
@@ -386,7 +386,7 @@ function Dashboard({
 
 function InviteLink({ invite, existed }: { invite: AdminInvite; existed: boolean }) {
   const wonder = useWonderStatus(WONDER_ON_BUILDERS ? [invite.source] : []);
-  const dm = inviteDm(invite, invite.claimLink, wonder.status[invite.source]?.escrow);
+  const dm = inviteDm(invite, invite.claimLink, waitingAmount(wonder.status[invite.source], Math.floor(Date.now() / 1000), wonder.expiry));
   return (
     <div className="adm-result">
       <p className={existed ? "vf-error" : "vf-ok"}>
@@ -614,7 +614,7 @@ function InviteRow({ inv, status, onChanged }: { inv: AdminInvite; status: Invit
       <td>
         <span className="adm-actions">
           <CopyButton text={inv.claimLink} label="link" />
-          <CopyButton text={inviteDm(inv, inv.claimLink, wonder.status[inv.source]?.escrow)} label="DM" />
+          <CopyButton text={inviteDm(inv, inv.claimLink, waitingAmount(wonder.status[inv.source], Math.floor(Date.now() / 1000), wonder.expiry))} label="DM" />
         </span>
       </td>
       <td className="tnum">
@@ -1649,7 +1649,7 @@ function WonderSection({ invites }: { invites: AdminInvite[] }) {
   }
 
   function act(on: boolean, how: "wallet" | "safe") {
-    const r = nominateInput(input, invited);
+    const r = nominateInput(input, invited, on);
     if (!r.ok) return setMsg({ error: r.error });
     if (how === "safe") {
       download(safeFileName(`${on ? "nominate" : "unnominate"}-${r.source.replace(/[^a-z0-9]+/g, "-")}`, Date.now()),

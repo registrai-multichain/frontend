@@ -3,7 +3,7 @@ import { decodeFunctionData, keccak256, toBytes, type Address, type Hex } from "
 import {
   cancelReleaseSafeFile, cancelReleaseTx, groupWonderMarkets, LABEL_COMMUNITY, LABEL_UNCLAIMED, marketLabels,
   nextHourExpiry, nominateInput, nominateSafeFile, nominateTx, releaseView, sourceKey, SUBJECT, waitingLine,
-  wonderContracts, wonderCreateCheck, wonderEscrowAbi, wonderFeedFor, wonderMarketsAbi, type WonderStatus,
+  waitingAmount, wonderContracts, wonderCreateCheck, wonderEscrowAbi, wonderFeedFor, wonderMarketsAbi, type WonderStatus,
 } from "./wonder";
 
 const MK = "0x00000000000000000000000000000000000000a1" as Address;
@@ -129,10 +129,45 @@ describe("Safe files", () => {
 describe("wonderCreateCheck", () => {
   const feed = `0x${"f1".repeat(32)}` as Hex;
   test("wonderCreateCheck requires the source's bound feed", () => {
-    expect(wonderCreateCheck({ source: SRC, feed, feedSubject: { kind: 2, sourceKey: KEY }, nominated: true })).toBeNull();
-    expect(wonderCreateCheck({ source: SRC, feed: null, feedSubject: null, nominated: true })).toMatch(/milestone feed/);
-    expect(wonderCreateCheck({ source: SRC, feed, feedSubject: { kind: 0, sourceKey: `0x${"0".repeat(64)}` as Hex }, nominated: true })).toMatch(/not bound/);
-    expect(wonderCreateCheck({ source: SRC, feed, feedSubject: { kind: 2, sourceKey: sourceKey("github:x/y") }, nominated: true })).toMatch(/not bound/);
-    expect(wonderCreateCheck({ source: SRC, feed, feedSubject: { kind: 2, sourceKey: KEY }, nominated: false })).toMatch(/not nominated/);
+    expect(wonderCreateCheck({ source: SRC, feed, feedSubject: { kind: 2, sourceKey: KEY }, nominated: true, hasReading: true })).toBeNull();
+    expect(wonderCreateCheck({ source: SRC, feed: null, feedSubject: null, nominated: true, hasReading: true })).toMatch(/milestone feed/);
+    expect(wonderCreateCheck({ source: SRC, feed, feedSubject: { kind: 0, sourceKey: `0x${"0".repeat(64)}` as Hex }, nominated: true, hasReading: true })).toMatch(/not bound/);
+    expect(wonderCreateCheck({ source: SRC, feed, feedSubject: { kind: 2, sourceKey: sourceKey("github:x/y") }, nominated: true, hasReading: true })).toMatch(/not bound/);
+    expect(wonderCreateCheck({ source: SRC, feed, feedSubject: { kind: 2, sourceKey: KEY }, nominated: false, hasReading: true })).toMatch(/not nominated/);
+  });
+});
+
+
+describe("final review fixes", () => {
+  const feed = `0x${"f1".repeat(32)}` as Hex;
+  test("no market before the feed's first reading (threshold 1 would be a sure YES)", () => {
+    expect(wonderCreateCheck({ source: SRC, feed, feedSubject: { kind: 2, sourceKey: KEY }, nominated: true, hasReading: false })).toMatch(/first reading/);
+  });
+  test("an unclaimed domain source has no feed to open markets on", () => {
+    const d = "domain:acme.dev";
+    expect(wonderCreateCheck({ source: d, feed: null, feedSubject: null, nominated: true, hasReading: false })).toMatch(/until the team claims/);
+  });
+  test("a source bound to its builder: open a builder market instead", () => {
+    expect(wonderCreateCheck({ source: SRC, feed, feedSubject: { kind: 1, sourceKey: `0x${"0".repeat(64)}` as Hex }, nominated: true, hasReading: true })).toMatch(/builder market/);
+  });
+  test("un-nominating (an opt-out) needs no live invite", () => {
+    expect(nominateInput("github:other/thing", new Set([SRC]), false)).toEqual({ ok: true, source: "github:other/thing" });
+    expect(nominateInput("github:other/thing", new Set([SRC]), true).ok).toBe(false);
+  });
+  test("the cancel-release Safe file describes itself", () => {
+    const f = cancelReleaseSafeFile({ escrow: ESC, source: SRC, chainId: 5042, createdAt: 1 });
+    expect(f.meta.description).toContain("cancelRelease(");
+    expect(f.meta.description).not.toContain("registerFor");
+  });
+  test("waitingAmount: only escrow that is actually waiting for the team", () => {
+    const base: WonderStatus = { source: SRC, key: KEY, nominated: true, escrow: 5_000_000n, releasedTo: 0, pending: null, firstCreditAt: 1000 };
+    expect(waitingAmount(base, 2000, 180 * 86400)).toBe(5_000_000n);
+    expect(waitingAmount(base, 1000 + 180 * 86400, 180 * 86400)).toBeNull();
+    expect(waitingAmount({ ...base, pending: { builderId: 7, projectId: 3, readyAt: 9e9 } }, 2000, 180 * 86400)).toBeNull();
+    expect(waitingAmount(base, 2000, null)).toBeNull();
+    expect(waitingAmount(undefined, 2000, 1)).toBeNull();
+  });
+  test("a wonder market whose binding is unknown is still labelled unclaimed", () => {
+    expect(marketLabels({ kind: SUBJECT.Wonder, builderId: 0n, sourceKey: KEY, bound: undefined, source: SRC })).toEqual([LABEL_UNCLAIMED]);
   });
 });

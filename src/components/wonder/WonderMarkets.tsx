@@ -24,11 +24,22 @@ import {
   groupWonderMarkets, nextHourExpiry, sourceKey, SUBJECT, waitingLine, wonderContracts, wonderCreateCheck,
   wonderFeedFor, wonderMarketsAbi,
 } from "@/lib/wonder";
-import { readWonderStatus, type WonderReader } from "@/lib/wonder-chain";
+import { findFeedLive, readWonderStatus, type WonderReader } from "@/lib/wonder-chain";
 
 const D = PERENNIAL;
 const W = wonderContracts(D);
-const FEEDS = (live as { builderFeeds?: { feeds?: Record<string, string> } }).builderFeeds?.feeds;
+/** The sync's snapshot of the operator's feeds (description -> feed id) and where it stopped. */
+const SNAP = (live as { builderFeeds?: { feeds?: Record<string, string>; registry?: string; operator?: string; lastScannedBlock?: string; chainId?: number } }).builderFeeds;
+const FEEDS = SNAP?.chainId === D.chain.id ? SNAP.feeds : undefined;
+
+/** The source's milestone feed: the snapshot's, else one the operator created since (live scan). */
+async function milestoneFeed(c: PublicClient, source: string): Promise<Hex | null> {
+  const known = wonderFeedFor(FEEDS, source);
+  if (known) return known;
+  if (!SNAP?.registry || !SNAP.operator || SNAP.chainId !== D.chain.id) return null;
+  const head = await c.getBlockNumber();
+  return findFeedLive(c as never, SNAP.registry as Address, SNAP.operator as Address, BigInt(SNAP.lastScannedBlock ?? "0") + 1n, head, source);
+}
 const HUMAN = { testnet: D.chain.testnet, networkName: D.label };
 
 let client: PublicClient | undefined;
@@ -119,12 +130,15 @@ function CreateWonderMarket({
     try {
       const c = pc();
       const me = address as Address;
-      const feed = wonderFeedFor(FEEDS, source);
-      const [nominated, feedSubject] = await Promise.all([
+      const feed = source.startsWith("domain:") ? null : await milestoneFeed(c, source);
+      const [nominated, feedSubject, latest] = await Promise.all([
         c.readContract({ address: W!.markets, abi: wonderMarketsAbi, functionName: "nominated", args: [sourceKey(source)] }),
         feed ? c.readContract({ address: W!.markets, abi: wonderMarketsAbi, functionName: "feedSubjectOf", args: [feed] }) : Promise.resolve(null),
+        feed ? readLatestValue(c, attestation, feed, D.operator) : Promise.resolve(null),
       ]);
-      const why = wonderCreateCheck({ source, feed, feedSubject: feedSubject as { kind: number; sourceKey: Hex } | null, nominated: nominated === true });
+      const why = wonderCreateCheck({
+        source, feed, feedSubject: feedSubject as { kind: number; sourceKey: Hex } | null, nominated: nominated === true, hasReading: latest !== null,
+      });
       if (why) return setMsg({ error: why });
       const ledger = D.contracts.NanoLedger!;
       const bal = (await c.readContract({ address: ledger, abi: nanoLedgerAbi, functionName: "balanceOf", args: [me] })) as bigint;
@@ -135,8 +149,7 @@ function CreateWonderMarket({
         const h = await walletClient.writeContract({ address: ledger, abi: nanoLedgerAbi, functionName: "approveSpender", args: [W!.markets, l.value], account: me, chain: D.chain.viemChain });
         if ((await c.waitForTransactionReceipt({ hash: h })).status !== "success") throw new Error("the approval reverted");
       }
-      const latest = await readLatestValue(c, attestation, feed!, D.operator);
-      const threshold = (latest?.value ?? 0n) + 1n;
+      const threshold = latest!.value + 1n;
       const now = Number((await c.getBlock({ blockTag: "latest" })).timestamp);
       const expiry = nextHourExpiry(now, d.value);
       const args = [source, feed!, D.operator, threshold, COMPARATOR.GreaterOrEqual, expiry, l.value] as const;

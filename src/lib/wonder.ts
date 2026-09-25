@@ -11,7 +11,7 @@
 import { encodeFunctionData, keccak256, parseAbi, toBytes, type Address, type Hex } from "viem";
 import { BUILDERS_NETWORK } from "./builders-network";
 import { perennialDeploymentFor, type PerennialDeployment } from "./perennial-network";
-import { safeBatchJson, singleTxSafeFile, type PlannedTx } from "./onboard-batch";
+import { singleTxSafeFile, type PlannedTx } from "./onboard-batch";
 import { normalizeSource, sourceLabel } from "./verified-builders";
 import { usd } from "./usd";
 
@@ -58,8 +58,9 @@ export interface MarketSubject {
   kind: number;
   builderId: bigint;
   sourceKey: Hex;
-  /** The market's feed was bound to this subject when it opened: its builder leg reaches it. */
-  bound: boolean;
+  /** The market's feed was bound to this subject when it opened: its builder leg reaches it.
+   *  undefined = unknown (its subjectOf read failed). */
+  bound: boolean | undefined;
   /** A wonder market's canonical source (from its WonderMarketCreated event). */
   source?: string;
 }
@@ -72,7 +73,7 @@ export function marketLabels(s?: MarketSubject): string[] {
   if (!s) return [];
   const out: string[] = [];
   if (s.kind === SUBJECT.Wonder) out.push(LABEL_UNCLAIMED);
-  if ((s.kind === SUBJECT.Wonder || s.kind === SUBJECT.Builder) && !s.bound) out.push(LABEL_COMMUNITY);
+  if ((s.kind === SUBJECT.Wonder || s.kind === SUBJECT.Builder) && s.bound === false) out.push(LABEL_COMMUNITY);
   return out;
 }
 
@@ -118,6 +119,13 @@ export function releaseView(
   return { state: "waiting", line: waitingLine(s.escrow) };
 }
 
+/** The escrow to advertise as "waiting for the team": only while it is actually waiting
+ *  (not expired, not queued to a builder, not released); null otherwise or unknown. */
+export function waitingAmount(s: WonderStatus | undefined, nowSec: number, expirySec: number | null): bigint | null {
+  if (!s || expirySec === null) return null;
+  return releaseView(s, nowSec, expirySec).state === "waiting" ? s.escrow : null;
+}
+
 /** Wonder markets grouped by project, busiest first. */
 export function groupWonderMarkets<T extends { source: string }>(ms: T[]): { source: string; key: Hex; markets: T[] }[] {
   const by = new Map<string, T[]>();
@@ -138,14 +146,16 @@ export function wonderFeedFor(feeds: Record<string, string> | undefined, source:
   return typeof f === "string" && /^0x[0-9a-fA-F]{64}$/.test(f) ? (f as Hex) : null;
 }
 
-/** /admin's nominate box: the canonical source, only for an invited one (spec decision 2). */
+/** /admin's nominate box: the canonical source; nominating needs an invite (spec decision 2),
+ *  un-nominating (an opt-out) never does — the invite may be gone by then. */
 export function nominateInput(
   raw: string,
   invited: ReadonlySet<string>,
+  on = true,
 ): { ok: true; source: string } | { ok: false; error: string } {
   const source = normalizeSource(raw);
   if (!source) return { ok: false, error: "Not a GitHub repo or domain." };
-  if (!invited.has(source)) return { ok: false, error: `Invite ${sourceLabel(source)} first: only invited projects are nominated.` };
+  if (on && !invited.has(source)) return { ok: false, error: `Invite ${sourceLabel(source)} first: only invited projects are nominated.` };
   return { ok: true, source };
 }
 
@@ -178,7 +188,7 @@ export function nominateSafeFile(o: { markets: Address; source: string; on: bool
 }
 
 export function cancelReleaseSafeFile(o: { escrow: Address; source: string; chainId: number; createdAt: number }) {
-  return safeBatchJson([cancelReleaseTx(o.escrow, sourceKey(o.source), o.source)], {
+  return singleTxSafeFile(cancelReleaseTx(o.escrow, sourceKey(o.source), o.source), {
     chainId: o.chainId,
     createdAt: o.createdAt,
     name: `Registrai: cancel the wonder release of ${o.source}`,
@@ -191,11 +201,18 @@ export function wonderCreateCheck(o: {
   feed: Hex | null;
   feedSubject: { kind: number; sourceKey: Hex } | null;
   nominated: boolean;
+  /** The feed has a first attested reading (else threshold = 1 would be a sure YES). */
+  hasReading: boolean;
 }): string | null {
   if (!o.nominated) return `${sourceLabel(o.source)} is not nominated: wonder markets open only on nominated projects.`;
+  if (o.source.startsWith("domain:")) {
+    return `${sourceLabel(o.source)} is a domain: its milestones are counted from its deployers, which nobody knows until the team claims it.`;
+  }
   if (!o.feed) return `${sourceLabel(o.source)} has no milestone feed yet: the keeper provisions it within about 10 minutes of the nomination.`;
+  if (o.feedSubject?.kind === SUBJECT.Builder) return `${sourceLabel(o.source)} has joined Registrai: open a builder market for it instead.`;
   if (!o.feedSubject || o.feedSubject.kind !== SUBJECT.Wonder || o.feedSubject.sourceKey.toLowerCase() !== sourceKey(o.source).toLowerCase()) {
     return "This feed is not bound to the project yet: its fees would go to the season pool, not the team. Try again after the keeper's next check.";
   }
+  if (!o.hasReading) return "Waiting for the milestone agent's first reading of this feed: a market needs it to set its threshold.";
   return null;
 }

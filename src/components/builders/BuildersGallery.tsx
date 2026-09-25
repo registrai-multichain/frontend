@@ -1,7 +1,7 @@
 "use client";
 
 import { useWonderStatus } from "@/components/wonder/WonderBits";
-import { waitingLine } from "@/lib/wonder";
+import { waitingAmount, waitingLine } from "@/lib/wonder";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -529,7 +529,7 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
           ) : (
             <ul className="bld-grid">
               {shown.map((e) => (
-                <BuilderCard key={e.key} e={e} highlighted={Boolean(target && e.builder?.id === target)} waiting={e.source ? wonder.status[e.source]?.escrow : undefined} />
+                <BuilderCard key={e.key} e={e} highlighted={Boolean(target && e.builder?.id === target)} waiting={e.source ? waitingAmount(wonder.status[e.source], Math.floor(Date.now() / 1000), wonder.expiry) ?? undefined : undefined} />
               ))}
             </ul>
           )}

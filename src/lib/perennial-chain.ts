@@ -16,7 +16,7 @@ import live from "./live-data.json";
 import { PERENNIAL_BUILDERS } from "./perennial";
 import { blockChunks } from "./perennial-market";
 import { SNAPSHOT_MATCHES_NETWORK, type PerennialDeployment } from "./perennial-network";
-import { wonderContracts, wonderMarketsAbi, type MarketSubject } from "./wonder";
+import { sourceKey, SUBJECT, wonderContracts, wonderMarketsAbi, type MarketSubject } from "./wonder";
 import { readMarketSubjects } from "./wonder-chain";
 import { isRevert, readFeeModel, readMarketSettlement } from "./market-fees-chain";
 import { snapshotBadgeFor, snapshotBuilders, snapshotRowFor, verificationFor, type Verification } from "./builder-verification";
@@ -49,7 +49,7 @@ const WONDER_CREATED = wonderMarketsAbi.find((e) => e.type === "event" && e.name
 // ───────────────────────────── discovery ─────────────────────────────
 
 /** `wonder`: market id (lowercase) -> source, for the wonder markets found. */
-type DiscoveryCache = { ids: string[]; scannedTo: string; wonder?: Record<string, string> };
+type DiscoveryCache = { ids: string[]; scannedTo: string; wonder?: Record<string, string>; wonderScannedTo?: string };
 
 const cacheKey = (d: PerennialDeployment) =>
   `perennial:markets:v1:${d.chain.id}:${(d.contracts.MarketsPerennial ?? "").toLowerCase()}`;
@@ -148,11 +148,7 @@ export async function discoverMarkets(
   for (let i = 0; i < chunks.length && !failed; i += 2) {
     const pair = chunks.slice(i, i + 2);
     const res = await Promise.allSettled(
-      pair.map(([a, b]) =>
-        wonderOn
-          ? client.getLogs({ address: mp, events: [MARKET_CREATED, WONDER_CREATED] as never, fromBlock: a, toBlock: b })
-          : client.getLogs({ address: mp, event: MARKET_CREATED as never, fromBlock: a, toBlock: b }),
-      ),
+      pair.map(([a, b]) => client.getLogs({ address: mp, event: MARKET_CREATED as never, fromBlock: a, toBlock: b })),
     );
     for (let j = 0; j < res.length; j++) {
       const r = res[j];
@@ -160,16 +156,39 @@ export async function discoverMarkets(
       for (const lg of r.value as Log[]) {
         const id = lg.topics[1];
         if (id) ids.add(id.toLowerCase());
-        const ev = lg as unknown as { eventName?: string; args?: { source?: string } };
-        if (id && ev.eventName === "WonderMarketCreated" && typeof ev.args?.source === "string") {
-          wonderSources[id.toLowerCase()] = ev.args.source;
-        }
       }
       scannedTo = pair[j][1];
     }
   }
-  const out = { ids: [...ids] as Hex[], scannedTo, partial: scannedTo < head, wonderSources };
-  if (typeof window !== "undefined") writeCache(d, { ids: out.ids, scannedTo: scannedTo.toString(), wonder: wonderSources });
+  // Wonder markets: their own scan from the deploy block (the build-time snapshot's
+  // seed only holds MarketCreated ids, so its cursor would skip older wonder markets).
+  let wonderScannedTo = cache?.wonderScannedTo ? BigInt(cache.wonderScannedTo) : d.deployBlock ? d.deployBlock - 1n : from;
+  let wonderPartial = false;
+  if (wonderOn) {
+    const wchunks = blockChunks(wonderScannedTo + 1n, head).slice(0, budgetChunks);
+    for (const [a, b] of wchunks) {
+      let logs: Log[];
+      try {
+        logs = (await client.getLogs({ address: mp, event: WONDER_CREATED as never, fromBlock: a, toBlock: b })) as Log[];
+      } catch {
+        break;
+      }
+      for (const lg of logs) {
+        const id = lg.topics[1];
+        const src = (lg as unknown as { args?: { source?: string } }).args?.source;
+        if (id && typeof src === "string") {
+          ids.add(id.toLowerCase());
+          wonderSources[id.toLowerCase()] = src;
+        }
+      }
+      wonderScannedTo = b;
+    }
+    wonderPartial = wonderScannedTo < head;
+  }
+  const out = { ids: [...ids] as Hex[], scannedTo, partial: scannedTo < head || wonderPartial, wonderSources };
+  if (typeof window !== "undefined") {
+    writeCache(d, { ids: out.ids, scannedTo: scannedTo.toString(), wonder: wonderSources, wonderScannedTo: wonderScannedTo.toString() });
+  }
   return out;
 }
 
@@ -327,7 +346,11 @@ export async function readOverview(client: PublicClient, d: PerennialDeployment)
     return { ...m, id, comparator: Number(m.comparator), phase: Number(m.phase), seeded, lpPot } as ChainMarket;
   });
   let markets = raws.filter((m) => m.createdAt > 0n);
-  const subjects = await subjectsFor(client, d, markets.map((m) => m.id), discovery.wonderSources);
+  const subjects = withWonderFallback(
+    await subjectsFor(client, d, markets.map((m) => m.id), discovery.wonderSources),
+    markets.map((m) => m.id),
+    discovery.wonderSources,
+  );
   for (const m of markets) m.subject = subjects[m.id.toLowerCase()];
 
   // v3 accounting: the pot and agent escrow while unsettled, the void snapshot
@@ -491,4 +514,20 @@ export async function subjectsFor(
 ): Promise<Record<string, MarketSubject>> {
   const w = wonderContracts(d);
   return w ? readMarketSubjects(client as never, w.markets, ids, wonderSources) : {};
+}
+
+/** A market known to be a wonder market (WonderMarketCreated) whose subjectOf read failed
+ *  keeps its wonder subject (so its "Unclaimed" disclosure), binding unknown. */
+export function withWonderFallback(
+  subjects: Record<string, MarketSubject>,
+  ids: Hex[],
+  wonderSources: Record<string, string>,
+): Record<string, MarketSubject> {
+  const out = { ...subjects };
+  for (const id of ids) {
+    const k = id.toLowerCase();
+    const src = wonderSources[k];
+    if (!out[k] && src) out[k] = { kind: SUBJECT.Wonder, builderId: 0n, sourceKey: sourceKey(src), bound: undefined, source: src };
+  }
+  return out;
 }
