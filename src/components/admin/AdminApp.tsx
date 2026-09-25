@@ -867,15 +867,16 @@ function OnboardingSection({
       ) : (
         <>
           <p className="vf-note">
-            Builders with at least one project proof this browser just validated (onboarding is per builder, not per
-            project): pending ones get <code>setCaretaker(id, operator)</code>
+            Builders with at least one project proof validated just now (read through the builders site&apos;s proof
+            check; onboarding is per builder, not per project), never a deactivated or revoked one: pending ones get{" "}
+            <code>setCaretaker(id, operator)</code>
             {badge ? (
               <>
                 {" "}then <code>issue(id)</code>, and verified builders without a badge get <code>issue(id)</code>
               </>
             ) : null}
-            . The same rules as <code>scripts/onboard-batch.ts</code>: an onboarder wallet sends them from here, or the
-            Safe signs the batch file.
+            . The same rules as <code>scripts/onboard-batch.ts</code>: an onboarder wallet sends them from here (each
+            builder&apos;s proofs are re-checked right before its first transaction), or the Safe signs the batch file.
           </p>
           {queue.included.length > 0 && direct}
           {queue.included.length > 0 && gate.ok && (
