@@ -131,3 +131,28 @@ describe("readRevokedBuilders", () => {
     expect(blockRanges(5n, 4n, 5n)).toEqual([]);
   });
 });
+
+describe("readRevokedBuilders pacing (the admin page, Arc mainnet rate limit)", () => {
+  test("parallel: 1 never has more than one range (two getLogs) in flight", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const client: LogReader = {
+      getBlockNumber: async () => 30_000n,
+      getLogs: async () => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((r) => setTimeout(r, 2));
+        inFlight--;
+        return [];
+      },
+    };
+    const r = await readRevokedBuilders(client, { badge: BADGE, registry: REG, fromBlock: 0n, parallel: 1 });
+    expect(r.ok).toBe(true);
+    expect(peak).toBe(2);
+  });
+  test("the admin page reads one range at a time", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(new URL("../components/admin/AdminApp.tsx", import.meta.url), "utf8");
+    expect(src).toMatch(/readRevokedBuilders\(buildersClient\(\)[\s\S]{0,400}?parallel: 1,/);
+  });
+});

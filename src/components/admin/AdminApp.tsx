@@ -304,9 +304,12 @@ function Dashboard({
     if (invites.error instanceof SignedOut) onSignedOut();
   }, [invites.error, onSignedOut]);
 
+  // A rate-limited read is retried a few times with a pause instead of leaving
+  // every section on "Could not read" until "Re-read chain" is clicked.
   const chain = useSWR(REG ? ["admin-chain", BUILDERS.chainId, REG] : null, readChain, {
     revalidateOnFocus: false,
-    shouldRetryOnError: false,
+    errorRetryCount: 4,
+    errorRetryInterval: 8_000,
   });
 
   /** The gallery's name rule (builderName), with the admin's invite names as the curated names. */
@@ -937,6 +940,9 @@ function OnboardingSection({
         fromBlock: BUILDERS.deployBlock ?? 0n,
         prior: bestRevocationCheckpoint(revocationCheckpoint, want),
         maxChunks: 400,
+        // One range at a time: Arc mainnet's RPC rate-limits bursts of getLogs
+        // ("Request exceeds defined limit"), which also starved the page's other reads.
+        parallel: 1,
       });
       if (r.ok) saveRevocationCheckpoint(r.checkpoint);
       return r;
