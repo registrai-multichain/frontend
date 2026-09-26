@@ -311,7 +311,7 @@ export function Transparency() {
             label="Roles as deployed"
             value={diffs === null ? dash : diffs.length === 0 ? `✓ ${roleCount} of ${roleCount}` : `${diffs.length} changed`}
             tone={diffs === null ? undefined : diffs.length === 0 ? "up" : "down"}
-            sub="checked live on 3 contracts"
+            sub={`checked live on ${CONTRACTS.filter((x) => ROLES[x.key].length > 0).length} contracts`}
           />
           <Stat label="Proof re-check" value="10 min" sub="the keeper re-checks every builder's proof and marks badges to match" />
         </div>
@@ -381,8 +381,9 @@ export function Transparency() {
       <section className="pa-stack" aria-labelledby="t-contracts">
         <h2 id="t-contracts" className="pa-h2">Contracts</h2>
         <p className="pa-muted">
-          Deployed {DEPLOY.date} at block {DEPLOY.block.toLocaleString("en-US")}, source verified on the explorer. Market contracts go
-          live on {BUILDERS.label} after their audit.
+          The builder registries and badge were deployed {DEPLOY.date} at block {DEPLOY.block.toLocaleString("en-US")}, audited and
+          source verified on the explorer. The NanoLedger, the REGI buyback and its splitter were deployed 2026-09-27 after an
+          internal review (report on request); an external audit is still to come. Market contracts go live on {BUILDERS.label} later.
         </p>
         <div className="pa-grid">
           {CONTRACTS.map((ct) => (

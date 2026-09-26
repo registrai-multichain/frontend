@@ -15,8 +15,25 @@ describe("transparency (app.registrai.cc/transparency)", () => {
     }
   });
 
+  test("mainnet 2026-09-27: the buyback, its splitter and the shared NanoLedger are wired in", () => {
+    expect(BUYBACK.contract).toBe("0xE6D5d4C4b8c0b3ea271c9C48De61D0cDD38Bb7e0");
+    expect(BUYBACK.splitter).toBe("0xd8Dc4Ca674de4571E33040EEb14D487D2Bc37Df7");
+    expect(BUYBACK.ledger).toBe("0x82CC64bc010Bc244E63654817202B5330f1Ac112");
+    expect(BUYBACK.deployBlock).toBe(22932186n);
+    const byKey = Object.fromEntries(CONTRACTS.map((c) => [c.key, c]));
+    expect(byKey.ledger.address).toBe(BUYBACK.ledger);
+    expect(byKey.buyback.address).toBe(BUYBACK.contract);
+    expect(byKey.splitter.address).toBe(BUYBACK.splitter);
+    for (const k of ["ledger", "buyback", "splitter"]) expect(byKey[k].audit).toBe("internally reviewed");
+    expect(ROLES.ledger.map((r) => r.name)).toEqual(["DEFAULT_ADMIN_ROLE", "GOVERNOR_ROLE"]);
+    expect(EXPECTED_ROLES["ledger:DEFAULT_ADMIN_ROLE"]).toEqual(["safe"]);
+    expect(EXPECTED_ROLES["ledger:GOVERNOR_ROLE"]).toEqual(["safe"]);
+    expect(ROLES.buyback).toEqual([]); // no roles: no owner
+    expect(ROLES.splitter).toEqual([]); // the Safe is fixed in the contract
+  });
+
   test("the three phase-1 contracts, with their role names (DEFAULT_ADMIN first)", () => {
-    expect(CONTRACTS.map((c) => c.address)).toEqual([
+    expect(CONTRACTS.slice(0, 3).map((c) => c.address)).toEqual([
       deployment.builders.BuilderRegistry, deployment.builders.CaretakerRegistry, deployment.builders.VerifiedBuilderBadge,
     ]);
     expect(ROLES.registry.map((r) => r.name)).toEqual(["DEFAULT_ADMIN_ROLE", "REGISTRAR_ROLE"]);

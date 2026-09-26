@@ -50,7 +50,7 @@ const byAddress = new Map(WALLETS.map((w) => [w.address.toLowerCase(), w]));
 /** A known wallet's name, else a short address. */
 export const holderLabel = (address: string) => byAddress.get(address.toLowerCase())?.label ?? shortHex(address);
 
-export type ContractKey = "registry" | "caretakers" | "badge";
+export type ContractKey = "registry" | "caretakers" | "badge" | "ledger" | "buyback" | "splitter";
 export interface ContractInfo { key: ContractKey; name: string; address: Address; what: string; audit: string }
 
 export const CONTRACTS: ContractInfo[] = [
@@ -60,6 +60,13 @@ export const CONTRACTS: ContractInfo[] = [
     what: "Which keeper looks after each builder's milestones." },
   { key: "badge", name: "VerifiedBuilderBadge", address: B.VerifiedBuilderBadge, audit: "audited",
     what: "The soulbound Verified Builder Badge: one per builder, numbered in the order they were verified." },
+  // Deployed 2026-09-27 (block 22932186 for the buyback pair), ahead of the markets stack.
+  { key: "ledger", name: "NanoLedger", address: "0x82CC64bc010Bc244E63654817202B5330f1Ac112", audit: "internally reviewed",
+    what: "The shared USDC ledger: balances move as accounting and real USDC only crosses at deposit and withdraw. Nobody, the Safe included, can move or freeze a balance." },
+  { key: "buyback", name: "RegiBuyback", address: "0xE6D5d4C4b8c0b3ea271c9C48De61D0cDD38Bb7e0", audit: "internally reviewed",
+    what: "Spends every USDC it holds on REGI and burns it: rounds of 4 × $50, 10 minutes apart, anyone can press. No owner, no withdraw." },
+  { key: "splitter", name: "RegiFeeSplitter", address: "0xd8Dc4Ca674de4571E33040EEb14D487D2Bc37Df7", audit: "internally reviewed",
+    what: "The treasury address: 40% of income to the buyback (fixed), 60% recorded for the Safe to collect. The Safe can redirect the 40% only with 7 days' public notice." },
 ];
 export const DEPLOY = { block: B.deployBlock, date: B.deployedAt };
 
@@ -71,6 +78,12 @@ const role = (name: string, what: string) => ({
 export const ROLES: Record<ContractKey, { name: string; hash: Hex; what: string }[]> = {
   registry: [role("DEFAULT_ADMIN_ROLE", "grants and removes roles"), role("REGISTRAR_ROLE", "registers builders and adds projects for them")],
   caretakers: [role("DEFAULT_ADMIN_ROLE", "grants and removes roles"), role("GOVERNOR_ROLE", "links a builder to its keeper")],
+  ledger: [
+    role("DEFAULT_ADMIN_ROLE", "grants and removes roles"),
+    role("GOVERNOR_ROLE", "registers pool sources and skims USDC above what the ledger owes"),
+  ],
+  buyback: [],
+  splitter: [],
   badge: [
     role("DEFAULT_ADMIN_ROLE", "grants and removes roles"),
     role("ISSUER_ROLE", "issues a badge"),
@@ -105,14 +118,14 @@ export const FEE_SPLITS = [
 
 export const BUYBACK = {
   /** RegiBuyback on mainnet; null until it deploys with common markets (the button stays hidden). */
-  contract: null as Address | null,
+  contract: "0xE6D5d4C4b8c0b3ea271c9C48De61D0cDD38Bb7e0" as Address | null,
   /** RegiFeeSplitter (MarketsV4's TREASURY); null until deployed. */
-  splitter: null as Address | null,
+  splitter: "0xd8Dc4Ca674de4571E33040EEb14D487D2Bc37Df7" as Address | null,
   /** The shared NanoLedger: common markets pay the splitter there, so its pending income is
    *  ledger balance + USDC. Null until mainnet markets deploy. */
-  ledger: null as Address | null,
+  ledger: "0x82CC64bc010Bc244E63654817202B5330f1Ac112" as Address | null,
   /** First block to scan for Burned events; null until deployed. */
-  deployBlock: null as bigint | null,
+  deployBlock: 22932186n as bigint | null,
   triggerUsdc: 200,
   chunkUsdc: 50,
   chunks: 4,
@@ -143,6 +156,8 @@ export const EXPECTED_ROLES: Record<string, WalletKey[]> = {
   "badge:ISSUER_ROLE": ["safe", "onboarder"],
   "badge:STATUS_ROLE": ["operator"],
   "badge:REVOKER_ROLE": ["safe"],
+  "ledger:DEFAULT_ADMIN_ROLE": ["safe"],
+  "ledger:GOVERNOR_ROLE": ["safe"],
 };
 
 const roleWords = (name: string) => name.replace(/_ROLE$/, "").replace(/_/g, " ").toLowerCase();
