@@ -4,6 +4,7 @@ import {
   cashOutValue,
   niceTicks,
   pnl,
+  poolPrices,
   replayPool,
   resample,
   sellQuote,
@@ -35,6 +36,12 @@ function buy(r: { yes: bigint; no: bigint }, outcome: number, collateral: bigint
 }
 
 describe("pool replay", () => {
+  test("poolPrices mirrors priceOf (floored, 1e18)", () => {
+    expect(poolPrices({ yes: 5n * U, no: 5n * U })).toEqual({ yesPrice: 5n * 10n ** 17n, noPrice: 5n * 10n ** 17n });
+    expect(poolPrices({ yes: 3n, no: 1n })).toEqual({ yesPrice: 250_000_000_000_000_000n, noPrice: 750_000_000_000_000_000n });
+    expect(poolPrices({ yes: 0n, no: 0n })).toEqual({ yesPrice: 0n, noPrice: 0n });
+  });
+
   test("a fresh pool is 50/50", () => {
     expect(upProbability({ yes: 5n * U, no: 5n * U })).toBe(0.5);
   });

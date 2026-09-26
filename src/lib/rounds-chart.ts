@@ -26,6 +26,13 @@ export interface Trade {
   fee: bigint;
 }
 
+/** priceOf(Yes) and priceOf(No), 1e18-scaled, exactly as MarketsV4 computes them. */
+export function poolPrices(r: Reserves): { yesPrice: bigint; noPrice: bigint } {
+  const total = r.yes + r.no;
+  if (total === 0n) return { yesPrice: 0n, noPrice: 0n };
+  return { yesPrice: (r.no * 10n ** 18n) / total, noPrice: (r.yes * 10n ** 18n) / total };
+}
+
 /** Up's implied probability (0..1): priceOf(Yes) = no / (yes + no). */
 export function upProbability(r: Reserves): number {
   const total = r.yes + r.no;

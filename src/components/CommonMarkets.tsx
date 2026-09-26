@@ -80,7 +80,7 @@ import {
   type RoundMarket,
   type RoundStatus,
 } from "@/lib/rounds";
-import { cashOutValue, pnl, replayPool, type Trade } from "@/lib/rounds-chart";
+import { cashOutValue, pnl, poolPrices, replayPool, type Trade } from "@/lib/rounds-chart";
 import { OddsChart, PriceChart, usePriceStream, type PriceStream } from "./RoundCharts";
 import { ROUNDS_TABS, parseRoundsTab, type RoundsTab } from "@/lib/perennial-view";
 import {
@@ -119,6 +119,8 @@ const SOLD = parseAbiItem(
 );
 
 const SLIPPAGES = [50n, 100n, 200n] as const; // bps
+/** Multicall3 at its canonical address (deployed on Arc testnet and mainnet). */
+const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11" as Address;
 const fmt = (v: bigint, dp = 2) => formatUsdc(v, dp);
 const cents = (p: bigint) => `${Math.round(impliedPct(p))}¢`;
 
@@ -391,6 +393,77 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
   return { snap, loadError, refresh };
 }
 
+/**
+ * The live lane: the pools people can trade right now (rounds taking bets, open
+ * event markets), re-read every second in one batched request. Buttons, share
+ * quotes, odds and position values follow every trade within about a second,
+ * while the full refresh (discovery, readings, claims) keeps its slower pace.
+ */
+type LivePool = { yesReserve: bigint; noReserve: bigint; phase: number; at: number };
+function useLivePools(client: PublicClient, ids: readonly Hex[]) {
+  const [pools, setPools] = useState<Record<string, LivePool>>({});
+  const key = ids.join(",");
+  useEffect(() => {
+    if (!ids.length) return;
+    let alive = true;
+    let busy = false;
+    const read = async () => {
+      if (busy || (typeof document !== "undefined" && document.hidden)) return;
+      busy = true;
+      try {
+        // One eth_call for every pool, whatever their number.
+        const rows = (await client.multicall({
+          contracts: ids.map((id) => ({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "getMarket" as const, args: [id] as const })),
+          allowFailure: false,
+          multicallAddress: MULTICALL3,
+        })) as unknown as Array<{ yesReserve: bigint; noReserve: bigint; phase: number }>;
+        if (!alive) return;
+        const at = Date.now() / 1000;
+        setPools((prev) => {
+          const next = { ...prev };
+          ids.forEach((id, i) => {
+            const m = rows[i];
+            const old = prev[id];
+            // Keep the object identity when nothing moved: no re-render for a quiet pool.
+            if (old && old.yesReserve === m.yesReserve && old.noReserve === m.noReserve && old.phase === Number(m.phase)) {
+              next[id] = { ...old, at };
+            } else {
+              next[id] = { yesReserve: m.yesReserve, noReserve: m.noReserve, phase: Number(m.phase), at };
+            }
+          });
+          return next;
+        });
+      } catch {
+        /* next second */
+      } finally {
+        busy = false;
+      }
+    };
+    void read();
+    const t = setInterval(() => void read(), 1_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, key]);
+  return pools;
+}
+
+/** The snapshot with the live lane's newer pool reads laid over it. */
+function withLivePools(snap: Snapshot | undefined, pools: Record<string, LivePool>): Snapshot | undefined {
+  if (!snap) return snap;
+  let state: Record<string, MarketState> | undefined;
+  for (const [id, p] of Object.entries(pools)) {
+    const cur = snap.state[id];
+    if (!cur || p.at <= snap.readAt) continue;
+    if (cur.yesReserve === p.yesReserve && cur.noReserve === p.noReserve && cur.phase === p.phase) continue;
+    state ??= { ...snap.state };
+    state[id] = { ...cur, yesReserve: p.yesReserve, noReserve: p.noReserve, phase: p.phase, ...poolPrices({ yes: p.yesReserve, no: p.noReserve }) };
+  }
+  return state ? { ...snap, state } : snap;
+}
+
 /** The price each in-play round started at: Coinbase's 1-minute close ending at
  *  the round's start (what the agent reads), fetched once per round. */
 function useStartPrices(rounds: Array<{ asset: AssetMeta; start: number }>) {
@@ -610,10 +683,17 @@ const SessionCtx = createContext<Session | undefined>(undefined);
 export function CommonMarkets() {
   const { address, walletChainId, connect, switchChain } = useWallet();
   const client = useMemo(
-    () => createPublicClient({ chain: CHAIN.viemChain, transport: transportFor(CHAIN, { batch: true }) }) as PublicClient,
+    () =>
+      // Reads in the same tick go out as ONE Multicall3 eth_call (the official RPC
+      // rate-limits per IP; a refresh is dozens of reads).
+      createPublicClient({
+        chain: { ...CHAIN.viemChain, contracts: { ...CHAIN.viemChain.contracts, multicall3: { address: MULTICALL3 } } },
+        transport: transportFor(CHAIN, { batch: true }),
+        batch: { multicall: { wait: 16 } },
+      }) as PublicClient,
     [],
   );
-  const { snap, loadError, refresh } = useRoundsData(client, address);
+  const { snap: fullSnap, loadError, refresh } = useRoundsData(client, address);
   const stream = usePriceStream(useMemo(() => D.assets.map((a) => a.product), []));
   const tx = useTx(client, refresh);
   const session = useSession(client, address, tx);
@@ -625,14 +705,16 @@ export function CommonMarkets() {
     const id = setInterval(() => setClientNow(Date.now() / 1000), 250);
     return () => clearInterval(id);
   }, []);
-  const skew = snap ? snap.chainNow - snap.readAt : 0;
+  const skew = fullSnap ? fullSnap.chainNow - fullSnap.readAt : 0;
   const now = clientNow ? clientNow + skew : 0;
 
   // Chain state every 5 s, and right after each round boundary (the agent opens
   // the new round a few seconds after it, so look again shortly after).
   useEffect(() => {
     void refresh();
-    const id = setInterval(() => void refresh(), 3_000); // pool odds and position values stay live
+    // The live lane (useLivePools) keeps prices, odds and positions current every
+    // second; the full read (discovery, readings, holdings, claims) runs every 10 s.
+    const id = setInterval(() => void refresh(), 10_000);
     return () => clearInterval(id);
   }, [refresh]);
   const boundary = now ? Math.floor(now / D.roundSecs) : 0;
@@ -655,13 +737,26 @@ export function CommonMarkets() {
   const [open, setOpen] = useState<{ id: string; side: "yes" | "no"; mode: "buy" | "sell" }>();
 
   const groups = useMemo(() => {
-    if (!snap) return undefined;
+    if (!fullSnap) return undefined;
     const phases: Record<string, number> = {};
-    for (const [id, s] of Object.entries(snap.state)) phases[id] = s.phase;
-    return groupRounds(snap.markets, D.assets.map((a) => a.key), now || snap.chainNow, phases);
+    for (const [id, s] of Object.entries(fullSnap.state)) phases[id] = s.phase;
+    return groupRounds(fullSnap.markets, D.assets.map((a) => a.key), now || fullSnap.chainNow, phases);
     // Regroup on each read and at each boundary, not every clock tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snap, boundary]);
+  }, [fullSnap, boundary]);
+
+  // The live lane: pools people can trade now, re-read every second.
+  const liveIds = useMemo(() => {
+    const ids = new Set<Hex>();
+    for (const g of Object.values(groups ?? {})) if (g.current) ids.add(g.current.marketId);
+    for (const id of Object.values(fullSnap?.eventMarkets ?? {})) {
+      const ph = fullSnap?.state[id]?.phase;
+      if (ph === undefined || ph === PHASE.Trading) ids.add(id);
+    }
+    return [...ids].sort();
+  }, [groups, fullSnap]);
+  const livePools = useLivePools(client, liveIds);
+  const snap = useMemo(() => withLivePools(fullSnap, livePools), [fullSnap, livePools]);
 
   // Betting on the next round closes at the next boundary.
   const roundEnd = now ? nextBoundary(now) : 0;
@@ -1212,13 +1307,25 @@ function Position({ hold, value, valueLabel = "Value now" }: { hold: Holding; va
 }
 
 function SideButton({ label, tone, active, onClick }: { label: string; tone: "up" | "down"; active: boolean; onClick: () => void }) {
+  // A price that just moved flashes once, so a live change is noticed.
+  const ref = useRef<HTMLButtonElement>(null);
+  const last = useRef(label);
+  useEffect(() => {
+    if (last.current !== label && ref.current?.animate) {
+      ref.current.animate([{ boxShadow: "0 0 0 3px color-mix(in srgb, currentColor 35%, transparent)" }, { boxShadow: "0 0 0 0 transparent" }], {
+        duration: 700,
+        easing: "ease-out",
+      });
+    }
+    last.current = label;
+  }, [label]);
   const on = tone === "up" ? "bg-up text-bg-elev border-up" : "bg-down text-bg-elev border-down";
   const off =
     tone === "up"
       ? "border-[color-mix(in_srgb,var(--up)_45%,transparent)] bg-[color-mix(in_srgb,var(--up)_9%,transparent)] text-up hover:bg-[color-mix(in_srgb,var(--up)_18%,transparent)]"
       : "border-[color-mix(in_srgb,var(--down)_45%,transparent)] bg-[color-mix(in_srgb,var(--down)_9%,transparent)] text-down hover:bg-[color-mix(in_srgb,var(--down)_18%,transparent)]";
   return (
-    <button onClick={onClick} aria-pressed={active} className={`tnum w-full border px-3 py-2.5 text-[14px] font-medium transition-colors ${active ? on : off}`}>
+    <button ref={ref} onClick={onClick} aria-pressed={active} className={`tnum w-full border px-3 py-2.5 text-[14px] font-medium transition-colors ${active ? on : off}`}>
       {label}
     </button>
   );
