@@ -1518,7 +1518,7 @@ function EventMarkets({
         Longer questions on a curated feed. The team records the outcome with evidence when it happens; the market
         settles on the feed&apos;s reading at the deadline.
       </p>
-      <div className="space-y-px">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((e) => (
           <EventCard key={e.key} ev={e} snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={canTrade} address={address} />
         ))}
@@ -1590,10 +1590,10 @@ function EventCard({
             : undefined;
 
   return (
-    <article className="rounded-xl border border-line bg-bg-elev p-4 sm:p-5">
+    <article className="flex min-w-0 flex-col rounded-xl border border-line bg-bg-elev p-4">
       {ev.rehearsal && <div className="mb-2 text-[13px] text-accent">Testnet rehearsal of the settlement flow, short-dated.</div>}
-      <h3 className="max-w-[40ch] font-serif text-[22px] leading-snug">{ev.question}</h3>
-      <dl className="mt-3 grid gap-x-6 gap-y-2 text-[13px] text-fg-dim sm:grid-cols-3">
+      <h3 className="font-serif text-[21px] leading-snug">{ev.question}</h3>
+      <dl className="mt-3 grid gap-y-2 text-[13px] text-fg-dim">
         <div>
           <dt>Deadline</dt>
           <dd className="tnum text-[13px] text-fg-mute">
