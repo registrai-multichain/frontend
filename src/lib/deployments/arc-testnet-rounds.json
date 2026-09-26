@@ -307,6 +307,58 @@
     "zec-usd:5m-9": {
       "feedId": "0xa6b0ef02ca330b814cf88f5f01fbeffc6774b7eef5084b976533454ff753f3b7",
       "disputeWindow": 600
+    },
+    "hype-usd:5m-0": {
+      "feedId": "0xc150b206e3b852d2640a456f1a7572563c310caaece851a6cf580ea495f77766",
+      "disputeWindow": 600
+    },
+    "hype-usd:5m-1": {
+      "feedId": "0x7d5f1e3f50e136e5d025534dafa983c20b704137d7562d7b09070047947a8708",
+      "disputeWindow": 600
+    },
+    "hype-usd:5m-2": {
+      "feedId": "0x106b60dcbc0172e76f93098fa8c35c03daba39f33b7ad8dc873940743515007d",
+      "disputeWindow": 600
+    },
+    "hype-usd:5m-3": {
+      "feedId": "0x34790b1a902ecadbc9c2d5d8090db6b873837b24be3d9b7982e507dda81ff31d",
+      "disputeWindow": 600
+    },
+    "hype-usd:5m-4": {
+      "feedId": "0x8fd10afc63240700b12f24d873d6a41bbaf1b89bd8f5ad5511495afaff2d6287",
+      "disputeWindow": 600
+    },
+    "hype-usd:5m-5": {
+      "feedId": "0x53b09b29a0b84320bbd31b39b5527a6133c9757684240f6735a784d319fcd4ab",
+      "disputeWindow": 600
+    },
+    "hype-usd:5m-6": {
+      "feedId": "0x1d3f4c673b40175c8c194ecf799d84eff83af1cf11020f0c713363204ee0e517",
+      "disputeWindow": 600
+    },
+    "hype-usd:5m-7": {
+      "feedId": "0x908e3523193f75fa6f1f8786bd68d4b6c68a728d4fd95f9253c7d08c878da506",
+      "disputeWindow": 600
+    },
+    "hype-usd:5m-8": {
+      "feedId": "0x5cdf40589a7f61b662be205b7149aa8b22e695f64c99c1d2856401f5f32ee90d",
+      "disputeWindow": 600
+    },
+    "hype-usd:5m-9": {
+      "feedId": "0xab66608a2d9a77c42f575eb8f058ba19e58792866a07f592a8f238abb1113701",
+      "disputeWindow": 600
+    },
+    "hype-usd:5m-10": {
+      "feedId": "0x33fed8c2285fd93b89beb1a3a5f473d7af15c50eeb67b15e41b7e9ba9302bd85",
+      "disputeWindow": 600
+    },
+    "hype-usd:5m-11": {
+      "feedId": "0xce3e837d70361d468deb0207a121521a99f698de6e92e77606c8fd02bf333589",
+      "disputeWindow": 600
+    },
+    "hype-usd:5m-12": {
+      "feedId": "0xde30fa6604e1610ebf1bf3f8ccc15570db6129a621c5608ddffbc0d3dcf8a91a",
+      "disputeWindow": 600
     }
   }
 }
