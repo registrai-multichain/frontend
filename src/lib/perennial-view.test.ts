@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
-  MARKET_TABS, holdingLabel, tradeAmountOpts, isEnded, marketsForTab, parseMarketParam, parseSide, parseTab, potOf, ticketState,
+  MARKET_TABS, ROUNDS_TABS, holdingLabel, parseRoundsTab, tradeAmountOpts, isEnded, marketsForTab, parseMarketParam, parseSide, parseTab, potOf, ticketState,
   topBuilder, yesPct, type TicketInput,
 } from "./perennial-view";
 
@@ -134,5 +134,16 @@ describe("review fixes", () => {
     expect(tradeAmountOpts("buy", undefined, 9n)).toEqual({ label: "amount" });
     expect(tradeAmountOpts("buy", 5n, 9n)).toEqual({ max: 5n, label: "amount" });
     expect(tradeAmountOpts("sell", undefined, 9n)).toEqual({ max: 9n, label: "share amount" });
+  });
+});
+
+describe("rounds categories", () => {
+  test("Price and Events; #events opens Events, anything else Price", () => {
+    expect(ROUNDS_TABS.map((t) => t.label)).toEqual(["Price", "Events"]);
+    expect(parseRoundsTab("#events")).toBe("events");
+    expect(parseRoundsTab("events")).toBe("events");
+    expect(parseRoundsTab("#price")).toBe("price");
+    expect(parseRoundsTab("")).toBe("price");
+    expect(parseRoundsTab(undefined)).toBe("price");
   });
 });

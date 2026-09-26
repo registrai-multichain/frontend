@@ -82,6 +82,7 @@ import {
 } from "@/lib/rounds";
 import { cashOutValue, pnl, replayPool, type Trade } from "@/lib/rounds-chart";
 import { OddsChart, PriceChart, usePriceStream, type PriceStream } from "./RoundCharts";
+import { ROUNDS_TABS, parseRoundsTab, type RoundsTab } from "@/lib/perennial-view";
 import {
   SESSION_CAP,
   SESSION_GAS,
@@ -675,6 +676,14 @@ export function CommonMarkets() {
   );
   const startPrices = useStartPrices(inPlay);
 
+  // Price rounds or event markets, as tabs (#events links straight to the events).
+  const [tab, setTab] = useState<RoundsTab>("price");
+  useEffect(() => setTab(parseRoundsTab(window.location.hash)), []);
+  const pickTab = (t: RoundsTab) => {
+    setTab(t);
+    window.history.replaceState(null, "", t === "events" ? "#events" : window.location.pathname + window.location.search);
+  };
+
   return (
     <SessionCtx.Provider value={session}>
     <div className="fade-up">
@@ -688,6 +697,18 @@ export function CommonMarkets() {
         </p>
       )}
 
+      {address && <Claims snap={snap} tx={tx} now={now} />}
+
+      <nav className="pa-tabs mb-5" aria-label="Market categories">
+        {ROUNDS_TABS.map((t) => (
+          <button key={t.key} type="button" className="pa-tab" aria-pressed={tab === t.key} onClick={() => pickTab(t.key)}>
+            {t.label}
+          </button>
+        ))}
+      </nav>
+
+      {tab === "price" && (
+      <>
       <section aria-label="Five-minute rounds" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {D.assets.map((a) => (
           <AssetCard
@@ -716,10 +737,12 @@ export function CommonMarkets() {
         challenge window and the agent resolves the round right after, about 10–11 minutes after the round ends; in the
         meantime your position shows what it pays if the round ended now.
       </p>
+      </>
+      )}
 
-      {address && <Claims snap={snap} tx={tx} now={now} />}
-
-      <EventMarkets snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={Boolean(address && onChain)} address={address} />
+      {tab === "events" && (
+        <EventMarkets snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={Boolean(address && onChain)} address={address} />
+      )}
 
       <p className="mt-12 border-t border-line pt-4 text-[13px] leading-relaxed text-fg-dim">
         Markets read live from{" "}
@@ -1510,7 +1533,7 @@ function EventMarkets({
     return eventVisible(e, st?.phase, e.expiry, now || e.expiry);
   });
   return (
-    <section className="mt-12" aria-labelledby="events-h">
+    <section aria-labelledby="events-h">
       <h2 id="events-h" className="font-serif text-[30px] leading-none tracking-tightest">
         Event markets
       </h2>

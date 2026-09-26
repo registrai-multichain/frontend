@@ -101,3 +101,12 @@ export function topBuilder<T extends { builderId: number }>(builders: T[], incom
   }
   return best;
 }
+
+/** /rounds categories: the 5-minute price rounds, or the longer event markets (`#events`). */
+export type RoundsTab = "price" | "events";
+export const ROUNDS_TABS: readonly { key: RoundsTab; label: string }[] = [
+  { key: "price", label: "Price" },
+  { key: "events", label: "Events" },
+];
+export const parseRoundsTab = (hash: string | null | undefined): RoundsTab =>
+  hash?.replace(/^#/, "").trim().toLowerCase() === "events" ? "events" : "price";
