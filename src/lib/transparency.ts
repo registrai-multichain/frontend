@@ -79,21 +79,26 @@ export const ROLES: Record<ContractKey, { name: string; hash: Hex; what: string 
   ],
 };
 
+/** A 1% fee on every buy and sell, split like this. */
+export const TRADE_FEE_PCT = 1;
+
 export const FEE_SPLITS = [
   {
     market: "Perennial markets (about builders)",
+    short: "Builder markets",
     legs: [
-      { pct: 50, to: "the builder the market is about, paid out after each epoch (a progressive tax funds the season pool)" },
-      { pct: 30, to: "whoever opened the market" },
-      { pct: 20, to: "the agent that settles it, held until it does" },
+      { pct: 50, who: "Builder", to: "the builder the market is about, paid out after each epoch (a progressive tax funds the season pool)" },
+      { pct: 30, who: "Market opener", to: "whoever opened the market" },
+      { pct: 20, who: "Settling agent", to: "the agent that settles it, held until it does" },
     ],
   },
   {
     market: "Common markets (5-minute rounds and events)",
+    short: "Common markets",
     legs: [
-      { pct: 50, to: "the Registrai treasury (part of it funds the REGI buyback and burn)" },
-      { pct: 30, to: "whoever opened the market" },
-      { pct: 20, to: "the agent that settles it" },
+      { pct: 50, who: "Treasury", to: "the Registrai treasury (part of it funds the REGI buyback and burn)" },
+      { pct: 30, who: "Market opener", to: "whoever opened the market" },
+      { pct: 20, who: "Settling agent", to: "the agent that settles it" },
     ],
   },
 ];
@@ -113,3 +118,81 @@ export const RECORD: RecordEntry[] = [...(record as RecordEntry[])].sort((a, b) 
 
 /** Arc's native gas token is USDC with 18 decimals; the site's money helpers use 6. */
 export const nativeToUsdc = (v: bigint) => v / 1_000_000_000_000n;
+
+/**
+ * The roles as deployed and checked on 2026-09-25 (contracts/deployments/arc-mainnet-builders.json):
+ * `contract:ROLE` -> the wallets that should hold it. The page compares the live chain against this.
+ */
+export const EXPECTED_ROLES: Record<string, WalletKey[]> = {
+  "registry:DEFAULT_ADMIN_ROLE": ["safe"],
+  "registry:REGISTRAR_ROLE": ["safe"],
+  "caretakers:DEFAULT_ADMIN_ROLE": ["safe"],
+  "caretakers:GOVERNOR_ROLE": ["safe", "onboarder"],
+  "badge:DEFAULT_ADMIN_ROLE": ["safe"],
+  "badge:ISSUER_ROLE": ["safe", "onboarder"],
+  "badge:STATUS_ROLE": ["operator"],
+  "badge:REVOKER_ROLE": ["safe"],
+};
+
+const roleWords = (name: string) => name.replace(/_ROLE$/, "").replace(/_/g, " ").toLowerCase();
+
+/** Pure: every way the live roles (`contract:ROLE:wallet` -> held) differ from EXPECTED_ROLES, in plain words. */
+export function roleDiffs(live: Record<string, boolean>): string[] {
+  const out: string[] = [];
+  for (const c of CONTRACTS) {
+    for (const r of ROLES[c.key]) {
+      const expected = EXPECTED_ROLES[`${c.key}:${r.name}`] ?? [];
+      for (const w of WALLETS) {
+        const held = Boolean(live[`${c.key}:${r.name}:${w.key}`]);
+        const should = expected.includes(w.key);
+        if (held && !should) out.push(`${w.label} holds ${c.name} ${roleWords(r.name)}, which it shouldn't`);
+        if (!held && should) out.push(`${w.label} no longer holds ${c.name} ${roleWords(r.name)}`);
+      }
+    }
+  }
+  return out;
+}
+
+/** "2.81%": part / whole, two decimals, "0%" for an empty whole. */
+export function percentOf(part: bigint, whole: bigint): string {
+  if (whole <= 0n) return "0%";
+  const bp = (part * 10_000n) / whole;
+  return `${(Number(bp) / 100).toFixed(2)}%`;
+}
+
+/** "28.1M", "1.2K", "999", "1B". */
+export function compactNumber(n: number): string {
+  const units: [number, string][] = [[1e9, "B"], [1e6, "M"], [1e3, "K"]];
+  for (const [v, u] of units) if (Math.abs(n) >= v) return `${Number((n / v).toFixed(1))}${u}`;
+  return String(Math.round(n));
+}
+
+export interface DexPair { priceUsd: number; marketCapUsd: number | null; liquidityUsd: number | null }
+export const DEX_PAIR_API = "https://api.dexscreener.com/latest/dex/pairs/arc/0x0530f18eb32d732cc8b067bbd0b2ba7e5d807d4f5cf4f7d74429f2a78d3120c8";
+
+/** Pure: the REGI/USDC pair from DexScreener's pairs response, or null. */
+export function parseDexPair(json: unknown): DexPair | null {
+  const j = json as { pairs?: unknown[]; pair?: unknown } | null;
+  const p = (j?.pairs?.[0] ?? j?.pair) as { priceUsd?: string; marketCap?: number; fdv?: number; liquidity?: { usd?: number } } | undefined;
+  const price = Number(p?.priceUsd);
+  if (!p || !Number.isFinite(price) || price <= 0) return null;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  return { priceUsd: price, marketCapUsd: num(p.marketCap) ?? num(p.fdv), liquidityUsd: num(p.liquidity?.usd) };
+}
+
+export interface SupplyPart { key: "burned" | "protocol" | "public"; label: string; amount: bigint; pct: string }
+
+/** Pure: REGI supply as burned / held by the protocol's wallets / everyone else. */
+export function supplySplit({ supply, burned, protocol }: { supply: bigint; burned: bigint; protocol: bigint }): SupplyPart[] {
+  const rest = supply - burned - protocol;
+  const pub = rest > 0n ? rest : 0n;
+  return [
+    { key: "burned", label: "Burned", amount: burned, pct: percentOf(burned, supply) },
+    { key: "protocol", label: "Protocol wallets", amount: protocol, pct: percentOf(protocol, supply) },
+    { key: "public", label: "Everyone else", amount: pub, pct: percentOf(pub, supply) },
+  ];
+}
+
+/** Pure: the sum of `values` over the given wallets; a wallet with no entry counts as 0. */
+export const sumBy = (wallets: { key: string }[], values: Record<string, bigint>) =>
+  wallets.reduce((s, w) => s + (values[w.key] ?? 0n), 0n);

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import deployment from "./deployments/arc-mainnet.json";
-import { BUYBACK, CONTRACTS, FEE_SPLITS, RECORD, ROLES, WALLETS, holderLabel, nativeToUsdc } from "./transparency";
+import { BUYBACK, CONTRACTS, EXPECTED_ROLES, FEE_SPLITS, RECORD, ROLES, WALLETS, compactNumber, holderLabel, parseDexPair, nativeToUsdc, percentOf, roleDiffs, supplySplit, sumBy } from "./transparency";
 
 describe("transparency (app.registrai.cc/transparency)", () => {
   test("every wallet comes from the mainnet deployment file, with what it does and what it cannot", () => {
@@ -49,5 +49,62 @@ describe("transparency (app.registrai.cc/transparency)", () => {
   test("Arc's native gas balance (18 decimals) in USDC base units (6)", () => {
     expect(nativeToUsdc(4_989_297_966_500_000_000n)).toBe(4_989_297n);
     expect(nativeToUsdc(0n)).toBe(0n);
+  });
+});
+
+describe("numbers first", () => {
+  test("expected roles cover every role on every contract", () => {
+    for (const c of CONTRACTS) for (const r of ROLES[c.key]) expect(EXPECTED_ROLES[`${c.key}:${r.name}`]).toBeDefined();
+  });
+  test("roleDiffs: none when the chain matches the plan; names the role and wallet when it doesn't", () => {
+    const live: Record<string, boolean> = {};
+    for (const c of CONTRACTS) for (const r of ROLES[c.key]) for (const w of WALLETS) live[`${c.key}:${r.name}:${w.key}`] = EXPECTED_ROLES[`${c.key}:${r.name}`].includes(w.key);
+    expect(roleDiffs(live)).toEqual([]);
+    live["badge:ISSUER_ROLE:deployer"] = true;
+    live["registry:REGISTRAR_ROLE:safe"] = false;
+    expect(roleDiffs(live)).toEqual([
+      "Admin Safe no longer holds BuilderRegistry registrar",
+      "Deployer holds VerifiedBuilderBadge issuer, which it shouldn't",
+    ]);
+  });
+  test("percentOf: two decimals, zero-safe", () => {
+    expect(percentOf(28_142_908n, 1_000_000_000n)).toBe("2.81%");
+    expect(percentOf(1n, 0n)).toBe("0%");
+  });
+  test("compactNumber: 28.1M, 1.2K, 999", () => {
+    expect(compactNumber(28_142_908)).toBe("28.1M");
+    expect(compactNumber(1_234)).toBe("1.2K");
+    expect(compactNumber(999)).toBe("999");
+    expect(compactNumber(1_000_000_000)).toBe("1B");
+  });
+});
+
+test("parseDexPair: price, market cap and liquidity from DexScreener; null on anything else", () => {
+  expect(parseDexPair({ pairs: [{ priceUsd: "0.0001173", marketCap: 114242, fdv: 120000, liquidity: { usd: 31870.97 } }] })).toEqual({
+    priceUsd: 0.0001173, marketCapUsd: 114242, liquidityUsd: 31870.97,
+  });
+  expect(parseDexPair({ pair: { priceUsd: "0.5", fdv: 10, liquidity: { usd: 3 } } })).toEqual({ priceUsd: 0.5, marketCapUsd: 10, liquidityUsd: 3 });
+  expect(parseDexPair({ pairs: [] })).toBeNull();
+  expect(parseDexPair(null)).toBeNull();
+  expect(parseDexPair({ pairs: [{ priceUsd: "abc" }] })).toBeNull();
+});
+
+describe("supply and balances", () => {
+  test("splits REGI supply into burned, protocol-owned and everyone else, each with its share", () => {
+    const parts = supplySplit({ supply: 1000n, burned: 28n, protocol: 150n });
+    expect(parts.map((p) => [p.key, p.amount, p.pct])).toEqual([
+      ["burned", 28n, "2.80%"],
+      ["protocol", 150n, "15.00%"],
+      ["public", 822n, "82.20%"],
+    ]);
+  });
+
+  test("never shows a negative public share when the reads overlap", () => {
+    const parts = supplySplit({ supply: 100n, burned: 60n, protocol: 60n });
+    expect(parts.find((p) => p.key === "public")!.amount).toBe(0n);
+  });
+
+  test("sums balances across wallets, missing ones count as zero", () => {
+    expect(sumBy(WALLETS, { safe: 5n, operator: 2n })).toBe(7n);
   });
 });

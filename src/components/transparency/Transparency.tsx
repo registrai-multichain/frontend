@@ -8,7 +8,10 @@ import { accessControlAbi } from "@/lib/builders-onboarder";
 import { BUILDERS } from "@/lib/builders-network";
 import { usdText, who } from "@/lib/plain-words";
 import { badgeAbi } from "@/lib/verified-builder-badge";
-import { BUYBACK, CONTRACTS, DEPLOY, FEE_SPLITS, RECORD, ROLES, WALLETS, holderLabel, nativeToUsdc } from "@/lib/transparency";
+import {
+  BUYBACK, CONTRACTS, DEPLOY, DEX_PAIR_API, FEE_SPLITS, RECORD, ROLES, TRADE_FEE_PCT, WALLETS, compactNumber, holderLabel, nativeToUsdc, parseDexPair,
+  roleDiffs, sumBy, supplySplit,
+} from "@/lib/transparency";
 
 const safeAbi = parseAbi([
   "function getOwners() view returns (address[])",
@@ -25,13 +28,14 @@ const EXPLORER = BUILDERS.chain.explorer.url.replace(/\/$/, "");
 const addrUrl = (a: string) => `${EXPLORER}/address/${a}`;
 
 interface Live {
+  readAt: number;
   roles: Record<string, boolean>;
   owners: Address[];
   threshold: bigint;
   safeNonce: bigint;
   balances: Record<string, bigint>;
   txCounts: Record<string, number>;
-  regi: { supply: bigint; decimals: number; burned: bigint };
+  regi: { supply: bigint; decimals: number; burned: bigint; held: Record<string, bigint> };
   badges: { serial: number; builderId: bigint; owner: Address | null }[];
 }
 
@@ -48,7 +52,7 @@ async function readLive(c: PublicClient): Promise<Live> {
     ),
   );
   const badge = CONTRACTS.find((x) => x.key === "badge")!.address;
-  const [roles, owners, threshold, safeNonce, balances, txCounts, supply, decimals, burned, nextSerial] = await Promise.all([
+  const [roles, owners, threshold, safeNonce, balances, txCounts, supply, decimals, burned, nextSerial, held] = await Promise.all([
     Promise.all(roleReads),
     c.readContract({ address: safe, abi: safeAbi, functionName: "getOwners" }) as Promise<Address[]>,
     c.readContract({ address: safe, abi: safeAbi, functionName: "getThreshold" }) as Promise<bigint>,
@@ -59,6 +63,7 @@ async function readLive(c: PublicClient): Promise<Live> {
     c.readContract({ address: BUYBACK.token, abi: erc20Abi, functionName: "decimals" }) as Promise<number>,
     c.readContract({ address: BUYBACK.token, abi: erc20Abi, functionName: "balanceOf", args: [BUYBACK.burnAddress] }) as Promise<bigint>,
     c.readContract({ address: badge, abi: badgeAbi, functionName: "nextSerial" }) as Promise<bigint>,
+    Promise.all(WALLETS.map(async (w) => [w.key, (await c.readContract({ address: BUYBACK.token, abi: erc20Abi, functionName: "balanceOf", args: [w.address] })) as bigint] as const)),
   ]);
   const serials = Array.from({ length: Math.max(0, Number(nextSerial) - 1) }, (_, i) => i + 1);
   const badges = await Promise.all(
@@ -70,16 +75,52 @@ async function readLive(c: PublicClient): Promise<Live> {
     }),
   );
   return {
+    readAt: Date.now(),
     roles: Object.fromEntries(roles),
     owners,
     threshold,
     safeNonce,
     balances: Object.fromEntries(balances),
     txCounts: Object.fromEntries(txCounts),
-    regi: { supply, decimals, burned },
+    regi: { supply, decimals, burned, held: Object.fromEntries(held) },
     badges,
   };
 }
+
+/** "$0.000117", "$114.2K": small prices keep three significant digits, big amounts go compact. */
+function usdLoose(n: number): string {
+  if (n >= 1000) return `$${compactNumber(n)}`;
+  if (n >= 1) return `$${n.toFixed(2)}`;
+  return `$${n.toPrecision(3)}`;
+}
+
+const BIG = { fontSize: "clamp(24px, 6vw, 34px)", lineHeight: 1.05, fontWeight: 400 } as const;
+
+function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "up" | "down" }) {
+  return (
+    <div className="pa-card flex flex-col gap-1">
+      <span className="pa-muted pa-small">{label}</span>
+      <b className={`pa-serif tnum ${tone === "up" ? "text-up" : tone === "down" ? "text-down" : ""}`} style={BIG}>{value}</b>
+      {sub && <span className="pa-muted pa-small">{sub}</span>}
+    </div>
+  );
+}
+
+/** One bar, segments sized by share; a sliver stays visible however small. */
+function SplitBar({ parts, label }: { parts: { key: string; share: number; color: string }[]; label: string }) {
+  return (
+    <div className="flex h-3 w-full gap-[2px] overflow-hidden rounded-full" role="img" aria-label={label}>
+      {parts.filter((p) => p.share > 0).map((p) => (
+        <i key={p.key} style={{ width: `${p.share}%`, minWidth: 4, background: p.color }} />
+      ))}
+    </div>
+  );
+}
+
+const Swatch = ({ color }: { color: string }) => <i aria-hidden className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: color }} />;
+
+const SUPPLY_COLORS = { burned: "var(--fg)", protocol: "var(--accent)", public: "var(--line-strong)" } as const;
+const LEG_COLORS = ["var(--up)", "var(--accent)", "var(--line-strong)"];
 
 /** A token amount (any decimals) as a grouped whole number. */
 function tokens(v: bigint, decimals: number): string {
@@ -98,130 +139,248 @@ function Addr({ a }: { a: string }) {
 export function Transparency() {
   const { data: live, error } = useSWR(["transparency", BUILDERS.chainId], () => readLive(buildersClient()), {
     revalidateOnFocus: false,
+    refreshInterval: 60_000,
     errorRetryCount: 4,
     errorRetryInterval: 8_000,
   });
+  const { data: dex } = useSWR(["transparency-dex"], async () => parseDexPair(await (await fetch(DEX_PAIR_API)).json()), {
+    revalidateOnFocus: false,
+    refreshInterval: 60_000,
+  });
   const reading = !live && !error;
+  const diffs = live ? roleDiffs(live.roles) : null;
+  const roleCount = CONTRACTS.reduce((n, c) => n + ROLES[c.key].length, 0);
+  const whole = (v: bigint) => (live ? Number(v / 10n ** BigInt(live.regi.decimals)) : 0);
+  const regiHeld = live ? sumBy(WALLETS, live.regi.held) : null;
+  const usdcHeld = live ? sumBy(WALLETS, live.balances) : null;
+  const split = live && regiHeld !== null ? supplySplit({ supply: live.regi.supply, burned: live.regi.burned, protocol: regiHeld }) : null;
+  const shareOf = (v: bigint) => (live && live.regi.supply > 0n ? Number((v * 10_000n) / live.regi.supply) / 100 : 0);
+  const issued = live ? live.badges.filter((b) => b.owner).length : null;
+  const dash = "…";
 
   return (
     <div className="flex flex-col gap-12">
       <header>
         <h1 className="pa-h1">Transparency</h1>
-        <p className="pa-lede">
-          Every wallet, role and contract behind Registrai on {BUILDERS.label}, read live from the chain. Anyone can check each
-          number on the explorer; this page just puts them in one place.
-        </p>
+        <p className="pa-lede">The numbers behind Registrai on {BUILDERS.label}, read live from the chain. Every address links to the explorer.</p>
         {error && <p className="pa-notice mt-4" data-tone="down">Couldn&apos;t read {BUILDERS.label} right now. Retrying.</p>}
         {reading && <p className="pa-muted mt-4">Reading {BUILDERS.label}…</p>}
+        {live && <p className="pa-muted pa-small mt-3">Read at {new Date(live.readAt).toLocaleTimeString()} · refreshes every minute</p>}
       </header>
 
-      {/* 1 · keys */}
+      {/* How much: REGI in total and where it sits */}
+      <section className="pa-stack" aria-labelledby="t-supply">
+        <h2 id="t-supply" className="pa-h2">REGI supply</h2>
+        <div className="pa-card flex flex-col gap-5">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="flex flex-col gap-1">
+              <span className="pa-muted pa-small">Total supply</span>
+              <b className="pa-serif tnum" style={{ fontSize: "clamp(34px, 9vw, 52px)", lineHeight: 1, fontWeight: 400 }}>
+                {live ? compactNumber(whole(live.regi.supply)) : dash}
+              </b>
+              <span className="pa-muted pa-small tnum">{live ? `${tokens(live.regi.supply, live.regi.decimals)} REGI` : " "}</span>
+            </div>
+            <div className="flex flex-col gap-1 sm:items-end">
+              <span className="pa-muted pa-small">Price</span>
+              <b className="pa-serif tnum" style={BIG}>{dex ? usdLoose(dex.priceUsd) : "—"}</b>
+              <span className="pa-muted pa-small tnum">
+                {dex ? [dex.marketCapUsd !== null && `market cap ${usdLoose(dex.marketCapUsd)}`, dex.liquidityUsd !== null && `liquidity ${usdLoose(dex.liquidityUsd)}`].filter(Boolean).join(" · ") : "from DexScreener"}
+              </span>
+            </div>
+          </div>
+          <SplitBar
+            label="REGI supply: burned, protocol wallets, everyone else"
+            parts={split ? split.map((p) => ({ key: p.key, share: shareOf(p.amount), color: SUPPLY_COLORS[p.key] })) : [{ key: "x", share: 100, color: "var(--line)" }]}
+          />
+          <div className="grid grid-cols-3 gap-3 sm:gap-4">
+            {(split ?? supplySplit({ supply: 0n, burned: 0n, protocol: 0n })).map((p) => (
+              <div key={p.key} className="flex flex-col gap-1">
+                <span className="pa-muted pa-small inline-flex items-center gap-2"><Swatch color={SUPPLY_COLORS[p.key]} />{p.label}</span>
+                <b className="pa-serif tnum" style={BIG}>{split ? compactNumber(whole(p.amount)) : dash}</b>
+                <span className="pa-small tnum">{split ? `${p.pct} of supply` : " "}</span>
+                <span className="pa-muted pa-small">
+                  {p.key === "burned" && <a className="pa-link" href={addrUrl(BUYBACK.burnAddress)} target="_blank" rel="noreferrer">at the burn address ↗</a>}
+                  {p.key === "protocol" && `across the ${WALLETS.length} wallets below`}
+                  {p.key === "public" && "in the pool and every other wallet"}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="pa-muted pa-small">
+            Token <a className="pa-link pa-mono" href={addrUrl(BUYBACK.token)} target="_blank" rel="noreferrer">{BUYBACK.token}</a> ·{" "}
+            <a className="pa-link" href={BUYBACK.poolUrl} target="_blank" rel="noreferrer">REGI/USDC pool ↗</a>
+          </p>
+        </div>
+      </section>
+
+      {/* How much sits on protocol-owned addresses */}
+      <section className="pa-stack" aria-labelledby="t-held">
+        <h2 id="t-held" className="pa-h2">On protocol addresses</h2>
+        <div className="grid grid-cols-2 gap-3">
+          <Stat label="USDC held" value={usdcHeld === null ? dash : usdText(nativeToUsdc(usdcHeld))} sub={`across ${WALLETS.length} wallets`} />
+          <Stat label="REGI held" value={regiHeld === null || !live ? dash : compactNumber(whole(regiHeld))} sub={split ? `${split[1].pct} of supply` : undefined} />
+        </div>
+        <div className="pa-card overflow-x-auto">
+          <table className="w-full text-left tnum">
+            <thead className="pa-muted pa-small">
+              <tr>
+                <th className="py-2 pr-4 font-normal">Wallet</th>
+                <th className="py-2 pr-4 text-right font-normal">USDC</th>
+                <th className="py-2 pr-4 text-right font-normal">REGI</th>
+                <th className="py-2 text-right font-normal">Txs</th>
+              </tr>
+            </thead>
+            <tbody>
+              {WALLETS.map((w) => (
+                <tr key={w.key} className="border-t border-line">
+                  <td className="py-2 pr-4">
+                    <a className="pa-link" href={addrUrl(w.address)} target="_blank" rel="noreferrer">{w.label}</a>
+                    <span className="pa-muted pa-small pa-mono block">{who(w.address)}</span>
+                  </td>
+                  <td className="py-2 pr-4 text-right">{live ? usdText(nativeToUsdc(live.balances[w.key] ?? 0n)) : dash}</td>
+                  <td className="py-2 pr-4 text-right">{live ? compactNumber(whole(live.regi.held[w.key] ?? 0n)) : dash}</td>
+                  <td className="py-2 text-right">{live ? (w.isSafe ? live.safeNonce.toString() : String(live.txCounts[w.key] ?? 0)) : dash}</td>
+                </tr>
+              ))}
+              <tr className="border-t-2 border-line-strong font-semibold">
+                <td className="py-2 pr-4">Total</td>
+                <td className="py-2 pr-4 text-right">{usdcHeld === null ? dash : usdText(nativeToUsdc(usdcHeld))}</td>
+                <td className="py-2 pr-4 text-right">{regiHeld === null || !live ? dash : compactNumber(whole(regiHeld))}</td>
+                <td className="py-2" />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="pa-muted pa-small max-w-[70ch]">
+          USDC is {BUILDERS.label}&apos;s gas token. The treasury and market contracts aren&apos;t on {BUILDERS.label} yet; they join this
+          table when they deploy.
+        </p>
+      </section>
+
+      {/* Shares */}
+      <section className="pa-stack" aria-labelledby="t-shares">
+        <h2 id="t-shares" className="pa-h2">Who gets each fee</h2>
+        <p className="pa-muted">
+          A <b className="text-fg">{TRADE_FEE_PCT}%</b> fee on every buy and sell. Collected so far on {BUILDERS.label}: <b className="text-fg tnum">$0</b>, since
+          markets open after their audit.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {FEE_SPLITS.map((s) => (
+            <article key={s.market} className="pa-card flex flex-col gap-4">
+              <h3 className="pa-h3">{s.short}</h3>
+              <SplitBar label={`${s.short} fee split`} parts={s.legs.map((l, i) => ({ key: l.who, share: l.pct, color: LEG_COLORS[i] }))} />
+              <div className="flex flex-col gap-3">
+                {s.legs.map((l, i) => (
+                  <div key={l.who} className="grid grid-cols-[4.5rem_1fr] items-baseline gap-3">
+                    <b className="pa-serif tnum" style={{ ...BIG, fontSize: 30 }}>{l.pct}%</b>
+                    <span>
+                      <span className="inline-flex items-center gap-2"><Swatch color={LEG_COLORS[i]} />{l.who}</span>
+                      <span className="pa-muted pa-small block">{l.to}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* Rules */}
+      <section className="pa-stack" aria-labelledby="t-rules">
+        <h2 id="t-rules" className="pa-h2">Rules</h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <Stat label="Buyback trigger" value={`$${BUYBACK.triggerUsdc}`} sub="each time the buyback contract holds this much, it buys REGI" />
+          <Stat
+            label="Buys per trigger"
+            value={`${BUYBACK.triggerUsdc / BUYBACK.chunkUsdc} × $${BUYBACK.chunkUsdc}`}
+            sub="small pieces keep the price impact low; every token goes to the burn address"
+          />
+          <Stat
+            label="Funds the buyback"
+            value={BUYBACK.shareOfTreasuryPct === null ? "Soon" : `${BUYBACK.shareOfTreasuryPct}%`}
+            sub="of the treasury's common-market fees, announced before launch"
+          />
+          <Stat
+            label="Admin actions need"
+            value={live ? `${live.threshold.toString()} of ${live.owners.length}` : dash}
+            sub={live ? `Safe signatures · ${live.safeNonce.toString()} executed so far` : undefined}
+          />
+          <Stat
+            label="Roles as deployed"
+            value={diffs === null ? dash : diffs.length === 0 ? `✓ ${roleCount} of ${roleCount}` : `${diffs.length} changed`}
+            tone={diffs === null ? undefined : diffs.length === 0 ? "up" : "down"}
+            sub="checked live on 3 contracts"
+          />
+          <Stat label="Proof re-check" value="10 min" sub="the keeper re-checks every builder's proof and marks badges to match" />
+        </div>
+        {diffs && diffs.length > 0 && (
+          <ul className="pa-notice" data-tone="down">
+            {diffs.map((d) => <li key={d}>{d}</li>)}
+          </ul>
+        )}
+      </section>
+
+      {/* Keys: what each wallet can and can't do */}
       <section className="pa-stack" aria-labelledby="t-keys">
         <h2 id="t-keys" className="pa-h2">Who holds the keys</h2>
         <div className="pa-grid">
           {WALLETS.map((w) => (
             <article key={w.key} className="pa-card pa-stack">
-              <div className="flex items-baseline justify-between gap-3">
-                <h3 className="pa-h3">{w.label}</h3>
-                <span className="pa-muted pa-small tnum">
-                  {live ? `${w.isSafe ? "holds " : ""}${usdText(nativeToUsdc(live.balances[w.key] ?? 0n))}${w.isSafe ? "" : " for gas"}` : "…"}
-                </span>
-              </div>
+              <h3 className="pa-h3">{w.label}</h3>
               <Addr a={w.address} />
-              <p>{w.what}</p>
+              <p className="pa-small">{w.what}</p>
               <p className="pa-muted pa-small"><b>Can&apos;t:</b> {w.cannot}</p>
-              {w.isSafe ? (
-                <p className="pa-small">
-                  {live ? (
-                    <>
-                      {live.threshold.toString()} of {live.owners.length} owners must sign · {live.safeNonce.toString()} transactions executed.
-                      Owners: {live.owners.map((o, i) => (
-                        <span key={o}>{i > 0 && ", "}<a className="pa-link" href={addrUrl(o)} target="_blank" rel="noreferrer">{who(o)}</a></span>
-                      ))}
-                    </>
-                  ) : "…"}
+              {w.isSafe && live && (
+                <p className="pa-small pa-muted">
+                  Owners: {live.owners.map((o, i) => (
+                    <span key={o}>{i > 0 && ", "}<a className="pa-link" href={addrUrl(o)} target="_blank" rel="noreferrer">{who(o)}</a></span>
+                  ))}
                 </p>
-              ) : (
-                <p className="pa-small pa-muted">{live ? `${live.txCounts[w.key] ?? 0} transactions sent` : "…"}</p>
               )}
             </article>
           ))}
         </div>
 
-        <h3 className="pa-h3 mt-6">Roles on chain</h3>
-        <p className="pa-muted pa-small max-w-[70ch]">
-          Read live with each contract&apos;s <code>hasRole</code> for the wallets above. Roles are checked for these wallets; the
-          explorer shows every RoleGranted and RoleRevoked event if you want the full history.
-        </p>
-        <div className="pa-card overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="pa-muted pa-small">
-              <tr>
-                <th className="py-2 pr-4 font-normal">Contract · role</th>
-                <th className="py-2 pr-4 font-normal">What it allows</th>
-                <th className="py-2 font-normal">Held by</th>
-              </tr>
-            </thead>
-            <tbody>
-              {CONTRACTS.flatMap((ct) =>
-                ROLES[ct.key].map((r) => {
-                  const holders = live ? WALLETS.filter((w) => live.roles[roleKey(ct.key, r.name, w.key)]) : null;
-                  return (
-                    <tr key={`${ct.key}-${r.name}`} className="border-t border-line align-top">
-                      <td className="py-2 pr-4"><b>{ct.name}</b><br /><span className="pa-small pa-muted">{r.name.replace(/_ROLE$/, "").replace(/_/g, " ").toLowerCase()}</span></td>
-                      <td className="py-2 pr-4 pa-small">{r.what}</td>
-                      <td className="py-2 pa-small">{holders === null ? "…" : holders.length ? holders.map((h) => h.label).join(", ") : <span className="pa-muted">none of these wallets</span>}</td>
-                    </tr>
-                  );
-                }),
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* 2 · money */}
-      <section className="pa-stack" aria-labelledby="t-money">
-        <h2 id="t-money" className="pa-h2">Where the money goes</h2>
-        <p className="pa-notice">Markets aren&apos;t live on {BUILDERS.label} yet, so no trading fees have been collected. When they open, every fee splits like this:</p>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {FEE_SPLITS.map((s) => (
-            <article key={s.market} className="pa-card pa-stack">
-              <h3 className="pa-h3">{s.market}</h3>
-              <p className="pa-muted pa-small">A 1% fee on every buy and sell:</p>
-              {s.legs.map((l) => (
-                <div key={l.to} className="pa-kv"><span><b className="text-fg">{l.pct}%</b></span><span className="text-left">{l.to}</span></div>
-              ))}
-            </article>
-          ))}
-        </div>
-      </section>
-
-      {/* 3 · buyback */}
-      <section className="pa-stack" aria-labelledby="t-buyback">
-        <h2 id="t-buyback" className="pa-h2">REGI buyback and burn</h2>
-        <div className="pa-card pa-stack">
-          <p>
-            A share of the treasury&apos;s fee income from common markets
-            {BUYBACK.shareOfTreasuryPct !== null ? ` (${BUYBACK.shareOfTreasuryPct}%)` : ""} collects in a buyback contract. Every time it
-            reaches <b>${BUYBACK.triggerUsdc}</b>, it buys REGI in {BUYBACK.triggerUsdc / BUYBACK.chunkUsdc} pieces of ${BUYBACK.chunkUsdc} and
-            sends every token straight to the burn address, where nobody can ever move it.
+        <details className="pa-card">
+          <summary className="cursor-pointer">Every role, and who holds it</summary>
+          <p className="pa-muted pa-small mt-2 max-w-[70ch]">
+            Read live with each contract&apos;s <code>hasRole</code> for the wallets above. The explorer shows every RoleGranted and
+            RoleRevoked event for the full history.
           </p>
-          <p className="pa-muted pa-small">Starts with common markets on {BUILDERS.label}. {BUYBACK.shareOfTreasuryPct === null ? "The share is announced before launch." : ""}</p>
-          <div className="pa-kv"><span>REGI total supply</span><span className="tnum">{live ? tokens(live.regi.supply, live.regi.decimals) : "…"}</span></div>
-          <div className="pa-kv"><span>At the burn address today</span><span className="tnum">{live ? `${tokens(live.regi.burned, live.regi.decimals)} REGI` : "…"}</span></div>
-          <div className="pa-kv"><span>Burn address</span><Addr a={BUYBACK.burnAddress} /></div>
-          <div className="pa-kv"><span>Token</span><Addr a={BUYBACK.token} /></div>
-          <p className="pa-small"><a className="pa-link" href={BUYBACK.poolUrl} target="_blank" rel="noreferrer">The REGI/USDC pool on DexScreener ↗</a></p>
-        </div>
+          <div className="overflow-x-auto">
+            <table className="mt-2 w-full text-left">
+              <thead className="pa-muted pa-small">
+                <tr>
+                  <th className="py-2 pr-4 font-normal">Contract · role</th>
+                  <th className="py-2 pr-4 font-normal">What it allows</th>
+                  <th className="py-2 font-normal">Held by</th>
+                </tr>
+              </thead>
+              <tbody>
+                {CONTRACTS.flatMap((ct) =>
+                  ROLES[ct.key].map((r) => {
+                    const holders = live ? WALLETS.filter((w) => live.roles[roleKey(ct.key, r.name, w.key)]) : null;
+                    return (
+                      <tr key={`${ct.key}-${r.name}`} className="border-t border-line align-top">
+                        <td className="py-2 pr-4"><b>{ct.name}</b><br /><span className="pa-small pa-muted">{r.name.replace(/_ROLE$/, "").replace(/_/g, " ").toLowerCase()}</span></td>
+                        <td className="py-2 pr-4 pa-small">{r.what}</td>
+                        <td className="py-2 pa-small">{holders === null ? dash : holders.length ? holders.map((h) => h.label).join(", ") : <span className="pa-muted">none of these wallets</span>}</td>
+                      </tr>
+                    );
+                  }),
+                )}
+              </tbody>
+            </table>
+          </div>
+        </details>
       </section>
 
-      {/* 5 · contracts */}
+      {/* Contracts */}
       <section className="pa-stack" aria-labelledby="t-contracts">
         <h2 id="t-contracts" className="pa-h2">Contracts</h2>
         <p className="pa-muted">
-          Deployed {DEPLOY.date} at block {DEPLOY.block.toLocaleString("en-US")}. Source code is verified on the explorer. Markets
-          contracts are not deployed on {BUILDERS.label} yet: they go live after their audit.
+          Deployed {DEPLOY.date} at block {DEPLOY.block.toLocaleString("en-US")}, source verified on the explorer. Market contracts go
+          live on {BUILDERS.label} after their audit.
         </p>
         <div className="pa-grid">
           {CONTRACTS.map((ct) => (
@@ -230,18 +389,21 @@ export function Transparency() {
                 <h3 className="pa-h3">{ct.name}</h3>
                 <span className="pa-pill" data-tone="ok">{ct.audit}</span>
               </div>
-              <p>{ct.what}</p>
+              <p className="pa-small">{ct.what}</p>
               <Addr a={ct.address} />
             </article>
           ))}
         </div>
       </section>
 
-      {/* 7 · record */}
+      {/* Record */}
       <section className="pa-stack" aria-labelledby="t-record">
         <h2 id="t-record" className="pa-h2">Public record</h2>
         <div className="pa-card">
-          <h3 className="pa-h3">Verified Builder Badges issued</h3>
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="pa-h3">Verified Builder Badges</h3>
+            <b className="pa-serif tnum" style={{ ...BIG, fontSize: 30 }}>{issued === null ? dash : issued}</b>
+          </div>
           {live ? (
             live.badges.length ? (
               <ul className="mt-2">
@@ -253,7 +415,7 @@ export function Transparency() {
                 ))}
               </ul>
             ) : <p className="pa-muted mt-2">None yet.</p>
-          ) : <p className="pa-muted mt-2">…</p>}
+          ) : <p className="pa-muted mt-2">{dash}</p>}
         </div>
         <ol className="pa-stack">
           {RECORD.map((r) => (
