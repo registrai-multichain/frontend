@@ -169,7 +169,7 @@ export function Transparency() {
   const shareOf = (v: bigint) => (live && live.regi.supply > 0n ? Number((v * 10_000n) / live.regi.supply) / 100 : 0);
   const issued = live ? live.badges.filter((b) => b.owner).length : null;
   // No buyback contract on mainnet yet: every figure is zero until it deploys.
-  const bb = buybackView(null);
+  const bb = buybackView(null, Math.floor(Date.now() / 1000));
   const dash = "…";
 
   return (
@@ -233,23 +233,23 @@ export function Transparency() {
             stroke={20}
             parts={[{ key: "in", share: bb.progressPct, color: "var(--accent)" }, { key: "left", share: 100 - bb.progressPct, color: "var(--line)" }]}
           >
-            <b className="pa-serif tnum" style={{ fontSize: 32, lineHeight: 1, fontWeight: 400 }}>{usdText(bb.pending)}</b>
+            <b className="pa-serif tnum" style={{ fontSize: 32, lineHeight: 1, fontWeight: 400 }}>{usdText(bb.collected)}</b>
             <span className="pa-muted pa-small">of ${BUYBACK.triggerUsdc} to next buy</span>
           </Donut>
           <div className="grid w-full grid-cols-3 gap-3">
             <div className="flex flex-col gap-1">
               <span className="pa-muted pa-small">Bought back</span>
-              <b className="pa-serif tnum" style={BIG}>{usdText(bb.spentUsdc)}</b>
+              <b className="pa-serif tnum" style={BIG}>{usdText(bb.spent)}</b>
               <span className="pa-muted pa-small">USDC spent on REGI</span>
             </div>
             <div className="flex flex-col gap-1">
               <span className="pa-muted pa-small">REGI burned</span>
-              <b className="pa-serif tnum" style={BIG}>{compactNumber(Number(bb.burnedRegi / 10n ** 18n))}</b>
+              <b className="pa-serif tnum" style={BIG}>{compactNumber(Number(bb.burned / 10n ** 18n))}</b>
               <span className="pa-muted pa-small">by buybacks</span>
             </div>
             <div className="flex flex-col gap-1">
               <span className="pa-muted pa-small">Buys</span>
-              <b className="pa-serif tnum" style={BIG}>{bb.buys}</b>
+              <b className="pa-serif tnum" style={BIG}>{bb.chunks}</b>
               <span className="pa-muted pa-small">of ${BUYBACK.chunkUsdc} each</span>
             </div>
           </div>

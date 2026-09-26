@@ -4,7 +4,7 @@
  * here is either read from the deployment file or live from chain; the prose is
  * what each wallet/role is for, so a reader can check it against the explorer.
  */
-import { keccak256, toBytes, type Address, type Hex } from "viem";
+import { keccak256, parseAbi, toBytes, type Address, type Hex } from "viem";
 import deployment from "./deployments/arc-mainnet.json";
 import record from "../data/transparency-record.json";
 import { shortHex } from "./perennial-market";
@@ -104,15 +104,19 @@ export const FEE_SPLITS = [
 ];
 
 export const BUYBACK = {
+  /** RegiBuyback on mainnet; null until it deploys with common markets (the button stays hidden). */
+  contract: null as Address | null,
+  /** RegiFeeSplitter (MarketsV4's TREASURY); null until deployed. */
+  splitter: null as Address | null,
+  /** First block to scan for Burned events; null until deployed. */
+  deployBlock: null as bigint | null,
   triggerUsdc: 200,
   chunkUsdc: 50,
   chunks: 4,
   cooldownMin: 10,
-  /** Share of the treasury's income, fixed in the splitter contract (BUYBACK_BPS 4000). */
+  /** Share of the treasury's income (the splitter's BUYBACK_BPS / 100). */
   shareOfTreasuryPct: 40,
   burnAddress: "0x000000000000000000000000000000000000dEaD" as Address,
-  /** The buyback contract on mainnet; null until it deploys with common markets. */
-  contract: null as Address | null,
   token: REGI_CONTRACT as Address,
   poolUrl: REGI_DEXSCREENER_URL,
 };
@@ -216,13 +220,65 @@ export function donutArcs(shares: number[], circumference: number, minLength = 0
   });
 }
 
-export interface BuybackRead { spentUsdc: bigint; burnedRegi: bigint; buys: number; pending: bigint }
+export const regiBuybackAbi = parseAbi([
+  "function status() view returns (uint256 balance, uint256 chunksLeft, uint256 nextChunkAt, bool ready, uint256 totalUsdcSpent, uint256 totalRegiBurned, uint256 totalChunks)",
+  "function burnChunk() returns (uint256 usdcIn, uint256 regiBurned)",
+  "event Burned(uint256 indexed round, uint256 chunk, uint256 usdcIn, uint256 regiBurned, address indexed caller)",
+]);
+export const regiSplitterAbi = parseAbi([
+  "function distribute() returns (uint256 toBuyback, uint256 toSafe)",
+  "function buyback() view returns (address)",
+  "function pendingBuyback() view returns (address)",
+  "function pendingSince() view returns (uint256)",
+]);
 
-/** Pure: buyback volume so far and progress to the next buy (USDC in 6 decimals). */
-export function buybackView(read: BuybackRead | null) {
+export interface BuybackStatus { balance: bigint; chunksLeft: number; nextChunkAt: number; ready: boolean; spent: bigint; burned: bigint; chunks: number }
+export type BuybackPhase = "off" | "collecting" | "ready" | "cooldown";
+
+export function parseBuybackStatus(r: readonly [bigint, bigint, bigint, boolean, bigint, bigint, bigint]): BuybackStatus {
+  return { balance: r[0], chunksLeft: Number(r[1]), nextChunkAt: Number(r[2]), ready: r[3], spent: r[4], burned: r[5], chunks: Number(r[6]) };
+}
+
+/** Pure: what the buyback section shows. USDC in 6 decimals; `incoming` = the splitter's pending 40%. */
+export function buybackView(s: BuybackStatus | null, nowSec: number, incoming = 0n) {
   const trigger = BigInt(BUYBACK.triggerUsdc) * 1_000_000n;
-  const r = read ?? { spentUsdc: 0n, burnedRegi: 0n, buys: 0, pending: 0n };
-  const toTrigger = r.pending >= trigger ? 0n : trigger - r.pending;
-  const progressPct = r.pending >= trigger ? 100 : Number((r.pending * 100n) / trigger);
-  return { live: read !== null, ...r, toTrigger, progressPct };
+  const r = s ?? { balance: 0n, chunksLeft: 0, nextChunkAt: 0, ready: false, spent: 0n, burned: 0n, chunks: 0 };
+  const inRound = r.chunksLeft > 0;
+  const secondsToNext = Math.max(0, r.nextChunkAt - nowSec);
+  const phase: BuybackPhase = !s ? "off" : r.ready ? "ready" : (inRound || r.balance >= trigger) && secondsToNext > 0 ? "cooldown" : "collecting";
+  const progressPct = inRound
+    ? Math.round(((BUYBACK.chunks - r.chunksLeft) / BUYBACK.chunks) * 100)
+    : r.balance >= trigger ? 100 : Number((r.balance * 100n) / trigger);
+  return {
+    live: s !== null,
+    phase,
+    collected: r.balance,
+    incoming,
+    toTrigger: r.balance >= trigger ? 0n : trigger - r.balance,
+    progressPct,
+    roundChunk: inRound ? BUYBACK.chunks - r.chunksLeft + 1 : 0,
+    secondsToNext,
+    spent: r.spent,
+    burned: r.burned,
+    chunks: r.chunks,
+  };
+}
+
+/** "6:12"; never negative. */
+export function countdown(secs: number): string {
+  const s = Math.max(0, Math.floor(secs));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/** Pure: getLogs ranges of `size` blocks walking back from `head`, at most `max`, never below `floor`. */
+export function logWindows(head: bigint, floor: bigint, size: bigint, max: number): [bigint, bigint][] {
+  const out: [bigint, bigint][] = [];
+  let to = head;
+  while (out.length < max && to >= floor) {
+    const from = to - size + 1n > floor ? to - size + 1n : floor;
+    out.push([from, to]);
+    if (from === floor) break;
+    to = from - 1n;
+  }
+  return out;
 }

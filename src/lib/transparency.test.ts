@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import deployment from "./deployments/arc-mainnet.json";
-import { BUYBACK, CONTRACTS, EXPECTED_ROLES, FEE_SPLITS, RECORD, ROLES, WALLETS, compactNumber, holderLabel, parseDexPair, nativeToUsdc, percentOf, roleDiffs, supplySplit, sumBy, donutArcs, buybackView } from "./transparency";
+import { BUYBACK, CONTRACTS, EXPECTED_ROLES, FEE_SPLITS, RECORD, ROLES, WALLETS, compactNumber, holderLabel, parseDexPair, nativeToUsdc, percentOf, roleDiffs, supplySplit, sumBy, donutArcs, buybackView, type BuybackStatus, countdown, logWindows, parseBuybackStatus } from "./transparency";
 
 describe("transparency (app.registrai.cc/transparency)", () => {
   test("every wallet comes from the mainnet deployment file, with what it does and what it cannot", () => {
@@ -124,29 +124,64 @@ describe("supply and balances", () => {
   });
 });
 
-describe("buyback volume", () => {
-  test("the rules: 40% of treasury income, a round at $200, 4 buys of $50 ten minutes apart", () => {
-    expect(BUYBACK.shareOfTreasuryPct).toBe(40);
+describe("buyback", () => {
+  const S = (o: Partial<BuybackStatus> = {}): BuybackStatus => ({
+    balance: 0n, chunksLeft: 0, nextChunkAt: 0, ready: false, spent: 0n, burned: 0n, chunks: 0, ...o,
+  });
+
+  test("the rules the contract enforces", () => {
     expect(BUYBACK.triggerUsdc).toBe(200);
     expect(BUYBACK.chunkUsdc).toBe(50);
     expect(BUYBACK.chunks).toBe(4);
     expect(BUYBACK.cooldownMin).toBe(10);
+    expect(BUYBACK.shareOfTreasuryPct).toBe(40);
   });
 
-  test("nothing bought yet before the buyback contract exists", () => {
-    expect(buybackView(null)).toEqual({ live: false, spentUsdc: 0n, burnedRegi: 0n, buys: 0, pending: 0n, toTrigger: 200_000_000n, progressPct: 0 });
+  test("off before the contract exists", () => {
+    const v = buybackView(null, 1000);
+    expect(v.live).toBe(false);
+    expect(v.phase).toBe("off");
+    expect(v.toTrigger).toBe(200_000_000n);
   });
 
-  test("progress toward the next buy from what the contract holds", () => {
-    const v = buybackView({ spentUsdc: 1_500_000_000n, burnedRegi: 10n, buys: 15, pending: 50_000_000n });
-    expect(v.live).toBe(true);
+  test("collecting toward the trigger, with the splitter's share shown as incoming", () => {
+    const v = buybackView(S({ balance: 50_000_000n }), 1000, 30_000_000n);
+    expect(v.phase).toBe("collecting");
+    expect(v.progressPct).toBe(25);
     expect(v.toTrigger).toBe(150_000_000n);
+    expect(v.incoming).toBe(30_000_000n);
+  });
+
+  test("ready at the trigger", () => {
+    const v = buybackView(S({ balance: 200_000_000n, ready: true }), 1000);
+    expect(v.phase).toBe("ready");
+    expect(v.toTrigger).toBe(0n);
+    expect(v.progressPct).toBe(100);
+  });
+
+  test("mid-round: chunk number, cooldown countdown, progress through the round", () => {
+    const v = buybackView(S({ balance: 150_000_000n, chunksLeft: 3, nextChunkAt: 1600 }), 1000);
+    expect(v.phase).toBe("cooldown");
+    expect(v.roundChunk).toBe(2);
+    expect(v.secondsToNext).toBe(600);
     expect(v.progressPct).toBe(25);
   });
 
-  test("a full contract shows 100% and nothing left to go", () => {
-    const v = buybackView({ spentUsdc: 0n, burnedRegi: 0n, buys: 0, pending: 600_000_000n });
-    expect(v.progressPct).toBe(100);
-    expect(v.toTrigger).toBe(0n);
+  test("parses the status tuple", () => {
+    expect(parseBuybackStatus([5n, 2n, 99n, true, 7n, 8n, 3n])).toEqual(
+      { balance: 5n, chunksLeft: 2, nextChunkAt: 99, ready: true, spent: 7n, burned: 8n, chunks: 3 },
+    );
+  });
+
+  test("countdown text", () => {
+    expect(countdown(372)).toBe("6:12");
+    expect(countdown(0)).toBe("0:00");
+    expect(countdown(-5)).toBe("0:00");
+  });
+
+  test("log windows walk back from the head, never below the floor", () => {
+    expect(logWindows(1000n, 0n, 400n, 5)).toEqual([[601n, 1000n], [201n, 600n], [0n, 200n]]);
+    expect(logWindows(1000n, 700n, 400n, 5)).toEqual([[700n, 1000n]]);
+    expect(logWindows(1000n, 0n, 100n, 2)).toEqual([[901n, 1000n], [801n, 900n]]);
   });
 });
