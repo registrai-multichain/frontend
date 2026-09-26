@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import useSWR from "swr";
 import { createPublicClient, getAddress, isAddress, type Abi, type Address, type Hex, type PublicClient } from "viem";
 import { useWallet } from "@/components/WalletProvider";
@@ -21,7 +21,7 @@ import {
 import {
   checkpointFromJson, checkpointToJson, readRevokedBuilders, type LogReader, type RevocationCheckpoint,
 } from "@/lib/badge-revocations";
-import { ADMIN_SERVICE, adminLoginMessage, inviteDm, type InviteRecord } from "@/lib/builders-admin";
+import { ADMIN_SERVICE, adminLoginMessage, adminView, inviteDm, type AdminRole, type AdminView, type InviteRecord } from "@/lib/builders-admin";
 import {
   cancelRecoverySafeFile,
   deactivateProjectSafeFile,
@@ -67,7 +67,10 @@ const BUILDERS_SITE = "https://builder.registrai.cc";
 const CLI = `npx tsx scripts/onboard-batch.ts --network ${BUILDERS.network}${BUILDERS.badgesOn && BADGE ? ` --badge ${BADGE}` : ""}`;
 
 type AdminInvite = InviteRecord & { claimLink: string };
-type ApiState = { state: "checking" } | { state: "unavailable" } | { state: "ready"; address: string | null };
+type ApiState = { state: "checking" } | { state: "unavailable" } | { state: "ready"; address: string | null; role: AdminRole | null };
+
+/** What the signed-in role may see and do (adminView); read by the rows and sections below. */
+const ViewCtx = createContext<AdminView>(adminView("admin"));
 
 class SignedOut extends Error {}
 
@@ -175,9 +178,9 @@ export function AdminApp({ revocationCheckpoint = null }: { revocationCheckpoint
       try {
         const res = await fetch("/api/auth/me", { credentials: "same-origin", cache: "no-store" });
         if (!res.ok || !(res.headers.get("content-type") ?? "").includes("application/json")) throw new Error("no api");
-        const me = (await res.json()) as { service?: string; address?: string | null };
+        const me = (await res.json()) as { service?: string; address?: string | null; role?: AdminRole | null };
         if (me.service !== ADMIN_SERVICE) throw new Error("not the admin api");
-        if (!off) setApi({ state: "ready", address: me.address ?? null });
+        if (!off) setApi({ state: "ready", address: me.address ?? null, role: me.role ?? (me.address ? "admin" : null) });
       } catch {
         if (!off) setApi({ state: "unavailable" });
       }
@@ -212,15 +215,20 @@ export function AdminApp({ revocationCheckpoint = null }: { revocationCheckpoint
           </a>
         </div>
       )}
-      {api.state === "ready" && !api.address && <SignIn onSignedIn={(address) => setApi({ state: "ready", address })} />}
+      {api.state === "ready" && !api.address && <SignIn onSignedIn={(address, role) => setApi({ state: "ready", address, role })} />}
       {api.state === "ready" && api.address && (
-        <Dashboard admin={api.address} revocationCheckpoint={revocationCheckpoint} onSignedOut={() => setApi({ state: "ready", address: null })} />
+        <Dashboard
+          admin={api.address}
+          role={api.role ?? "admin"}
+          revocationCheckpoint={revocationCheckpoint}
+          onSignedOut={() => setApi({ state: "ready", address: null, role: null })}
+        />
       )}
     </>
   );
 }
 
-function SignIn({ onSignedIn }: { onSignedIn: (address: string) => void }) {
+function SignIn({ onSignedIn }: { onSignedIn: (address: string, role: AdminRole) => void }) {
   const { address, connect, isConnecting, walletClient, error: walletError } = useWallet();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -234,9 +242,9 @@ function SignIn({ onSignedIn }: { onSignedIn: (address: string) => void }) {
       if (!n.body.nonce) throw new Error(n.body.error ?? `no nonce (${n.status})`);
       const message = adminLoginMessage({ origin: window.location.origin, nonce: n.body.nonce, issued: new Date().toISOString() });
       const signature = await walletClient.signMessage({ account: address, message });
-      const r = await call<{ address?: string; error?: string }>("/api/auth/login", { method: "POST", body: { message, signature } });
+      const r = await call<{ address?: string; role?: AdminRole; error?: string }>("/api/auth/login", { method: "POST", body: { message, signature } });
       if (r.status !== 200 || !r.body.address) throw new Error(r.body.error ?? `sign-in failed (${r.status})`);
-      onSignedIn(r.body.address);
+      onSignedIn(r.body.address, r.body.role ?? "admin");
     } catch (e) {
       setError(humanizeError(e, HUMAN));
     } finally {
@@ -283,10 +291,12 @@ async function readChain(): Promise<GalleryBuilder[]> {
 
 function Dashboard({
   admin,
+  role,
   revocationCheckpoint,
   onSignedOut,
 }: {
   admin: string;
+  role: AdminRole;
   revocationCheckpoint: unknown;
   onSignedOut: () => void;
 }) {
@@ -338,12 +348,15 @@ function Dashboard({
         : null;
 
   const wonderSources = WONDER_ON_BUILDERS ? (invites.data ?? []).map((i) => i.source) : [];
+  const view = adminView(role);
   return (
+    <ViewCtx.Provider value={view}>
     <WonderStatusProvider sources={wonderSources}>
       <div className="adm-stack">
         <div className="adm-bar">
           <span>
             Signed in as <b className="tnum">{shortAddr(admin)}</b>
+            {role === "onboarder" && <> · onboarder: you can read everything here and onboard builders from this wallet</>}
           </span>
           <span className="adm-bar-actions">
             {REG && (
@@ -357,7 +370,7 @@ function Dashboard({
           </span>
         </div>
 
-        <InviteForm onChanged={() => invites.mutate()} />
+        {view.inviteForm && <InviteForm onChanged={() => invites.mutate()} />}
 
         <InvitesTable
           invites={invites.data}
@@ -377,15 +390,16 @@ function Dashboard({
           onChainChanged={() => chain.mutate()}
         />
 
-        <BadgeSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
+        {view.badges && <BadgeSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />}
 
-        <RecoverySection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
+        {view.recovery && <RecoverySection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />}
 
-        <ProjectsSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />
+        {view.projects && <ProjectsSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />}
 
-        {WONDER_ON_BUILDERS && <WonderSection invites={invites.data ?? []} />}
+        {view.wonder && WONDER_ON_BUILDERS && <WonderSection invites={invites.data ?? []} />}
       </div>
     </WonderStatusProvider>
+    </ViewCtx.Provider>
   );
 }
 
@@ -539,6 +553,7 @@ function StatusChip({ s }: { s: InviteChainStatus | null }) {
 function InviteRow({ inv, status, onChanged }: { inv: AdminInvite; status: InviteChainStatus | null; onChanged: () => void }) {
   const wonder = useWonderContext();
   const [editing, setEditing] = useState(false);
+  const view = useContext(ViewCtx);
   const [name, setName] = useState(inv.name ?? "");
   const [x, setX] = useState(inv.x ?? "");
   const [note, setNote] = useState(inv.note ?? "");
@@ -632,7 +647,7 @@ function InviteRow({ inv, status, onChanged }: { inv: AdminInvite; status: Invit
         <StatusChip s={status} />
       </td>
       <td>
-        {!editing && (
+        {!editing && view.editInvites && (
           <span className="adm-actions">
             <button type="button" className="vf-mini" onClick={() => setEditing(true)} disabled={busy}>
               edit
@@ -775,6 +790,7 @@ function GaslessSection({
   chainNote: string | null;
   onSignedOut: () => void;
 }) {
+  const view = useContext(ViewCtx);
   const requests = useSWR<GaslessRequest[]>(
     "admin-register-requests",
     async () => {
@@ -858,14 +874,18 @@ function GaslessSection({
                     {" · "}
                     {ok === undefined ? "checking proof…" : ok ? "proof valid" : "proof does NOT check out"}
                   </span>{" "}
-                  <button type="button" className="vf-mini" onClick={() => dismiss(r.source)}>
-                    dismiss
-                  </button>
+                  {view.dismissRequests && (
+                    <button type="button" className="vf-mini" onClick={() => dismiss(r.source)}>
+                      dismiss
+                    </button>
+                  )}
                 </li>
               );
             })}
           </ul>
-          {plan && plan.txs.length > 0 ? (
+          {plan && plan.txs.length > 0 && !view.safeFiles ? (
+            <p className="vf-hint">The Safe registers these ({plan.txs.length} tx): an admin downloads the batch.</p>
+          ) : plan && plan.txs.length > 0 ? (
             <>
               <ol className="adm-txs">
                 {plan.txs.map((t, i) => (
@@ -924,6 +944,7 @@ function OnboardingSection({
   revocationCheckpoint: unknown;
   onChainChanged: () => void;
 }) {
+  const view = useContext(ViewCtx);
   const { address, walletChainId, switchChain, connect, isConnecting } = useWallet();
   const missing = [!REG && "BuilderRegistry", !CARE && "CaretakerRegistry", !OPERATOR && "the operator"].filter(Boolean);
   const badge = BUILDERS.badgesOn ? BADGE : null;
@@ -1147,6 +1168,8 @@ function OnboardingSection({
                   );
                 })}
               </ul>
+              {view.safeFiles && (
+              <>
               <div className="pp-card-label">Or: the Safe batch</div>
               <ol className="adm-txs">
                 {queue.plan.txs.map((t, i) => (
@@ -1166,6 +1189,8 @@ function OnboardingSection({
                 Safe → Apps → Transaction Builder → drag the file in. Chain {BUILDERS.chainId}, CaretakerRegistry {CARE && shortAddr(CARE)}
                 {badge ? `, badge ${shortAddr(badge)}` : ""}, operator {OPERATOR && shortAddr(OPERATOR)}.
               </p>
+              </>
+              )}
             </>
           )}
           {sentLog.length > 0 && (

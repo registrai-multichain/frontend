@@ -34,6 +34,8 @@ export interface Env {
   INVITES: KV;
   /** Comma-separated admin addresses (lowercase). Empty = nobody can sign in. */
   ADMIN_ADDRESSES?: string;
+  /** Comma-separated onboarder addresses: they sign in to read and onboard only (every admin API change is refused). */
+  ONBOARDER_ADDRESSES?: string;
   /** https://builder.registrai.cc — sign-in, CSRF and claim links are bound to it. */
   SITE_ORIGIN?: string;
   /** Pages SECRET (never in wrangler.toml): the HMAC key of the stateless sign-in nonces. Unset = sign-in fails closed (500). */

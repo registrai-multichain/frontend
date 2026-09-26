@@ -204,3 +204,29 @@ export function safeEqual(a: string, b: string): boolean {
   for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
   return diff === 0;
 }
+
+/** A signed-in admin-page role (builders-site/lib/auth.ts roleOf). */
+export type AdminRole = "admin" | "onboarder";
+
+/**
+ * Pure: what /admin shows a role. An onboarder reads invites and the no-gas
+ * requests and sends onboarding with its own wallet; everything that changes the
+ * invite store or needs the Safe (batch files, badges, recoveries, projects,
+ * wonder nominations) is admin-only. The server refuses an onboarder's changes
+ * regardless (adminGate); this only keeps the page honest.
+ */
+export function adminView(role: AdminRole) {
+  const admin = role === "admin";
+  return {
+    inviteForm: admin,
+    editInvites: admin,
+    dismissRequests: admin,
+    safeFiles: admin,
+    directOnboard: true,
+    badges: admin,
+    recovery: admin,
+    projects: admin,
+    wonder: admin,
+  };
+}
+export type AdminView = ReturnType<typeof adminView>;

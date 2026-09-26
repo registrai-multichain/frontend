@@ -114,7 +114,7 @@ describe("login (real viem signatures)", () => {
     const body = await signed(env);
     const res = await handleLogin(post("/api/auth/login", body), env, NOW);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ address: ADMIN.address.toLowerCase() });
+    expect(await res.json()).toEqual({ address: ADMIN.address.toLowerCase(), role: "admin" });
     const cookie = res.headers.get("set-cookie")!;
     expect(cookie).toMatch(/^__Host-rb_admin=[0-9a-f]{64}; Path=\/; HttpOnly; Secure; SameSite=Strict; Max-Age=43200$/);
     const token = /=([0-9a-f]{64});/.exec(cookie)![1];
@@ -124,7 +124,7 @@ describe("login (real viem signatures)", () => {
     expect(await kv.get(`used-nonce:${body.nonce}`)).toBe("1");
 
     const me = await handleMe(new Request(`${ORIGIN}/api/auth/me`, { headers: { cookie: `__Host-rb_admin=${token}` } }), env);
-    expect(await me.json()).toEqual({ service: "registrai-builders-admin", address: ADMIN.address.toLowerCase() });
+    expect(await me.json()).toEqual({ service: "registrai-builders-admin", address: ADMIN.address.toLowerCase(), role: "admin" });
   });
 
   test("a wallet not on the allowlist is refused", async () => {
@@ -213,7 +213,7 @@ describe("session", () => {
 
   test("me without a session: service marker, no address", async () => {
     const { env } = setup();
-    expect(await (await handleMe(new Request(`${ORIGIN}/api/auth/me`), env)).json()).toEqual({ service: "registrai-builders-admin", address: null });
+    expect(await (await handleMe(new Request(`${ORIGIN}/api/auth/me`), env)).json()).toEqual({ service: "registrai-builders-admin", address: null, role: null });
   });
 
   test("removing an address from the allowlist ends its sessions", async () => {
@@ -236,13 +236,13 @@ describe("session", () => {
   test("admin gate: session required; mutations also need same-origin JSON", async () => {
     const { env, cookie } = await loggedIn();
     expect(await adminGate(new Request(`${ORIGIN}/api/admin/invites`), env)).toBeInstanceOf(Response);
-    expect(await adminGate(new Request(`${ORIGIN}/api/admin/invites`, { headers: { cookie } }), env)).toEqual({ address: ADMIN.address.toLowerCase() });
+    expect(await adminGate(new Request(`${ORIGIN}/api/admin/invites`, { headers: { cookie } }), env)).toEqual({ address: ADMIN.address.toLowerCase(), role: "admin" });
     const mut = (headers: Record<string, string>) => new Request(`${ORIGIN}/api/admin/invites`, { method: "POST", headers: { cookie, ...headers }, body: "{}" });
     const noOrigin = await adminGate(mut({ "content-type": "application/json" }), env);
     expect(noOrigin).toBeInstanceOf(Response);
     expect((noOrigin as Response).status).toBe(403);
     expect(await adminGate(mut({ "content-type": "application/x-www-form-urlencoded", origin: ORIGIN }), env)).toBeInstanceOf(Response);
-    expect(await adminGate(mut({ "content-type": "application/json; charset=utf-8", origin: ORIGIN }), env)).toEqual({ address: ADMIN.address.toLowerCase() });
+    expect(await adminGate(mut({ "content-type": "application/json; charset=utf-8", origin: ORIGIN }), env)).toEqual({ address: ADMIN.address.toLowerCase(), role: "admin" });
     const del = new Request(`${ORIGIN}/api/admin/invites?source=a/b`, { method: "DELETE", headers: { cookie, origin: "https://evil.example", "content-type": "application/json" } });
     expect(((await adminGate(del, env)) as Response).status).toBe(403);
   });
@@ -253,6 +253,54 @@ describe("session", () => {
     expect(res.status).toBe(204);
     expect(res.headers.get("set-cookie")).toBe("__Host-rb_admin=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0");
     expect(await kv.get(`session:${token}`)).toBeNull();
+  });
+});
+
+describe("onboarder sign-in (ONBOARDER_ADDRESSES)", () => {
+  async function onboarderIn(extra: Partial<Env> = {}) {
+    const s = setup();
+    s.env.ONBOARDER_ADDRESSES = OTHER.address.toLowerCase();
+    Object.assign(s.env, extra);
+    const res = await handleLogin(post("/api/auth/login", await signed(s.env, { account: OTHER })), s.env, NOW);
+    const token = /=([0-9a-f]{64});/.exec(res.headers.get("set-cookie") ?? "")?.[1];
+    return { ...s, res, cookie: `__Host-rb_admin=${token}` };
+  }
+  const read = (cookie: string) => new Request(`${ORIGIN}/api/admin/invites`, { headers: { cookie } });
+  const write = (cookie: string, method: string) =>
+    new Request(`${ORIGIN}/api/admin/invites?source=a/b`, { method, headers: { cookie, origin: ORIGIN, "content-type": "application/json" }, body: method === "DELETE" ? undefined : "{}" });
+
+  test("an onboarder signs in, and /me says so", async () => {
+    const { env, res, cookie } = await onboarderIn();
+    expect(res.status).toBe(200);
+    expect(await (await handleMe(read(cookie), env)).json()).toEqual({ service: "registrai-builders-admin", address: OTHER.address.toLowerCase(), role: "onboarder" });
+  });
+
+  test("an onboarder reads; every change is refused", async () => {
+    const { env, cookie } = await onboarderIn();
+    expect(await adminGate(read(cookie), env)).toEqual({ address: OTHER.address.toLowerCase(), role: "onboarder" });
+    for (const m of ["POST", "PATCH", "DELETE"]) {
+      const r = (await adminGate(write(cookie, m), env)) as Response;
+      expect(r).toBeInstanceOf(Response);
+      expect(r.status).toBe(403);
+      expect(((await r.json()) as { error: string }).error).toBe("Onboarders can only read and onboard");
+    }
+  });
+
+  test("leaving ONBOARDER_ADDRESSES ends the session", async () => {
+    const { env, cookie } = await onboarderIn();
+    env.ONBOARDER_ADDRESSES = "";
+    expect(await adminGate(read(cookie), env)).toBeInstanceOf(Response);
+  });
+
+  test("an address on both lists is an admin", async () => {
+    const { env, cookie } = await onboarderIn();
+    env.ADMIN_ADDRESSES = `${env.ADMIN_ADDRESSES}, ${OTHER.address.toLowerCase()}`;
+    expect(await adminGate(write(cookie, "PATCH"), env)).toEqual({ address: OTHER.address.toLowerCase(), role: "admin" });
+  });
+
+  test("on neither list: refused at sign-in", async () => {
+    const { res } = await onboarderIn({ ONBOARDER_ADDRESSES: "" });
+    expect(res.status).toBe(403);
   });
 });
 

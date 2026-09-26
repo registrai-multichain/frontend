@@ -159,3 +159,20 @@ describe("inviteDm (wonder markets)", () => {
     for (const w of [undefined, null, 0n]) expect(inviteDm({ source: "github:acme/tool" }, link, w)).not.toContain("$");
   });
 });
+
+import { adminView } from "./builders-admin";
+
+describe("adminView (onboarder sign-in)", () => {
+  test("an admin sees and does everything", () => {
+    expect(adminView("admin")).toEqual({
+      inviteForm: true, editInvites: true, dismissRequests: true, safeFiles: true, directOnboard: true,
+      badges: true, recovery: true, projects: true, wonder: true,
+    });
+  });
+  test("an onboarder reads invites and requests, onboards directly, and nothing else", () => {
+    expect(adminView("onboarder")).toEqual({
+      inviteForm: false, editInvites: false, dismissRequests: false, safeFiles: false, directOnboard: true,
+      badges: false, recovery: false, projects: false, wonder: false,
+    });
+  });
+});

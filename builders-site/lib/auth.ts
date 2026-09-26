@@ -40,6 +40,16 @@ import {
 } from "./http";
 
 const usedNonceKey = (n: string) => `used-nonce:${n}`;
+
+/** Who a signed-in address is, looked up from the allowlists on every request (an admin on both lists is an admin). */
+export type Role = "admin" | "onboarder";
+export function roleOf(env: Env, address: string): Role | null {
+  const a = address.toLowerCase();
+  if (parseAdminAllowlist(env.ADMIN_ADDRESSES).has(a)) return "admin";
+  if (parseAdminAllowlist(env.ONBOARDER_ADDRESSES).has(a)) return "onboarder";
+  return null;
+}
+export const ONBOARDER_READ_ONLY = "Onboarders can only read and onboard";
 const sessionKey = (t: string) => `session:${t}`;
 const TOKEN_RE = /^[0-9a-f]{64}$/;
 
@@ -102,7 +112,7 @@ export async function handleNonce(env: Env, nowMs = Date.now()): Promise<Respons
   return json({ nonce: await makeNonce(env.NONCE_SECRET, nowMs) });
 }
 
-export type LoginResult = { ok: true; address: string } | { ok: false; status: number; error: string };
+export type LoginResult = { ok: true; address: string; role: Role } | { ok: false; status: number; error: string };
 
 /**
  * The sign-in checks, in order: canonical message, nonce ours (MAC) and at
@@ -135,10 +145,11 @@ export async function verifyLogin(env: Env, body: unknown, nowMs: number): Promi
   } catch {
     return fail(401, "bad signature");
   }
-  if (!parseAdminAllowlist(env.ADMIN_ADDRESSES).has(signer)) return fail(403, `${signer} is not an admin`);
+  const role = roleOf(env, signer);
+  if (!role) return fail(403, `${signer} is not an admin or onboarder`);
   // Single use: recorded only now, at a successful sign-in.
   await env.INVITES.put(key, "1", { expirationTtl: NONCE_TTL_S });
-  return { ok: true, address: signer };
+  return { ok: true, address: signer, role };
 }
 
 export async function handleLogin(req: Request, env: Env, nowMs = Date.now()): Promise<Response> {
@@ -148,16 +159,22 @@ export async function handleLogin(req: Request, env: Env, nowMs = Date.now()): P
   if (!r.ok) return errorJson(r.status, r.error);
   const token = randomHex(32);
   await env.INVITES.put(sessionKey(token), r.address, { expirationTtl: SESSION_TTL_S });
-  return json({ address: r.address }, 200, { "set-cookie": sessionCookie(token) });
+  return json({ address: r.address, role: r.role }, 200, { "set-cookie": sessionCookie(token) });
 }
 
-/** The signed-in admin's address, or null (no / unknown / expired session, or no longer allowlisted). */
-export async function sessionAddress(req: Request, env: Env): Promise<string | null> {
+/** The signed-in address and its role, or null (no / unknown / expired session, or on neither allowlist any more). */
+export async function sessionUser(req: Request, env: Env): Promise<{ address: string; role: Role } | null> {
   const token = getCookie(req, SESSION_COOKIE);
   if (!token || !TOKEN_RE.test(token)) return null;
   const address = await env.INVITES.get(sessionKey(token));
   if (!address) return null;
-  return parseAdminAllowlist(env.ADMIN_ADDRESSES).has(address) ? address : null;
+  const role = roleOf(env, address);
+  return role ? { address, role } : null;
+}
+
+/** The signed-in address, or null. */
+export async function sessionAddress(req: Request, env: Env): Promise<string | null> {
+  return (await sessionUser(req, env))?.address ?? null;
 }
 
 export async function handleLogout(req: Request, env: Env): Promise<Response> {
@@ -169,19 +186,21 @@ export async function handleLogout(req: Request, env: Env): Promise<Response> {
 }
 
 export async function handleMe(req: Request, env: Env): Promise<Response> {
-  return json({ service: ADMIN_SERVICE, address: await sessionAddress(req, env) });
+  const u = await sessionUser(req, env);
+  return json({ service: ADMIN_SERVICE, address: u?.address ?? null, role: u?.role ?? null });
 }
 
 /**
- * /api/admin/* gate: a live session, and for a mutating request the CSRF
- * checks. Returns the admin's address, or the refusal.
+ * /api/admin/* gate: a live session; a mutating request needs the admin role
+ * (onboarders only read) and passes the CSRF checks. Returns who, or the refusal.
  */
-export async function adminGate(req: Request, env: Env): Promise<{ address: string } | Response> {
-  const address = await sessionAddress(req, env);
-  if (!address) return errorJson(401, "sign in first");
+export async function adminGate(req: Request, env: Env): Promise<{ address: string; role: Role } | Response> {
+  const user = await sessionUser(req, env);
+  if (!user) return errorJson(401, "sign in first");
   if (isMutating(req.method)) {
+    if (user.role !== "admin") return errorJson(403, ONBOARDER_READ_ONLY);
     const csrf = csrfFailure(req, siteOrigin(env));
     if (csrf) return errorJson(403, csrf);
   }
-  return { address };
+  return user;
 }

@@ -27,6 +27,9 @@ id = "9652d6f635d94fda8cf3d09ee182fa41"
 # Wallets allowed to sign in to /admin: comma-separated, lowercase.
 # Empty = nobody can sign in (the rest of the site works as before).
 ADMIN_ADDRESSES = "0xb7ecf980a4732b75e57e2ec80903dee3964f2573"
+# Onboarders sign in to /admin to READ and send onboarding from their own wallet (the
+# ISSUER_ROLE + GOVERNOR_ROLE holder); every admin API change is refused for them.
+ONBOARDER_ADDRESSES = "0x80e81588175558d565ffc1f63fe0513a61316405"
 # Sign-in messages, the CSRF Origin check and claim links are bound to it.
 SITE_ORIGIN = "https://builder.registrai.cc"
 
