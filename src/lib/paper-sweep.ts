@@ -117,6 +117,8 @@ export const SCOPED_DIRS = [
   "src/app/guide",
   "src/app/admin",
   "src/app/rounds",
+  "src/app/transparency",
+  "src/components/transparency",
 ];
 
 export function scopedTsxFiles(root: string): string[] {

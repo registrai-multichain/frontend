@@ -1,0 +1,23 @@
+[
+  {
+    "date": "2026-09-26",
+    "title": "Season 1 dates set: 1 Oct – 29 Oct 2026",
+    "detail": "Seasons run on a fixed calendar from 1 Oct 2026, 00:00 UTC, on every network; trades before it count toward no season."
+  },
+  {
+    "date": "2026-09-26",
+    "title": "The markets app moved to app.registrai.cc",
+    "detail": "Markets, Rounds, Builders, Atlas and How it works run on their own site, built for Arc mainnet. Markets open there after their audit."
+  },
+  {
+    "date": "2026-09-25",
+    "title": "Roles checked on chain after the deploy",
+    "detail": "Every role on the three contracts was read back independently: the admin Safe holds the admin roles, and the deployer holds none."
+  },
+  {
+    "date": "2026-09-25",
+    "title": "Builder registry, caretaker registry and Verified Builder Badge deployed on Arc mainnet",
+    "detail": "Phase 1: builders before markets. Deployed at block 22,642,042; source verified on the explorer.",
+    "address": "0xBB6F4B18776Fd20Bb53a1205375273373DD1E5bA"
+  }
+]

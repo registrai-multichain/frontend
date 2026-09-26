@@ -35,7 +35,7 @@ describe("public registrai.cc", () => {
 
 describe("app.registrai.cc", () => {
   test("serves the markets app: its root opens Markets; the bridge and builder pages point to their own sites", () => {
-    expect([...APP_SITE_ROUTES].sort()).toEqual(["atlas", "perennial", "rounds"]);
+    expect([...APP_SITE_ROUTES].sort()).toEqual(["atlas", "perennial", "rounds", "transparency"]);
     const r = appSiteRedirects();
     expect(r).toContain("/ /perennial/ 302");
     expect(r).toContain("/bridge https://registrai.cc/bridge/ 302");

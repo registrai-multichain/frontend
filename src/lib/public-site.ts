@@ -20,7 +20,7 @@ export const PUBLIC_ROUTES = ["bridge"] as const;
 export const BUILDERS_SITE_ROUTES = ["builders", "verify", "admin", "guide"] as const;
 
 /** App routes that move to the markets app, app.registrai.cc (same path; built for mainnet). */
-export const APP_SITE_ROUTES = ["atlas", "perennial", "rounds"] as const;
+export const APP_SITE_ROUTES = ["atlas", "perennial", "rounds", "transparency"] as const;
 
 /** App routes that run on testnet: redirected to the landing on the public site. */
 export const TESTNET_ROUTES = [

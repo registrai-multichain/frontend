@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 D=dist-app
 rm -rf "$D"; mkdir -p "$D"
-for x in 404 404.html _next _not-found perennial rounds atlas apple-icon.png icon.png brand social \
+for x in 404 404.html _next _not-found perennial rounds atlas transparency apple-icon.png icon.png brand social \
          mark.png mark-ring.svg mark-ring-512.png wordmark.png wordmark-dark.png; do
   [ -e "out/$x" ] && cp -R "out/$x" "$D/"
 done

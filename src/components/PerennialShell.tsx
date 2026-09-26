@@ -16,6 +16,7 @@ const NAV: NavItem[] = [
   { href: "/perennial/builders/", label: "Builders" },
   { href: "/atlas/", label: "Atlas" },
   { href: "/perennial/economy/", label: "How it works" },
+  { href: "/transparency/", label: "Transparency" },
 ];
 
 export function PerennialShell({ children }: { children: ReactNode }) {

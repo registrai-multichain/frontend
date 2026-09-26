@@ -9,7 +9,7 @@ test("app.registrai.cc: built for mainnet, ships only the markets app, deploys t
   expect(pkg.scripts["deploy:app"]).toMatch(/^NEXT_PUBLIC_PERENNIAL_NETWORK=mainnet next build && bash scripts\/build-app-site\.sh && wrangler pages deploy dist-app --project-name=registrai-app --branch=main$/);
   const build = readFileSync(resolve(FRONTEND, "scripts/build-app-site.sh"), "utf8");
   const shipped = /for x in ([^;]*); do/s.exec(build)![1].replace(/\\\n/g, " ").split(/\s+/).filter(Boolean);
-  for (const r of ["perennial", "rounds", "atlas", "_next"]) expect(shipped).toContain(r);
+  for (const r of ["perennial", "rounds", "atlas", "transparency", "_next"]) expect(shipped).toContain(r);
   for (const r of ["bridge", "builders", "verify", "admin", "markets", "lending", "data", "legacy"]) expect(shipped).not.toContain(r);
   expect(build).toContain("appSiteRedirects()");
   expect(build).toMatch(/connect-src 'self' https:\/\/rpc\.mainnet\.arc\.io/);
