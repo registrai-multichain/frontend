@@ -842,8 +842,9 @@ export function CommonMarkets() {
       </section>
       <p className="mt-3 max-w-[72ch] text-[13px] leading-relaxed text-fg-dim">
         Prices are live · Coinbase, for reference. You bet on the next round; betting closes the moment it starts. When
-        it ends, the agent attests the round&apos;s change on chain: the 1-minute close at its end minus the one at its
-        start. Up wins only if the change is above zero; no change is Down. The reading becomes final after a 10-minute
+        it ends, the agent attests the round&apos;s change on chain: the median of the changes on Coinbase, Kraken and
+        OKX (each the 1-minute close at the end minus the one at the start), so no single exchange decides a round. Up
+        wins only if the change is above zero; no change is Down. The reading becomes final after a 10-minute
         challenge window and the agent resolves the round right after, about 10–11 minutes after the round ends; in the
         meantime your position shows what it pays if the round ended now.
       </p>
