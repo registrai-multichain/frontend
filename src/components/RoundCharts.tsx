@@ -289,8 +289,8 @@ export function PriceChart({
   const yLo = v.lo ?? 0;
   const yHi = v.hi ?? 1;
 
-  const padR = 64; // right axis labels
-  const padB = 16;
+  const padR = 76; // right axis labels
+  const padB = 18;
   const W = Math.max(0, width - padR);
   const H = height - padB;
   const X = (t: number) => ((t - x0) / (x1 - x0)) * W;
@@ -305,7 +305,7 @@ export function PriceChart({
   const above = head !== undefined && startPrice !== undefined ? head > startPrice : undefined;
   const tone = above === undefined ? "var(--accent)" : above ? "var(--up)" : "var(--down)";
   // Axis labels, minus any the live price tag would cover.
-  const ticks = niceTicks(yLo, yHi, 3).filter((v) => Y(v) > 8 && Y(v) < H - 4 && (head === undefined || Math.abs(Y(v) - Y(head)) > 14));
+  const ticks = niceTicks(yLo, yHi, 3).filter((v) => Y(v) > 8 && Y(v) < H - 4 && (head === undefined || Math.abs(Y(v) - Y(head)) > 16));
   const minutes: number[] = [];
   for (let t = Math.ceil(x0 / 120) * 120; t <= x1; t += 120) minutes.push(t);
   const inPlay = roundStart !== undefined && roundEnd !== undefined;
@@ -329,10 +329,10 @@ export function PriceChart({
             <g>
               <rect x={X(roundStart!)} y={0} width={Math.max(0, X(roundEnd!) - X(roundStart!))} height={H} fill="var(--fg)" opacity="0.035" />
               <line x1={X(roundEnd!)} x2={X(roundEnd!)} y1={0} y2={H} stroke="var(--line-strong)" strokeDasharray="2 3" />
-              <text x={X(roundStart!) + 4} y={11} className="fill-fg-dim" fontSize="10">
+              <text x={X(roundStart!) + 4} y={13} className="fill-fg-dim" fontSize="12">
                 in play
               </text>
-              <text x={X(roundEnd!) + 4} y={11} className="fill-fg-dim" fontSize="10">
+              <text x={X(roundEnd!) + 4} y={13} className="fill-fg-dim" fontSize="12">
                 next round
               </text>
             </g>
@@ -342,13 +342,13 @@ export function PriceChart({
           {ticks.map((v) => (
             <g key={v}>
               <line x1={0} x2={W} y1={Y(v)} y2={Y(v)} stroke="var(--line)" strokeWidth="1" />
-              <text x={W + 6} y={Y(v) + 3} className="tnum fill-fg-dim" fontSize="10">
+              <text x={W + 6} y={Y(v) + 4} className="tnum fill-fg-dim" fontSize="12">
                 {formatPrice(v, decimals)}
               </text>
             </g>
           ))}
           {minutes.map((t) => (
-            <text key={t} x={X(t)} y={height - 3} textAnchor="middle" className="tnum fill-fg-dim" fontSize="10">
+            <text key={t} x={X(t)} y={height - 3} textAnchor="middle" className="tnum fill-fg-dim" fontSize="12">
               {hhmm(t)}
             </text>
           ))}
@@ -362,7 +362,7 @@ export function PriceChart({
           {startPrice !== undefined && (
             <g>
               <line x1={0} x2={W} y1={Y(startPrice)} y2={Y(startPrice)} stroke="var(--fg-mute)" strokeDasharray="4 4" strokeWidth="1" />
-              <text x={4} y={Y(startPrice) - 4} className="tnum fill-fg-mute" fontSize="10">
+              <text x={4} y={Y(startPrice) - 4} className="tnum fill-fg-mute" fontSize="12">
                 price to beat {formatPrice(startPrice, decimals)}
               </text>
             </g>
@@ -376,8 +376,8 @@ export function PriceChart({
                 <animate attributeName="r" from="3.5" to="11" dur="1.6s" repeatCount="indefinite" />
                 <animate attributeName="opacity" from="0.7" to="0" dur="1.6s" repeatCount="indefinite" />
               </circle>
-              <rect x={W + 2} y={Y(head) - 8} width={padR - 4} height={16} fill={tone} rx="2" />
-              <text x={W + 6} y={Y(head) + 3.5} className="tnum" fontSize="10.5" fill="var(--bg-elev)">
+              <rect x={W + 2} y={Y(head) - 9} width={padR - 4} height={18} fill={tone} rx="3" />
+              <text x={W + 6} y={Y(head) + 4} className="tnum" fontSize="12" fill="var(--bg-elev)">
                 {formatPrice(head, decimals)}
               </text>
             </g>
@@ -412,7 +412,7 @@ export function OddsChart({
   const targetsAt = useCallback((): Targets => ({ head: lastUp }), [lastUp]);
   const { now, v } = useAnimation(skew, targetsAt, ODDS_RATES);
   const head = v.head ?? lastUp;
-  const padR = 40;
+  const padR = 44;
   const W = Math.max(0, width - padR);
   const H = height - 4;
   const X = (t: number) => ((Math.min(Math.max(t, open), close) - open) / (close - open || 1)) * W;
@@ -436,14 +436,14 @@ export function OddsChart({
           </defs>
           <line x1={0} x2={W} y1={Y(0.5)} y2={Y(0.5)} stroke="var(--line-strong)" strokeDasharray="3 4" />
           {Math.abs(head - 0.5) > 0.08 && (
-            <text x={W + 6} y={Y(0.5) + 3} className="tnum fill-fg-dim" fontSize="10">
+            <text x={W + 6} y={Y(0.5) + 3} className="tnum fill-fg-dim" fontSize="12">
               50%
             </text>
           )}
           {area && <path d={area} fill={`url(#odds-${gid})`} />}
           <path d={d} fill="none" stroke={tone} strokeWidth="1.75" strokeLinejoin="round" />
           <circle cx={X(tNow)} cy={Y(head)} r="3" fill={tone} />
-          <text x={W + 6} y={Math.min(H, Math.max(10, Y(head) + 3))} className="tnum" fontSize="10.5" fill={tone}>
+          <text x={W + 6} y={Math.min(H, Math.max(10, Y(head) + 3))} className="tnum" fontSize="12" fill={tone}>
             {Math.round(head * 100)}%
           </text>
         </svg>
