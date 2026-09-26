@@ -132,3 +132,13 @@ export function marketsForBuilders(
   const wanted = new Set(builderIds);
   return markets.filter((m) => wanted.has(m.builderId));
 }
+
+/**
+ * What the atlas shows while it is sparse: with no verified builder the globe
+ * carries an explanation instead of looking broken, and the season boards stay
+ * hidden until the season's first verified progress (empty boards read as a
+ * dead page).
+ */
+export function atlasView(totalBuilders: number, progressCount: number): { emptyGlobe: boolean; showBoards: boolean } {
+  return { emptyGlobe: totalBuilders === 0, showBoards: progressCount > 0 };
+}

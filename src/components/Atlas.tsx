@@ -7,6 +7,7 @@ import { Globe } from "@/components/Globe";
 import { SeasonBoards } from "@/components/SeasonBoards";
 import { MilestoneDisclosure, VerifiedBadge } from "@/components/VerifiedBadge";
 import {
+  atlasView,
   aggregateByCountry,
   impliedYes,
   marketsForBuilders,
@@ -87,6 +88,8 @@ export function Atlas() {
   const totalBuilders = cells.reduce((s, c) => s + c.builders, 0);
   const totalProgress = cells.reduce((s, c) => s + c.progress, 0);
   const totalVolume = cells.reduce((s, c) => s + c.volume, 0n);
+  const view = atlasView(totalBuilders, seasonProgress.length);
+  const fmtDate = (t: number) => new Date(t * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
   const inCell = selected
     ? builders.filter((b) => {
@@ -103,9 +106,9 @@ export function Atlas() {
   return (
     <section className="atlas-root">
       <dl className="atlas-stats">
-        <Stat label="builders" value={String(totalBuilders)} />
-        <Stat label="progress" value={String(totalProgress)} />
-        <Stat label="volume" value={`${usdc(totalVolume)} USDC`} />
+        <Stat label="Builders" value={String(totalBuilders)} />
+        <Stat label="Progress" value={String(totalProgress)} />
+        <Stat label="Volume" value={`${usdc(totalVolume)} USDC`} />
       </dl>
 
       {/* One grid: the globe alone at full width, or docked small to the left
@@ -122,6 +125,16 @@ export function Atlas() {
             }}
             max={max}
           />
+          {view.emptyGlobe && !selected && (
+            <div className="atlas-globe-empty">
+              <p className="pa-h3">The atlas fills in as builders verify</p>
+              <p className="pa-muted pa-small mt-1">
+                Each verified builder lights up their country
+                {season ? `. ${season.label} runs ${fmtDate(season.startedAt)} – ${fmtDate(season.endsAt)}` : ""}.
+              </p>
+              <Link className="pa-btn mt-3" href="/verify">Verify your project</Link>
+            </div>
+          )}
         </div>
         {selected && (
           <div className="atlas-panel">
@@ -270,6 +283,7 @@ export function Atlas() {
             progress={seasonProgress}
             traderPnl={traderPnl}
             syncedAt={syncedAt}
+            showBoards={view.showBoards}
           />
         </>
       )}
@@ -277,13 +291,6 @@ export function Atlas() {
       {/* Builders with no declared country, plus everyone folded in by the
           small-n floor. They have no geography by definition, so they sit
           beside the globe rather than on it. */}
-      {totalBuilders === 0 && (
-        <p className="atlas-empty">
-          No verified builders yet. Countries light up as builders{" "}
-          <Link href="/verify" className="text-accent hover:underline">verify their projects</Link>.
-        </p>
-      )}
-
       {unattributed && (
         <button
           type="button"

@@ -188,3 +188,12 @@
 .paper-type .gd-section ol, .paper-type .gd-section p { font-size: 16px !important; line-height: 1.65 !important; color: var(--fg); }
 .paper-type .gd-section code { color: var(--accent-deep); }
 .paper-type .gd-section li::marker { font-family: inherit; font-size: 15px; }
+/* atlas: the empty-globe message, rounded boards and season picker */
+.paper-type .atlas-stage-globe { position: relative; }
+.atlas-globe-empty { position: absolute; top: 50%; left: 50%; width: min(420px, calc(100% - 32px)); transform: translate(-50%, -50%); border: 1px solid var(--line); border-radius: 12px; padding: 20px; background: color-mix(in srgb, var(--bg-elev) 94%, transparent); text-align: center; box-shadow: 0 8px 30px rgba(43, 38, 32, .08); }
+.paper-type .board, .paper-type .atlas-unattributed { overflow: hidden; border-radius: 12px; }
+.paper-type .season-picker { gap: 6px; border: 0; }
+.paper-type .season-picker button { border: 1px solid var(--line); border-radius: 999px; }
+.paper-type .season-picker button[data-active="true"] { background: var(--fg); color: var(--bg); }
+.paper-type .globe-caption { font-family: inherit; font-size: 13px; letter-spacing: 0; text-transform: none; color: var(--fg-mute); }
+.paper-type .globe-caption em { font-style: normal; font-size: 13px; }

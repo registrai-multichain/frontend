@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   aggregateByCountry,
+  atlasView,
   densityBucket,
   impliedYes,
   marketsForBuilders,
@@ -107,5 +108,17 @@ describe("marketsForBuilders", () => {
 
   it("returns an empty array when no builder matches", () => {
     expect(marketsForBuilders([mkt("0xa", 1)], [9])).toEqual([]);
+  });
+});
+
+describe("atlasView (empty state)", () => {
+  it("no builders: the globe shows its message and no boards", () => {
+    expect(atlasView(0, 0)).toEqual({ emptyGlobe: true, showBoards: false });
+  });
+  it("builders but nothing scored this season: the globe fills in, the boards wait", () => {
+    expect(atlasView(4, 0)).toEqual({ emptyGlobe: false, showBoards: false });
+  });
+  it("the first verified progress brings the boards", () => {
+    expect(atlasView(4, 1)).toEqual({ emptyGlobe: false, showBoards: true });
   });
 });

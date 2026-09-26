@@ -38,10 +38,11 @@ export default function Image() {
   const fmt = (t: number) =>
     new Date(t * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
-  const NIGHT = "#080907";
-  const PAPER = "#fbf8ea";
-  const ACID = "#d7ff56";
-  const DIM = "#9a9b91";
+  // The paper palette (src/app/globals.css .paper-theme): the share card matches the page.
+  const PAPER = "#F4EEE1";
+  const INK = "#2B2620";
+  const GREEN = "#2F6B4F";
+  const MUTE = "#6F6353";
 
   return new ImageResponse(
     (
@@ -52,24 +53,22 @@ export default function Image() {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          background: NIGHT,
-          color: PAPER,
+          background: PAPER,
+          color: INK,
           padding: "68px 72px",
           fontFamily: "sans-serif",
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          <div style={{ display: "flex", fontSize: 22, letterSpacing: 6, color: DIM }}>
-            PERENNIAL · BUILDER ATLAS
-          </div>
+          <div style={{ display: "flex", fontSize: 26, color: MUTE }}>Perennial · Builder atlas</div>
           <div style={{ display: "flex", fontSize: 88, lineHeight: 1 }}>Where the grind is.</div>
         </div>
 
         <div style={{ display: "flex", gap: 56, alignItems: "flex-end" }}>
-          <Stat label={season ? season.label.toUpperCase() : "SEASON"} value={season ? `${fmt(season.startedAt)} – ${fmt(season.endsAt)}` : "—"} accent={ACID} dim={DIM} />
-          <Stat label="BUILDERS RANKED" value={String(rankedBuilders.length)} accent={ACID} dim={DIM} />
-          <Stat label="TRADERS RANKED" value={String(board?.traders.length ?? 0)} accent={ACID} dim={DIM} />
-          <div style={{ display: "flex", marginLeft: "auto", fontSize: 20, color: DIM }}>registrai.cc</div>
+          <Stat label={season ? season.label : "Season"} value={season ? `${fmt(season.startedAt)} – ${fmt(season.endsAt)}` : "—"} accent={GREEN} dim={MUTE} />
+          <Stat label="Builders ranked" value={String(rankedBuilders.length)} accent={GREEN} dim={MUTE} />
+          <Stat label="Traders ranked" value={String(board?.traders.length ?? 0)} accent={GREEN} dim={MUTE} />
+          <div style={{ display: "flex", marginLeft: "auto", fontSize: 22, color: MUTE }}>registrai.cc</div>
         </div>
       </div>
     ),
@@ -80,7 +79,7 @@ export default function Image() {
 function Stat({ label, value, accent, dim }: { label: string; value: string; accent: string; dim: string }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ display: "flex", fontSize: 18, letterSpacing: 4, color: dim }}>{label}</div>
+      <div style={{ display: "flex", fontSize: 22, color: dim }}>{label}</div>
       <div style={{ display: "flex", fontSize: 40, color: accent }}>{value}</div>
     </div>
   );

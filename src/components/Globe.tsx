@@ -320,12 +320,12 @@ export function Globe({
         )}
       </div>
       <figcaption className="globe-caption">
-        <span>drag to spin · scroll to zoom · click a lit country</span>
+        <span>Drag to spin · scroll to zoom · click a lit country</span>
         <span className="globe-scale" aria-hidden>
           {[0, 1, 2, 3, 4].map((b) => (
             <i key={b} data-density={b} />
           ))}
-          <em>denser</em>
+          <em>More builders</em>
         </span>
       </figcaption>
     </figure>

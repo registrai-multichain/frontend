@@ -66,12 +66,15 @@ export function SeasonBoards({
   progress,
   traderPnl,
   syncedAt,
+  showBoards = true,
 }: {
   season: Season;
   progress: SeasonProgress[];
   traderPnl: Map<string, bigint>;
   /** Build-time clock, in seconds. */
   syncedAt: number;
+  /** False until the season's first verified progress: empty boards read as a dead page. */
+  showBoards?: boolean;
 }) {
   // The page is statically exported, so `Date.now()` during render differs
   // between the build and the browser and breaks hydration. Both sides agree on
@@ -105,6 +108,9 @@ export function SeasonBoards({
         </span>
       </header>
 
+      {!showBoards ? (
+        <p className="pa-muted">The season&rsquo;s boards appear with its first verified progress.</p>
+      ) : (
       <div className="season-boards">
         <Board
           title="Countries"
@@ -125,6 +131,7 @@ export function SeasonBoards({
           format={usdc}
         />
       </div>
+      )}
 
       {/* The page ships a build-time snapshot, so the countdown above keeps
           running whether or not anyone re-synced. Without this the boards can
