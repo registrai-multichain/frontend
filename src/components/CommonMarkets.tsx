@@ -687,7 +687,7 @@ export function CommonMarkets() {
   return (
     <SessionCtx.Provider value={session}>
     <div className="fade-up">
-      <Header now={now} roundEnd={roundEnd} />
+      <Header now={now} roundEnd={roundEnd} showTimer={tab === "price"} />
 
       <LedgerBar snap={snap} tx={tx} address={address} onChain={onChain} connect={connect} switchChain={() => switchChain(D.chainId)} />
 
@@ -709,6 +709,10 @@ export function CommonMarkets() {
 
       {tab === "price" && (
       <>
+      <p className="mb-4 max-w-[72ch] text-fg-mute">
+        Up or down over the next five minutes? Bet on the next round of BTC, ETH, SOL, ZEC and HYPE; betting closes as
+        the round starts, so nobody trades on a move already on the chart. Buy and sell until then.
+      </p>
       <section aria-label="Five-minute rounds" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {D.assets.map((a) => (
           <AssetCard
@@ -763,7 +767,7 @@ export function CommonMarkets() {
 
 // ───────────────────────────── header ─────────────────────────────
 
-function Header({ now, roundEnd }: { now: number; roundEnd: number }) {
+function Header({ now, roundEnd, showTimer }: { now: number; roundEnd: number; showTimer: boolean }) {
   const left = now ? roundEnd - now : 0;
   const progress = now ? 1 - left / D.roundSecs : 0;
   const closing = now > 0 && left <= 30;
@@ -772,10 +776,10 @@ function Header({ now, roundEnd }: { now: number; roundEnd: number }) {
       <div>
         <h1 className="pa-h1">Common markets</h1>
         <p className="pa-lede">
-          Up or down over the next five minutes? Bet on the next round of BTC, ETH, SOL, ZEC and HYPE; betting closes
-          as the round starts, so nobody trades on a move already on the chart. Buy and sell until then.
+          Quick price rounds and longer event questions, open to anyone and settled on chain in USDC.
         </p>
       </div>
+      {showTimer && (
       <div className="sm:w-[240px]" aria-live="off">
         <div className="flex items-baseline justify-between gap-4 text-[13px] text-fg-dim">
           <span>{now ? `Next round ${roundLabel(roundEnd, roundEnd + D.roundSecs)}` : "Next round"}</span>
@@ -795,6 +799,7 @@ function Header({ now, roundEnd }: { now: number; roundEnd: number }) {
           />
         </div>
       </div>
+      )}
     </header>
   );
 }
