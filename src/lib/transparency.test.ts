@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import deployment from "./deployments/arc-mainnet.json";
-import { BUYBACK, CONTRACTS, EXPECTED_ROLES, FEE_SPLITS, RECORD, ROLES, WALLETS, compactNumber, holderLabel, parseDexPair, nativeToUsdc, percentOf, roleDiffs, supplySplit, sumBy, donutArcs, buybackView, type BuybackStatus, countdown, logWindows, parseBuybackStatus, agoText, LIVE_REFRESH_MS } from "./transparency";
+import { BUYBACK, CONTRACTS, EXPECTED_ROLES, FEE_SPLITS, RECORD, ROLES, WALLETS, compactNumber, holderLabel, parseDexPair, nativeToUsdc, percentOf, roleDiffs, supplySplit, sumBy, donutArcs, buybackView, type BuybackStatus, countdown, logWindows, parseBuybackStatus, agoText, LIVE_REFRESH_MS, nextScanRanges, BUYBACK_DISCLOSURE } from "./transparency";
 
 describe("transparency (app.registrai.cc/transparency)", () => {
   test("every wallet comes from the mainnet deployment file, with what it does and what it cannot", () => {
@@ -198,5 +198,27 @@ describe("live updates", () => {
 
   test("fast numbers every 10 s, prices every 15 s, roles every 5 min", () => {
     expect(LIVE_REFRESH_MS).toEqual({ fast: 10_000, price: 15_000, slow: 300_000 });
+  });
+});
+
+describe("buyback history scan (review I4)", () => {
+  test("first scan walks back from the head in windows, never below the floor", () => {
+    expect(nextScanRanges(1000n, null, 0n, 400n, 5)).toEqual([[601n, 1000n], [201n, 600n], [0n, 200n]]);
+  });
+
+  test("later scans only cover the new blocks, oldest first, however many windows it takes", () => {
+    expect(nextScanRanges(1000n, 900n, 0n, 400n, 5)).toEqual([[901n, 1000n]]);
+    expect(nextScanRanges(2000n, 900n, 0n, 400n, 5)).toEqual([[901n, 1300n], [1301n, 1700n], [1701n, 2000n]]);
+  });
+
+  test("nothing to scan when caught up", () => {
+    expect(nextScanRanges(1000n, 1000n, 0n, 400n, 5)).toEqual([]);
+  });
+});
+
+describe("buyback disclosure (review M3)", () => {
+  test("says the share is fixed but the Safe can redirect it with 7 days' public notice", () => {
+    expect(BUYBACK_DISCLOSURE).toContain("40%");
+    expect(BUYBACK_DISCLOSURE).toMatch(/Safe can .*7 days/);
   });
 });

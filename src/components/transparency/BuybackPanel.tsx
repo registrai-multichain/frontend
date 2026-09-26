@@ -9,7 +9,7 @@ import { BUILDERS } from "@/lib/builders-network";
 import { usdText } from "@/lib/plain-words";
 import { pushToast } from "@/lib/toast-store";
 import {
-  BUYBACK, LIVE_REFRESH_MS, buybackView, compactNumber, countdown, logWindows, parseBuybackStatus, regiBuybackAbi, regiSplitterAbi,
+  BUYBACK, BUYBACK_DISCLOSURE, BUYBACK_LOG_SCAN, LIVE_REFRESH_MS, buybackView, compactNumber, countdown, nextScanRanges, parseBuybackStatus, regiBuybackAbi, regiSplitterAbi,
 } from "@/lib/transparency";
 import { BIG, Donut } from "./parts";
 
@@ -18,52 +18,79 @@ const usdcAbi = parseAbi(["function balanceOf(address) view returns (uint256)"])
 const ledgerAbi = parseAbi(["function balanceOf(address) view returns (uint256)"]);
 const USDC = "0x3600000000000000000000000000000000000000" as Address;
 
-interface BurnRow { tx: Hex; usdcIn: bigint; regiBurned: bigint; caller: Address }
+interface BurnRow { tx: Hex; usdcIn: bigint; regiBurned: bigint; caller: Address; block: bigint }
+interface InflowRow { tx: Hex; from: Address; value: bigint; block: bigint }
 
-async function readBuyback() {
+const transferAbi = parseAbi(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
+
+/** Fast (every 10 s): the contract's status, the splitter's pending 40% and any repoint. A few calls, one batch. */
+async function readStatus() {
   const c = buildersClient();
-  const bb = BUYBACK.contract!;
-  const raw = await c.readContract({ address: bb, abi: regiBuybackAbi, functionName: "status" });
+  const raw = await c.readContract({ address: BUYBACK.contract!, abi: regiBuybackAbi, functionName: "status" });
   let incoming = 0n;
-  if (BUYBACK.splitter) {
-    const held = await c.readContract({ address: USDC, abi: usdcAbi, functionName: "balanceOf", args: [BUYBACK.splitter] }).catch(() => 0n);
-    const onLedger = BUYBACK.ledger
-      ? await c.readContract({ address: BUYBACK.ledger, abi: ledgerAbi, functionName: "balanceOf", args: [BUYBACK.splitter] }).catch(() => 0n)
-      : 0n;
-    incoming = ((held + onLedger) * BigInt(BUYBACK.shareOfTreasuryPct)) / 100n;
-  }
-  // Recent burns: walk back in 5,000-block windows (Arc's RPC caps getLogs), at most 10 windows.
-  const head = await c.getBlockNumber();
-  const burns: BurnRow[] = [];
-  for (const [fromBlock, toBlock] of logWindows(head, BUYBACK.deployBlock ?? head - 50_000n, 5_000n, 10)) {
-    const logs = await c.getContractEvents({ address: bb, abi: regiBuybackAbi, eventName: "Burned", fromBlock, toBlock });
-    for (const l of logs.reverse()) burns.push({ tx: l.transactionHash!, usdcIn: l.args.usdcIn!, regiBurned: l.args.regiBurned!, caller: l.args.caller! });
-    if (burns.length >= 10) break;
-  }
-  // Recent inflows: USDC Transfer logs INTO the buyback (a native send may not emit one on Arc;
-  // those still count in the balance, just not in this list).
-  const transferAbi = parseAbi(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
-  const inflows: { tx: Hex; from: Address; value: bigint }[] = [];
-  for (const [fromBlock, toBlock] of logWindows(head, BUYBACK.deployBlock ?? head - 50_000n, 5_000n, 10)) {
-    const logs = await c.getContractEvents({ address: USDC, abi: transferAbi, eventName: "Transfer", args: { to: bb }, fromBlock, toBlock });
-    for (const l of logs.reverse()) inflows.push({ tx: l.transactionHash!, from: l.args.from!, value: l.args.value! });
-    if (inflows.length >= 10) break;
-  }
   let pending: { next: Address; at: number } | null = null;
   if (BUYBACK.splitter) {
-    const [next, since] = await Promise.all([
+    const [held, onLedger, next, since] = await Promise.all([
+      c.readContract({ address: USDC, abi: usdcAbi, functionName: "balanceOf", args: [BUYBACK.splitter] }).catch(() => 0n),
+      BUYBACK.ledger
+        ? c.readContract({ address: BUYBACK.ledger, abi: ledgerAbi, functionName: "balanceOf", args: [BUYBACK.splitter] }).catch(() => 0n)
+        : Promise.resolve(0n),
       c.readContract({ address: BUYBACK.splitter, abi: regiSplitterAbi, functionName: "pendingBuyback" }),
       c.readContract({ address: BUYBACK.splitter, abi: regiSplitterAbi, functionName: "pendingSince" }),
     ]);
+    incoming = ((held + onLedger) * BigInt(BUYBACK.shareOfTreasuryPct)) / 100n;
     if (next !== "0x0000000000000000000000000000000000000000") pending = { next, at: Number(since) + 7 * 86_400 };
   }
-  return { status: parseBuybackStatus(raw), incoming, burns: burns.slice(0, 10), inflows: inflows.slice(0, 10), pending };
+  return { status: parseBuybackStatus(raw), incoming, pending };
+}
+
+/**
+ * Slow (every 5 min, and right after a press): recent burns and USDC inflows. Scanned
+ * incrementally: the first read walks back up to BUYBACK_LOG_SCAN.maxBack windows, later
+ * reads only the new blocks. A failed window stops the scan there (no gap, retried next
+ * time) and marks the lists partial instead of failing the whole panel.
+ */
+const history: { scannedTo: bigint | null; burns: BurnRow[]; inflows: InflowRow[] } = { scannedTo: null, burns: [], inflows: [] };
+
+async function readHistory() {
+  const c = buildersClient();
+  const bb = BUYBACK.contract!;
+  const head = await c.getBlockNumber();
+  const floor = BUYBACK.deployBlock ?? 0n;
+  const first = history.scannedTo === null;
+  let partial = false;
+  let reached: bigint | null = history.scannedTo;
+  for (const [fromBlock, toBlock] of nextScanRanges(head, history.scannedTo, floor, BUYBACK_LOG_SCAN.window, BUYBACK_LOG_SCAN.maxBack)) {
+    try {
+      const [burns, inflows] = await Promise.all([
+        c.getContractEvents({ address: bb, abi: regiBuybackAbi, eventName: "Burned", fromBlock, toBlock }),
+        c.getContractEvents({ address: USDC, abi: transferAbi, eventName: "Transfer", args: { to: bb }, fromBlock, toBlock }),
+      ]);
+      const b = burns.map((l) => ({ tx: l.transactionHash!, usdcIn: l.args.usdcIn!, regiBurned: l.args.regiBurned!, caller: l.args.caller!, block: l.blockNumber! }));
+      const f = inflows.map((l) => ({ tx: l.transactionHash!, from: l.args.from!, value: l.args.value!, block: l.blockNumber! }));
+      history.burns = [...history.burns, ...b].sort((x, y) => Number(y.block - x.block)).slice(0, 10);
+      history.inflows = [...history.inflows, ...f].sort((x, y) => Number(y.block - x.block)).slice(0, 10);
+      // First scan goes newest -> oldest: the head is covered once the newest window is in.
+      if (first) reached = head;
+      else reached = toBlock;
+    } catch {
+      partial = true;
+      break;
+    }
+  }
+  history.scannedTo = reached;
+  return { burns: history.burns, inflows: history.inflows, partial };
 }
 
 export function BuybackPanel() {
-  const { data, mutate } = useSWR(BUYBACK.contract ? ["buyback", BUYBACK.contract] : null, readBuyback, {
-    refreshInterval: LIVE_REFRESH_MS.fast, revalidateOnFocus: false, errorRetryCount: 4, errorRetryInterval: 8_000,
+  const opts = { revalidateOnFocus: false, errorRetryCount: 4, errorRetryInterval: 8_000 };
+  const { data: live, error, mutate } = useSWR(BUYBACK.contract ? ["buyback-status", BUYBACK.contract] : null, readStatus, {
+    ...opts, refreshInterval: LIVE_REFRESH_MS.fast,
   });
+  const { data: hist, mutate: mutateHistory } = useSWR(BUYBACK.contract ? ["buyback-history", BUYBACK.contract] : null, readHistory, {
+    ...opts, refreshInterval: LIVE_REFRESH_MS.slow,
+  });
+  const data = live && { ...live, burns: hist?.burns ?? [], inflows: hist?.inflows ?? [] };
   const { address, connect, walletClient, walletChainId, switchChain } = useWallet();
   const [busy, setBusy] = useState<"burn" | "distribute" | null>(null);
   const v = buybackView(data?.status ?? null, Math.floor(Date.now() / 1000), data?.incoming ?? 0n);
@@ -80,7 +107,7 @@ export function BuybackPanel() {
       pushToast(rc.status === "success"
         ? { kind: "ok", text: kind === "burn" ? "Bought REGI and burned it." : "Fees distributed: 40% went to the buyback.", href: `${EXPLORER}/tx/${hash}` }
         : { kind: "error", text: "The transaction reverted.", href: `${EXPLORER}/tx/${hash}` });
-      await mutate();
+      await Promise.all([mutate(), mutateHistory()]);
     } catch (e) {
       pushToast({ kind: "error", text: (e as Error).message.split("\n")[0] });
     } finally {
@@ -92,6 +119,9 @@ export function BuybackPanel() {
   return (
     <section className="pa-stack" aria-labelledby="t-buyback">
       <h2 id="t-buyback" className="pa-h2">REGI buyback</h2>
+      {BUYBACK.contract && error && !live && (
+        <p className="pa-notice" data-tone="down">Couldn&apos;t read the buyback contract right now. Retrying; the figures below are not live.</p>
+      )}
       <div className="pa-card flex flex-col items-center gap-6 sm:flex-row sm:gap-10">
         <Donut label={`Buyback: ${ringLabel}`} size={168} stroke={20}
           parts={[{ key: "in", share: v.progressPct, color: "var(--accent)" }, { key: "left", share: 100 - v.progressPct, color: "var(--line)" }]}>
@@ -126,15 +156,18 @@ export function BuybackPanel() {
       </div>
       {BUYBACK.contract ? (
         <p className="pa-muted pa-small break-all">
-          Anyone can send USDC to the buyback, <a className="pa-link pa-mono" href={`${EXPLORER}/address/${BUYBACK.contract}`} target="_blank" rel="noreferrer">{BUYBACK.contract}</a>: every dollar is spent on REGI and burned under the same rules.
+          Anyone can send USDC to the buyback, <a className="pa-link pa-mono" href={`${EXPLORER}/address/${BUYBACK.contract}`} target="_blank" rel="noreferrer">{BUYBACK.contract}</a>: every dollar is spent on REGI and burned under the same rules. {BUYBACK_DISCLOSURE}
         </p>
       ) : (
         <p className="pa-muted pa-small max-w-[70ch]">
           {BUYBACK.shareOfTreasuryPct}% of the treasury&apos;s income goes to a buyback contract with no owner and no withdraw. Anyone can
           send it more USDC. Once it holds ${BUYBACK.triggerUsdc}, it buys REGI in {BUYBACK.chunks} pieces of ${BUYBACK.chunkUsdc},{" "}
           {BUYBACK.cooldownMin} minutes apart, and every token goes straight to the burn address. Anyone can press the button that runs
-          a buy. It starts with common markets on {BUILDERS.label}; until then these read zero.
+          a buy. It starts with common markets on {BUILDERS.label}; until then these read zero. {BUYBACK_DISCLOSURE}
         </p>
+      )}
+      {hist?.partial && (
+        <p className="pa-muted pa-small">Some older history couldn&apos;t be read just now; the lists below may be incomplete.</p>
       )}
       {data && data.burns.length > 0 && (
         <ul className="pa-card">

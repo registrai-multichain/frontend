@@ -295,7 +295,7 @@ export function Transparency() {
       <section className="pa-stack" aria-labelledby="t-rules">
         <h2 id="t-rules" className="pa-h2">Rules</h2>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          <Stat label="Funds the buyback" value={`${BUYBACK.shareOfTreasuryPct}%`} sub="of the treasury's income, fixed in the contract; anyone can add more" />
+          <Stat label="Funds the buyback" value={`${BUYBACK.shareOfTreasuryPct}%`} sub="of the treasury's income, fixed in the splitter; the Safe can redirect it only with 7 days' public notice" />
           <Stat label="Buyback trigger" value={`$${BUYBACK.triggerUsdc}`} sub="once the buyback contract holds this much, a round of buys opens" />
           <Stat
             label="Buys per round"
