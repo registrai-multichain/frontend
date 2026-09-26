@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { builderBoard, countryBoard, seasonElapsed, traderBoard } from "@/lib/seasons";
+import { builderBoard, countryBoard, seasonElapsed, traderBoard, seasonStatus } from "@/lib/seasons";
 import type { BoardRow, Season, SeasonProgress } from "@/lib/seasons";
 
 const usdc = (base: bigint) => {
@@ -88,6 +88,8 @@ export function SeasonBoards({
 
   const pct = Math.round(seasonElapsed(season, now) * 100);
   const daysLeft = Math.max(0, Math.ceil((season.endsAt - now) / 86_400));
+  const status = seasonStatus(season, now);
+  const daysToStart = Math.max(0, Math.ceil((season.startedAt - now) / 86_400));
   const fmtDate = (t: number) =>
     new Date(t * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
@@ -104,12 +106,18 @@ export function SeasonBoards({
           <i style={{ ["--pct" as string]: `${pct}%` }} />
         </div>
         <span className="season-left tnum">
-          {daysLeft} day{daysLeft === 1 ? "" : "s"} left
+          {status === "upcoming"
+            ? `starts in ${daysToStart} day${daysToStart === 1 ? "" : "s"}`
+            : `${daysLeft} day${daysLeft === 1 ? "" : "s"} left`}
         </span>
       </header>
 
       {!showBoards ? (
-        <p className="pa-muted">The season&rsquo;s boards appear with its first verified progress.</p>
+        <p className="pa-muted">
+          {status === "upcoming"
+            ? `${season.label} starts ${fmtDate(season.startedAt)}. Its boards appear with the first verified progress.`
+            : "The season’s boards appear with its first verified progress."}
+        </p>
       ) : (
       <div className="season-boards">
         <Board

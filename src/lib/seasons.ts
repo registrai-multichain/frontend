@@ -25,6 +25,17 @@ export type Season = {
 
 export const SEASON_DAYS = 28;
 
+/** Season 1 starts 1 Oct 2026, 00:00 UTC, on every network: the calendar is
+ *  anchored here, not at a deployment block, so trades before it count toward
+ *  no season. */
+export const SEASON_ONE_START = Date.UTC(2026, 9, 1) / 1000;
+
+/** Whether a season is still ahead, running or over. */
+export function seasonStatus(season: { startedAt: number; endsAt: number }, now: number): "upcoming" | "running" | "ended" {
+  if (now < season.startedAt) return "upcoming";
+  return now < season.endsAt ? "running" : "ended";
+}
+
 const DAY = 86_400;
 
 /**

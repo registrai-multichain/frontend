@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-09-25T20:46:16.065Z",
+  "syncedAt": "2026-09-26T09:42:19.083Z",
   "builders": [],
   "perennialBuilders": [
     {
@@ -25,7 +25,7 @@
     "chainId": 5042002,
     "registry": "0x770d0feedcDa264c9d5C835D56fA7903cbC5719c",
     "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
-    "lastScannedBlock": "63988515",
+    "lastScannedBlock": "64079328",
     "feeds": {
       "registrai-milestone:domain:registrai-proof-test.pages.dev": "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601",
       "registrai-data:btc-usd": "0xd2f96305ff376028d69a5d0c19b873f484a7ba337ce05e8676d7f9796373089d"
@@ -48,7 +48,7 @@
     }
   ],
   "atlas": {
-    "lastScannedBlock": "63988515",
+    "lastScannedBlock": "64079328",
     "volumeByBuilderId": {
       "1": "5000000"
     },
@@ -66,27 +66,17 @@
           "cost": "3000000"
         }
       },
-      "realised": {
-        "1": {
-          "0xae1a21be03a9099971aafc1dfdc9544c3b07f0af": "-441981"
-        }
-      }
+      "realised": {}
     },
     "milestones": {
       "latestByFeed": {
         "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601": "1",
-        "0xd2f96305ff376028d69a5d0c19b873f484a7ba337ce05e8676d7f9796373089d": "8397671"
+        "0xd2f96305ff376028d69a5d0c19b873f484a7ba337ce05e8676d7f9796373089d": "8401311"
       },
-      "bySeason": {
-        "1": {
-          "0x6e5f89011fefe7435c7b509f5d3f83c42621d840": 1
-        }
-      }
+      "bySeason": {}
     },
-    "seasonStartBlocks": {
-      "1": "63826822"
-    },
-    "seasonsVersion": 4,
+    "seasonStartBlocks": {},
+    "seasonsVersion": 5,
     "chainId": 5042002,
     "markets": "0xFA2034ea39Fb6e04137239e1dfb0beC995938E9e"
   },
@@ -94,7 +84,7 @@
     "chainId": 5042002,
     "fund": "0x06ef72DE4Cb130e7F3EC2807eC34066053c86C8d",
     "pool": "0x96c7C8E5E2805334c30C23C94930542E91D19567",
-    "scannedTo": "63988515",
+    "scannedTo": "64079328",
     "ledger": {
       "income": {
         "1": {
@@ -115,20 +105,15 @@
     {
       "id": 1,
       "label": "Season 1",
-      "startBlock": 63826822,
+      "startBlock": 64079329,
       "endBlock": null,
-      "startedAt": 1790286359,
-      "endsAt": 1792705559
+      "startedAt": 1790812800,
+      "endsAt": 1793232000
     }
   ],
   "seasonBoards": {
     "1": {
-      "traders": [
-        [
-          "0xae1a21be03a9099971aafc1dfdc9544c3b07f0af",
-          "-441981"
-        ]
-      ],
+      "traders": [],
       "builders": []
     }
   },
@@ -136,6 +121,15 @@
     "agents": {
       "0xa9fa24e1147e8337c3d25b084890121be10a132b": {
         "score": "6254030",
+        "level": 1,
+        "caught": false,
+        "caughtAt": null,
+        "lastDisputeId": null,
+        "caughtTx": null,
+        "settledMarkets": 1
+      },
+      "0xf26db19bc8dc33c9a72399128cf5cfb5ddc76263": {
+        "score": "2500000",
         "level": 1,
         "caught": false,
         "caughtAt": null,
@@ -154,11 +148,20 @@
         "Dispute": "0x9c0c81c11fe510eb89ade831c13c066cc5dad411"
       },
       "fromBlock": "63826822",
-      "lastScannedBlock": "63988515",
+      "lastScannedBlock": "64079328",
       "state": {
         "agents": {
           "0xa9fa24e1147e8337c3d25b084890121be10a132b": {
             "score": "6254030",
+            "level": 1,
+            "caught": false,
+            "caughtAt": null,
+            "lastDisputeId": null,
+            "caughtTx": null,
+            "settledMarkets": 1
+          },
+          "0xf26db19bc8dc33c9a72399128cf5cfb5ddc76263": {
+            "score": "2500000",
             "level": 1,
             "caught": false,
             "caughtAt": null,
@@ -172,11 +175,6 @@
             "agent": "0xf26db19bc8dc33c9a72399128cf5cfb5ddc76263",
             "feed": "0x4a05ce8431451157a5bec95bf5b81846feaf073f5a8a2e14fc8f065e12bde601",
             "volume": "5563655"
-          },
-          "0xff3dcbb85ed027395c915e1eef7353453a84a594:0x8a95b46e961d3bfa0d8912a2b4b8641f72f74f5e2b3dc3ce1a4701cb5d195159": {
-            "agent": "0xf26db19bc8dc33c9a72399128cf5cfb5ddc76263",
-            "feed": "0xd2f96305ff376028d69a5d0c19b873f484a7ba337ce05e8676d7f9796373089d",
-            "volume": "2500000"
           }
         }
       },
@@ -198,7 +196,7 @@
     "network": "mainnet",
     "chainId": 5042,
     "builderRegistry": "0xBB6F4B18776Fd20Bb53a1205375273373DD1E5bA",
-    "syncedAt": "2026-09-25T20:46:16.065Z",
+    "syncedAt": "2026-09-26T09:42:19.083Z",
     "nextId": 3,
     "builders": [
       {
@@ -257,7 +255,7 @@
     "chainId": 5042,
     "badge": "0xF229d2Ed13Cc35d46fa7676a579495E5C80CFEB2",
     "registry": "0xBB6F4B18776Fd20Bb53a1205375273373DD1E5bA",
-    "toBlock": "22746604",
+    "toBlock": "22838359",
     "revokes": [],
     "statuses": []
   },

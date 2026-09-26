@@ -6,8 +6,7 @@ import {
   rank,
   realisedPnl,
   seasonAt,
-  traderBoard,
-} from "./seasons";
+  traderBoard, SEASON_ONE_START, seasonStatus } from "./seasons";
 import type { Season, SeasonProgress, Trade } from "./seasons";
 
 const S1: Season = { id: 1, label: "S1", startBlock: 100, endBlock: 199, startedAt: 0, endsAt: 1 };
@@ -372,5 +371,19 @@ describe("voided markets, both sides held", () => {
       SEASONS,
     );
     expect(out.get(1)?.get("a")).toBe(100n - 110n);
+  });
+});
+
+describe("season 1 starts 1 Oct 2026, 00:00 UTC", () => {
+  it("the fixed start", () => {
+    expect(new Date(SEASON_ONE_START * 1000).toISOString()).toBe("2026-10-01T00:00:00.000Z");
+  });
+  it("before the start the calendar holds season 1 as upcoming, 1 Oct – 29 Oct", () => {
+    const [s1, ...rest] = seasonWindows(SEASON_ONE_START, SEASON_ONE_START - 5 * 86_400);
+    expect(rest).toEqual([]);
+    expect(new Date(s1.endsAt * 1000).toISOString()).toBe("2026-10-29T00:00:00.000Z");
+    expect(seasonStatus(s1, SEASON_ONE_START - 1)).toBe("upcoming");
+    expect(seasonStatus(s1, SEASON_ONE_START)).toBe("running");
+    expect(seasonStatus(s1, s1.endsAt)).toBe("ended");
   });
 });

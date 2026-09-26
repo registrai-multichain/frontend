@@ -13,7 +13,7 @@
  */
 import { createPublicClient, http, defineChain, type Address, type Hex } from "viem";
 import { writeFileSync, readFileSync } from "node:fs";
-import { EMPTY_PNL, foldTrades, seasonWindows } from "../src/lib/seasons";
+import { EMPTY_PNL, foldTrades, SEASON_ONE_START, seasonWindows } from "../src/lib/seasons";
 import type { PnlState, Season, Trade } from "../src/lib/seasons";
 import { REPUTATION_CURSOR_VERSION, type ReputationSnapshot } from "../src/lib/reputation";
 import { syncReputation } from "./reputation";
@@ -85,8 +85,11 @@ function liveContracts(
  * (milestone-progress.ts), not ProgressPool.ProgressAdded: the pool is retired
  * (spec 2026-09-24-builder-income-tax-design.md). The per-season builder board
  * is rebuilt from the anchor once.
+ *
+ * v5: the calendar is anchored at SEASON_ONE_START (1 Oct 2026, 00:00 UTC), not
+ * at the deployment block, so every cached boundary and fold is recomputed.
  */
-const SEASONS_CURSOR_VERSION = 4;
+const SEASONS_CURSOR_VERSION = 5;
 import { resolve } from "node:path";
 
 const DEPLOYMENT = JSON.parse(
@@ -926,11 +929,12 @@ async function main(): Promise<void> {
        A season is a block range, so every board below is a windowed replay of
        events already fetched above. No contract knows seasons exist. */
 
-    // Anchor the calendar to the block the stack went live, not to "now" — the
-    // season a past trade belongs to must never move because we synced again.
-    const anchorBlock = await client.getBlock({ blockNumber: anchor });
+    // The calendar is anchored at a fixed date (SEASON_ONE_START), not at "now" —
+    // the season a past trade belongs to must never move because we synced again.
+    const headBlock = await client.getBlock({ blockNumber: latestBlock });
     await pace();
-    const windows = seasonWindows(Number(anchorBlock.timestamp), Math.floor(Date.now() / 1000));
+    const headTs = Number(headBlock.timestamp);
+    const windows = seasonWindows(SEASON_ONE_START, Math.floor(Date.now() / 1000));
 
     /** First block at or after `target`, by binary search on block timestamps. */
     async function blockAtTime(targetTs: number): Promise<bigint> {
@@ -949,11 +953,17 @@ async function main(): Promise<void> {
     // ~20 RPC calls per boundary, once ever: a past boundary cannot move, so it
     // is cached in the cursor and never searched again.
     const startBlocks = new Map<number, bigint>(
-      Object.entries(cursor?.seasonStartBlocks ?? {}).map(([k, v]) => [Number(k), BigInt(v)]),
+      Object.entries(cursor?.seasonsVersion === SEASONS_CURSOR_VERSION ? (cursor?.seasonStartBlocks ?? {}) : {}).map(([k, v]) => [Number(k), BigInt(v)]),
     );
+    // A boundary still ahead of the chain has no block yet: it gets the next
+    // block as a placeholder (so no past event falls in it) and is not cached.
     for (const w of windows) {
       if (startBlocks.has(w.id)) continue;
-      startBlocks.set(w.id, w.id === 1 ? anchor : await blockAtTime(w.startedAt));
+      if (w.startedAt > headTs) {
+        startBlocks.set(w.id, latestBlock + 1n);
+      } else {
+        startBlocks.set(w.id, await blockAtTime(w.startedAt));
+      }
     }
 
     seasons = windows.map((w, i) => {
@@ -1111,7 +1121,8 @@ async function main(): Promise<void> {
       pnl,
       milestones,
       seasonStartBlocks: Object.fromEntries(
-        [...startBlocks].map(([sid, b]) => [String(sid), b.toString()]),
+        // only boundaries the chain has reached; a placeholder (head + 1) is re-resolved next sync
+        [...startBlocks].filter(([, b]) => b <= latestBlock).map(([sid, b]) => [String(sid), b.toString()]),
       ),
       seasonsVersion: SEASONS_CURSOR_VERSION,
       chainId: DEPLOYMENT.chainId,
