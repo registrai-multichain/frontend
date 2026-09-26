@@ -56,9 +56,10 @@
  *
  * ── A builder's avatar (builderAvatarUrl) ────────────────────────────────────
  * The GitHub owner avatar of its first VERIFIED github project, else none (the
- * card shows the name's initial). No website icons.
+ * card shows the name's initial); a verified domain gives its site icon.
  */
 import { getAddress, isAddress, parseAbi, zeroAddress, type Address, type Hex } from "viem";
+import { siteIconPath } from "./site-icon";
 import {
   builderCountry,
   builderStatus,
@@ -421,9 +422,10 @@ export function builderName(
   return lead ? sourceLabel(lead.source) : `Builder #${b.id}`;
 }
 
-/** Pure: the builder's avatar — its first verified GitHub project's owner, else null (the initial). No website icons. */
+/** Pure: the builder's avatar — its first verified GitHub project's owner, else its first verified domain's site icon, else null (the initial). */
 export function builderAvatarUrl(b: Pick<GalleryBuilder, "projects">, size = 96): string | null {
-  const pick = b.projects.find((p) => p.status === "verified" && p.source.startsWith("github:"));
+  const verified = b.projects.filter((p) => p.status === "verified");
+  const pick = verified.find((p) => p.source.startsWith("github:")) ?? verified.find((p) => p.source.startsWith("domain:"));
   return pick ? avatarUrl(pick.source, size) : null;
 }
 
@@ -680,12 +682,13 @@ export function showGalleryStats(c: Pick<GalleryCounts, "all">): boolean {
 
 /**
  * A project's picture: the GitHub owner's avatar (CORS-enabled, cached by
- * GitHub). Domains show the name's initial: no website icons (user decision,
- * UI redesign 2026-09-26).
+ * GitHub), or a domain's own site icon through this site's /api/icon (same
+ * origin; where that API is absent the image fails and the initial shows).
  */
 export function avatarUrl(source: string | null | undefined, size = 96): string | null {
   const m = /^github:([^/]+)\//.exec(source ?? "");
-  return m ? `https://avatars.githubusercontent.com/${encodeURIComponent(m[1])}?size=${size}` : null;
+  if (m) return `https://avatars.githubusercontent.com/${encodeURIComponent(m[1])}?size=${size}`;
+  return source && source.startsWith("domain:") ? siteIconPath(source) : null;
 }
 
 /** "Ask us to remove it": a mail to Registrai naming the project. */

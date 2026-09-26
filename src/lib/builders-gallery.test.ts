@@ -243,7 +243,7 @@ describe("mergeGallery", () => {
         x: null,
         builder: null,
         chips: [],
-        avatar: null,
+        avatar: "/api/icon?source=domain%3Agone.example.com",
       },
     ]);
   });
@@ -421,8 +421,8 @@ describe("builders with several projects", () => {
     // a domain first, then github: still the github owner
     expect(builderAvatarUrl({ projects: [proj(1, "domain:a.org"), proj(2, "github:bob/x")] })).toBe("https://avatars.githubusercontent.com/bob?size=96");
     // lapsed github projects never give the avatar
-    // lapsed github projects never give the avatar; a verified domain alone shows the initial (no website icons)
-    expect(builderAvatarUrl({ projects: [proj(1, "github:eve/x", { status: "lapsed" }), proj(2, "domain:a.org")] })).toBeNull();
+    // lapsed github projects never give the avatar; a verified domain gives its site icon
+    expect(builderAvatarUrl({ projects: [proj(1, "github:eve/x", { status: "lapsed" }), proj(2, "domain:a.org")] })).toBe("/api/icon?source=domain%3Aa.org");
     expect(builderAvatarUrl({ projects: [proj(1, "github:eve/x", { status: "lapsed" }), proj(2, "domain:a.org", { status: "lapsed" })] })).toBeNull();
     expect(initialOf("acme.xyz")).toBe("A");
     expect(initialOf("  ")).toBe("R");
@@ -466,7 +466,7 @@ describe("links and deep links", () => {
     expect(proofHref(null)).toBeNull();
     expect(proofHref("github:Not/Canonical")).toBeNull();
     expect(avatarUrl("github:acme/widget", 128)).toBe("https://avatars.githubusercontent.com/acme?size=128");
-    expect(avatarUrl("domain:app.example.org")).toBeNull();
+    expect(avatarUrl("domain:app.example.org")).toBe("/api/icon?source=domain%3Aapp.example.org");
     expect(avatarUrl(null)).toBeNull();
     expect(xHref("@acme")).toBe("https://x.com/acme");
   });
@@ -850,9 +850,9 @@ describe("browserProofCheck", () => {
   });
 });
 
-test("no website icons: a verified domain alone shows the initial (spec §4, user decision)", () => {
-  expect(builderAvatarUrl({ projects: [proj(1, "domain:a.org")] })).toBeNull();
-  expect(avatarUrl("domain:app.example.org")).toBeNull();
+test("website icons are back (user, 2026-09-26): a verified domain shows its site icon; a lapsed one never does", () => {
+  expect(builderAvatarUrl({ projects: [proj(1, "domain:a.org")] })).toBe("/api/icon?source=domain%3Aa.org");
+  expect(builderAvatarUrl({ projects: [proj(1, "domain:a.org", { status: "lapsed" })] })).toBeNull();
   expect(avatarUrl("github:acme/widget", 128)).toBe("https://avatars.githubusercontent.com/acme?size=128");
 });
 
