@@ -104,10 +104,12 @@ export const FEE_SPLITS = [
 ];
 
 export const BUYBACK = {
-  triggerUsdc: 500,
-  chunkUsdc: 100,
-  /** Share of the treasury's fee income; null until announced. */
-  shareOfTreasuryPct: null as number | null,
+  triggerUsdc: 200,
+  chunkUsdc: 50,
+  chunks: 4,
+  cooldownMin: 10,
+  /** Share of the treasury's income, fixed in the splitter contract (BUYBACK_BPS 4000). */
+  shareOfTreasuryPct: 40,
   burnAddress: "0x000000000000000000000000000000000000dEaD" as Address,
   /** The buyback contract on mainnet; null until it deploys with common markets. */
   contract: null as Address | null,

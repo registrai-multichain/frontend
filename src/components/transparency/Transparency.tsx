@@ -256,8 +256,10 @@ export function Transparency() {
         </div>
         {!bb.live && (
           <p className="pa-muted pa-small max-w-[70ch]">
-            Buybacks start with common markets on {BUILDERS.label}. Until the buyback contract deploys there is nothing to buy with, so
-            these read zero; after that they read live from the contract.
+            {BUYBACK.shareOfTreasuryPct}% of the treasury&apos;s income goes to a buyback contract with no owner and no withdraw. Anyone can
+            send it more USDC. Once it holds ${BUYBACK.triggerUsdc}, it buys REGI in {BUYBACK.chunks} pieces of ${BUYBACK.chunkUsdc},{" "}
+            {BUYBACK.cooldownMin} minutes apart, and every token goes straight to the burn address. Anyone can press the button that runs
+            a buy. It starts with common markets on {BUILDERS.label}; until then these read zero.
           </p>
         )}
       </section>
@@ -343,16 +345,12 @@ export function Transparency() {
       <section className="pa-stack" aria-labelledby="t-rules">
         <h2 id="t-rules" className="pa-h2">Rules</h2>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          <Stat label="Buyback trigger" value={`$${BUYBACK.triggerUsdc}`} sub="each time the buyback contract holds this much, it buys REGI" />
+          <Stat label="Funds the buyback" value={`${BUYBACK.shareOfTreasuryPct}%`} sub="of the treasury's income, fixed in the contract; anyone can add more" />
+          <Stat label="Buyback trigger" value={`$${BUYBACK.triggerUsdc}`} sub="once the buyback contract holds this much, a round of buys opens" />
           <Stat
-            label="Buys per trigger"
-            value={`${BUYBACK.triggerUsdc / BUYBACK.chunkUsdc} × $${BUYBACK.chunkUsdc}`}
-            sub="small pieces keep the price impact low; every token goes to the burn address"
-          />
-          <Stat
-            label="Funds the buyback"
-            value={BUYBACK.shareOfTreasuryPct === null ? "Soon" : `${BUYBACK.shareOfTreasuryPct}%`}
-            sub="of the treasury's common-market fees, announced before launch"
+            label="Buys per round"
+            value={`${BUYBACK.chunks} × $${BUYBACK.chunkUsdc}`}
+            sub={`${BUYBACK.cooldownMin} minutes apart, anyone can press; every token goes to the burn address`}
           />
           <Stat
             label="Admin actions need"

@@ -125,14 +125,22 @@ describe("supply and balances", () => {
 });
 
 describe("buyback volume", () => {
+  test("the rules: 40% of treasury income, a round at $200, 4 buys of $50 ten minutes apart", () => {
+    expect(BUYBACK.shareOfTreasuryPct).toBe(40);
+    expect(BUYBACK.triggerUsdc).toBe(200);
+    expect(BUYBACK.chunkUsdc).toBe(50);
+    expect(BUYBACK.chunks).toBe(4);
+    expect(BUYBACK.cooldownMin).toBe(10);
+  });
+
   test("nothing bought yet before the buyback contract exists", () => {
-    expect(buybackView(null)).toEqual({ live: false, spentUsdc: 0n, burnedRegi: 0n, buys: 0, pending: 0n, toTrigger: 500_000_000n, progressPct: 0 });
+    expect(buybackView(null)).toEqual({ live: false, spentUsdc: 0n, burnedRegi: 0n, buys: 0, pending: 0n, toTrigger: 200_000_000n, progressPct: 0 });
   });
 
   test("progress toward the next buy from what the contract holds", () => {
-    const v = buybackView({ spentUsdc: 1_500_000_000n, burnedRegi: 10n, buys: 15, pending: 125_000_000n });
+    const v = buybackView({ spentUsdc: 1_500_000_000n, burnedRegi: 10n, buys: 15, pending: 50_000_000n });
     expect(v.live).toBe(true);
-    expect(v.toTrigger).toBe(375_000_000n);
+    expect(v.toTrigger).toBe(150_000_000n);
     expect(v.progressPct).toBe(25);
   });
 
