@@ -9,7 +9,7 @@ import { BUILDERS } from "@/lib/builders-network";
 import { usdText } from "@/lib/plain-words";
 import { pushToast } from "@/lib/toast-store";
 import {
-  BUYBACK, buybackView, compactNumber, countdown, logWindows, parseBuybackStatus, regiBuybackAbi, regiSplitterAbi,
+  BUYBACK, LIVE_REFRESH_MS, buybackView, compactNumber, countdown, logWindows, parseBuybackStatus, regiBuybackAbi, regiSplitterAbi,
 } from "@/lib/transparency";
 import { BIG, Donut } from "./parts";
 
@@ -62,7 +62,7 @@ async function readBuyback() {
 
 export function BuybackPanel() {
   const { data, mutate } = useSWR(BUYBACK.contract ? ["buyback", BUYBACK.contract] : null, readBuyback, {
-    refreshInterval: 30_000, revalidateOnFocus: false, errorRetryCount: 4, errorRetryInterval: 8_000,
+    refreshInterval: LIVE_REFRESH_MS.fast, revalidateOnFocus: false, errorRetryCount: 4, errorRetryInterval: 8_000,
   });
   const { address, connect, walletClient, walletChainId, switchChain } = useWallet();
   const [busy, setBusy] = useState<"burn" | "distribute" | null>(null);

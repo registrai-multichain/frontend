@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import deployment from "./deployments/arc-mainnet.json";
-import { BUYBACK, CONTRACTS, EXPECTED_ROLES, FEE_SPLITS, RECORD, ROLES, WALLETS, compactNumber, holderLabel, parseDexPair, nativeToUsdc, percentOf, roleDiffs, supplySplit, sumBy, donutArcs, buybackView, type BuybackStatus, countdown, logWindows, parseBuybackStatus } from "./transparency";
+import { BUYBACK, CONTRACTS, EXPECTED_ROLES, FEE_SPLITS, RECORD, ROLES, WALLETS, compactNumber, holderLabel, parseDexPair, nativeToUsdc, percentOf, roleDiffs, supplySplit, sumBy, donutArcs, buybackView, type BuybackStatus, countdown, logWindows, parseBuybackStatus, agoText, LIVE_REFRESH_MS } from "./transparency";
 
 describe("transparency (app.registrai.cc/transparency)", () => {
   test("every wallet comes from the mainnet deployment file, with what it does and what it cannot", () => {
@@ -183,5 +183,20 @@ describe("buyback", () => {
     expect(logWindows(1000n, 0n, 400n, 5)).toEqual([[601n, 1000n], [201n, 600n], [0n, 200n]]);
     expect(logWindows(1000n, 700n, 400n, 5)).toEqual([[700n, 1000n]]);
     expect(logWindows(1000n, 0n, 100n, 2)).toEqual([[901n, 1000n], [801n, 900n]]);
+  });
+});
+
+describe("live updates", () => {
+  test("says how long ago the numbers were read", () => {
+    expect(agoText(0)).toBe("just now");
+    expect(agoText(1_900)).toBe("just now");
+    expect(agoText(4_200)).toBe("4s ago");
+    expect(agoText(59_999)).toBe("59s ago");
+    expect(agoText(125_000)).toBe("2m ago");
+    expect(agoText(-50)).toBe("just now");
+  });
+
+  test("fast numbers every 10 s, prices every 15 s, roles every 5 min", () => {
+    expect(LIVE_REFRESH_MS).toEqual({ fast: 10_000, price: 15_000, slow: 300_000 });
   });
 });

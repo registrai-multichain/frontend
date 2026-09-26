@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { BuybackPanel } from "./BuybackPanel";
 import { BIG, Donut, Stat, Swatch } from "./parts";
@@ -12,7 +13,7 @@ import { usdText, who } from "@/lib/plain-words";
 import { badgeAbi } from "@/lib/verified-builder-badge";
 import {
   BUYBACK, CONTRACTS, DEPLOY, DEX_PAIR_API, FEE_SPLITS, RECORD, ROLES, TRADE_FEE_PCT, WALLETS, compactNumber, holderLabel, nativeToUsdc, parseDexPair,
-  roleDiffs, sumBy, supplySplit,
+  roleDiffs, agoText, LIVE_REFRESH_MS, sumBy, supplySplit,
 } from "@/lib/transparency";
 
 const safeAbi = parseAbi([
@@ -29,22 +30,30 @@ const erc20Abi = parseAbi([
 const EXPLORER = BUILDERS.chain.explorer.url.replace(/\/$/, "");
 const addrUrl = (a: string) => `${EXPLORER}/address/${a}`;
 
-interface Live {
-  readAt: number;
+/** Slow-moving state: who holds which role, the Safe's owners, the badges. Read every 5 minutes. */
+interface Slow {
   roles: Record<string, boolean>;
   owners: Address[];
   threshold: bigint;
+  badges: { serial: number; builderId: bigint; owner: Address | null }[];
+}
+
+/** Fast-moving numbers: balances, supply, burned, holdings, Safe nonce. Read every 10 seconds. */
+interface Fast {
+  readAt: number;
   safeNonce: bigint;
   balances: Record<string, bigint>;
   txCounts: Record<string, number>;
   regi: { supply: bigint; decimals: number; burned: bigint; held: Record<string, bigint> };
-  badges: { serial: number; builderId: bigint; owner: Address | null }[];
 }
 
-const roleKey = (contract: string, role: string, wallet: string) => `${contract}:${role}:${wallet}`;
+type Live = Slow & Fast;
 
-async function readLive(c: PublicClient): Promise<Live> {
-  const safe = WALLETS.find((w) => w.isSafe)!.address;
+const roleKey = (contract: string, role: string, wallet: string) => `${contract}:${role}:${wallet}`;
+const SAFE = WALLETS.find((w) => w.isSafe)!.address;
+const BADGE = CONTRACTS.find((x) => x.key === "badge")!.address;
+
+async function readSlow(c: PublicClient): Promise<Slow> {
   const roleReads = CONTRACTS.flatMap((ct) =>
     ROLES[ct.key].flatMap((r) =>
       WALLETS.map(async (w) => [
@@ -53,40 +62,52 @@ async function readLive(c: PublicClient): Promise<Live> {
       ] as const),
     ),
   );
-  const badge = CONTRACTS.find((x) => x.key === "badge")!.address;
-  const [roles, owners, threshold, safeNonce, balances, txCounts, supply, decimals, burned, nextSerial, held] = await Promise.all([
+  const [roles, owners, threshold, nextSerial] = await Promise.all([
     Promise.all(roleReads),
-    c.readContract({ address: safe, abi: safeAbi, functionName: "getOwners" }) as Promise<Address[]>,
-    c.readContract({ address: safe, abi: safeAbi, functionName: "getThreshold" }) as Promise<bigint>,
-    c.readContract({ address: safe, abi: safeAbi, functionName: "nonce" }) as Promise<bigint>,
+    c.readContract({ address: SAFE, abi: safeAbi, functionName: "getOwners" }) as Promise<Address[]>,
+    c.readContract({ address: SAFE, abi: safeAbi, functionName: "getThreshold" }) as Promise<bigint>,
+    c.readContract({ address: BADGE, abi: badgeAbi, functionName: "nextSerial" }) as Promise<bigint>,
+  ]);
+  const serials = Array.from({ length: Math.max(0, Number(nextSerial) - 1) }, (_, i) => i + 1);
+  const badges = await Promise.all(
+    serials.map(async (serial) => {
+      const builderId = (await c.readContract({ address: BADGE, abi: badgeAbi, functionName: "builderOf", args: [BigInt(serial)] })) as bigint;
+      // A revoked badge has no owner any more: ownerOf reverts.
+      const owner = await (c.readContract({ address: BADGE, abi: badgeAbi, functionName: "ownerOf", args: [BigInt(serial)] }) as Promise<Address>).catch(() => null);
+      return { serial, builderId, owner };
+    }),
+  );
+  return { roles: Object.fromEntries(roles), owners, threshold, badges };
+}
+
+async function readFast(c: PublicClient): Promise<Fast> {
+  // One batched JSON-RPC request per refresh (the client batches), so every 10 s stays cheap.
+  const [safeNonce, balances, txCounts, supply, decimals, burned, held] = await Promise.all([
+    c.readContract({ address: SAFE, abi: safeAbi, functionName: "nonce" }) as Promise<bigint>,
     Promise.all(WALLETS.map(async (w) => [w.key, await c.getBalance({ address: w.address })] as const)),
     Promise.all(WALLETS.filter((w) => !w.isSafe).map(async (w) => [w.key, await c.getTransactionCount({ address: w.address })] as const)),
     c.readContract({ address: BUYBACK.token, abi: erc20Abi, functionName: "totalSupply" }) as Promise<bigint>,
     c.readContract({ address: BUYBACK.token, abi: erc20Abi, functionName: "decimals" }) as Promise<number>,
     c.readContract({ address: BUYBACK.token, abi: erc20Abi, functionName: "balanceOf", args: [BUYBACK.burnAddress] }) as Promise<bigint>,
-    c.readContract({ address: badge, abi: badgeAbi, functionName: "nextSerial" }) as Promise<bigint>,
     Promise.all(WALLETS.map(async (w) => [w.key, (await c.readContract({ address: BUYBACK.token, abi: erc20Abi, functionName: "balanceOf", args: [w.address] })) as bigint] as const)),
   ]);
-  const serials = Array.from({ length: Math.max(0, Number(nextSerial) - 1) }, (_, i) => i + 1);
-  const badges = await Promise.all(
-    serials.map(async (serial) => {
-      const builderId = (await c.readContract({ address: badge, abi: badgeAbi, functionName: "builderOf", args: [BigInt(serial)] })) as bigint;
-      // A revoked badge has no owner any more: ownerOf reverts.
-      const owner = await (c.readContract({ address: badge, abi: badgeAbi, functionName: "ownerOf", args: [BigInt(serial)] }) as Promise<Address>).catch(() => null);
-      return { serial, builderId, owner };
-    }),
-  );
   return {
     readAt: Date.now(),
-    roles: Object.fromEntries(roles),
-    owners,
-    threshold,
     safeNonce,
     balances: Object.fromEntries(balances),
     txCounts: Object.fromEntries(txCounts),
     regi: { supply, decimals, burned, held: Object.fromEntries(held) },
-    badges,
   };
+}
+
+/** Re-renders every second so "updated Xs ago" ticks. */
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
 }
 
 /** "$0.000117", "$114.2K": small prices keep three significant digits, big amounts go compact. */
@@ -109,15 +130,19 @@ function Addr({ a }: { a: string }) {
 }
 
 export function Transparency() {
-  const { data: live, error } = useSWR(["transparency", BUILDERS.chainId], () => readLive(buildersClient()), {
-    revalidateOnFocus: false,
-    refreshInterval: 60_000,
-    errorRetryCount: 4,
-    errorRetryInterval: 8_000,
+  const swrOpts = { revalidateOnFocus: false, errorRetryCount: 4, errorRetryInterval: 8_000 };
+  const { data: slow, error: slowError } = useSWR(["transparency-slow", BUILDERS.chainId], () => readSlow(buildersClient()), {
+    ...swrOpts, refreshInterval: LIVE_REFRESH_MS.slow,
   });
+  const { data: fast, error: fastError } = useSWR(["transparency-fast", BUILDERS.chainId], () => readFast(buildersClient()), {
+    ...swrOpts, refreshInterval: LIVE_REFRESH_MS.fast,
+  });
+  const live: Live | undefined = slow && fast ? { ...slow, ...fast } : undefined;
+  const error = slowError ?? fastError;
+  const now = useNow();
   const { data: dex } = useSWR(["transparency-dex"], async () => parseDexPair(await (await fetch(DEX_PAIR_API)).json()), {
     revalidateOnFocus: false,
-    refreshInterval: 60_000,
+    refreshInterval: LIVE_REFRESH_MS.price,
   });
   const reading = !live && !error;
   const diffs = live ? roleDiffs(live.roles) : null;
@@ -137,7 +162,13 @@ export function Transparency() {
         <p className="pa-lede">The numbers behind Registrai on {BUILDERS.label}, read live from the chain. Every address links to the explorer.</p>
         {error && <p className="pa-notice mt-4" data-tone="down">Couldn&apos;t read {BUILDERS.label} right now. Retrying.</p>}
         {reading && <p className="pa-muted mt-4">Reading {BUILDERS.label}…</p>}
-        {live && <p className="pa-muted pa-small mt-3">Read at {new Date(live.readAt).toLocaleTimeString()} · refreshes every minute</p>}
+        {live && (
+          <p className="pa-muted pa-small mt-3 inline-flex items-center gap-2" aria-live="off">
+            <i aria-hidden className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--up)" }} />
+            Live · updated {agoText(now - live.readAt)} · balances every {LIVE_REFRESH_MS.fast / 1000} s, price every{" "}
+            {LIVE_REFRESH_MS.price / 1000} s
+          </p>
+        )}
       </header>
 
       {/* How much: REGI in total and where it sits */}

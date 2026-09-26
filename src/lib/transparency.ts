@@ -285,3 +285,14 @@ export function logWindows(head: bigint, floor: bigint, size: bigint, max: numbe
   }
   return out;
 }
+
+/** How often the dashboard re-reads: fast-moving numbers, the DexScreener price, and roles/owners. */
+export const LIVE_REFRESH_MS = { fast: 10_000, price: 15_000, slow: 300_000 } as const;
+
+/** Pure: "just now" (< 2 s), "4s ago", "2m ago". */
+export function agoText(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 2) return "just now";
+  if (s < 60) return `${s}s ago`;
+  return `${Math.floor(s / 60)}m ago`;
+}
