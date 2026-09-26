@@ -7,12 +7,12 @@ import { CopyButton } from "@/components/perennial/CopyButton";
 import { useWallet } from "@/components/WalletProvider";
 import { buildersClient } from "@/components/verify/useMyBuilder";
 import { BUILDERS } from "@/lib/builders-network";
-import { usdText } from "@/lib/plain-words";
+import { usdText, who } from "@/lib/plain-words";
 import { pushToast } from "@/lib/toast-store";
 import {
   BUYBACK, BUYBACK_DISCLOSURE, WALLETS, inflowLabel, BUYBACK_LOG_SCAN, LIVE_REFRESH_MS, buybackView, compactNumber, countdown, nextScanRanges, parseBuybackStatus, regiBuybackAbi, regiSplitterAbi,
 } from "@/lib/transparency";
-import { BIG, Donut } from "./parts";
+import { Donut } from "./parts";
 
 const EXPLORER = BUILDERS.chain.explorer.url.replace(/\/$/, "");
 const usdcAbi = parseAbi(["function balanceOf(address) view returns (uint256)"]);
@@ -92,7 +92,7 @@ async function readHistory() {
   return { burns: history.burns, inflows: history.inflows, partial };
 }
 
-export function BuybackPanel() {
+export function BuybackPanel({ className = "" }: { className?: string }) {
   const opts = { revalidateOnFocus: false, errorRetryCount: 4, errorRetryInterval: 8_000 };
   const { data: live, error, mutate } = useSWR(BUYBACK.contract ? ["buyback-status", BUYBACK.contract] : null, readStatus, {
     ...opts, refreshInterval: LIVE_REFRESH_MS.fast,
@@ -129,101 +129,96 @@ export function BuybackPanel() {
   }
 
   const ringLabel = v.roundChunk > 0 ? `Chunk ${v.roundChunk} of ${BUYBACK.chunks}` : `${v.progressPct}% of $${BUYBACK.triggerUsdc}`;
+  const figure = { fontSize: 22, lineHeight: 1.1, fontWeight: 400 } as const;
   return (
-    <section className="pa-stack" aria-labelledby="t-buyback">
+    <section className={`pa-stack min-w-0 ${className}`} aria-labelledby="t-buyback">
       <h2 id="t-buyback" className="pa-h2">REGI buyback</h2>
       {BUYBACK.contract && error && !live && (
         <p className="pa-notice" data-tone="down">Couldn&apos;t read the buyback contract right now. Retrying; the figures below are not live.</p>
       )}
-      <div className="pa-card flex flex-col items-center gap-6 sm:flex-row sm:gap-10">
-        <Donut label={`Buyback: ${ringLabel}`} size={168} stroke={20}
-          parts={[{ key: "in", share: v.progressPct, color: "var(--accent)" }, { key: "left", share: 100 - v.progressPct, color: "var(--line)" }]}>
-          <b className="pa-serif tnum" style={{ fontSize: 30, lineHeight: 1, fontWeight: 400 }}>{usdText(v.collected)}</b>
-          <span className="pa-muted pa-small">{v.roundChunk > 0 ? `chunk ${v.roundChunk} of ${BUYBACK.chunks}` : `of $${BUYBACK.triggerUsdc}`}</span>
-        </Donut>
-        <div className="flex w-full flex-col gap-4">
-          <div className="grid grid-cols-3 gap-3">
-            <div className="flex flex-col gap-1"><span className="pa-muted pa-small">Bought back</span><b className="pa-serif tnum" style={BIG}>{usdText(v.spent)}</b></div>
-            <div className="flex flex-col gap-1"><span className="pa-muted pa-small">REGI burned</span><b className="pa-serif tnum" style={BIG}>{compactNumber(Number(v.burned / 10n ** 18n))}</b></div>
-            <div className="flex flex-col gap-1"><span className="pa-muted pa-small">Buys</span><b className="pa-serif tnum" style={BIG}>{v.chunks}</b></div>
-          </div>
-          {BUYBACK.contract && (
-            <div className="flex flex-wrap items-center gap-3">
-              <button type="button" className="pa-btn" disabled={v.phase !== "ready" || busy !== null} onClick={() => send("burn")}>
-                {busy === "burn" ? "Burning…" : `Buy & burn $${BUYBACK.chunkUsdc}`}
-              </button>
-              <span className="pa-muted pa-small">
-                {v.phase === "ready" && "Ready: anyone can press it."}
-                {v.phase === "cooldown" && `Next chunk in ${countdown(v.secondsToNext)}.`}
-                {v.phase === "collecting" && `${usdText(v.collected)} of $${BUYBACK.triggerUsdc} collected.`}
-                {v.incoming > 0n && ` ${usdText(v.incoming)} on its way in (the splitter's 40% and any ledger payments).`}
-              </span>
-              {v.incoming > 0n && BUYBACK.splitter && (
-                <button type="button" className="pa-btn" data-variant="ghost" disabled={busy !== null} onClick={() => send("distribute")}>
-                  {busy === "distribute" ? "Distributing…" : "Distribute"}
-                </button>
-              )}
-            </div>
-          )}
+      <div className="pa-card flex flex-1 flex-col gap-4">
+        <div className="flex items-center gap-5">
+          <Donut label={`Buyback: ${ringLabel}`} size={136} stroke={16}
+            parts={[{ key: "in", share: v.progressPct, color: "var(--accent)" }, { key: "left", share: 100 - v.progressPct, color: "var(--line)" }]}>
+            <b className="pa-serif tnum" style={{ fontSize: 24, lineHeight: 1, fontWeight: 400 }}>{usdText(v.collected)}</b>
+            <span className="pa-muted pa-small">{v.roundChunk > 0 ? `chunk ${v.roundChunk} of ${BUYBACK.chunks}` : `of $${BUYBACK.triggerUsdc}`}</span>
+          </Donut>
+          <dl className="flex min-w-0 flex-1 flex-col">
+            <div className="pa-kv"><dt>Bought back</dt><dd className="pa-serif tnum" style={figure}>{usdText(v.spent)}</dd></div>
+            <div className="pa-kv"><dt>REGI burned</dt><dd className="pa-serif tnum" style={figure}>{compactNumber(Number(v.burned / 10n ** 18n))}</dd></div>
+            <div className="pa-kv"><dt>Buys</dt><dd className="pa-serif tnum" style={figure}>{v.chunks}</dd></div>
+          </dl>
         </div>
+        {BUYBACK.contract && (
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" className="pa-btn" disabled={v.phase !== "ready" || busy !== null} onClick={() => send("burn")}>
+              {busy === "burn" ? "Burning…" : `Buy & burn $${BUYBACK.chunkUsdc}`}
+            </button>
+            {v.incoming > 0n && BUYBACK.splitter && (
+              <button type="button" className="pa-btn" data-variant="ghost" disabled={busy !== null} onClick={() => send("distribute")}>
+                {busy === "distribute" ? "Distributing…" : "Distribute"}
+              </button>
+            )}
+            <span className="pa-muted pa-small">
+              {v.phase === "ready" && "Ready: anyone can press it."}
+              {v.phase === "cooldown" && `Next chunk in ${countdown(v.secondsToNext)}.`}
+              {v.phase === "collecting" && `${usdText(v.toTrigger)} to go.`}
+              {v.incoming > 0n && ` ${usdText(v.incoming)} on its way in.`}
+            </span>
+          </div>
+        )}
+        {data?.pending && (
+          <p className="pa-notice" data-tone="down">
+            The Safe proposed sending the buyback&apos;s 40% to <span className="pa-mono">{data.pending.next}</span>. It takes effect{" "}
+            {new Date(data.pending.at * 1000).toUTCString()} unless cancelled.
+          </p>
+        )}
+        {data && (data.burns.length > 0 || data.inflows.length > 0) && (
+          <div className="grid gap-3 border-t border-line pt-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+            {data.burns.length > 0 && (
+              <div className="min-w-0">
+                <p className="pa-muted pa-small">Recent burns</p>
+                <ul>
+                  {data.burns.slice(0, 5).map((b) => (
+                    <li key={b.tx} className="pa-kv pa-small">
+                      <a className="pa-link" href={`${EXPLORER}/tx/${b.tx}`} target="_blank" rel="noreferrer">{usdText(b.usdcIn)} → {compactNumber(Number(b.regiBurned / 10n ** 18n))}</a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {data.inflows.length > 0 && (
+              <div className="min-w-0">
+                <p className="pa-muted pa-small">Money in</p>
+                <ul>
+                  {data.inflows.slice(0, 5).map((f) => (
+                    <li key={f.tx} className="pa-kv pa-small">
+                      <a className="pa-link" href={`${EXPLORER}/tx/${f.tx}`} target="_blank" rel="noreferrer">{usdText(f.value)}</a>
+                      <span className="truncate">{inflowLabel(f.from, { splitter: BUYBACK.splitter, safe: SAFE, ledger: BUYBACK.ledger })}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+        {hist?.partial && <p className="pa-muted pa-small">Some older history couldn&apos;t be read just now; the lists may be incomplete.</p>}
       </div>
       {BUYBACK.contract ? (
-        <p className="pa-muted pa-small break-all">
-          Anyone can send USDC to the buyback, <a className="pa-link pa-mono" href={`${EXPLORER}/address/${BUYBACK.contract}`} target="_blank" rel="noreferrer">{BUYBACK.contract}</a>{" "}
-          <CopyButton text={BUYBACK.contract} />: every dollar is spent on REGI and burned under the same rules. {BUYBACK_DISCLOSURE}
-          {BUYBACK.splitter && (
-            <>
-              {" "}The splitter is{" "}
-              <a className="pa-link pa-mono" href={`${EXPLORER}/address/${BUYBACK.splitter}`} target="_blank" rel="noreferrer">{BUYBACK.splitter}</a>
-              {live?.splitterTarget && (
-                <>
-                  ; it sends its 40% to{" "}
-                  {live.splitterTarget.toLowerCase() === BUYBACK.contract.toLowerCase() ? "this buyback" : <span className="pa-mono">{live.splitterTarget}</span>}
-                </>
-              )}
-              .
-            </>
+        <p className="pa-muted pa-small">
+          Send USDC to the buyback{" "}
+          <a className="pa-link pa-mono" href={`${EXPLORER}/address/${BUYBACK.contract}`} target="_blank" rel="noreferrer" title={BUYBACK.contract}>{who(BUYBACK.contract)}</a>{" "}
+          <CopyButton text={BUYBACK.contract} /> and it is spent on REGI and burned under the same rules. {BUYBACK_DISCLOSURE}
+          {BUYBACK.splitter && live?.splitterTarget && live.splitterTarget.toLowerCase() !== BUYBACK.contract.toLowerCase() && (
+            <> The splitter now sends its 40% to <span className="pa-mono">{live.splitterTarget}</span>.</>
           )}
         </p>
       ) : (
-        <p className="pa-muted pa-small max-w-[70ch]">
+        <p className="pa-muted pa-small">
           {BUYBACK.shareOfTreasuryPct}% of the treasury&apos;s income goes to a buyback contract with no owner and no withdraw. Anyone can
           send it more USDC. Once it holds ${BUYBACK.triggerUsdc}, it buys REGI in {BUYBACK.chunks} pieces of ${BUYBACK.chunkUsdc},{" "}
-          {BUYBACK.cooldownMin} minutes apart, and every token goes straight to the burn address. Anyone can press the button that runs
-          a buy. It starts with common markets on {BUILDERS.label}; until then these read zero. {BUYBACK_DISCLOSURE}
+          {BUYBACK.cooldownMin} minutes apart, and every token goes straight to the burn address. {BUYBACK_DISCLOSURE}
         </p>
-      )}
-      {hist?.partial && (
-        <p className="pa-muted pa-small">Some older history couldn&apos;t be read just now; the lists below may be incomplete.</p>
-      )}
-      {data && data.burns.length > 0 && (
-        <ul className="pa-card">
-          {data.burns.map((b) => (
-            <li key={b.tx} className="pa-kv">
-              <span>{usdText(b.usdcIn)} → {compactNumber(Number(b.regiBurned / 10n ** 18n))} REGI</span>
-              <a className="pa-link" href={`${EXPLORER}/tx/${b.tx}`} target="_blank" rel="noreferrer">burn ↗</a>
-            </li>
-          ))}
-        </ul>
-      )}
-      {data?.pending && (
-        <p className="pa-notice" data-tone="down">
-          The Safe proposed sending the buyback&apos;s 40% to <span className="pa-mono">{data.pending.next}</span>. It takes effect{" "}
-          {new Date(data.pending.at * 1000).toUTCString()} unless cancelled.
-        </p>
-      )}
-      {data && data.inflows.length > 0 && (
-        <ul className="pa-card">
-          {data.inflows.map((f) => (
-            <li key={f.tx} className="pa-kv">
-              <span>
-                {usdText(f.value)} from{" "}
-                {inflowLabel(f.from, { splitter: BUYBACK.splitter, safe: SAFE, ledger: BUYBACK.ledger })}
-              </span>
-              <a className="pa-link" href={`${EXPLORER}/tx/${f.tx}`} target="_blank" rel="noreferrer">tx ↗</a>
-            </li>
-          ))}
-        </ul>
       )}
     </section>
   );
