@@ -109,6 +109,8 @@ export const BUYBACK = {
   /** Share of the treasury's fee income; null until announced. */
   shareOfTreasuryPct: null as number | null,
   burnAddress: "0x000000000000000000000000000000000000dEaD" as Address,
+  /** The buyback contract on mainnet; null until it deploys with common markets. */
+  contract: null as Address | null,
   token: REGI_CONTRACT as Address,
   poolUrl: REGI_DEXSCREENER_URL,
 };
@@ -196,3 +198,29 @@ export function supplySplit({ supply, burned, protocol }: { supply: bigint; burn
 /** Pure: the sum of `values` over the given wallets; a wallet with no entry counts as 0. */
 export const sumBy = (wallets: { key: string }[], values: Record<string, bigint>) =>
   wallets.reduce((s, w) => s + (values[w.key] ?? 0n), 0n);
+
+/**
+ * Pure: SVG donut segments for `shares` (any scale) around a circle of `circumference`.
+ * A non-zero part is at least `minLength` long so a sliver stays visible; empty parts get 0.
+ */
+export function donutArcs(shares: number[], circumference: number, minLength = 0): { length: number; offset: number }[] {
+  const total = shares.reduce((a, b) => a + b, 0) || 1;
+  let offset = 0;
+  return shares.map((v) => {
+    const length = v > 0 ? Math.max(minLength, (v / total) * circumference) : 0;
+    const arc = { length, offset };
+    offset += length;
+    return arc;
+  });
+}
+
+export interface BuybackRead { spentUsdc: bigint; burnedRegi: bigint; buys: number; pending: bigint }
+
+/** Pure: buyback volume so far and progress to the next buy (USDC in 6 decimals). */
+export function buybackView(read: BuybackRead | null) {
+  const trigger = BigInt(BUYBACK.triggerUsdc) * 1_000_000n;
+  const r = read ?? { spentUsdc: 0n, burnedRegi: 0n, buys: 0, pending: 0n };
+  const toTrigger = r.pending >= trigger ? 0n : trigger - r.pending;
+  const progressPct = r.pending >= trigger ? 100 : Number((r.pending * 100n) / trigger);
+  return { live: read !== null, ...r, toTrigger, progressPct };
+}

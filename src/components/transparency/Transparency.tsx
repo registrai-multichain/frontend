@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import useSWR from "swr";
 import { parseAbi, type Address, type PublicClient } from "viem";
 import { CopyButton } from "@/components/perennial/CopyButton";
@@ -10,7 +11,7 @@ import { usdText, who } from "@/lib/plain-words";
 import { badgeAbi } from "@/lib/verified-builder-badge";
 import {
   BUYBACK, CONTRACTS, DEPLOY, DEX_PAIR_API, FEE_SPLITS, RECORD, ROLES, TRADE_FEE_PCT, WALLETS, compactNumber, holderLabel, nativeToUsdc, parseDexPair,
-  roleDiffs, sumBy, supplySplit,
+  buybackView, donutArcs, roleDiffs, sumBy, supplySplit,
 } from "@/lib/transparency";
 
 const safeAbi = parseAbi([
@@ -106,13 +107,29 @@ function Stat({ label, value, sub, tone }: { label: string; value: string; sub?:
   );
 }
 
-/** One bar, segments sized by share; a sliver stays visible however small. */
-function SplitBar({ parts, label }: { parts: { key: string; share: number; color: string }[]; label: string }) {
+/** A ring split into parts by share; a sliver stays visible however small. Children sit in the hole. */
+function Donut({ parts, label, size = 168, stroke = 22, children }: {
+  parts: { key: string; share: number; color: string }[]; label: string; size?: number; stroke?: number; children?: ReactNode;
+}) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const shown = parts.filter((p) => p.share > 0).length;
+  const gap = shown > 1 ? 3 : 0;
+  const arcs = donutArcs(parts.map((p) => p.share), c, gap + 4);
   return (
-    <div className="flex h-3 w-full gap-[2px] overflow-hidden rounded-full" role="img" aria-label={label}>
-      {parts.filter((p) => p.share > 0).map((p) => (
-        <i key={p.key} style={{ width: `${p.share}%`, minWidth: 4, background: p.color }} />
-      ))}
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={label} style={{ transform: "rotate(-90deg)" }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--line)" strokeWidth={stroke} />
+        {arcs.map((a, i) => a.length > 0 && (
+          <circle
+            key={parts[i].key}
+            cx={size / 2} cy={size / 2} r={r} fill="none"
+            stroke={parts[i].color} strokeWidth={stroke}
+            strokeDasharray={`${Math.max(a.length - gap, 1)} ${c}`} strokeDashoffset={-a.offset}
+          />
+        ))}
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">{children}</div>
     </div>
   );
 }
@@ -121,11 +138,6 @@ const Swatch = ({ color }: { color: string }) => <i aria-hidden className="inlin
 
 const SUPPLY_COLORS = { burned: "var(--fg)", protocol: "var(--accent)", public: "var(--line-strong)" } as const;
 const LEG_COLORS = ["var(--up)", "var(--accent)", "var(--line-strong)"];
-
-/** A token amount (any decimals) as a grouped whole number. */
-function tokens(v: bigint, decimals: number): string {
-  return (v / 10n ** BigInt(decimals)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
 
 function Addr({ a }: { a: string }) {
   return (
@@ -156,6 +168,8 @@ export function Transparency() {
   const split = live && regiHeld !== null ? supplySplit({ supply: live.regi.supply, burned: live.regi.burned, protocol: regiHeld }) : null;
   const shareOf = (v: bigint) => (live && live.regi.supply > 0n ? Number((v * 10_000n) / live.regi.supply) / 100 : 0);
   const issued = live ? live.badges.filter((b) => b.owner).length : null;
+  // No buyback contract on mainnet yet: every figure is zero until it deploys.
+  const bb = buybackView(null);
   const dash = "…";
 
   return (
@@ -171,46 +185,81 @@ export function Transparency() {
       {/* How much: REGI in total and where it sits */}
       <section className="pa-stack" aria-labelledby="t-supply">
         <h2 id="t-supply" className="pa-h2">REGI supply</h2>
-        <div className="pa-card flex flex-col gap-5">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div className="flex flex-col gap-1">
-              <span className="pa-muted pa-small">Total supply</span>
-              <b className="pa-serif tnum" style={{ fontSize: "clamp(34px, 9vw, 52px)", lineHeight: 1, fontWeight: 400 }}>
-                {live ? compactNumber(whole(live.regi.supply)) : dash}
-              </b>
-              <span className="pa-muted pa-small tnum">{live ? `${tokens(live.regi.supply, live.regi.decimals)} REGI` : " "}</span>
-            </div>
-            <div className="flex flex-col gap-1 sm:items-end">
-              <span className="pa-muted pa-small">Price</span>
-              <b className="pa-serif tnum" style={BIG}>{dex ? usdLoose(dex.priceUsd) : "—"}</b>
-              <span className="pa-muted pa-small tnum">
-                {dex ? [dex.marketCapUsd !== null && `market cap ${usdLoose(dex.marketCapUsd)}`, dex.liquidityUsd !== null && `liquidity ${usdLoose(dex.liquidityUsd)}`].filter(Boolean).join(" · ") : "from DexScreener"}
-              </span>
+        <div className="pa-card flex flex-col gap-6">
+          <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-10">
+            <Donut
+              label="REGI supply: burned, protocol wallets, everyone else"
+              size={200}
+              stroke={26}
+              parts={split ? split.map((p) => ({ key: p.key, share: shareOf(p.amount), color: SUPPLY_COLORS[p.key] })) : []}
+            >
+              <b className="pa-serif tnum" style={{ fontSize: 40, lineHeight: 1, fontWeight: 400 }}>{live ? compactNumber(whole(live.regi.supply)) : dash}</b>
+              <span className="pa-muted pa-small">total supply</span>
+            </Donut>
+            <div className="flex w-full flex-col">
+              {(split ?? supplySplit({ supply: 0n, burned: 0n, protocol: 0n })).map((p) => (
+                <div key={p.key} className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 border-b border-line py-3 last:border-b-0">
+                  <span className="inline-flex items-center gap-2"><Swatch color={SUPPLY_COLORS[p.key]} />{p.label}</span>
+                  <b className="pa-serif tnum text-right" style={{ ...BIG, fontSize: 28 }}>{split ? compactNumber(whole(p.amount)) : dash}</b>
+                  <span className="pa-muted pa-small">
+                    {p.key === "burned" && <a className="pa-link" href={addrUrl(BUYBACK.burnAddress)} target="_blank" rel="noreferrer">at the burn address ↗</a>}
+                    {p.key === "protocol" && `across the ${WALLETS.length} wallets below`}
+                    {p.key === "public" && "in the pool and every other wallet"}
+                  </span>
+                  <span className="pa-small tnum text-right">{split ? p.pct : " "}</span>
+                </div>
+              ))}
             </div>
           </div>
-          <SplitBar
-            label="REGI supply: burned, protocol wallets, everyone else"
-            parts={split ? split.map((p) => ({ key: p.key, share: shareOf(p.amount), color: SUPPLY_COLORS[p.key] })) : [{ key: "x", share: 100, color: "var(--line)" }]}
-          />
-          <div className="grid grid-cols-3 gap-3 sm:gap-4">
-            {(split ?? supplySplit({ supply: 0n, burned: 0n, protocol: 0n })).map((p) => (
-              <div key={p.key} className="flex flex-col gap-1">
-                <span className="pa-muted pa-small inline-flex items-center gap-2"><Swatch color={SUPPLY_COLORS[p.key]} />{p.label}</span>
-                <b className="pa-serif tnum" style={BIG}>{split ? compactNumber(whole(p.amount)) : dash}</b>
-                <span className="pa-small tnum">{split ? `${p.pct} of supply` : " "}</span>
-                <span className="pa-muted pa-small">
-                  {p.key === "burned" && <a className="pa-link" href={addrUrl(BUYBACK.burnAddress)} target="_blank" rel="noreferrer">at the burn address ↗</a>}
-                  {p.key === "protocol" && `across the ${WALLETS.length} wallets below`}
-                  {p.key === "public" && "in the pool and every other wallet"}
-                </span>
-              </div>
-            ))}
+          <div className="grid grid-cols-3 gap-3 border-t border-line pt-4">
+            <div className="flex flex-col gap-1"><span className="pa-muted pa-small">Price</span><b className="pa-serif tnum" style={{ ...BIG, fontSize: 24 }}>{dex ? usdLoose(dex.priceUsd) : "—"}</b></div>
+            <div className="flex flex-col gap-1"><span className="pa-muted pa-small">Market cap</span><b className="pa-serif tnum" style={{ ...BIG, fontSize: 24 }}>{dex?.marketCapUsd != null ? usdLoose(dex.marketCapUsd) : "—"}</b></div>
+            <div className="flex flex-col gap-1"><span className="pa-muted pa-small">Pool liquidity</span><b className="pa-serif tnum" style={{ ...BIG, fontSize: 24 }}>{dex?.liquidityUsd != null ? usdLoose(dex.liquidityUsd) : "—"}</b></div>
           </div>
-          <p className="pa-muted pa-small">
+          <p className="pa-muted pa-small break-all">
             Token <a className="pa-link pa-mono" href={addrUrl(BUYBACK.token)} target="_blank" rel="noreferrer">{BUYBACK.token}</a> ·{" "}
-            <a className="pa-link" href={BUYBACK.poolUrl} target="_blank" rel="noreferrer">REGI/USDC pool ↗</a>
+            <a className="pa-link" href={BUYBACK.poolUrl} target="_blank" rel="noreferrer">REGI/USDC pool ↗</a> · price from DexScreener
           </p>
         </div>
+      </section>
+
+      {/* Buyback volume */}
+      <section className="pa-stack" aria-labelledby="t-buyback">
+        <h2 id="t-buyback" className="pa-h2">REGI buyback</h2>
+        <div className="pa-card flex flex-col items-center gap-6 sm:flex-row sm:gap-10">
+          <Donut
+            label={`Next buyback: ${bb.progressPct}% of $${BUYBACK.triggerUsdc}`}
+            size={168}
+            stroke={20}
+            parts={[{ key: "in", share: bb.progressPct, color: "var(--accent)" }, { key: "left", share: 100 - bb.progressPct, color: "var(--line)" }]}
+          >
+            <b className="pa-serif tnum" style={{ fontSize: 32, lineHeight: 1, fontWeight: 400 }}>{usdText(bb.pending)}</b>
+            <span className="pa-muted pa-small">of ${BUYBACK.triggerUsdc} to next buy</span>
+          </Donut>
+          <div className="grid w-full grid-cols-3 gap-3">
+            <div className="flex flex-col gap-1">
+              <span className="pa-muted pa-small">Bought back</span>
+              <b className="pa-serif tnum" style={BIG}>{usdText(bb.spentUsdc)}</b>
+              <span className="pa-muted pa-small">USDC spent on REGI</span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="pa-muted pa-small">REGI burned</span>
+              <b className="pa-serif tnum" style={BIG}>{compactNumber(Number(bb.burnedRegi / 10n ** 18n))}</b>
+              <span className="pa-muted pa-small">by buybacks</span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="pa-muted pa-small">Buys</span>
+              <b className="pa-serif tnum" style={BIG}>{bb.buys}</b>
+              <span className="pa-muted pa-small">of ${BUYBACK.chunkUsdc} each</span>
+            </div>
+          </div>
+        </div>
+        {!bb.live && (
+          <p className="pa-muted pa-small max-w-[70ch]">
+            Buybacks start with common markets on {BUILDERS.label}. Until the buyback contract deploys there is nothing to buy with, so
+            these read zero; after that they read live from the contract.
+          </p>
+        )}
       </section>
 
       {/* How much sits on protocol-owned addresses */}
@@ -268,17 +317,22 @@ export function Transparency() {
           {FEE_SPLITS.map((s) => (
             <article key={s.market} className="pa-card flex flex-col gap-4">
               <h3 className="pa-h3">{s.short}</h3>
-              <SplitBar label={`${s.short} fee split`} parts={s.legs.map((l, i) => ({ key: l.who, share: l.pct, color: LEG_COLORS[i] }))} />
-              <div className="flex flex-col gap-3">
-                {s.legs.map((l, i) => (
-                  <div key={l.who} className="grid grid-cols-[4.5rem_1fr] items-baseline gap-3">
-                    <b className="pa-serif tnum" style={{ ...BIG, fontSize: 30 }}>{l.pct}%</b>
-                    <span>
-                      <span className="inline-flex items-center gap-2"><Swatch color={LEG_COLORS[i]} />{l.who}</span>
-                      <span className="pa-muted pa-small block">{l.to}</span>
-                    </span>
-                  </div>
-                ))}
+              <div className="flex items-center gap-5">
+                <Donut label={`${s.short} fee split`} size={128} stroke={18} parts={s.legs.map((l, i) => ({ key: l.who, share: l.pct, color: LEG_COLORS[i] }))}>
+                  <b className="pa-serif tnum" style={{ fontSize: 26, lineHeight: 1, fontWeight: 400 }}>{TRADE_FEE_PCT}%</b>
+                  <span className="pa-muted pa-small">fee</span>
+                </Donut>
+                <div className="flex min-w-0 flex-col gap-3">
+                  {s.legs.map((l, i) => (
+                    <div key={l.who} className="flex flex-col">
+                      <span className="inline-flex items-baseline gap-2">
+                        <b className="pa-serif tnum" style={{ fontSize: 24, lineHeight: 1, fontWeight: 400 }}>{l.pct}%</b>
+                        <span className="inline-flex items-center gap-1.5"><Swatch color={LEG_COLORS[i]} />{l.who}</span>
+                      </span>
+                      <span className="pa-muted pa-small">{l.to}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </article>
           ))}

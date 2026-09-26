@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import deployment from "./deployments/arc-mainnet.json";
-import { BUYBACK, CONTRACTS, EXPECTED_ROLES, FEE_SPLITS, RECORD, ROLES, WALLETS, compactNumber, holderLabel, parseDexPair, nativeToUsdc, percentOf, roleDiffs, supplySplit, sumBy } from "./transparency";
+import { BUYBACK, CONTRACTS, EXPECTED_ROLES, FEE_SPLITS, RECORD, ROLES, WALLETS, compactNumber, holderLabel, parseDexPair, nativeToUsdc, percentOf, roleDiffs, supplySplit, sumBy, donutArcs, buybackView } from "./transparency";
 
 describe("transparency (app.registrai.cc/transparency)", () => {
   test("every wallet comes from the mainnet deployment file, with what it does and what it cannot", () => {
@@ -106,5 +106,39 @@ describe("supply and balances", () => {
 
   test("sums balances across wallets, missing ones count as zero", () => {
     expect(sumBy(WALLETS, { safe: 5n, operator: 2n })).toBe(7n);
+  });
+
+  test("donut arcs: each part's length and where it starts, around a circle of the given length", () => {
+    expect(donutArcs([50, 30, 20], 100)).toEqual([
+      { length: 50, offset: 0 },
+      { length: 30, offset: 50 },
+      { length: 20, offset: 80 },
+    ]);
+  });
+
+  test("donut arcs keep a tiny part visible and skip empty ones", () => {
+    const arcs = donutArcs([0.1, 0, 99.9], 100, 1);
+    expect(arcs[0].length).toBe(1);
+    expect(arcs[1].length).toBe(0);
+    expect(arcs[2].offset).toBeCloseTo(1);
+  });
+});
+
+describe("buyback volume", () => {
+  test("nothing bought yet before the buyback contract exists", () => {
+    expect(buybackView(null)).toEqual({ live: false, spentUsdc: 0n, burnedRegi: 0n, buys: 0, pending: 0n, toTrigger: 500_000_000n, progressPct: 0 });
+  });
+
+  test("progress toward the next buy from what the contract holds", () => {
+    const v = buybackView({ spentUsdc: 1_500_000_000n, burnedRegi: 10n, buys: 15, pending: 125_000_000n });
+    expect(v.live).toBe(true);
+    expect(v.toTrigger).toBe(375_000_000n);
+    expect(v.progressPct).toBe(25);
+  });
+
+  test("a full contract shows 100% and nothing left to go", () => {
+    const v = buybackView({ spentUsdc: 0n, burnedRegi: 0n, buys: 0, pending: 600_000_000n });
+    expect(v.progressPct).toBe(100);
+    expect(v.toTrigger).toBe(0n);
   });
 });
