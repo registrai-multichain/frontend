@@ -677,13 +677,13 @@ export function CommonMarkets() {
 
   return (
     <SessionCtx.Provider value={session}>
-    <div className="pt-10 sm:pt-14 fade-up">
+    <div className="fade-up">
       <Header now={now} roundEnd={roundEnd} />
 
       <LedgerBar snap={snap} tx={tx} address={address} onChain={onChain} connect={connect} switchChain={() => switchChain(D.chainId)} />
 
       {loadError && !snap && (
-        <p className="mb-6 border border-down bg-bg-elev px-4 py-3 text-[13px] text-down">
+        <p className="mb-6 rounded-[10px] border border-down bg-bg-elev px-4 py-3 text-[13px] text-down">
           Could not read the markets from Arc testnet: {loadError} Retrying every 5 seconds.
         </p>
       )}
@@ -709,7 +709,7 @@ export function CommonMarkets() {
           />
         ))}
       </section>
-      <p className="mt-3 max-w-[72ch] text-2xs leading-relaxed text-fg-dim">
+      <p className="mt-3 max-w-[72ch] text-[13px] leading-relaxed text-fg-dim">
         Prices are live · Coinbase, for reference. You bet on the next round; betting closes the moment it starts. When
         it ends, the agent attests the round&apos;s change on chain: the 1-minute close at its end minus the one at its
         start. Up wins only if the change is above zero; no change is Down. The reading becomes final after a 10-minute
@@ -721,7 +721,7 @@ export function CommonMarkets() {
 
       <EventMarkets snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={Boolean(address && onChain)} address={address} />
 
-      <p className="mt-12 border-t border-line pt-4 text-2xs leading-relaxed text-fg-dim">
+      <p className="mt-12 border-t border-line pt-4 text-[13px] leading-relaxed text-fg-dim">
         Markets read live from{" "}
         <a className="text-fg-mute underline" href={`${D.explorer}/address/${C.MarketsV4}`} target="_blank" rel="noreferrer">
           MarketsV4 on Arc testnet
@@ -747,14 +747,14 @@ function Header({ now, roundEnd }: { now: number; roundEnd: number }) {
   return (
     <header className="mb-8 grid gap-6 border-b border-line pb-6 sm:grid-cols-[1fr_auto] sm:items-end">
       <div>
-        <h1 className="font-serif text-[40px] leading-none tracking-tightest sm:text-[52px]">Common markets</h1>
-        <p className="mt-3 max-w-[56ch] text-[13px] leading-relaxed text-fg-mute">
+        <h1 className="pa-h1">Common markets</h1>
+        <p className="pa-lede">
           Up or down over the next five minutes? Bet on the next round of BTC, ETH, SOL, ZEC and HYPE; betting closes
           as the round starts, so nobody trades on a move already on the chart. Buy and sell until then.
         </p>
       </div>
       <div className="sm:w-[240px]" aria-live="off">
-        <div className="flex items-baseline justify-between gap-4 text-2xs text-fg-dim">
+        <div className="flex items-baseline justify-between gap-4 text-[13px] text-fg-dim">
           <span>{now ? `Next round ${roundLabel(roundEnd, roundEnd + D.roundSecs)}` : "Next round"}</span>
           <span>betting closes in</span>
         </div>
@@ -816,9 +816,9 @@ function LedgerBar({
 
   if (!address) {
     return (
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border border-line bg-bg-elev px-4 py-3">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-bg-elev px-4 py-3">
         <p className="text-[13px] text-fg-mute">Connect a wallet to trade. Prices and results are public.</p>
-        <button onClick={() => void connect()} className="bg-accent px-4 py-2 text-[13px] text-bg transition-colors hover:bg-accent-deep">
+        <button onClick={() => void connect()} className="pa-btn">
           Connect wallet
         </button>
       </div>
@@ -826,9 +826,9 @@ function LedgerBar({
   }
   if (!onChain) {
     return (
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border border-line bg-bg-elev px-4 py-3">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-bg-elev px-4 py-3">
         <p className="text-[13px] text-fg-mute">These markets run on Arc testnet. Your wallet is on another network.</p>
-        <button onClick={() => void switchChain()} className="bg-accent px-4 py-2 text-[13px] text-bg transition-colors hover:bg-accent-deep">
+        <button onClick={() => void switchChain()} className="pa-btn">
           Switch to Arc testnet
         </button>
       </div>
@@ -836,13 +836,13 @@ function LedgerBar({
   }
   const busy = Boolean(tx.st.pending);
   return (
-    <div className="mb-6 border border-line bg-bg-elev px-4 py-3">
+    <div className="mb-6 rounded-xl border border-line bg-bg-elev px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <div>
-          <div className="text-2xs text-fg-dim">Trading balance</div>
+          <div className="text-[13px] text-fg-dim">Trading balance</div>
           <div className="tnum font-serif text-[22px] leading-tight">{snap?.ledgerBal !== undefined ? `${fmt(ledgerBal)} USDC` : "…"}</div>
         </div>
-        <div className="text-2xs text-fg-dim">
+        <div className="text-[13px] text-fg-dim">
           Wallet <span className="tnum text-fg-mute">{fmt(walletBal)} USDC</span>
           <br />
           Buys draw from the trading balance; winnings land there too.
@@ -856,7 +856,7 @@ function LedgerBar({
             aria-label="Amount to deposit"
             className="tnum w-[110px] border border-line bg-bg px-3 py-2 text-[14px] outline-none focus:border-accent"
           />
-          <button onClick={deposit} disabled={busy} className="bg-accent px-4 text-[13px] text-bg transition-colors hover:bg-accent-deep disabled:opacity-50">
+          <button onClick={deposit} disabled={busy} className="pa-btn">
             {tx.st.pending === "depositing" ? "Depositing…" : "Deposit"}
           </button>
           <button
@@ -889,7 +889,7 @@ function SessionRow({ tx }: { tx: Tx }) {
     "low-gas": "The session key is almost out of gas. Renew to top it up.",
   };
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-3 text-2xs">
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-3 text-[13px]">
       <span className={`inline-flex items-center gap-1.5 ${on ? "text-up" : "text-fg-mute"}`}>
         <span aria-hidden className={`inline-block h-1.5 w-1.5 rounded-full ${on ? "bg-up" : "bg-line-strong"}`} />
         One-click betting {on ? "on" : "off"}
@@ -906,7 +906,7 @@ function SessionRow({ tx }: { tx: Tx }) {
           <button
             onClick={() => void ses.enable()}
             disabled={busy}
-            className="border border-accent px-3 py-1 text-[12px] text-accent transition-colors hover:bg-accent hover:text-bg disabled:opacity-50"
+            className="pa-chip disabled:opacity-50"
           >
             {tx.st.pending === "session" ? "Confirm in wallet…" : ses.status === "none" ? "Enable" : "Renew"}
           </button>
@@ -915,7 +915,7 @@ function SessionRow({ tx }: { tx: Tx }) {
           <button
             onClick={() => void ses.end()}
             disabled={busy}
-            className="border border-line px-3 py-1 text-[12px] text-fg-mute transition-colors hover:border-accent hover:text-fg disabled:opacity-50"
+            className="border border-line px-3 py-1 text-[13px] text-fg-mute transition-colors hover:border-accent hover:text-fg disabled:opacity-50"
           >
             {tx.st.pending === "ending" ? "Ending…" : "End"}
           </button>
@@ -936,7 +936,7 @@ function TxLine({ tx, scope }: { tx: Tx; scope: string }) {
   const st = tx.st;
   if (st.scope !== scope || (!st.error && !st.hash && !st.done && !st.pending)) return null;
   return (
-    <div className="mt-2 text-2xs" aria-live="polite">
+    <div className="mt-2 text-[13px]" aria-live="polite">
       {st.pending && <span className="text-fg-dim">{st.oneClick ? "Sending (one-click)… " : "Confirm in your wallet, then wait for the block… "}</span>}
       {st.done && <span className="text-up">{st.done} </span>}
       {st.error && <span className="text-down">{st.error} </span>}
@@ -1015,11 +1015,11 @@ function AssetCard({
     current && setOpen(isOpen && open?.mode === mode && open.side === side ? undefined : { id: current.marketId, side, mode });
 
   return (
-    <article className="flex min-w-0 flex-col border border-line bg-bg-elev p-4">
+    <article className="flex min-w-0 flex-col rounded-xl border border-line bg-bg-elev p-4">
       <div className="flex items-baseline justify-between gap-3">
         <div className="flex min-w-0 items-baseline gap-2">
           <h2 className="font-serif text-[24px] leading-none">{asset.symbol}</h2>
-          <span className="truncate text-2xs text-fg-dim">{asset.name}</span>
+          <span className="truncate text-[13px] text-fg-dim">{asset.name}</span>
         </div>
         <div
           className={`tnum font-serif text-[24px] leading-none tracking-tightest transition-colors duration-300 ${
@@ -1027,10 +1027,10 @@ function AssetCard({
           }`}
         >
           {live ? formatPrice(live.price, asset.decimals) : "—"}
-          {!stream.live && live && <span className="ml-1 align-middle text-2xs text-fg-dim" title="Live stream reconnecting; polling">·</span>}
+          {!stream.live && live && <span className="ml-1 align-middle text-[13px] text-fg-dim" title="Live stream reconnecting; polling">·</span>}
         </div>
       </div>
-      <div className="mt-1.5 flex items-baseline justify-between gap-3 text-2xs text-fg-dim">
+      <div className="mt-1.5 flex items-baseline justify-between gap-3 text-[13px] text-fg-dim">
         <span className="min-w-0 truncate">
           {current ? (
             <>
@@ -1069,7 +1069,7 @@ function AssetCard({
       </div>
 
       {played && (
-        <div className="mt-1 flex items-baseline justify-between gap-3 text-2xs text-fg-dim">
+        <div className="mt-1 flex items-baseline justify-between gap-3 text-[13px] text-fg-dim">
           <span>
             In play · ends <span className="tnum text-fg-mute">{timeLeft(playLeft)}</span>
           </span>
@@ -1092,7 +1092,7 @@ function AssetCard({
         <div className="mt-3 border-t border-line pt-3">
           {odds && current.change && (
             <div className="mb-2">
-              <div className="flex items-baseline justify-between text-2xs text-fg-dim">
+              <div className="flex items-baseline justify-between text-[13px] text-fg-dim">
                 <span>
                   <span className={upPct >= 50 ? "text-up" : "text-down"}>{upPct.toFixed(0)}% Up</span> · pool odds
                 </span>
@@ -1106,7 +1106,7 @@ function AssetCard({
               <SideButton label={`Down ${downPrice}`} tone="down" active={Boolean(isOpen && open?.mode === "buy" && open.side === "no")} onClick={() => toggle("no", "buy")} />
             </div>
           ) : (
-            <p className="text-2xs text-fg-dim">
+            <p className="text-[13px] text-fg-dim">
               {current.change ? "Betting closed" : "Trading closed"} at {clockUtc(current.expiry)} UTC.
             </p>
           )}
@@ -1151,7 +1151,7 @@ function Position({ hold, value, valueLabel = "Value now" }: { hold: Holding; va
   const r = value !== undefined ? pnl(value, hold.cost) : undefined;
   const tone = !r || r.diff === 0n ? "text-fg-mute" : r.diff > 0n ? "text-up" : "text-down";
   return (
-    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border border-line bg-bg px-3 py-2.5 text-2xs sm:grid-cols-4">
+    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border border-line bg-bg px-3 py-2.5 text-[13px] sm:grid-cols-4">
       <div>
         <div className="text-fg-dim">Your shares</div>
         <div className="tnum mt-0.5 text-[13px]">
@@ -1282,7 +1282,7 @@ function TradeBox({
   const presets = open.mode === "buy" ? ["1", "5", "10"] : [];
   return (
     <div className="mt-3 border border-line bg-bg p-3">
-      <div className="mb-3 flex flex-wrap items-center gap-2 text-2xs">
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-[13px]">
         <div className="inline-flex border border-line" role="group" aria-label="Buy or sell">
           {(["buy", "sell"] as const).map((m) => (
             <button
@@ -1317,7 +1317,7 @@ function TradeBox({
       </div>
 
       <div className="flex items-stretch gap-2">
-        <div className="flex flex-1 items-center border border-line bg-bg-elev px-3 focus-within:border-accent">
+        <div className="flex flex-1 items-center rounded-[10px] border border-line bg-bg-elev px-3 focus-within:border-line-strong">
           <input
             value={amt}
             onChange={(e) => setAmt(e.target.value.replace(/[^0-9.]/g, ""))}
@@ -1326,7 +1326,7 @@ function TradeBox({
             aria-label={open.mode === "buy" ? "USDC to spend" : `${label} shares to sell`}
             className="tnum w-full bg-transparent py-2 font-serif text-[22px] outline-none"
           />
-          <span className="text-2xs text-fg-dim">{open.mode === "buy" ? "USDC" : "shares"}</span>
+          <span className="text-[13px] text-fg-dim">{open.mode === "buy" ? "USDC" : "shares"}</span>
         </div>
         {presets.map((p) => (
           <button key={p} onClick={() => setAmt(p)} className="tnum border border-line px-3 text-[13px] text-fg-mute hover:border-line-strong hover:text-fg">
@@ -1340,7 +1340,7 @@ function TradeBox({
         )}
       </div>
 
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-2xs text-fg-dim sm:grid-cols-4">
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[13px] text-fg-dim sm:grid-cols-4">
         <div>
           <dt>You get about</dt>
           <dd className="tnum text-[13px] text-fg">
@@ -1366,7 +1366,7 @@ function TradeBox({
       </dl>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <div className="inline-flex items-center gap-1 text-2xs text-fg-dim" role="group" aria-label="Slippage tolerance">
+        <div className="inline-flex items-center gap-1 text-[13px] text-fg-dim" role="group" aria-label="Slippage tolerance">
           Slippage
           {SLIPPAGES.map((s) => (
             <button
@@ -1379,7 +1379,7 @@ function TradeBox({
             </button>
           ))}
         </div>
-        <span className="text-2xs text-fg-dim">
+        <span className="text-[13px] text-fg-dim">
           {windowSecs === ROUND_TRADE_WINDOW_SECS
             ? "Fills within 2 minutes and before the close, or not at all."
             : `Fills within ${Number(windowSecs) / 60} minutes, or not at all.`}
@@ -1396,7 +1396,7 @@ function TradeBox({
             : `${oneClick ? "⚡ " : ""}${open.mode === "buy" ? `Buy ${label}${value ? ` for ${fmt(value)} USDC` : ""}` : `Sell ${label}`}`}
         </button>
       </div>
-      {!canTrade && <p className="mt-2 text-2xs text-fg-dim">Connect a wallet on Arc testnet to trade.</p>}
+      {!canTrade && <p className="mt-2 text-[13px] text-fg-dim">Connect a wallet on Arc testnet to trade.</p>}
       <TxLine tx={tx} scope={scope} />
     </div>
   );
@@ -1436,12 +1436,12 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
         Your claims
       </h2>
       {claims.length === 0 ? (
-        <p className="border border-line bg-bg-elev px-4 py-3 text-[13px] text-fg-dim">
+        <p className="rounded-xl border border-line bg-bg-elev px-4 py-3 text-[13px] text-fg-dim">
           Nothing to redeem. Winning shares from settled rounds you traded in the last two hours show up here, and pay
           into your trading balance.
         </p>
       ) : (
-        <ul className="border border-line bg-bg-elev">
+        <ul className="overflow-hidden rounded-xl border border-line bg-bg-elev">
           {claims.map(({ market: m, amount }) => {
             const a = assetOf(m.key);
             const ev = eventOf(m.key);
@@ -1452,7 +1452,7 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="text-[14px]">{a ? `${a.symbol} · ${roundLabel(roundWindow(m).start, roundWindow(m).end)}` : ev?.question ?? m.key}</div>
-                    <div className="text-2xs text-fg-dim">
+                    <div className="text-[13px] text-fg-dim">
                       {s?.key === "voided" ? "Voided: your net cost comes back." : s?.key === "resolved-up" ? (a ? "Closed Up." : "Resolved Yes.") : a ? "Closed Down." : "Resolved No."}
                     </div>
                   </div>
@@ -1470,7 +1470,7 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
                         Boolean(ses?.owner && ses.covers("redeem", 0n)),
                       )
                     }
-                    className="tnum bg-accent px-4 py-2 text-[13px] text-bg transition-colors hover:bg-accent-deep disabled:opacity-50"
+                    className="tnum pa-btn"
                   >
                     {tx.st.pending === "redeem" && tx.st.scope === scope ? "Redeeming…" : `Redeem ${fmt(amount)} USDC`}
                   </button>
@@ -1590,10 +1590,10 @@ function EventCard({
             : undefined;
 
   return (
-    <article className="border border-line bg-bg-elev p-4 sm:p-5">
-      {ev.rehearsal && <div className="mb-2 text-2xs text-accent">Testnet rehearsal of the settlement flow, short-dated.</div>}
+    <article className="rounded-xl border border-line bg-bg-elev p-4 sm:p-5">
+      {ev.rehearsal && <div className="mb-2 text-[13px] text-accent">Testnet rehearsal of the settlement flow, short-dated.</div>}
       <h3 className="max-w-[40ch] font-serif text-[22px] leading-snug">{ev.question}</h3>
-      <dl className="mt-3 grid gap-x-6 gap-y-2 text-2xs text-fg-dim sm:grid-cols-3">
+      <dl className="mt-3 grid gap-x-6 gap-y-2 text-[13px] text-fg-dim sm:grid-cols-3">
         <div>
           <dt>Deadline</dt>
           <dd className="tnum text-[13px] text-fg-mute">
@@ -1627,11 +1627,11 @@ function EventCard({
         </div>
       </dl>
 
-      {!id && snap && <p className="mt-3 text-2xs text-fg-dim">This market has not been opened yet.</p>}
+      {!id && snap && <p className="mt-3 text-[13px] text-fg-dim">This market has not been opened yet.</p>}
 
       {st && market && (
         <div className="mt-4">
-          <div className="mb-1 flex justify-between text-2xs">
+          <div className="mb-1 flex justify-between text-[13px]">
             <span className="text-up">Yes {yesPct.toFixed(0)}%</span>
             <span className="text-down">{(100 - yesPct).toFixed(0)}% No</span>
           </div>
@@ -1661,7 +1661,7 @@ function EventCard({
                   >
                     Sell
                   </button>
-                  <span className="tnum ml-auto text-2xs text-fg-dim">
+                  <span className="tnum ml-auto text-[13px] text-fg-dim">
                     You hold {fmt(hold.yes)} Yes · {fmt(hold.no)} No
                   </span>
                 </>
@@ -1692,7 +1692,7 @@ function EventCard({
               <button
                 disabled={Boolean(tx.st.pending) || redeemable === 0n}
                 onClick={() => void tx.run(scope, "redeem", () => tx.send(C.MarketsV4, marketsV4Abi, "redeem", [market.marketId]), `Redeemed ${fmt(redeemable)} USDC.`)}
-                className="tnum w-full bg-accent py-2 text-[13px] text-bg transition-colors hover:bg-accent-deep disabled:opacity-50"
+                className="tnum pa-btn pa-btn--block"
               >
                 {redeemable === 0n ? "Nothing to redeem" : tx.st.pending === "redeem" && tx.st.scope === scope ? "Redeeming…" : `Redeem ${fmt(redeemable)} USDC`}
               </button>

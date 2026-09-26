@@ -100,6 +100,8 @@ export const SCOPED_FILES = [
   "src/components/BuilderBadgeCard.tsx",
   "src/components/VerifiedBadge.tsx",
   "src/components/AgentBadge.tsx",
+  "src/components/CommonMarkets.tsx",
+  "src/components/RoundCharts.tsx",
 ];
 export const SCOPED_DIRS = [
   "src/components/paper",
@@ -114,6 +116,7 @@ export const SCOPED_DIRS = [
   "src/app/verify",
   "src/app/guide",
   "src/app/admin",
+  "src/app/rounds",
 ];
 
 export function scopedTsxFiles(root: string): string[] {
