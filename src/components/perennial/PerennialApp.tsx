@@ -17,8 +17,9 @@ export function PerennialApp({ initialTab }: { initialTab?: MarketTab }) {
       <div className="pa-card max-w-[62ch]">
         <h1 className="pa-h2">Markets open on {D.label} soon</h1>
         <p className="pa-muted mt-2">
-          Markets, deposits and builder payouts appear here once the contracts are live. Until then this page makes no {D.label} calls.
-          Meanwhile, meet the builders at <a className="pa-link" href="https://builder.registrai.cc">builder.registrai.cc</a>.
+          Bet on what builders ship: every market is a real milestone, and half of each trading fee goes to the builder who
+          shipped it. Meanwhile, meet the builders at <a className="pa-link" href="https://builder.registrai.cc">builder.registrai.cc</a>{" "}
+          or see <a className="pa-link" href="/perennial/economy/">how it works</a>.
         </p>
       </div>
     );

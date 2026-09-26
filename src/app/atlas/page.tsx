@@ -48,8 +48,8 @@ export default function AtlasPage() {
           <Atlas />
         ) : (
           <p className="pa-notice">
-            No {PERENNIAL.label} atlas yet — Perennial is not deployed there, or this build has no{" "}
-            {PERENNIAL.label} snapshot.
+            The atlas opens with the markets on {PERENNIAL.label}: each verified builder will light up their country. Season 1
+            starts 1 Oct.
           </p>
         )}
       </article>

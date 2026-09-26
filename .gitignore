@@ -40,3 +40,4 @@ next-env.d.ts
 
 # standalone builders site (scripts/build-builders-site.sh)
 /dist-builders/
+/dist-app/

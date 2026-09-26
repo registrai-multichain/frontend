@@ -12,7 +12,8 @@
     "deploy": "python3 scripts/render-badges.py && next build && tsx scripts/write-public-redirects.ts && wrangler pages deploy out --project-name=registrai-web --branch=main",
     "deploy:testnet": "python3 scripts/render-badges.py && next build && rm -f out/_redirects && wrangler pages deploy out --project-name=registrai-testnet --branch=main",
     "deploy:builders": "python3 scripts/render-badges.py && next build && bash scripts/build-builders-site.sh && bash scripts/deploy-builders-site.sh",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p builders-site"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p builders-site",
+    "deploy:app": "NEXT_PUBLIC_PERENNIAL_NETWORK=mainnet next build && bash scripts/build-app-site.sh && wrangler pages deploy dist-app --project-name=registrai-app --branch=main"
   },
   "dependencies": {
     "@circle-fin/adapter-solana-kit": "^1.6.3",
