@@ -672,7 +672,18 @@ function useSession(client: PublicClient, address: Address | undefined, tx: Tx) 
     setChain(undefined);
   }, [address, local, wallet, client, tx]);
 
-  return { status, chain, allowance, covers, send, enable, end, owner: address };
+  /** Did this session key buy into `marketId` for the owner (so it may sell there)? */
+  const soldHere = useCallback(
+    async (marketId: Hex) =>
+      Boolean(
+        address &&
+          local &&
+          ((await client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "sessionMarket", args: [address, local.delegate, marketId] })) as boolean),
+      ),
+    [client, address, local],
+  );
+
+  return { status, chain, allowance, covers, send, enable, end, soldHere, owner: address };
 }
 
 type Session = ReturnType<typeof useSession>;
@@ -1403,7 +1414,9 @@ function TradeBox({
         }
         const [out] = (await client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "quoteSell", args: [market.marketId, outcome, v] })) as readonly [bigint, bigint];
         if (out === 0n) throw new Error("That is too few shares to sell.");
-        if (ses?.owner && ses.covers("sell", v)) {
+        // One-click sells only where the session key bought for you (the contract
+        // keeps a delegate out of positions it did not build); else the wallet.
+        if (ses?.owner && ses.covers("sell", v) && (await ses.soldHere(market.marketId))) {
           return ses.send("sellFor", [ses.owner, market.marketId, outcome, v, minOutWithSlippage(out, slip), deadline]);
         }
         return tx.send(C.MarketsV4, marketsV4Abi, "sell", [market.marketId, outcome, v, minOutWithSlippage(out, slip), deadline]);

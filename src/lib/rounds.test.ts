@@ -86,8 +86,8 @@ const book = mergeFeedLogs(
 describe("deployment", () => {
   test("carries the addresses, agent, assets and events", () => {
     expect(ROUNDS.chainId).toBe(5042002);
-    expect(ROUNDS.contracts.MarketsV4).toBe("0xd77fa5a7A88E2797F281c54CB1DaAfF73E558DF9");
-    expect(ROUNDS.deployBlock).toBe(63999959n);
+    expect(ROUNDS.contracts.MarketsV4).toBe("0xf98Be8dA6AB0262B6dA5Dc0D090aAB331A961cB9");
+    expect(ROUNDS.deployBlock).toBe(64119042n);
     expect(ROUNDS.agent).toBe(AGENT);
     expect(ROUNDS.assets.map((a) => a.symbol)).toEqual(["BTC", "ETH", "SOL", "ZEC", "HYPE"]);
     expect(ROUNDS.assets.map((a) => a.decimals)).toEqual([2, 2, 3, 2, 3]);
