@@ -119,6 +119,9 @@ const SOLD = parseAbiItem(
 );
 
 const SLIPPAGES = [50n, 100n, 200n] as const; // bps
+/** First paint scans only this many recent blocks (~11 min on Arc): enough for
+ *  the round taking bets and the one in play. */
+const FIRST_PAINT_BLOCKS = 1_200n;
 /** Multicall3 at its canonical address (deployed on Arc testnet and mainnet). */
 const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11" as Address;
 const fmt = (v: bigint, dp = 2) => formatUsdc(v, dp);
@@ -181,6 +184,62 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
     tradeCursor: new Map<string, bigint>(),
   });
   const busy = useRef(false);
+
+  // First paint: before the full read (two hours of logs, readings, holdings,
+  // claims: several round trips), show the rounds people can act on now. One
+  // log query over the last few minutes on the known feeds finds the round
+  // taking bets and the one in play; one batched read gets their pools. The
+  // full refresh replaces this snapshot when it lands.
+  const painted = useRef(false);
+  useEffect(() => {
+    if (painted.current) return;
+    painted.current = true;
+    let alive = true;
+    const d = disc.current;
+    void (async () => {
+      try {
+        const block = await client.getBlock({ blockTag: "latest" });
+        const head = block.number;
+        const chainNow = Number(block.timestamp);
+        const logs = await client.getLogs({
+          address: C.MarketsV4,
+          event: MARKET_CREATED,
+          args: { feedId: Object.keys(d.book.byId) as Hex[] },
+          fromBlock: head > FIRST_PAINT_BLOCKS ? head - FIRST_PAINT_BLOCKS : 0n,
+          toBlock: head,
+        });
+        const markets = parseMarketLogs(logs as unknown as MarketCreatedLog[], d.book, D.agent);
+        const groups = groupRounds(markets, D.assets.map((a) => a.key), chainNow);
+        const want = Object.values(groups).flatMap((g) => [g.current, g.inPlay].filter((m): m is RoundMarket => Boolean(m)));
+        const rows = await Promise.all(
+          want.map(async (m): Promise<[string, MarketState]> => {
+            const [mk, yp, np] = await Promise.all([
+              client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "getMarket", args: [m.marketId] }) as Promise<{
+                threshold: bigint; expiry: bigint; yesReserve: bigint; noReserve: bigint; phase: number; yesWon: boolean;
+              }>,
+              client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "priceOf", args: [m.marketId, OUTCOME.Yes] }) as Promise<bigint>,
+              client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "priceOf", args: [m.marketId, OUTCOME.No] }) as Promise<bigint>,
+            ]);
+            return [m.marketId, { phase: Number(mk.phase), yesWon: mk.yesWon, threshold: mk.threshold, expiry: Number(mk.expiry), yesReserve: mk.yesReserve, noReserve: mk.noReserve, yesPrice: yp, noPrice: np }];
+          }),
+        );
+        if (!alive) return;
+        const eventMarkets: Record<string, Hex> = {};
+        for (const e of D.events) if (e.marketId) eventMarkets[e.key] = e.marketId.toLowerCase() as Hex;
+        setSnap((prev) =>
+          prev ?? {
+            chainNow, readAt: Date.now() / 1000, head, markets, trades: {}, book: d.book, state: Object.fromEntries(rows),
+            readings: {}, holdings: {}, redeemable: {}, eventReadings: {}, eventMarkets,
+          },
+        );
+      } catch {
+        /* the full refresh follows anyway */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [client]);
 
   const refresh = useCallback(async () => {
     if (busy.current) return;
