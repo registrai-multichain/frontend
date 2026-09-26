@@ -20,7 +20,10 @@ export function transportFor(chain: WalletChain, opts: { batch?: boolean } = {})
   return fallback(
     chain.rpcUrls.map((url) =>
       http(url, {
-        batch: opts.batch ? { batchSize: 25, wait: 20 } : false,
+        // The Arc RPC rate-limits large JSON-RPC batches per IP (batches of 25 were
+        // refused; <= 10 pass), and a 429 there also hits the user's wallet on the
+        // same IP. Keep batches small; contract reads go through Multicall3 anyway.
+        batch: opts.batch ? { batchSize: 8, wait: 20 } : false,
         retryCount: 4,
         retryDelay: 400,
       }),

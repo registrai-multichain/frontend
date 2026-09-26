@@ -459,15 +459,21 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
  * while the full refresh (discovery, readings, claims) keeps its slower pace.
  */
 type LivePool = { yesReserve: bigint; noReserve: bigint; phase: number; at: number };
-function useLivePools(client: PublicClient, ids: readonly Hex[]) {
+function useLivePools(client: PublicClient, ids: readonly Hex[], paused: boolean) {
   const [pools, setPools] = useState<Record<string, LivePool>>({});
   const key = ids.join(",");
+  // While a wallet transaction is in flight, stay off the RPC: the wallet's own
+  // gas-price / estimate / send calls share the user's IP and its rate limit.
+  const pausedRef = useRef(paused);
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
   useEffect(() => {
     if (!ids.length) return;
     let alive = true;
     let busy = false;
     const read = async () => {
-      if (busy || (typeof document !== "undefined" && document.hidden)) return;
+      if (busy || pausedRef.current || (typeof document !== "undefined" && document.hidden)) return;
       busy = true;
       try {
         // One eth_call for every pool, whatever their number.
@@ -766,6 +772,11 @@ export function CommonMarkets() {
   const { snap: fullSnap, loadError, refresh } = useRoundsData(client, address);
   const stream = usePriceStream(useMemo(() => D.assets.map((a) => a.product), []));
   const tx = useTx(client, refresh);
+  // A wallet transaction in flight (not a one-click one, which uses no wallet).
+  const walletBusy = useRef(false);
+  useEffect(() => {
+    walletBusy.current = Boolean(tx.st.pending) && !tx.st.oneClick;
+  }, [tx.st.pending, tx.st.oneClick]);
   const session = useSession(client, address, tx);
 
   // Client clock, corrected to chain time at the last read.
@@ -783,8 +794,11 @@ export function CommonMarkets() {
   useEffect(() => {
     void refresh();
     // The live lane (useLivePools) keeps prices, odds and positions current every
-    // second; the full read (discovery, readings, holdings, claims) runs every 10 s.
-    const id = setInterval(() => void refresh(), 10_000);
+    // second; the full read (discovery, readings, holdings, claims) runs every 10 s,
+    // except while a wallet transaction is in flight (the wallet needs the RPC).
+    const id = setInterval(() => {
+      if (!walletBusy.current) void refresh();
+    }, 10_000);
     return () => clearInterval(id);
   }, [refresh]);
   const boundary = now ? Math.floor(now / D.roundSecs) : 0;
@@ -825,7 +839,7 @@ export function CommonMarkets() {
     }
     return [...ids].sort();
   }, [groups, fullSnap]);
-  const livePools = useLivePools(client, liveIds);
+  const livePools = useLivePools(client, liveIds, Boolean(tx.st.pending) && !tx.st.oneClick);
   const snap = useMemo(() => withLivePools(fullSnap, livePools), [fullSnap, livePools]);
 
   // Betting on the next round closes at the next boundary.
