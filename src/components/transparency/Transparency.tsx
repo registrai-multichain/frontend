@@ -1,7 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
 import useSWR from "swr";
+import { BuybackPanel } from "./BuybackPanel";
+import { BIG, Donut, Stat, Swatch } from "./parts";
 import { parseAbi, type Address, type PublicClient } from "viem";
 import { CopyButton } from "@/components/perennial/CopyButton";
 import { buildersClient } from "@/components/verify/useMyBuilder";
@@ -11,7 +12,7 @@ import { usdText, who } from "@/lib/plain-words";
 import { badgeAbi } from "@/lib/verified-builder-badge";
 import {
   BUYBACK, CONTRACTS, DEPLOY, DEX_PAIR_API, FEE_SPLITS, RECORD, ROLES, TRADE_FEE_PCT, WALLETS, compactNumber, holderLabel, nativeToUsdc, parseDexPair,
-  buybackView, donutArcs, roleDiffs, sumBy, supplySplit,
+  roleDiffs, sumBy, supplySplit,
 } from "@/lib/transparency";
 
 const safeAbi = parseAbi([
@@ -95,47 +96,6 @@ function usdLoose(n: number): string {
   return `$${n.toPrecision(3)}`;
 }
 
-const BIG = { fontSize: "clamp(24px, 6vw, 34px)", lineHeight: 1.05, fontWeight: 400 } as const;
-
-function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "up" | "down" }) {
-  return (
-    <div className="pa-card flex flex-col gap-1">
-      <span className="pa-muted pa-small">{label}</span>
-      <b className={`pa-serif tnum ${tone === "up" ? "text-up" : tone === "down" ? "text-down" : ""}`} style={BIG}>{value}</b>
-      {sub && <span className="pa-muted pa-small">{sub}</span>}
-    </div>
-  );
-}
-
-/** A ring split into parts by share; a sliver stays visible however small. Children sit in the hole. */
-function Donut({ parts, label, size = 168, stroke = 22, children }: {
-  parts: { key: string; share: number; color: string }[]; label: string; size?: number; stroke?: number; children?: ReactNode;
-}) {
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const shown = parts.filter((p) => p.share > 0).length;
-  const gap = shown > 1 ? 3 : 0;
-  const arcs = donutArcs(parts.map((p) => p.share), c, gap + 4);
-  return (
-    <div className="relative shrink-0" style={{ width: size, height: size }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={label} style={{ transform: "rotate(-90deg)" }}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--line)" strokeWidth={stroke} />
-        {arcs.map((a, i) => a.length > 0 && (
-          <circle
-            key={parts[i].key}
-            cx={size / 2} cy={size / 2} r={r} fill="none"
-            stroke={parts[i].color} strokeWidth={stroke}
-            strokeDasharray={`${Math.max(a.length - gap, 1)} ${c}`} strokeDashoffset={-a.offset}
-          />
-        ))}
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">{children}</div>
-    </div>
-  );
-}
-
-const Swatch = ({ color }: { color: string }) => <i aria-hidden className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: color }} />;
-
 const SUPPLY_COLORS = { burned: "var(--fg)", protocol: "var(--accent)", public: "var(--line-strong)" } as const;
 const LEG_COLORS = ["var(--up)", "var(--accent)", "var(--line-strong)"];
 
@@ -168,8 +128,6 @@ export function Transparency() {
   const split = live && regiHeld !== null ? supplySplit({ supply: live.regi.supply, burned: live.regi.burned, protocol: regiHeld }) : null;
   const shareOf = (v: bigint) => (live && live.regi.supply > 0n ? Number((v * 10_000n) / live.regi.supply) / 100 : 0);
   const issued = live ? live.badges.filter((b) => b.owner).length : null;
-  // No buyback contract on mainnet yet: every figure is zero until it deploys.
-  const bb = buybackView(null, Math.floor(Date.now() / 1000));
   const dash = "…";
 
   return (
@@ -223,46 +181,7 @@ export function Transparency() {
         </div>
       </section>
 
-      {/* Buyback volume */}
-      <section className="pa-stack" aria-labelledby="t-buyback">
-        <h2 id="t-buyback" className="pa-h2">REGI buyback</h2>
-        <div className="pa-card flex flex-col items-center gap-6 sm:flex-row sm:gap-10">
-          <Donut
-            label={`Next buyback: ${bb.progressPct}% of $${BUYBACK.triggerUsdc}`}
-            size={168}
-            stroke={20}
-            parts={[{ key: "in", share: bb.progressPct, color: "var(--accent)" }, { key: "left", share: 100 - bb.progressPct, color: "var(--line)" }]}
-          >
-            <b className="pa-serif tnum" style={{ fontSize: 32, lineHeight: 1, fontWeight: 400 }}>{usdText(bb.collected)}</b>
-            <span className="pa-muted pa-small">of ${BUYBACK.triggerUsdc} to next buy</span>
-          </Donut>
-          <div className="grid w-full grid-cols-3 gap-3">
-            <div className="flex flex-col gap-1">
-              <span className="pa-muted pa-small">Bought back</span>
-              <b className="pa-serif tnum" style={BIG}>{usdText(bb.spent)}</b>
-              <span className="pa-muted pa-small">USDC spent on REGI</span>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="pa-muted pa-small">REGI burned</span>
-              <b className="pa-serif tnum" style={BIG}>{compactNumber(Number(bb.burned / 10n ** 18n))}</b>
-              <span className="pa-muted pa-small">by buybacks</span>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="pa-muted pa-small">Buys</span>
-              <b className="pa-serif tnum" style={BIG}>{bb.chunks}</b>
-              <span className="pa-muted pa-small">of ${BUYBACK.chunkUsdc} each</span>
-            </div>
-          </div>
-        </div>
-        {!bb.live && (
-          <p className="pa-muted pa-small max-w-[70ch]">
-            {BUYBACK.shareOfTreasuryPct}% of the treasury&apos;s income goes to a buyback contract with no owner and no withdraw. Anyone can
-            send it more USDC. Once it holds ${BUYBACK.triggerUsdc}, it buys REGI in {BUYBACK.chunks} pieces of ${BUYBACK.chunkUsdc},{" "}
-            {BUYBACK.cooldownMin} minutes apart, and every token goes straight to the burn address. Anyone can press the button that runs
-            a buy. It starts with common markets on {BUILDERS.label}; until then these read zero.
-          </p>
-        )}
-      </section>
+      <BuybackPanel />
 
       {/* How much sits on protocol-owned addresses */}
       <section className="pa-stack" aria-labelledby="t-held">

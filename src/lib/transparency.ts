@@ -108,6 +108,9 @@ export const BUYBACK = {
   contract: null as Address | null,
   /** RegiFeeSplitter (MarketsV4's TREASURY); null until deployed. */
   splitter: null as Address | null,
+  /** The shared NanoLedger: common markets pay the splitter there, so its pending income is
+   *  ledger balance + USDC. Null until mainnet markets deploy. */
+  ledger: null as Address | null,
   /** First block to scan for Burned events; null until deployed. */
   deployBlock: null as bigint | null,
   triggerUsdc: 200,
