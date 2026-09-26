@@ -11,6 +11,7 @@
 
 export const BUILDERS_SITE = "https://builder.registrai.cc";
 export const APP_SITE = "https://app.registrai.cc";
+export const DASHBOARD_SITE = "https://dashboard.registrai.cc";
 export const PUBLIC_SITE = "https://registrai.cc";
 
 /** App routes the public site keeps. */
@@ -20,7 +21,15 @@ export const PUBLIC_ROUTES = ["bridge"] as const;
 export const BUILDERS_SITE_ROUTES = ["builders", "verify", "admin", "guide"] as const;
 
 /** App routes that move to the markets app, app.registrai.cc (same path; built for mainnet). */
-export const APP_SITE_ROUTES = ["atlas", "perennial", "rounds", "transparency"] as const;
+export const APP_SITE_ROUTES = ["atlas", "perennial", "rounds"] as const;
+
+/** App routes served by the transparency dashboard, dashboard.registrai.cc (at its root; built for mainnet). */
+export const DASHBOARD_SITE_ROUTES = ["transparency"] as const;
+
+/** Every dashboard route lands on the dashboard's root: it is a one-page site. */
+const toDashboard = (lines: string[]) => {
+  for (const r of DASHBOARD_SITE_ROUTES) lines.push(`/${r} ${DASHBOARD_SITE}/ 302`, `/${r}/* ${DASHBOARD_SITE}/ 302`);
+};
 
 /** App routes that run on testnet: redirected to the landing on the public site. */
 export const TESTNET_ROUTES = [
@@ -56,6 +65,7 @@ export function publicRedirects(): string {
   for (const r of APP_SITE_ROUTES) {
     lines.push(`/${r} ${APP_SITE}/${r}/ 302`, `/${r}/* ${APP_SITE}/${r}/:splat 302`);
   }
+  toDashboard(lines);
   for (const r of [...new Set([...TESTNET_ROUTES, ...TESTNET_STATIC, "seasons"])].sort()) {
     lines.push(`/${r} / 302`, `/${r}/* / 302`);
   }
@@ -71,5 +81,20 @@ export function appSiteRedirects(): string {
   const lines = ["# Written by scripts/build-app-site.sh (src/lib/public-site.ts). app.registrai.cc only.", "/ /perennial/ 302", "/index.html /perennial/ 302"];
   for (const r of PUBLIC_ROUTES) lines.push(`/${r} ${PUBLIC_SITE}/${r}/ 302`, `/${r}/* ${PUBLIC_SITE}/${r}/:splat 302`);
   for (const r of BUILDERS_SITE_ROUTES) lines.push(`/${r} ${BUILDERS_SITE}/${r}/ 302`, `/${r}/* ${BUILDERS_SITE}/${r}/:splat 302`);
+  toDashboard(lines);
+  return `${lines.join("\n")}\n`;
+}
+
+/**
+ * Pure: the `_redirects` of dashboard.registrai.cc (scripts/build-dashboard-site.sh).
+ * Its root IS the transparency page, so /transparency folds into it; the shared
+ * nav's other pages go to the app, the builders site and the bridge.
+ */
+export function dashboardSiteRedirects(): string {
+  const lines = ["# Written by scripts/build-dashboard-site.sh (src/lib/public-site.ts). dashboard.registrai.cc only."];
+  for (const r of DASHBOARD_SITE_ROUTES) lines.push(`/${r} / 301`, `/${r}/* / 301`);
+  for (const r of APP_SITE_ROUTES) lines.push(`/${r} ${APP_SITE}/${r}/ 302`, `/${r}/* ${APP_SITE}/${r}/:splat 302`);
+  for (const r of BUILDERS_SITE_ROUTES) lines.push(`/${r} ${BUILDERS_SITE}/${r}/ 302`, `/${r}/* ${BUILDERS_SITE}/${r}/:splat 302`);
+  for (const r of PUBLIC_ROUTES) lines.push(`/${r} ${PUBLIC_SITE}/${r}/ 302`, `/${r}/* ${PUBLIC_SITE}/${r}/:splat 302`);
   return `${lines.join("\n")}\n`;
 }

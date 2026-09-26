@@ -8,8 +8,8 @@ const DESCRIPTION =
 export const metadata: Metadata = {
   title: "Transparency · Registrai",
   description: DESCRIPTION,
-  alternates: { canonical: "/transparency" },
-  openGraph: { title: "Transparency · Registrai", description: DESCRIPTION, url: "https://app.registrai.cc/transparency/" },
+  alternates: { canonical: "https://dashboard.registrai.cc/" },
+  openGraph: { title: "Transparency · Registrai", description: DESCRIPTION, url: "https://dashboard.registrai.cc/" },
 };
 
 export default function TransparencyPage() {

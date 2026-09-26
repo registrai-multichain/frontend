@@ -3,13 +3,13 @@
 # How it works ONLY, built for Arc MAINNET (npm run deploy:app runs next build with
 # NEXT_PUBLIC_PERENNIAL_NETWORK=mainnet first). Its root opens Markets; the bridge
 # goes back to registrai.cc and the builder pages to builder.registrai.cc
-# (src/lib/public-site.ts appSiteRedirects). Deployed to the Pages project
+# (src/lib/public-site.ts appSiteRedirects); /transparency lives on dashboard.registrai.cc. Deployed to the Pages project
 # `registrai-app`; app.registrai.cc is its custom domain.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 D=dist-app
 rm -rf "$D"; mkdir -p "$D"
-for x in 404 404.html _next _not-found perennial rounds atlas transparency apple-icon.png icon.png brand social \
+for x in 404 404.html _next _not-found perennial rounds atlas apple-icon.png icon.png brand social \
          mark.png mark-ring.svg mark-ring-512.png wordmark.png wordmark-dark.png; do
   [ -e "out/$x" ] && cp -R "out/$x" "$D/"
 done
@@ -18,13 +18,13 @@ printf "User-agent: *\nAllow: /\n" > "$D/robots.txt"
 # Security headers for app.registrai.cc, tuned to THIS app (see build-builders-site.sh
 # for why script-src needs 'unsafe-inline' with a static export):
 #   - connect-src: the Arc RPCs the read client uses, Coinbase (reference prices and
-#     the live candle stream on /rounds), and DexScreener (the REGI price on /transparency).
+#     the live candle stream on /rounds).
 #   - img-src: GitHub owner avatars on the Builders page.
 # A new external origin (RPC, image host, price feed) must be added here or the
 # browser blocks it.
 cat > "$D/_headers" <<'HEADERS'
 /*
-  Content-Security-Policy: default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://avatars.githubusercontent.com; font-src 'self'; connect-src 'self' https://rpc.mainnet.arc.io https://rpc.testnet.arc.io https://api.exchange.coinbase.com wss://ws-feed.exchange.coinbase.com https://api.dexscreener.com; worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://avatars.githubusercontent.com; font-src 'self'; connect-src 'self' https://rpc.mainnet.arc.io https://rpc.testnet.arc.io https://api.exchange.coinbase.com wss://ws-feed.exchange.coinbase.com; worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

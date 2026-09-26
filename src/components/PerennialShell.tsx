@@ -16,7 +16,8 @@ const NAV: NavItem[] = [
   { href: "/perennial/builders/", label: "Builders" },
   { href: "/atlas/", label: "Atlas" },
   { href: "/perennial/economy/", label: "How it works" },
-  { href: "/transparency/", label: "Transparency" },
+  // dashboard.registrai.cc serves this page at its root.
+  { href: "/transparency/", label: "Transparency", also: ["/"] },
 ];
 
 export function PerennialShell({ children }: { children: ReactNode }) {
