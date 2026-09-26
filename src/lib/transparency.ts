@@ -248,7 +248,16 @@ export function buybackView(s: BuybackStatus | null, nowSec: number, incoming = 
   const r = s ?? { balance: 0n, chunksLeft: 0, nextChunkAt: 0, ready: false, spent: 0n, burned: 0n, chunks: 0 };
   const inRound = r.chunksLeft > 0;
   const secondsToNext = Math.max(0, r.nextChunkAt - nowSec);
-  const phase: BuybackPhase = !s ? "off" : r.ready ? "ready" : (inRound || r.balance >= trigger) && secondsToNext > 0 ? "cooldown" : "collecting";
+  // A chunk is due when a round is open or a round's worth is held; once the cooldown has
+  // passed it is ready even if the last read (up to 10 s old) still said otherwise (review M2).
+  const due = inRound || r.balance >= trigger;
+  const phase: BuybackPhase = !s
+    ? "off"
+    : r.ready || (due && secondsToNext === 0 && r.balance > 0)
+      ? "ready"
+      : due && secondsToNext > 0
+        ? "cooldown"
+        : "collecting";
   const progressPct = inRound
     ? Math.round(((BUYBACK.chunks - r.chunksLeft) / BUYBACK.chunks) * 100)
     : r.balance >= trigger ? 100 : Number((r.balance * 100n) / trigger);
@@ -319,3 +328,12 @@ export const BUYBACK_DISCLOSURE =
   `The ${BUYBACK.shareOfTreasuryPct}% share is fixed in the splitter contract. ` +
   "The Safe can point that share at a new buyback contract, with 7 days' public notice shown on this page; " +
   "during the notice the share waits in the splitter.";
+
+/** Pure: who sent USDC into the buyback, in words (review M4). */
+export function inflowLabel(from: string, known: { splitter?: string | null; safe?: string | null; ledger?: string | null }): string {
+  const f = from.toLowerCase();
+  if (known.splitter && f === known.splitter.toLowerCase()) return "the splitter (40% of treasury income)";
+  if (known.safe && f === known.safe.toLowerCase()) return "the Admin Safe";
+  if (known.ledger && f === known.ledger.toLowerCase()) return "the NanoLedger (a ledger payment swept in)";
+  return shortHex(from);
+}

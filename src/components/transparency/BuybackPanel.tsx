@@ -3,13 +3,14 @@
 import { useState } from "react";
 import useSWR from "swr";
 import { parseAbi, type Address, type Hex } from "viem";
+import { CopyButton } from "@/components/perennial/CopyButton";
 import { useWallet } from "@/components/WalletProvider";
 import { buildersClient } from "@/components/verify/useMyBuilder";
 import { BUILDERS } from "@/lib/builders-network";
 import { usdText } from "@/lib/plain-words";
 import { pushToast } from "@/lib/toast-store";
 import {
-  BUYBACK, BUYBACK_DISCLOSURE, BUYBACK_LOG_SCAN, LIVE_REFRESH_MS, buybackView, compactNumber, countdown, nextScanRanges, parseBuybackStatus, regiBuybackAbi, regiSplitterAbi,
+  BUYBACK, BUYBACK_DISCLOSURE, WALLETS, inflowLabel, BUYBACK_LOG_SCAN, LIVE_REFRESH_MS, buybackView, compactNumber, countdown, nextScanRanges, parseBuybackStatus, regiBuybackAbi, regiSplitterAbi,
 } from "@/lib/transparency";
 import { BIG, Donut } from "./parts";
 
@@ -17,6 +18,7 @@ const EXPLORER = BUILDERS.chain.explorer.url.replace(/\/$/, "");
 const usdcAbi = parseAbi(["function balanceOf(address) view returns (uint256)"]);
 const ledgerAbi = parseAbi(["function balanceOf(address) view returns (uint256)"]);
 const USDC = "0x3600000000000000000000000000000000000000" as Address;
+const SAFE = WALLETS.find((w) => w.isSafe)!.address;
 
 interface BurnRow { tx: Hex; usdcIn: bigint; regiBurned: bigint; caller: Address; block: bigint }
 interface InflowRow { tx: Hex; from: Address; value: bigint; block: bigint }
@@ -29,19 +31,27 @@ async function readStatus() {
   const raw = await c.readContract({ address: BUYBACK.contract!, abi: regiBuybackAbi, functionName: "status" });
   let incoming = 0n;
   let pending: { next: Address; at: number } | null = null;
+  let splitterTarget: Address | null = null;
+  let onOwnLedger = 0n;
+  if (BUYBACK.ledger) {
+    // A NanoLedger payment to the buyback itself waits there until someone sweeps it in.
+    onOwnLedger = await c.readContract({ address: BUYBACK.ledger, abi: ledgerAbi, functionName: "balanceOf", args: [BUYBACK.contract!] }).catch(() => 0n);
+  }
   if (BUYBACK.splitter) {
-    const [held, onLedger, next, since] = await Promise.all([
+    const [held, onLedger, next, since, target] = await Promise.all([
       c.readContract({ address: USDC, abi: usdcAbi, functionName: "balanceOf", args: [BUYBACK.splitter] }).catch(() => 0n),
       BUYBACK.ledger
         ? c.readContract({ address: BUYBACK.ledger, abi: ledgerAbi, functionName: "balanceOf", args: [BUYBACK.splitter] }).catch(() => 0n)
         : Promise.resolve(0n),
       c.readContract({ address: BUYBACK.splitter, abi: regiSplitterAbi, functionName: "pendingBuyback" }),
       c.readContract({ address: BUYBACK.splitter, abi: regiSplitterAbi, functionName: "pendingSince" }),
+      c.readContract({ address: BUYBACK.splitter, abi: regiSplitterAbi, functionName: "buyback" }),
     ]);
+    splitterTarget = target;
     incoming = ((held + onLedger) * BigInt(BUYBACK.shareOfTreasuryPct)) / 100n;
     if (next !== "0x0000000000000000000000000000000000000000") pending = { next, at: Number(since) + 7 * 86_400 };
   }
-  return { status: parseBuybackStatus(raw), incoming, pending };
+  return { status: parseBuybackStatus(raw), incoming: incoming + onOwnLedger, pending, splitterTarget };
 }
 
 /**
@@ -103,10 +113,13 @@ export function BuybackPanel() {
       const hash = kind === "burn"
         ? await walletClient.writeContract({ address: BUYBACK.contract!, abi: regiBuybackAbi, functionName: "burnChunk", account: address as Address, chain: BUILDERS.chain.viemChain })
         : await walletClient.writeContract({ address: BUYBACK.splitter!, abi: regiSplitterAbi, functionName: "distribute", account: address as Address, chain: BUILDERS.chain.viemChain });
-      const rc = await buildersClient().waitForTransactionReceipt({ hash });
-      pushToast(rc.status === "success"
-        ? { kind: "ok", text: kind === "burn" ? "Bought REGI and burned it." : "Fees distributed: 40% went to the buyback.", href: `${EXPLORER}/tx/${hash}` }
-        : { kind: "error", text: "The transaction reverted.", href: `${EXPLORER}/tx/${hash}` });
+      // A slow confirmation isn't a failure: the transaction was sent and may still land.
+      const rc = await buildersClient().waitForTransactionReceipt({ hash }).catch(() => null);
+      pushToast(rc === null
+        ? { kind: "info", text: "Sent. Still waiting for it to confirm; the figures update when it does.", href: `${EXPLORER}/tx/${hash}` }
+        : rc.status === "success"
+          ? { kind: "ok", text: kind === "burn" ? "Bought REGI and burned it." : "Fees distributed: 40% went to the buyback.", href: `${EXPLORER}/tx/${hash}` }
+          : { kind: "error", text: "The transaction reverted.", href: `${EXPLORER}/tx/${hash}` });
       await Promise.all([mutate(), mutateHistory()]);
     } catch (e) {
       pushToast({ kind: "error", text: (e as Error).message.split("\n")[0] });
@@ -143,7 +156,7 @@ export function BuybackPanel() {
                 {v.phase === "ready" && "Ready: anyone can press it."}
                 {v.phase === "cooldown" && `Next chunk in ${countdown(v.secondsToNext)}.`}
                 {v.phase === "collecting" && `${usdText(v.collected)} of $${BUYBACK.triggerUsdc} collected.`}
-                {v.incoming > 0n && ` ${usdText(v.incoming)} on its way from the splitter.`}
+                {v.incoming > 0n && ` ${usdText(v.incoming)} on its way in (the splitter's 40% and any ledger payments).`}
               </span>
               {v.incoming > 0n && BUYBACK.splitter && (
                 <button type="button" className="pa-btn" data-variant="ghost" disabled={busy !== null} onClick={() => send("distribute")}>
@@ -156,7 +169,21 @@ export function BuybackPanel() {
       </div>
       {BUYBACK.contract ? (
         <p className="pa-muted pa-small break-all">
-          Anyone can send USDC to the buyback, <a className="pa-link pa-mono" href={`${EXPLORER}/address/${BUYBACK.contract}`} target="_blank" rel="noreferrer">{BUYBACK.contract}</a>: every dollar is spent on REGI and burned under the same rules. {BUYBACK_DISCLOSURE}
+          Anyone can send USDC to the buyback, <a className="pa-link pa-mono" href={`${EXPLORER}/address/${BUYBACK.contract}`} target="_blank" rel="noreferrer">{BUYBACK.contract}</a>{" "}
+          <CopyButton text={BUYBACK.contract} />: every dollar is spent on REGI and burned under the same rules. {BUYBACK_DISCLOSURE}
+          {BUYBACK.splitter && (
+            <>
+              {" "}The splitter is{" "}
+              <a className="pa-link pa-mono" href={`${EXPLORER}/address/${BUYBACK.splitter}`} target="_blank" rel="noreferrer">{BUYBACK.splitter}</a>
+              {live?.splitterTarget && (
+                <>
+                  ; it sends its 40% to{" "}
+                  {live.splitterTarget.toLowerCase() === BUYBACK.contract.toLowerCase() ? "this buyback" : <span className="pa-mono">{live.splitterTarget}</span>}
+                </>
+              )}
+              .
+            </>
+          )}
         </p>
       ) : (
         <p className="pa-muted pa-small max-w-[70ch]">
@@ -191,7 +218,7 @@ export function BuybackPanel() {
             <li key={f.tx} className="pa-kv">
               <span>
                 {usdText(f.value)} from{" "}
-                {f.from.toLowerCase() === BUYBACK.splitter?.toLowerCase() ? "the splitter (40% of treasury income)" : <span className="pa-mono">{f.from}</span>}
+                {inflowLabel(f.from, { splitter: BUYBACK.splitter, safe: SAFE, ledger: BUYBACK.ledger })}
               </span>
               <a className="pa-link" href={`${EXPLORER}/tx/${f.tx}`} target="_blank" rel="noreferrer">tx ↗</a>
             </li>

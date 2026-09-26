@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import deployment from "./deployments/arc-mainnet.json";
-import { BUYBACK, CONTRACTS, EXPECTED_ROLES, FEE_SPLITS, RECORD, ROLES, WALLETS, compactNumber, holderLabel, parseDexPair, nativeToUsdc, percentOf, roleDiffs, supplySplit, sumBy, donutArcs, buybackView, type BuybackStatus, countdown, logWindows, parseBuybackStatus, agoText, LIVE_REFRESH_MS, nextScanRanges, BUYBACK_DISCLOSURE } from "./transparency";
+import { BUYBACK, CONTRACTS, EXPECTED_ROLES, FEE_SPLITS, RECORD, ROLES, WALLETS, compactNumber, holderLabel, parseDexPair, nativeToUsdc, percentOf, roleDiffs, supplySplit, sumBy, donutArcs, buybackView, type BuybackStatus, countdown, logWindows, parseBuybackStatus, agoText, LIVE_REFRESH_MS, nextScanRanges, BUYBACK_DISCLOSURE, inflowLabel } from "./transparency";
 
 describe("transparency (app.registrai.cc/transparency)", () => {
   test("every wallet comes from the mainnet deployment file, with what it does and what it cannot", () => {
@@ -220,5 +220,41 @@ describe("buyback disclosure (review M3)", () => {
   test("says the share is fixed but the Safe can redirect it with 7 days' public notice", () => {
     expect(BUYBACK_DISCLOSURE).toContain("40%");
     expect(BUYBACK_DISCLOSURE).toMatch(/Safe can .*7 days/);
+  });
+});
+
+describe("buyback minors", () => {
+  const S = (o: Partial<BuybackStatus> = {}): BuybackStatus => ({
+    balance: 0n, chunksLeft: 0, nextChunkAt: 0, ready: false, spent: 0n, burned: 0n, chunks: 0, ...o,
+  });
+
+  test("M2: mid-round, once the cooldown has passed it reads ready, never 'collecting'", () => {
+    const v = buybackView(S({ balance: 150_000_000n, chunksLeft: 3, nextChunkAt: 1600, ready: false }), 1700);
+    expect(v.phase).toBe("ready");
+  });
+
+  test("M2: a new round's worth with the cooldown passed reads ready too", () => {
+    expect(buybackView(S({ balance: 200_000_000n, nextChunkAt: 1600, ready: false }), 1700).phase).toBe("ready");
+  });
+
+  test("M2: below the trigger with no round open is still collecting", () => {
+    expect(buybackView(S({ balance: 150_000_000n, nextChunkAt: 1600, ready: false }), 1700).phase).toBe("collecting");
+  });
+
+  test("M4: after a partial fill the round and the leftover read correctly", () => {
+    // $200 round, first chunk only filled $20 (price cap): $180 left, 3 chunks left, spent $20.
+    const v = buybackView(S({ balance: 180_000_000n, chunksLeft: 3, nextChunkAt: 1600, spent: 20_000_000n, chunks: 1 }), 1000);
+    expect(v.phase).toBe("cooldown");
+    expect(v.roundChunk).toBe(2);
+    expect(v.collected).toBe(180_000_000n);
+    expect(v.spent).toBe(20_000_000n);
+  });
+
+  test("M4: inflows are labelled by who sent them", () => {
+    const L = { splitter: "0x00000000000000000000000000000000000000Aa", safe: "0xFeE926e8Be2D1C6192213cf20f31D94Dad1e80Fb", ledger: "0x00000000000000000000000000000000000000Bb" } as const;
+    expect(inflowLabel("0x00000000000000000000000000000000000000aa", L)).toBe("the splitter (40% of treasury income)");
+    expect(inflowLabel("0xfee926e8be2d1c6192213cf20f31d94dad1e80fb", L)).toBe("the Admin Safe");
+    expect(inflowLabel(L.ledger, L)).toBe("the NanoLedger (a ledger payment swept in)");
+    expect(inflowLabel("0x1234567890123456789012345678901234567890", L)).toBe("0x1234…7890");
   });
 });
