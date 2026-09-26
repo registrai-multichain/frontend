@@ -285,3 +285,37 @@ export function logWindows(head: bigint, floor: bigint, size: bigint, max: numbe
   }
   return out;
 }
+
+/** How often the dashboard re-reads: fast-moving numbers, the DexScreener price, and roles/owners. */
+export const LIVE_REFRESH_MS = { fast: 10_000, price: 15_000, slow: 300_000 } as const;
+
+/** Pure: "just now" (< 2 s), "4s ago", "2m ago". */
+export function agoText(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 2) return "just now";
+  if (s < 60) return `${s}s ago`;
+  return `${Math.floor(s / 60)}m ago`;
+}
+
+/** The buyback's log scan: 5,000-block windows (what Arc's RPC accepts), at most 40 back on first load (~28 h). */
+export const BUYBACK_LOG_SCAN = { window: 5_000n, maxBack: 40 } as const;
+
+/**
+ * Pure: the getLogs ranges still to read. First scan (scannedTo null): walk back from the
+ * head, newest first, at most `maxBack` windows, never below `floor`. Later scans: only the
+ * blocks after `scannedTo`, oldest first, so a failure can stop without leaving a gap.
+ */
+export function nextScanRanges(head: bigint, scannedTo: bigint | null, floor: bigint, size: bigint, maxBack: number): [bigint, bigint][] {
+  if (scannedTo === null) return logWindows(head, floor, size, maxBack);
+  const out: [bigint, bigint][] = [];
+  for (let from = scannedTo + 1n; from <= head; from += size) {
+    out.push([from, from + size - 1n < head ? from + size - 1n : head]);
+  }
+  return out;
+}
+
+/** What the page says about who can change the buyback, in one place (review M3). */
+export const BUYBACK_DISCLOSURE =
+  `The ${BUYBACK.shareOfTreasuryPct}% share is fixed in the splitter contract. ` +
+  "The Safe can point that share at a new buyback contract, with 7 days' public notice shown on this page; " +
+  "during the notice the share waits in the splitter.";
