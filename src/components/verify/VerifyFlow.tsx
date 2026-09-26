@@ -133,6 +133,7 @@ function Step({ n, title, state, children }: { n: number; title: string; state: 
       <div className="vf-step-body">
         <h2>
           {title}
+          {state === "done" && <span className="sr-only"> (done)</span>}
         </h2>
         {state !== "todo" && children}
       </div>

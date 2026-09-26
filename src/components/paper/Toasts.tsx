@@ -11,11 +11,11 @@ export function Toasts() {
     const id = window.setInterval(() => expireToasts(), Math.min(1000, OK_TTL_MS));
     return () => window.clearInterval(id);
   }, [list]);
-  if (!list.length) return null;
+  // The region stays mounted so the first note is announced too; errors interrupt (role="alert").
   return (
     <div className="pa-toasts" role="status" aria-live="polite">
       {list.map((t) => (
-        <div key={t.id} className="pa-toast" data-kind={t.kind}>
+        <div key={t.id} className="pa-toast" data-kind={t.kind} role={t.kind === "error" ? "alert" : undefined}>
           <span>
             {t.kind === "ok" ? "✓ " : ""}
             {t.text}

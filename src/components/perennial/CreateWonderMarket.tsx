@@ -17,6 +17,7 @@ import { readLatestValue, rememberMarket } from "@/lib/perennial-chain";
 import { COMPARATOR, formatUsdc, parseDays, parseUsdcInput } from "@/lib/perennial-market";
 import { marketQuestion, metricNoun } from "@/lib/plain-words";
 import { pushToast } from "@/lib/toast-store";
+import { PERENNIAL_WRITES_ENABLED } from "@/lib/perennial";
 import { normalizeSource, sourceLabel } from "@/lib/verified-builders";
 import { nextHourExpiry, sourceKey, wonderContracts, wonderCreateCheck, wonderFeedFor, wonderMarketsAbi } from "@/lib/wonder";
 import { findFeedLive } from "@/lib/wonder-chain";
@@ -49,6 +50,7 @@ export function CreateWonderMarket({ data, onClose }: { data: PerennialData; onC
 
   async function create() {
     setError(undefined);
+    if (!PERENNIAL_WRITES_ENABLED) return setError("Perennial transactions are paused.");
     if (!W) return setError(`Markets about unclaimed projects are not deployed on ${D.label} yet.`);
     const source = normalizeSource(raw);
     if (!source) return setError("Enter a GitHub repo or domain.");

@@ -9,7 +9,7 @@ import { PERENNIAL_WRITES_ENABLED } from "@/lib/perennial";
 import type { ChainMarket } from "@/lib/perennial-chain";
 import { OUTCOME, PHASE, formatUsdc, minOutWithSlippage, parseSlippagePct, parseUsdcInput, quoteBuy, quoteSell, tradeDeadline } from "@/lib/perennial-market";
 import { humanizeError } from "@/lib/humanize-error";
-import { statusSentence, tradeLabel, usdText } from "@/lib/plain-words";
+import { sentence, statusSentence, tradeLabel, usdText } from "@/lib/plain-words";
 import { ticketState, tradeAmountOpts, yesPct } from "@/lib/perennial-view";
 import { same, type PerennialData } from "./usePerennialData";
 import { CHAIN, D, HUMAN, type PerennialTx } from "./usePerennialTx";
@@ -105,7 +105,7 @@ export function TradeTicket({ data, tx, market: m, initialSide = "Yes" }: { data
       if (!v3) return `The market was voided. Your shares pay $0.50 each: ${usdText(redeemable)}.`;
       if (pos.netCost === undefined) return `The market was voided. Your refund is ${usdText(redeemable)}.`;
       const proRata = m.voidTraderPool !== undefined && m.voidNetCostTotal !== undefined && voidIsProRata(m.voidTraderPool, m.voidNetCostTotal);
-      return `The market was voided. ${voidRefundText(pos.netCost, redeemable, proRata)}`;
+      return `The market was voided. ${sentence(voidRefundText(pos.netCost, redeemable, proRata))}`;
     }
     return `${m.yesWon ? "Yes" : "No"} won. Your winning shares pay ${usdText(redeemable)}.`;
   })();
@@ -184,6 +184,9 @@ export function TradeTicket({ data, tx, market: m, initialSide = "Yes" }: { data
               {buyQ && <div className="pa-kv"><span>You get</span><span>≈ {shares(buyQ.sharesOut)} {side} shares</span></div>}
               {buyQ && <div className="pa-kv"><span>Pays if {side} wins</span><span>{usdText(buyQ.sharesOut)}</span></div>}
               {sellQ && <div className="pa-kv"><span>You receive</span><span>≈ {usdText(sellQ.collateralOut)}</span></div>}
+              {minOut !== undefined && (
+                <div className="pa-kv"><span>At least</span><span>{buyQ ? `${shares(minOut)} ${side} shares` : usdText(minOut)}</span></div>
+              )}
               <div className="pa-kv">
                 <span>Fee</span>
                 <span>{usdText(q.fee)}{feeParts ? ` · ${usdText(feeParts.payee)} to the ${payeeShort(feeModel)}` : ""}</span>

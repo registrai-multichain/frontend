@@ -112,6 +112,8 @@ export interface SettlesInput extends QuestionInput {
   voidRefund: "net-cost" | "half";
   /** Legacy contract: settles on the latest reading at or before expiry. */
   legacy?: boolean;
+  /** Chain time: once past expiry the text says "Trading closed". */
+  now?: bigint;
 }
 
 export function settlesText(s: SettlesInput, timeZone?: string): string {
@@ -121,10 +123,10 @@ export function settlesText(s: SettlesInput, timeZone?: string): string {
   const within = s.windowSecs ? durationWords(s.windowSecs) : "the settlement window";
   const refund =
     s.voidRefund === "net-cost"
-      ? "every trader gets back what they put in after fees, minus what they took out"
+      ? "every trader gets back what they put in after fees, minus what they took out (pro rata if the pool is short)"
       : "every Yes and No share pays $0.50";
   return (
-    `Trading closes ${when(s.expiry, timeZone)}. The first reading of ${of} after that settles it: ${payoff} ` +
+    `Trading ${s.now !== undefined && s.now >= s.expiry ? "closed" : "closes"} ${when(s.expiry, timeZone)}. The first reading of ${of} after that settles it: ${payoff} ` +
     `If no reading arrives within ${within}, the market is voided and ${refund}.`
   );
 }
@@ -169,3 +171,6 @@ export function tradeLabel(mode: "buy" | "sell", side: "Yes" | "No", amount?: bi
   if (mode === "buy") return amount === undefined ? `Buy ${side}` : `Buy ${side} for ${usdText(amount)}`;
   return amount === undefined ? `Sell ${side}` : `Sell ${formatUsdc(amount, 2)} ${side} shares`;
 }
+
+/** Capitalise the first letter (for helper text that starts mid-sentence). */
+export const sentence = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);

@@ -25,7 +25,7 @@ export function MarketCard({ data, m, waiting, anchorId }: { data: PerennialData
       </span>
       <Link href={href} className="pa-mcard-q">{data.questionFor(m)}</Link>
       <p className="pa-muted pa-small">{meta.join(" · ")}</p>
-      <div className="pa-bar" aria-label={`${yp}% chance of Yes`}><i style={{ width: `${yp}%` }} /></div>
+      <div className="pa-bar" role="img" aria-label={`${yp}% chance of Yes`}><i style={{ width: `${yp}%` }} /></div>
       {st.canTrade ? (
         <div className="pa-yn">
           <Link href={`${href}&side=yes`} className="pa-btn pa-btn--yes"><span>Yes</span><span className="tnum">{yp}¢</span></Link>

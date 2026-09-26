@@ -49,7 +49,13 @@ function Live({ initialTab }: { initialTab?: MarketTab }) {
     if (m) return <MarketPage data={data} tx={tx} market={m} initialSide={parseSide(params?.get("side"))} />;
     return (
       <div className="pa-card max-w-[62ch]">
-        <p>{!marketId ? "That link doesn't point to a market." : data.ov ? `This market isn't on ${D.label}.` : "Reading the market…"}</p>
+        <p>
+          {!marketId
+            ? "That link doesn't point to a market."
+            : !data.ov || data.ovValidating
+              ? data.ovError && !data.ov ? `Couldn't read ${D.label} right now. Retrying every 30 seconds.` : "Reading the market…"
+              : `This market isn't on ${D.label}.`}
+        </p>
         <Link className="pa-link mt-2 inline-block" href="/perennial/">← All markets</Link>
       </div>
     );

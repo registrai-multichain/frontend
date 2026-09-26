@@ -36,6 +36,7 @@ export function MarketPage({ data, tx, market: m, initialSide }: { data: Perenni
   const roles: string[] = [];
   if (same(m.agent, b?.owner)) roles.push("the builder this market is about");
   if (same(m.agent, m.creator)) roles.push("the person who opened it (they earn the creator's share)");
+  if (same(m.agent, D.operator)) roles.push("the Registrai caretaker, the protocol's own operator");
   const disclosure = roles.length ? `Heads-up: the result is reported by ${roles.join(" and ")}.` : undefined;
 
   const names: Record<string, string> = {};
@@ -80,6 +81,7 @@ export function MarketPage({ data, tx, market: m, initialSide }: { data: Perenni
                 windowSecs: ov?.settlementWindow !== undefined ? Number(ov.settlementWindow) : undefined,
                 voidRefund: ov?.feeModel.kind === "trade" ? "net-cost" : "half",
                 legacy: ov ? !ov.supportsSettlement : false,
+                now: data.chainNow,
               })}
               {reading && ` ${reading}`}
             </p>
@@ -123,8 +125,8 @@ export function MarketPage({ data, tx, market: m, initialSide }: { data: Perenni
           <details className="pa-details mt-8">
             <summary>Details: market, feed and contract addresses</summary>
             <div className="mt-2">
-              <div className="pa-kv"><span>Market</span><span className="pa-mono">{m.id}</span></div>
-              <div className="pa-kv"><span>Feed</span><span className="pa-mono">{m.feedId}</span></div>
+              <div className="pa-kv"><span>Market</span><span className="flex flex-wrap items-center justify-end gap-2"><span className="pa-mono">{m.id}</span><CopyButton text={m.id} /></span></div>
+              <div className="pa-kv"><span>Feed</span><span className="flex flex-wrap items-center justify-end gap-2"><span className="pa-mono">{m.feedId}</span><CopyButton text={m.feedId} /></span></div>
               <div className="pa-kv"><span>Reported by</span><span>{who(m.agent, { me: tx.address, names })}</span></div>
               <div className="pa-kv"><span>Agent address</span><Addr a={m.agent} /></div>
               <div className="pa-kv"><span>Opened by</span><span>{who(m.creator, { me: tx.address, names })}</span></div>

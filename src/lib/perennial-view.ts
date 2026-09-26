@@ -1,4 +1,5 @@
 /** Pure view logic for the paper markets pages (spec §3): tabs, ticket state, card figures, URL params. */
+import { avatarUrl } from "./builders-gallery";
 import { OUTCOME, priceOf, type MarketStatusKey, type Reserves } from "./perennial-market";
 
 export type MarketTab = "trending" | "closing" | "new" | "unclaimed" | "ended";
@@ -110,3 +111,9 @@ export const ROUNDS_TABS: readonly { key: RoundsTab; label: string }[] = [
 ];
 export const parseRoundsTab = (hash: string | null | undefined): RoundsTab =>
   hash?.replace(/^#/, "").trim().toLowerCase() === "events" ? "events" : "price";
+
+/** A builder row's avatar: its first verified GitHub project's owner, else null (the initial). No website icons. */
+export function rowAvatar(projects: readonly { source: string; status: string }[]): string | null {
+  const pick = projects.find((p) => p.status === "verified" && p.source.startsWith("github:"));
+  return pick ? avatarUrl(pick.source) : null;
+}

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { COMPARATOR } from "./perennial-market";
 import {
-  durationWords, marketQuestion, tradeLabel, metricNoun, outcomeCondition, readingNow, settlesText, statusSentence, statusShort,
+  durationWords, marketQuestion, sentence, tradeLabel, metricNoun, outcomeCondition, readingNow, settlesText, statusSentence, statusShort,
   timeLeft, usdText, when, whenUtc, who,
 } from "./plain-words";
 
@@ -110,7 +110,7 @@ describe("settlesText", () => {
   test("settlement contract, net-cost refunds", () => {
     expect(settlesText({ ...q, windowSecs: 6 * 3_600, voidRefund: "net-cost" }, "Europe/Berlin")).toBe(
       "Trading closes Sep 30, 6:00 PM. The first reading of RegistrAI's releases after that settles it: 5 or more and Yes pays $1 a share; otherwise No does. " +
-        "If no reading arrives within 6 hours, the market is voided and every trader gets back what they put in after fees, minus what they took out.",
+        "If no reading arrives within 6 hours, the market is voided and every trader gets back what they put in after fees, minus what they took out (pro rata if the pool is short).",
     );
   });
   test("half-share refunds, unknown window, unknown metric", () => {
@@ -166,5 +166,17 @@ describe("tradeLabel", () => {
     expect(tradeLabel("sell", "Yes", 10n * 1_000_000n)).toBe("Sell 10 Yes shares");
     expect(tradeLabel("sell", "No", 2_500_000n)).toBe("Sell 2.5 No shares");
     expect(tradeLabel("sell", "Yes")).toBe("Sell Yes");
+  });
+});
+
+describe("review minors", () => {
+  test("sentence() capitalises the first letter only", () => {
+    expect(sentence("your net cost $5 back")).toBe("Your net cost $5 back");
+    expect(sentence("")).toBe("");
+  });
+  test("settlesText says the trading closed once it has", () => {
+    const q = { subject: "RegistrAI", metric: "releases", threshold: 5n, comparator: COMPARATOR.GreaterOrEqual, expiry: EXPIRY };
+    expect(settlesText({ ...q, voidRefund: "half", now: EXPIRY + 1n }, "UTC")).toMatch(/^Trading closed Sep 30, 4:00 PM\. /);
+    expect(settlesText({ ...q, voidRefund: "half", now: EXPIRY - 1n }, "UTC")).toMatch(/^Trading closes Sep 30, 4:00 PM\. /);
   });
 });

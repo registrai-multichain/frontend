@@ -8,10 +8,10 @@ import { BuilderIncomeCard } from "@/components/BuilderIncome";
 import { BuilderProfile, findDigest } from "@/components/BuilderProfile";
 import { BuilderCardView } from "@/components/builders/BuilderCardView";
 import { builderFundAbi } from "@/lib/abi";
-import { avatarUrl } from "@/lib/builders-gallery";
 import { humanizeError } from "@/lib/humanize-error";
 import { PERENNIAL_WRITES_ENABLED } from "@/lib/perennial";
 import { usdText } from "@/lib/plain-words";
+import { rowAvatar } from "@/lib/perennial-view";
 import { sourceLabel } from "@/lib/verified-builders";
 import { parseBuilderParam } from "@/lib/verified-builder-badge";
 import { MarketCard } from "./MarketCard";
@@ -117,7 +117,7 @@ function Live() {
             key={b.builderId}
             nameText={b.name}
             name={<Link href={`/perennial/builders/?builder=${b.builderId}`} scroll={false} className="hover:text-accent">{b.name}</Link>}
-            avatar={avatarUrl(b.source)}
+            avatar={rowAvatar(b.projects)}
             tone={b.verification ? "ok" : "plain"}
             pill={{ text: b.verification ? "✓ Verified" : b.active ? "Registered" : "Inactive", tone: b.verification ? "ok" : "muted" }}
             sub={b.source ? sourceLabel(b.source) : b.repo}

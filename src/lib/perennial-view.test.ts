@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
-  MARKET_TABS, ROUNDS_TABS, holdingLabel, parseRoundsTab, tradeAmountOpts, isEnded, marketsForTab, parseMarketParam, parseSide, parseTab, potOf, ticketState,
+  MARKET_TABS, ROUNDS_TABS, holdingLabel, rowAvatar, parseRoundsTab, tradeAmountOpts, isEnded, marketsForTab, parseMarketParam, parseSide, parseTab, potOf, ticketState,
   topBuilder, yesPct, type TicketInput,
 } from "./perennial-view";
 
@@ -145,5 +145,15 @@ describe("rounds categories", () => {
     expect(parseRoundsTab("#price")).toBe("price");
     expect(parseRoundsTab("")).toBe("price");
     expect(parseRoundsTab(undefined)).toBe("price");
+  });
+});
+
+describe("rowAvatar (Builders page)", () => {
+  const p = (source: string, status = "verified") => ({ id: 1, source, status, milestoneFeedId: null });
+  test("the first verified GitHub project's owner; never a lapsed one, never a domain", () => {
+    expect(rowAvatar([p("github:eve/x", "lapsed"), p("github:bob/y")])).toBe("https://avatars.githubusercontent.com/bob?size=96");
+    expect(rowAvatar([p("github:eve/x", "lapsed")])).toBeNull();
+    expect(rowAvatar([p("domain:a.org")])).toBeNull();
+    expect(rowAvatar([])).toBeNull();
   });
 });

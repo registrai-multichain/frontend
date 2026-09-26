@@ -39,7 +39,7 @@ export function usePerennialData(address?: Address) {
     return () => window.clearInterval(t);
   }, []);
 
-  const { data: ov, error: ovError } = useSWR<Overview>(["perennial-overview", D.chain.id, mp], () => readOverview(publicClient, D), SWR_OPTS);
+  const { data: ov, error: ovError, isValidating: ovValidating } = useSWR<Overview>(["perennial-overview", D.chain.id, mp], () => readOverview(publicClient, D), SWR_OPTS);
   const markets = useMemo(() => ov?.markets ?? [], [ov]);
   const builders = useMemo(() => ov?.builders ?? [], [ov]);
   const marketIdsKey = markets.map((m) => m.id).join(",");
@@ -102,7 +102,7 @@ export function usePerennialData(address?: Address) {
   const incomeOf = (id: bigint | number) => ov?.incomeThisEpoch[Number(id)] ?? 0n;
 
   return {
-    publicClient, ov, ovError, markets, builders, acct, acctError, chainNow,
+    publicClient, ov, ovError, ovValidating, markets, builders, acct, acctError, chainNow,
     statusOf, builderById, isWonder, subjectFor, isMilestoneMarket, sourceFor, metricFor, questionFor, positionOf, incomeOf,
   };
 }
