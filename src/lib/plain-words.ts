@@ -4,7 +4,7 @@
  * (subject, metric, comparator, threshold, expiry): never a free-text promise
  * that could drift from the parameters.
  */
-import { COMPARATOR, shortHex, utcStamp, type MarketStatusKey } from "./perennial-market";
+import { COMPARATOR, formatUsdc, shortHex, utcStamp, type MarketStatusKey } from "./perennial-market";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -162,4 +162,10 @@ export function statusSentence(key: MarketStatusKey, expiry: bigint, timeZone?: 
     case "closed-legacy": return `Trading ended ${at}. The operator settles this market.`;
     default: return "Reading the market…";
   }
+}
+
+/** The ticket's main button: Buy names the dollars paid; Sell names the shares sold. */
+export function tradeLabel(mode: "buy" | "sell", side: "Yes" | "No", amount?: bigint): string {
+  if (mode === "buy") return amount === undefined ? `Buy ${side}` : `Buy ${side} for ${usdText(amount)}`;
+  return amount === undefined ? `Sell ${side}` : `Sell ${formatUsdc(amount, 2)} ${side} shares`;
 }

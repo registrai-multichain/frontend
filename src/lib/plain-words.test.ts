@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { COMPARATOR } from "./perennial-market";
 import {
-  durationWords, marketQuestion, metricNoun, outcomeCondition, readingNow, settlesText, statusSentence, statusShort,
+  durationWords, marketQuestion, tradeLabel, metricNoun, outcomeCondition, readingNow, settlesText, statusSentence, statusShort,
   timeLeft, usdText, when, whenUtc, who,
 } from "./plain-words";
 
@@ -156,5 +156,15 @@ describe("status words", () => {
     expect(statusSentence("voided", EXPIRY, "UTC")).toBe("Voided: traders get refunds.");
     expect(statusSentence("closed-legacy", EXPIRY, "UTC")).toBe("Trading ended Sep 30, 4:00 PM. The operator settles this market.");
     expect(statusSentence("loading", EXPIRY, "UTC")).toBe("Reading the market…");
+  });
+});
+
+describe("tradeLabel", () => {
+  test("buy names dollars; sell names shares, never the share count as dollars", () => {
+    expect(tradeLabel("buy", "Yes", 10n * 1_000_000n)).toBe("Buy Yes for $10");
+    expect(tradeLabel("buy", "No")).toBe("Buy No");
+    expect(tradeLabel("sell", "Yes", 10n * 1_000_000n)).toBe("Sell 10 Yes shares");
+    expect(tradeLabel("sell", "No", 2_500_000n)).toBe("Sell 2.5 No shares");
+    expect(tradeLabel("sell", "Yes")).toBe("Sell Yes");
   });
 });

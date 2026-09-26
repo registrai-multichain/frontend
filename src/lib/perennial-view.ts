@@ -67,6 +67,9 @@ export interface TicketInput {
   redeemable: bigint;
   canClaimLP: boolean;
   lp: bigint;
+  /** Shares held: a holder with $0 to trade still gets the form, so they can sell. */
+  yes: bigint;
+  no: bigint;
 }
 
 export function ticketState(i: TicketInput): TicketState {
@@ -74,11 +77,19 @@ export function ticketState(i: TicketInput): TicketState {
   if (i.canTrade) {
     if (!i.address) return "connect";
     if (!i.onChain) return "switch";
-    return i.ledgerBal === 0n ? "fund" : "trade";
+    return i.ledgerBal === 0n && i.yes === 0n && i.no === 0n ? "fund" : "trade";
   }
   if (i.canResolve || i.canVoid) return "settle";
-  if (i.address && ((i.canRedeem && i.redeemable > 0n) || (i.canClaimLP && i.lp > 0n))) return "collect";
+  // Settled: a disconnected viewer can't know what they won, so ask them to connect.
+  if (!i.address) return i.canRedeem || i.canClaimLP ? "connect" : "closed";
+  if ((i.canRedeem && i.redeemable > 0n) || (i.canClaimLP && i.lp > 0n)) return i.onChain ? "collect" : "switch";
   return "closed";
+}
+
+/** parseUsdcInput options for the ticket's amount: no cap while the balance is still unread. */
+export function tradeAmountOpts(mode: "buy" | "sell", ledgerBal: bigint | undefined, held: bigint): { max?: bigint; label: string } {
+  if (mode === "sell") return { max: held, label: "share amount" };
+  return ledgerBal === undefined ? { label: "amount" } : { max: ledgerBal, label: "amount" };
 }
 
 export function topBuilder<T extends { builderId: number }>(builders: T[], incomeOf: (id: number) => bigint): T | null {

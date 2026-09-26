@@ -8,10 +8,11 @@ import { feeHeadline, mirrorClaimLP, mirrorRedeem, payeeShort, splitTradeFee, tr
 import { PERENNIAL_WRITES_ENABLED } from "@/lib/perennial";
 import type { ChainMarket } from "@/lib/perennial-chain";
 import { OUTCOME, PHASE, formatUsdc, minOutWithSlippage, parseSlippagePct, parseUsdcInput, quoteBuy, quoteSell, tradeDeadline } from "@/lib/perennial-market";
-import { statusSentence, usdText } from "@/lib/plain-words";
-import { ticketState, yesPct } from "@/lib/perennial-view";
+import { humanizeError } from "@/lib/humanize-error";
+import { statusSentence, tradeLabel, usdText } from "@/lib/plain-words";
+import { ticketState, tradeAmountOpts, yesPct } from "@/lib/perennial-view";
 import { same, type PerennialData } from "./usePerennialData";
-import { CHAIN, D, type PerennialTx } from "./usePerennialTx";
+import { CHAIN, D, HUMAN, type PerennialTx } from "./usePerennialTx";
 
 const shares = (v: bigint) => formatUsdc(v, 2);
 
@@ -45,9 +46,7 @@ export function TradeTicket({ data, tx, market: m, initialSide = "Yes" }: { data
   const slip = parseSlippagePct(slippage);
   const outcome = side === "Yes" ? OUTCOME.Yes : OUTCOME.No;
   const held = side === "Yes" ? pos.yes : pos.no;
-  const amt = amount.trim()
-    ? parseUsdcInput(amount, mode === "buy" ? { max: ledgerBal ?? 0n, label: "amount" } : { max: held, label: "share amount" })
-    : undefined;
+  const amt = amount.trim() ? parseUsdcInput(amount, tradeAmountOpts(mode, ledgerBal, held)) : undefined;
   const buyQ = feeBps !== undefined && mode === "buy" && amt?.ok ? quoteBuy(m, outcome, amt.value, feeBps) : null;
   const sellQ = feeBps !== undefined && mode === "sell" && amt?.ok ? quoteSell(m, outcome, amt.value, feeBps) : null;
   const q = buyQ ?? sellQ;
@@ -63,7 +62,7 @@ export function TradeTicket({ data, tx, market: m, initialSide = "Yes" }: { data
   const state = ticketState({
     writesEnabled: PERENNIAL_WRITES_ENABLED, address: tx.address, onChain: tx.onPerennialChain, canTrade: st.canTrade,
     ledgerBal: data.acct ? ledgerBal : undefined, canResolve: st.canResolve, canVoid: st.canVoid,
-    canRedeem: st.canRedeem, redeemable, canClaimLP: st.canClaimLP, lp: pos.lp,
+    canRedeem: st.canRedeem, redeemable, canClaimLP: st.canClaimLP, lp: pos.lp, yes: pos.yes, no: pos.no,
   });
 
   async function trade() {
@@ -126,10 +125,14 @@ export function TradeTicket({ data, tx, market: m, initialSide = "Yes" }: { data
 
       {state === "connect" && (
         <>
-          <p className="pa-muted">Browsing works without a wallet.</p>
-          <button type="button" className="pa-btn pa-btn--block" onClick={tx.connectOrSwitch}>Connect wallet to trade</button>
+          <p className="pa-muted">{st.canTrade ? "Browsing works without a wallet." : statusSentence(st.key, m.expiry)}</p>
+          <button type="button" className="pa-btn pa-btn--block" onClick={tx.connectOrSwitch}>
+            {st.canTrade ? "Connect wallet to trade" : "Connect wallet to collect"}
+          </button>
         </>
       )}
+
+      {data.acctError && tx.address && <p className="text-down pa-small">Couldn&apos;t read your balances: {humanizeError(data.acctError, HUMAN)}</p>}
 
       {state === "switch" && connectBtn}
 
@@ -166,12 +169,15 @@ export function TradeTicket({ data, tx, market: m, initialSide = "Yes" }: { data
             {mode === "buy" ? (
               <>
                 {["5", "10", "25"].map((v) => <button key={v} type="button" className="pa-chip" onClick={() => setAmount(v)}>${v}</button>)}
-                <button type="button" className="pa-chip" onClick={() => setAmount(formatUsdc(ledgerBal ?? 0n, 6))}>Max</button>
+                {ledgerBal !== undefined && ledgerBal > 0n && <button type="button" className="pa-chip" onClick={() => setAmount(formatUsdc(ledgerBal, 6))}>Max</button>}
               </>
             ) : (
               <button type="button" className="pa-chip" onClick={() => setAmount(formatUsdc(held, 6))}>All {shares(held)}</button>
             )}
           </div>
+          {mode === "buy" && ledgerBal === 0n && (
+            <p className="pa-small">You have $0 to trade · <button type="button" className="pa-link" onClick={openFunds}>Add funds</button></p>
+          )}
           {amt && !amt.ok && <p className="text-down">{amt.error}</p>}
           {q && (
             <div>
@@ -185,8 +191,8 @@ export function TradeTicket({ data, tx, market: m, initialSide = "Yes" }: { data
               {q.priceImpact > 0.05 && <p className="text-down pa-small">This order moves the price by {(q.priceImpact * 100).toFixed(1)}%.</p>}
             </div>
           )}
-          <button type="button" className="pa-btn pa-btn--block" onClick={trade} disabled={tx.busy || !q || !slip.ok}>
-            {tx.pending === mode ? (mode === "buy" ? "Buying…" : "Selling…") : `${mode === "buy" ? "Buy" : "Sell"} ${side}${amt?.ok ? ` for ${usdText(amt.value)}` : ""}`}
+          <button type="button" className="pa-btn pa-btn--block" onClick={trade} disabled={tx.busy || !q || !slip.ok || !data.acct}>
+            {tx.pending === mode ? (mode === "buy" ? "Buying…" : "Selling…") : tradeLabel(mode, side, amt?.ok ? amt.value : undefined)}
           </button>
           <p className="pa-muted pa-small">
             Price may move up to {slip.ok ? slippage : "1"}% before it lands ·{" "}

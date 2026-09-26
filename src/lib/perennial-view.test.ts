@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
-  MARKET_TABS, holdingLabel, isEnded, marketsForTab, parseMarketParam, parseSide, parseTab, potOf, ticketState,
+  MARKET_TABS, holdingLabel, tradeAmountOpts, isEnded, marketsForTab, parseMarketParam, parseSide, parseTab, potOf, ticketState,
   topBuilder, yesPct, type TicketInput,
 } from "./perennial-view";
 
@@ -87,7 +87,7 @@ describe("marketsForTab", () => {
 describe("ticketState", () => {
   const base: TicketInput = {
     writesEnabled: true, address: "0xabc", onChain: true, canTrade: true, ledgerBal: 5n,
-    canResolve: false, canVoid: false, canRedeem: false, redeemable: 0n, canClaimLP: false, lp: 0n,
+    canResolve: false, canVoid: false, canRedeem: false, redeemable: 0n, canClaimLP: false, lp: 0n, yes: 0n, no: 0n,
   };
   test("paused beats everything", () => {
     expect(ticketState({ ...base, writesEnabled: false })).toBe("paused");
@@ -108,7 +108,31 @@ describe("ticketState", () => {
     expect(ticketState({ ...closed, canRedeem: true, redeemable: 3n })).toBe("collect");
     expect(ticketState({ ...closed, canClaimLP: true, lp: 1n })).toBe("collect");
     expect(ticketState({ ...closed, canRedeem: true, redeemable: 0n })).toBe("closed");
-    expect(ticketState({ ...closed, canRedeem: true, redeemable: 3n, address: undefined })).toBe("closed");
+    expect(ticketState({ ...closed, canRedeem: true, redeemable: 3n, address: undefined })).toBe("connect");
     expect(ticketState(closed)).toBe("closed");
+  });
+});
+
+describe("review fixes", () => {
+  const base: TicketInput = {
+    writesEnabled: true, address: "0xabc", onChain: true, canTrade: true, ledgerBal: 0n,
+    canResolve: false, canVoid: false, canRedeem: false, redeemable: 0n, canClaimLP: false, lp: 0n, yes: 0n, no: 0n,
+  };
+  test("$0 to trade but holding shares: the trade form (so they can sell), not 'Add funds'", () => {
+    expect(ticketState({ ...base, yes: 5n })).toBe("trade");
+    expect(ticketState({ ...base, no: 1n })).toBe("trade");
+    expect(ticketState(base)).toBe("fund");
+  });
+  test("a winner on another chain is asked to switch; a disconnected viewer of a settled market is asked to connect", () => {
+    const settled = { ...base, canTrade: false, canRedeem: true, redeemable: 3n };
+    expect(ticketState({ ...settled, onChain: false })).toBe("switch");
+    expect(ticketState({ ...settled, address: undefined, redeemable: 0n })).toBe("connect");
+    expect(ticketState({ ...base, canTrade: false, canClaimLP: true, address: undefined })).toBe("connect");
+    expect(ticketState(settled)).toBe("collect");
+  });
+  test("amount limits: no cap until the balance is read; buy caps at the balance, sell at the shares", () => {
+    expect(tradeAmountOpts("buy", undefined, 9n)).toEqual({ label: "amount" });
+    expect(tradeAmountOpts("buy", 5n, 9n)).toEqual({ max: 5n, label: "amount" });
+    expect(tradeAmountOpts("sell", undefined, 9n)).toEqual({ max: 9n, label: "share amount" });
   });
 });
