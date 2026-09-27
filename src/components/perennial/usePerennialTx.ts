@@ -2,15 +2,18 @@
 
 import { useMemo, useState } from "react";
 import { mutate } from "swr";
-import { createPublicClient, createWalletClient, custom, type Address, type Hex, type PublicClient, type TransactionReceipt } from "viem";
+import { createWalletClient, custom, type Address, type Hex, type TransactionReceipt } from "viem";
 import { useWallet } from "@/components/WalletProvider";
 import { nanoLedgerAbi, usdcAbi } from "@/lib/abi";
-import { transportFor, txUrl as txUrlFor } from "@/lib/chains";
+import { txUrl as txUrlFor } from "@/lib/chains";
 import { explainMinedRevert, humanizeError } from "@/lib/humanize-error";
 import { PERENNIAL_WRITES_ENABLED } from "@/lib/perennial";
+import { perennialClient } from "@/lib/perennial-client";
 import { PERENNIAL } from "@/lib/perennial-network";
 import { pushToast } from "@/lib/toast-store";
 import { activeProvider } from "@/lib/wallets";
+
+export { perennialClient };
 
 export const D = PERENNIAL;
 export const CHAIN = D.chain;
@@ -20,13 +23,6 @@ export const addressUrl = (a: string) => `${CHAIN.explorer.url.replace(/\/$/, ""
 
 /** An error whose message is already user-facing (a decoded mined revert). */
 class HumanError extends Error {}
-
-let client: PublicClient | undefined;
-/** Reads are pinned to the Perennial network regardless of the wallet's chain. */
-export function perennialClient(): PublicClient {
-  client ??= createPublicClient({ chain: CHAIN.viemChain, transport: transportFor(CHAIN, { batch: true }) }) as PublicClient;
-  return client;
-}
 
 /** Re-read everything the paper pages show (every SWR key starts with "perennial-"). */
 export function refreshPerennial() {
