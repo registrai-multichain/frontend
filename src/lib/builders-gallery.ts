@@ -355,12 +355,16 @@ export const labelOf = (k: DisplayKind) => DISPLAY[k].label;
  * (ProjectNominations) is on the record: in colour, with its own kind and a solid
  * "Nominated" pill, where a plain invite is grey. (The internal "nominated" kind is
  * a different thing: a claimed builder awaiting onboarding, labelled "Onboarding".)
+ * A project that went dark (src/lib/gone-dark.ts) keeps its card with a "Gone dark"
+ * stamp; the card greys its own content under the stamp (CSS), so `grey` stays false.
  */
-export function cardLook(kind: DisplayKind, nominatedOnChain: boolean): {
-  kind: DisplayKind | "invited-onchain";
+export function cardLook(kind: DisplayKind, nominatedOnChain: boolean, goneDark = false): {
+  kind: DisplayKind | "invited-onchain" | "gone-dark";
   grey: boolean;
-  pill: { text: string; tone: "ok" | "unclaimed" | "muted" | "onchain" };
+  pill: { text: string; tone: "ok" | "unclaimed" | "muted" | "onchain" | "down" };
+  stamp?: string;
 } {
+  if (goneDark) return { kind: "gone-dark", grey: false, pill: { text: "Gone dark", tone: "down" }, stamp: "Gone dark" };
   if (kind === "invited" && nominatedOnChain) return { kind: "invited-onchain", grey: false, pill: { text: "Nominated", tone: "onchain" } };
   return {
     kind,

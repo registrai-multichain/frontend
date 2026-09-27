@@ -890,3 +890,14 @@ describe("cardLook: an invited project nominated on chain looks different from a
     expect(cardLook("lapsed", true)).toEqual({ kind: "lapsed", grey: true, pill: { text: "Lapsed", tone: "muted" } });
   });
 });
+
+describe("cardLook: a project that went dark keeps its card, stamped", () => {
+  test("gone dark: its own kind, a 'Gone dark' pill in the down tone and a stamp, whatever else is true", () => {
+    const gone = { kind: "gone-dark", grey: false, pill: { text: "Gone dark", tone: "down" }, stamp: "Gone dark" };
+    expect(cardLook("invited", true, true)).toEqual(gone);
+    expect(cardLook("invited", false, true)).toEqual(gone);
+  });
+  test("not gone dark: unchanged", () => {
+    expect(cardLook("invited", true, false)).toEqual(cardLook("invited", true));
+  });
+});

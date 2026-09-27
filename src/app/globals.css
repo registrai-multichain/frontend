@@ -1308,6 +1308,12 @@ a.vbadge:hover { background: color-mix(in srgb, var(--up) 10%, transparent); }
 .bld-card[data-kind="verified"] { border-color: color-mix(in srgb, var(--up) 40%, transparent); }
 .bld-card[data-kind="nominated"] { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 .bld-card[data-kind="invited-onchain"] { border: 1.5px dashed color-mix(in srgb, var(--unclaimed-fg) 80%, transparent); }
+/* A project that went dark (src/lib/gone-dark.ts): its content greyed under a red rubber-stamp mark. */
+.bld-card[data-kind="gone-dark"] { border: 1.5px solid color-mix(in srgb, var(--down) 45%, transparent); overflow: hidden; }
+.bld-card[data-kind="gone-dark"] > :not(.bld-stamp) { filter: grayscale(1); opacity: .5; transition: opacity .2s; }
+.bld-card[data-kind="gone-dark"]:hover > :not(.bld-stamp),
+.bld-card[data-kind="gone-dark"]:focus-within > :not(.bld-stamp) { opacity: .8; }
+.bld-stamp { position: absolute; z-index: 2; top: 46%; left: 50%; transform: translate(-50%, -50%) rotate(-12deg); padding: 7px 16px 6px; border: 4px double var(--down); border-radius: 6px; color: var(--down); background: color-mix(in srgb, var(--bg-elev) 70%, transparent); font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif; font-size: 24px; font-weight: 800; line-height: 1; letter-spacing: .04em; white-space: nowrap; opacity: .88; pointer-events: none; }
 .bld-card[data-tone="grayscale"] { filter: grayscale(1); opacity: .58; }
 .bld-card[data-tone="grayscale"]:hover,
 .bld-card[data-tone="grayscale"]:focus-within { opacity: .85; }
