@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { privateKeyToAccount } from "viem/accounts";
 import { recoverTypedDataAddress } from "viem";
 import {
-  PROPOSAL_DOMAIN, SEED, TREASURY, approvalMessage, approvalTypedData, newProposalId,
+  PROPOSAL_DOMAIN, SEED, TREASURY, approvalMessage, approvalTypedData, duplicateOf, newProposalId,
   normalizeQuestion, outcomeTypedData, validateProposal, type Proposal,
 } from "./market-proposals";
 
@@ -91,5 +91,14 @@ describe("EIP-712", () => {
   });
   test("approvalMessage throws when called on a phase-2 kind", () => {
     expect(() => approvalMessage({ ...p, kind: "wonder" } as Proposal, 1n)).toThrow("cannot approve a wonder proposal (phase 2)");
+  });
+});
+
+describe("duplicateOf", () => {
+  const mk = (id: string, q: string) => ({ ...(base as object), id, question: q, createdAt: "", status: "pending" }) as Proposal;
+  test("flags a live market or another open proposal with the same normalised question", () => {
+    expect(duplicateOf(mk("pa", "Will the Arc token trade publicly?"), [], ["will the arc token trade publicly"])).toBe("live market");
+    expect(duplicateOf(mk("pa", "Will X happen?!"), [mk("pb", "will x happen")], [])).toBe("pb");
+    expect(duplicateOf(mk("pa", "Will X happen?"), [mk("pa", "Will X happen?")], [])).toBeNull();
   });
 });

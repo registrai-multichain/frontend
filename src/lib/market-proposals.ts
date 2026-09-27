@@ -119,6 +119,15 @@ export function normalizeQuestion(q: string): string {
   return q.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
+/** What `p` duplicates: "live market" when a live market asks the same (normalised)
+ *  question, else the id of another proposal that is not rejected and asks it; null if none. */
+export function duplicateOf(p: Proposal, others: Proposal[], liveQuestions: string[]): string | null {
+  const q = normalizeQuestion(p.question);
+  if (liveQuestions.some((l) => normalizeQuestion(l) === q)) return "live market";
+  const hit = others.find((o) => o.id !== p.id && o.status !== "rejected" && normalizeQuestion(o.question) === q);
+  return hit ? hit.id : null;
+}
+
 const B32 = "abcdefghijklmnopqrstuvwxyz234567";
 export function newProposalId(rand: Uint8Array): string {
   let out = "p";

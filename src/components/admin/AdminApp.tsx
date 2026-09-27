@@ -363,6 +363,9 @@ function Dashboard({
             {role === "onboarder" && <> · onboarder: you can read everything here and onboard builders from this wallet</>}
           </span>
           <span className="adm-bar-actions">
+            <a className="vf-mini" href="/admin/proposals/">
+              Market proposals →
+            </a>
             {REG && (
               <button type="button" className="vf-mini" onClick={() => chain.mutate()} disabled={chain.isValidating}>
                 {chain.isValidating ? "reading chain…" : "re-read chain"}
