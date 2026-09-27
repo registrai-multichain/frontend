@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   EMPTY_FORM, PRICE_SOURCE, formatUtcDeadline, parseUtcDeadline, prepareSubmission, priceQuestion,
   feesScanEnd, mergeFeeProgress, mergeScanProgress, parseScanCache, proposalFeedDescription, proposalScanStart, scanForward,
-  statusChip, statusHref, sumCreatorFees, forwardPayee, type ProposeFormState, type ScanCache,
+  statusChip, statusHref, sumCreatorFees, forwardPayee, forwardedShown, isTreasury, shareText, type ProposeFormState, type ScanCache,
 } from "./propose-form";
 import { TREASURY } from "./market-proposals";
 import { DEFAULT_PROPOSALS_API, proposalsApiBase } from "./proposals-api";
@@ -215,3 +215,25 @@ describe("forwarded creator share (R37)", () => {
     expect(forwardPayee({ creatorPayee: "nope" }, own)).toBe(TREASURY.toLowerCase());
   });
 });
+
+describe("status page share lines (R42)", () => {
+  test("forwarded is shown up to this market's earned share, and unknown while either is", () => {
+    expect(forwardedShown(200_000n, 279_000n)).toBe(200_000n);
+    expect(forwardedShown(14_300_000n, 270_000n)).toBe(270_000n); // other markets' payouts to the same payee
+    expect(forwardedShown(5n, null)).toBeUndefined();
+    expect(forwardedShown(5n, undefined)).toBeUndefined();
+    expect(forwardedShown(null, 5n)).toBeUndefined();
+    expect(forwardedShown(undefined, 5n)).toBeUndefined();
+  });
+  test("a sub-cent share reads < 0.01, nothing reads 0", () => {
+    expect(shareText(9_000n)).toBe("< 0.01 USDC");
+    expect(shareText(0n)).toBe("0 USDC");
+    expect(shareText(10_000n)).toBe("0.01 USDC");
+    expect(shareText(279_000n)).toBe("0.27 USDC");
+  });
+  test("isTreasury compares case-insensitively", () => {
+    expect(isTreasury(TREASURY.toLowerCase())).toBe(true);
+    expect(isTreasury("0x000000000000000000000000000000000000dead")).toBe(false);
+  });
+});
+

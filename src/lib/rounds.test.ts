@@ -53,6 +53,9 @@ import {
   sumTransfers,
   parseProposalStore,
   serializeProposalStore,
+  pruneProposalStore,
+  proposalAnswer,
+  proposalRetryMs,
 } from "./rounds";
 import { COMPARATOR, PHASE } from "./perennial-market";
 
@@ -613,39 +616,92 @@ describe("proposed markets", () => {
     expect(list.map((m) => m.marketId)).toEqual([hex(3), hex(2), hex(4), hex(5)]);
   });
 
-  test("parseProposalInfo keeps only well-formed public fields", () => {
-    const info = parseProposalInfo({
-      proposal: {
-        id: "pabcdefghij", kind: "event", question: "  Will X ship by Friday?  ", rule: "Yes if the release is tagged.",
-        source: "https://example.org/releases", creatorPayee: "0x000000000000000000000000000000000000dEaD",
-        outcome: { message: { evidenceUrl: "https://example.org/v1" } }, contact: "never shown",
+  const APPROVAL = (threshold: string, comparator: number, expiry: string) => ({ message: { threshold, comparator, expiry }, signature: "0x", signer: "0x" });
+
+  test("parseProposalInfo keeps only well-formed public fields, and the approval's terms", () => {
+    const info = parseProposalInfo(
+      {
+        proposal: {
+          id: "pabcdefghij", kind: "event", question: "  Will X ship by Friday?  ", rule: "Yes if the release is tagged.",
+          source: "https://example.org/releases", creatorPayee: "0x000000000000000000000000000000000000dEaD",
+          outcome: { message: { evidenceUrl: "https://example.org/v1" } }, contact: "never shown", approval: APPROVAL("1", 1, "1800000000"),
+        },
       },
-    });
+      "pabcdefghij",
+    );
     expect(info).toEqual({
       question: "Will X ship by Friday?", kind: "event", rule: "Yes if the release is tagged.", source: "https://example.org/releases",
       asset: undefined, evidenceUrl: "https://example.org/v1", creatorPayee: "0x000000000000000000000000000000000000dEaD",
+      terms: { threshold: 1n, comparator: 1, expiry: 1_800_000_000 },
     });
-    expect(parseProposalInfo({ proposal: { question: "" } })).toBeNull();
-    expect(parseProposalInfo({ error: "no such proposal" })).toBeNull();
-    expect(parseProposalInfo(null)).toBeNull();
-    const odd = parseProposalInfo({ proposal: { question: "Q?", kind: "wonder", source: "javascript:alert(1)", creatorPayee: "nope", outcome: { message: { evidenceUrl: "http://x" } } } });
-    expect(odd).toMatchObject({ kind: undefined, source: undefined, evidenceUrl: undefined, creatorPayee: "" });
-    expect(parseProposalInfo({ proposal: { question: "x".repeat(301) } })).toBeNull();
+    expect(parseProposalInfo({ proposal: { id: "pabcdefghij", question: "" } }, "pabcdefghij")).toBeNull();
+    expect(parseProposalInfo({ error: "no such proposal" }, "pabcdefghij")).toBeNull();
+    expect(parseProposalInfo(null, "pabcdefghij")).toBeNull();
+    const odd = parseProposalInfo(
+      { proposal: { id: "pabcdefghij", question: "Q?", kind: "wonder", source: "javascript:alert(1)", creatorPayee: "nope", outcome: { message: { evidenceUrl: "http://x" } }, approval: APPROVAL("0x1", 1, "9") } },
+      "pabcdefghij",
+    );
+    expect(odd).toMatchObject({ kind: undefined, source: undefined, evidenceUrl: undefined, creatorPayee: "", terms: undefined });
+    expect(parseProposalInfo({ proposal: { id: "pabcdefghij", question: "x".repeat(301) } }, "pabcdefghij")).toBeNull();
   });
 
-  test("proposalEventMeta: the API's question, else Proposal #id; the kind from the API, else from the chain", () => {
-    const m = { key: "p-pabcdefghij", marketId: hex(9), expiry: 1_800_000_000, threshold: 1n, comparator: COMPARATOR.GreaterOrEqual };
-    expect(proposalEventMeta(m, null)).toMatchObject({
+  test("parseProposalInfo refuses another proposal's record", () => {
+    expect(parseProposalInfo({ proposal: { id: "pzzzzzzzzzz", question: "Will X?" } }, "pabcdefghij")).toBeNull();
+    expect(parseProposalInfo({ proposal: { question: "Will X?" } }, "pabcdefghij")).toBeNull();
+  });
+
+  const EVT = { key: "p-pabcdefghij", marketId: hex(9), expiry: 1_800_000_000, threshold: 1n, comparator: COMPARATOR.GreaterOrEqual };
+  const PRICE = { ...EVT, threshold: 300_000n, comparator: COMPARATOR.LessOrEqual };
+  const ASSETS = { "btc-usd": { symbol: "BTC", decimals: 2 } };
+  const priceInfo = (terms = { threshold: 300_000n, comparator: 3, expiry: 1_800_000_000 }) => ({
+    question: "BTC at most 3,000.00 at the deadline?", kind: "price" as const, asset: "btc-usd", rule: "r", terms,
+  });
+
+  test("proposalEventMeta: without a record, Proposal #id and the chain's kind, marked unverified", () => {
+    expect(proposalEventMeta(EVT, null)).toMatchObject({
       key: "p-pabcdefghij", question: "Proposal #pabcdefghij", expiry: 1_800_000_000, rehearsal: false, marketId: hex(9),
-      proposal: { id: "pabcdefghij", kind: "event" },
+      proposal: { id: "pabcdefghij", kind: "event", verified: false },
     });
-    const price = { ...m, threshold: 300_000n, comparator: COMPARATOR.LessOrEqual };
-    expect(proposalEventMeta(price, undefined).proposal?.kind).toBe("price");
-    const assets = { "btc-usd": { symbol: "BTC", decimals: 2 } };
-    const meta = proposalEventMeta(price, { question: "BTC at most 3,000.00 at the deadline?", kind: "price", asset: "btc-usd" }, assets);
+    expect(proposalEventMeta(PRICE, undefined).proposal).toMatchObject({ kind: "price", verified: false, symbol: undefined, decimals: undefined });
+  });
+
+  test("proposalEventMeta: a record whose approval matches the chain lends its words", () => {
+    const meta = proposalEventMeta(PRICE, priceInfo(), ASSETS);
     expect(meta.question).toBe("BTC at most 3,000.00 at the deadline?");
-    expect(meta.proposal).toMatchObject({ kind: "price", symbol: "BTC", decimals: 2 });
-    expect(proposalEventMeta(m, { question: "Q?", evidenceUrl: "https://e.org/x" }).evidenceUrl).toBe("https://e.org/x");
+    expect(meta.proposal).toMatchObject({ kind: "price", verified: true, symbol: "BTC", decimals: 2, rule: "r" });
+    const evt = { question: "Q?", evidenceUrl: "https://e.org/x", terms: { threshold: 1n, comparator: 1, expiry: 1_800_000_000 } };
+    expect(proposalEventMeta(EVT, evt).evidenceUrl).toBe("https://e.org/x");
+  });
+
+  test("proposalEventMeta: the chain's kind wins over the record's", () => {
+    // the record says price, the market on chain is a yes/no one (threshold 1, >=)
+    const lie = { ...priceInfo({ threshold: 1n, comparator: 1, expiry: 1_800_000_000 }) };
+    expect(proposalEventMeta(EVT, lie, ASSETS).proposal).toMatchObject({ kind: "event", symbol: undefined });
+    // and a yes/no record on a price market
+    const evtOnPrice = { question: "Q?", kind: "event" as const, terms: { threshold: 300_000n, comparator: 3, expiry: 1_800_000_000 } };
+    expect(proposalEventMeta(PRICE, evtOnPrice, ASSETS).proposal?.kind).toBe("price");
+  });
+
+  test("proposalEventMeta: any mismatch in threshold, comparator or expiry (or no terms) drops the record", () => {
+    for (const terms of [
+      { threshold: 310_000n, comparator: 3, expiry: 1_800_000_000 },
+      { threshold: 300_000n, comparator: 1, expiry: 1_800_000_000 },
+      { threshold: 300_000n, comparator: 3, expiry: 1_800_000_300 },
+    ]) {
+      const meta = proposalEventMeta(PRICE, priceInfo(terms), ASSETS);
+      expect(meta.question).toBe("Proposal #pabcdefghij");
+      expect(meta.proposal).toMatchObject({ verified: false, symbol: undefined, decimals: undefined, rule: undefined });
+    }
+    const noTerms = { question: "Q?", evidenceUrl: "https://e.org/x" };
+    expect(proposalEventMeta(EVT, noTerms)).toMatchObject({ question: "Proposal #pabcdefghij", evidenceUrl: null });
+  });
+
+  test("proposals API answers: 404 is kept, network, 429 and 5xx are retried with backoff", () => {
+    expect(proposalAnswer(200)).toBe("ok");
+    expect(proposalAnswer(404)).toBe("missing");
+    expect(proposalAnswer(400)).toBe("missing");
+    for (const s of ["network", 429, 500, 502, 503] as const) expect(proposalAnswer(s)).toBe("retry");
+    expect([1, 2, 3, 4, 5, 6, 10].map(proposalRetryMs)).toEqual([10_000, 20_000, 40_000, 80_000, 160_000, 300_000, 300_000]);
   });
 
   test("nextBackfill: newest chunk first, then new blocks, then back to the floor", () => {
@@ -674,23 +730,51 @@ describe("proposed markets", () => {
     expect(sumTransfers([])).toBe(0n);
   });
 
-  test("the scan store round-trips and a malformed one starts afresh", () => {
+  test("the scan store round-trips (ids and blocks only) and a malformed one starts afresh", () => {
     const store = {
       cover: { lo: 100n, hi: 20_000n },
       feeds: {
-        [hex(0xf1)]: { feedId: hex(0xf1), key: "p-pabcdefghij", block: 150n, disputeWindow: 43_200, marketTo: 5_149n, marketId: hex(0x51) },
-        [hex(0xf2)]: { feedId: hex(0xf2), key: "p-pqrstuvwxyz", block: 160n, disputeWindow: 600, marketTo: 159n },
+        [hex(0xf1)]: { feedId: hex(0xf1), block: 160n, marketTo: 5_159n, marketId: hex(0x51) },
+        [hex(0xf2)]: { feedId: hex(0xf2), block: 150n, marketTo: 149n },
       },
     };
     expect(parseProposalStore(serializeProposalStore(store))).toEqual(store);
     expect(parseProposalStore(null)).toEqual({ feeds: {} });
     expect(parseProposalStore("{nope")).toEqual({ feeds: {} });
     expect(parseProposalStore(JSON.stringify({ cover: { lo: "9", hi: "1" }, feeds: [] }))).toEqual({ feeds: {} });
-    const badKey = JSON.parse(serializeProposalStore(store));
-    badKey.feeds[0].key = "btc-usd";
-    expect(parseProposalStore(JSON.stringify(badKey))).toEqual({ feeds: {} });
+    const badBlock = JSON.parse(serializeProposalStore(store));
+    badBlock.feeds[0].block = "-1";
+    expect(parseProposalStore(JSON.stringify(badBlock))).toEqual({ feeds: {} });
     const badId = JSON.parse(serializeProposalStore(store));
     badId.feeds[1].marketId = "0x12";
     expect(parseProposalStore(JSON.stringify(badId))).toEqual({ feeds: {} });
+    // a planted key or label is not part of the record: it is dropped, never trusted
+    const planted = JSON.parse(serializeProposalStore(store));
+    planted.feeds[0].key = "p-pzzzzzzzzzz";
+    expect(Object.keys(parseProposalStore(JSON.stringify(planted)).feeds[hex(0xf1)]).sort()).toEqual(["block", "feedId", "marketId", "marketTo"]);
+  });
+
+  test("the store keeps the newest records by block, not the first ones", () => {
+    const feeds = Array.from({ length: 1_005 }, (_, i) => ({ feedId: hex(0x1000 + i), block: BigInt(i), marketTo: BigInt(i) }));
+    const raw = serializeProposalStore({ feeds: Object.fromEntries(feeds.map((f) => [f.feedId, f])) });
+    const kept = Object.values(parseProposalStore(raw).feeds).map((f) => f.block);
+    expect(kept.length).toBe(1_000);
+    expect(kept.includes(1_004n) && !kept.includes(4n) && kept.includes(5n)).toBe(true);
+  });
+
+  test("pruneProposalStore drops feeds before the floor and finished searches without a market", () => {
+    const s = {
+      cover: { lo: 0n, hi: 50_000n },
+      feeds: {
+        [hex(1)]: { feedId: hex(1), block: 900n, marketTo: 5_000n, marketId: hex(0x11) }, // before the floor
+        [hex(2)]: { feedId: hex(2), block: 2_000n, marketTo: 2_000n + 600n }, // searched to its end: never opened
+        [hex(3)]: { feedId: hex(3), block: 3_000n, marketTo: 3_100n }, // still searching
+        [hex(4)]: { feedId: hex(4), block: 4_000n, marketTo: 9_000n, marketId: hex(0x44) }, // opened
+      },
+    };
+    const out = pruneProposalStore(s, 1_000n, 600n);
+    expect(Object.keys(out.feeds).sort()).toEqual([hex(3), hex(4)].sort());
+    expect(out.cover).toEqual(s.cover);
+    expect(Object.keys(pruneProposalStore(s, 0n, 600n, 1).feeds)).toEqual([hex(4)]);
   });
 });

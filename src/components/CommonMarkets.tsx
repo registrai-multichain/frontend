@@ -91,16 +91,20 @@ import {
   assetHref,
   eventHref,
   extendCover,
+  feedKeyFromDescription,
   formatChange,
   isMarketId,
   isProposalKey,
   nextBackfill,
   parseProposalInfo,
   parseProposalStore,
+  proposalAnswer,
+  proposalRetryMs,
   proposalEventMeta,
   proposalIdOfKey,
   proposedMarketHref,
   proposedMarkets,
+  pruneProposalStore,
   serializeProposalStore,
   type AssetRounds,
   type ProposalInfo,
@@ -198,6 +202,8 @@ type Snapshot = {
   feeBps?: bigint;
 };
 
+/** A comparator as a sign, for raw on-chain terms. */
+const COMPARATOR_SIGN: Record<number, string> = { 0: ">", 1: "≥", 2: "<", 3: "≤" };
 const settled = (phase: number | undefined) => phase === PHASE.Resolved || phase === PHASE.Voided;
 const sameAddress = (a?: string, b?: string) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
 const ZERO_ID = `0x${"0".repeat(64)}`;
@@ -206,7 +212,7 @@ const blocksFor = (secs: number) => BigInt(Math.ceil(secs / BLOCK_SECS));
 
 // The background scan for proposal feeds (older than the page's two-hour window),
 // remembered per browser so a return visit reads only the blocks added since.
-const proposedKey = () => `registrai.rounds.proposed.v1.${D.chainId}.${C.MarketsV4.toLowerCase()}.${D.agent.toLowerCase()}`;
+const proposedKey = () => `registrai.rounds.proposed.v2.${D.chainId}.${C.MarketsV4.toLowerCase()}.${D.agent.toLowerCase()}`;
 function loadProposed(): ProposalScanStore {
   try {
     return parseProposalStore(localStorage.getItem(proposedKey()));
@@ -633,17 +639,9 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
     if (!backfill) return;
     let alive = true;
     const d = disc.current;
-    const store = loadProposed();
+    let store = loadProposed();
     const recs = () => Object.values(store.feeds);
-    const asLogs = (fs: ReturnType<typeof recs>): FeedCreatedLog[] =>
-      fs.map((f) => ({
-        args: { feedId: f.feedId, creator: D.agent, description: `${D.descriptionPrefix}${f.key}`, disputeWindow: BigInt(f.disputeWindow) },
-        blockNumber: f.block,
-        logIndex: 0,
-      }));
-    d.book = mergeFeedLogs(d.book, asLogs(recs()), D.agent);
-    for (const f of recs()) if (f.marketId) d.describe.add(f.marketId);
-    if (recs().some((f) => f.marketId)) void refreshRef.current?.();
+    const keyOf = (feedId: string) => d.book.byId[feedId]?.key;
     // How far each feed's market is searched this visit: to the head when the feed
     // joined the page's book (from then on the page's own scan includes it), at most
     // PROPOSAL_MARKET_SEARCH_SECS past the feed.
@@ -656,6 +654,31 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
       return until.get(f.feedId)!;
     };
 
+    // The stored records name feeds by id only: what each feed is (its creator and
+    // description, hence its key) is read from the Registry before it joins the book.
+    let verified = false;
+    const verify = async () => {
+      const ids = recs().map((f) => f.feedId);
+      const rows = (await client.multicall({
+        contracts: ids.map((f) => ({ address: C.Registry, abi: registryAbi, functionName: "getFeed" as const, args: [f] as const })),
+        allowFailure: false,
+        multicallAddress: MULTICALL3,
+      })) as unknown as Array<{ creator: Address; description: string; disputeWindow: bigint; exists: boolean }>;
+      const logs: FeedCreatedLog[] = [];
+      ids.forEach((feedId, i) => {
+        const r = rows[i];
+        const key = r?.exists && sameAddress(r.creator, D.agent) ? feedKeyFromDescription(r.description) : null;
+        if (!key || !isProposalKey(key)) {
+          delete store.feeds[feedId];
+          return;
+        }
+        logs.push({ args: { feedId, creator: r.creator, description: r.description, disputeWindow: r.disputeWindow }, blockNumber: store.feeds[feedId].block, logIndex: 0 });
+      });
+      d.book = mergeFeedLogs(d.book, logs, D.agent);
+      for (const f of recs()) if (f.marketId) d.describe.add(f.marketId);
+      if (recs().some((f) => f.marketId)) void refreshRef.current?.();
+    };
+
     void (async () => {
       while (alive) {
         if (document.hidden) {
@@ -663,12 +686,19 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
           continue;
         }
         try {
+          if (!verified) {
+            if (recs().length) await verify();
+            verified = true;
+          }
           const head = await client.getBlockNumber();
+          const back = blocksFor(PROPOSAL_LOOKBACK_SECS);
+          const floor = head > back && head - back > D.deployBlock ? head - back : D.deployBlock;
           let found = false;
           // Markets the page's own scan already found for a stored feed.
           for (const f of recs()) {
-            if (f.marketId) continue;
-            const m = latestMarketFor([...d.markets.values()], f.key);
+            const key = keyOf(f.feedId);
+            if (f.marketId || !key) continue;
+            const m = latestMarketFor([...d.markets.values()], key);
             if (m && m.feedId === f.feedId) f.marketId = m.marketId;
           }
           // 1. A proposal feed without its market yet: the next chunk after it
@@ -693,8 +723,6 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
           } else {
             // 2. The next stretch of FeedCreated logs, newest first, back to a year
             //    (plus a day) before the head and never before the deployment.
-            const back = blocksFor(PROPOSAL_LOOKBACK_SECS);
-            const floor = head > back && head - back > D.deployBlock ? head - back : D.deployBlock;
             const range = nextBackfill(store.cover, head, floor);
             if (!range) {
               await pause(60_000); // all covered; the page's own scan follows new blocks
@@ -706,11 +734,12 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
             const b = mergeFeedLogs(seedFeedBook({}), logs, D.agent);
             for (const f of Object.values(b.byId)) {
               if (!isProposalKey(f.key) || store.feeds[f.feedId]) continue;
-              store.feeds[f.feedId] = { feedId: f.feedId, key: f.key, block: f.blockNumber, disputeWindow: f.disputeWindow, marketTo: f.blockNumber - 1n };
+              store.feeds[f.feedId] = { feedId: f.feedId, block: f.blockNumber, marketTo: f.blockNumber - 1n };
             }
             d.book = mergeFeedLogs(d.book, logs, D.agent);
             store.cover = extendCover(store.cover, range[0], range[1]);
           }
+          store = pruneProposalStore(store, floor, blocksFor(PROPOSAL_MARKET_SEARCH_SECS));
           saveProposed(store);
           if (found) void refreshRef.current?.();
         } catch {
@@ -789,34 +818,52 @@ function useLivePools(client: PublicClient, ids: readonly Hex[], paused: boolean
   return pools;
 }
 
-/** Proposals' public records (the question, rule and source), fetched once per id
- *  from the proposals API. null: the API did not answer or has no such proposal,
- *  and the page says "Proposal #id". */
-const proposalInfoCache = new Map<string, Promise<ProposalInfo | null>>();
-function fetchProposalInfo(id: string): Promise<ProposalInfo | null> {
+/** Proposals' public records (the question, rule and source) from the proposals API.
+ *  A record, or a definitive "none" (404: the page says "Proposal #id"), is kept for
+ *  the page's lifetime; a network error, 429 or 5xx is forgotten and asked again on
+ *  a later refresh, with backoff (proposalRetryMs). */
+const proposalInfoCache = new Map<string, Promise<ProposalInfo | null | "retry">>();
+const proposalFails = new Map<string, { fails: number; at: number }>();
+function fetchProposalInfo(id: string): Promise<ProposalInfo | null | "retry"> {
   let p = proposalInfoCache.get(id);
   if (!p) {
     p = fetch(`${PROPOSALS_API}/${encodeURIComponent(id)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then(parseProposalInfo, () => null);
+      .then(async (r) => {
+        const a = proposalAnswer(r.status);
+        return a === "ok" ? parseProposalInfo(await r.json(), id) : a === "missing" ? null : ("retry" as const);
+      })
+      .catch(() => "retry" as const)
+      .then((res) => {
+        if (res === "retry") {
+          proposalInfoCache.delete(id);
+          const f = proposalFails.get(id)?.fails ?? 0;
+          proposalFails.set(id, { fails: f + 1, at: Date.now() + proposalRetryMs(f + 1) });
+        } else proposalFails.delete(id);
+        return res;
+      });
     proposalInfoCache.set(id, p);
   }
   return p;
 }
-function useProposalInfo(ids: readonly string[]) {
+/** `tick` changes on every refresh of the page's data: ids that failed are retried then, once their backoff is over. */
+function useProposalInfo(ids: readonly string[], tick: number) {
   const [got, setGot] = useState<Record<string, ProposalInfo | null>>({});
   const key = ids.join(",");
   useEffect(() => {
     let alive = true;
     for (const id of key ? key.split(",") : []) {
+      if (id in got) continue;
+      const f = proposalFails.get(id);
+      if (f && Date.now() < f.at && !proposalInfoCache.has(id)) continue;
       void fetchProposalInfo(id).then((info) => {
-        if (alive) setGot((prev) => (id in prev ? prev : { ...prev, [id]: info }));
+        if (alive && info !== "retry") setGot((prev) => (id in prev ? prev : { ...prev, [id]: info }));
       });
     }
     return () => {
       alive = false;
     };
-  }, [key]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, tick]);
   return got;
 }
 
@@ -1101,7 +1148,7 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
     () => [...new Set((fullSnap?.markets ?? []).filter((m) => isProposalKey(m.key)).map((m) => proposalIdOfKey(m.key)))].sort(),
     [fullSnap?.markets],
   );
-  const proposalInfo = useProposalInfo(proposalIds);
+  const proposalInfo = useProposalInfo(proposalIds, fullSnap?.readAt ?? 0);
   const stream = usePriceStream(useMemo(() => D.assets.map((a) => a.product), []));
   const tx = useTx(client, refresh);
   // A wallet transaction in flight (not a one-click one, which uses no wallet).
@@ -2400,9 +2447,8 @@ function Claims({ snap, tx, now, info }: { snap?: Snapshot; tx: Tx; now: number;
   const rows = new Set([...toSettle.map((m) => `settle:${m.marketId}`), ...claims.map((c) => `claim:${c.market.marketId}`)]);
   const orphan = tx.st.scope && /^(claim|settle):/.test(tx.st.scope) && !rows.has(tx.st.scope) ? tx.st.scope : undefined;
   const assetOf = (key: string) => D.assets.find((a) => a.key === key);
-  const eventOf = (key: string) =>
-    D.events.find((e) => e.key === key) ??
-    (isProposalKey(key) ? { question: info[proposalIdOfKey(key)]?.question ?? `Proposal #${proposalIdOfKey(key)}` } : undefined);
+  // A proposed market's question only when the API record matches it on chain.
+  const eventOf = (m: RoundMarket) => D.events.find((e) => e.key === m.key) ?? (isProposalKey(m.key) ? proposedMeta(m, info) : undefined);
   return (
     <section className="mt-10" aria-labelledby="claims-h">
       <h2 id="claims-h" className="pu-h mb-3 text-[24px] leading-none">
@@ -2418,7 +2464,7 @@ function Claims({ snap, tx, now, info }: { snap?: Snapshot; tx: Tx; now: number;
               <li key={m.marketId} className="border-b border-line px-4 py-3 last:border-b-0">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="min-w-0 flex-1 text-[14px]">
-                    {a ? `${a.symbol} · ${roundLabel(roundWindow(m).start, roundWindow(m).end)}` : eventOf(m.key)?.question ?? m.key}
+                    {a ? `${a.symbol} · ${roundLabel(roundWindow(m).start, roundWindow(m).end)}` : eventOf(m)?.question ?? m.key}
                     <div className="text-[13px] text-fg-dim">
                       {how === "resolve"
                         ? "Its reading is final but the market is not resolved yet. Anyone may resolve it."
@@ -2462,7 +2508,7 @@ function Claims({ snap, tx, now, info }: { snap?: Snapshot; tx: Tx; now: number;
         <ul className="overflow-hidden rounded-2xl border border-line bg-bg-elev">
           {claims.map(({ market: m, amount }) => {
             const a = assetOf(m.key);
-            const ev = eventOf(m.key);
+            const ev = eventOf(m);
             const s = statusFor(m, snap, now);
             const scope = `claim:${m.marketId}`;
             return (
@@ -2539,11 +2585,11 @@ function EventMarkets({
         Event markets
       </h2>
       <p className="mb-4 mt-2 max-w-[60ch] text-[13px] text-fg-mute">
-        {snap?.proposed.length ? (
+        {visible.some((e) => e.proposal) ? (
           <>
             Longer questions, the team&apos;s and ones the community proposed. A yes/no market settles on its curated
-            feed&apos;s reading at the deadline, which the team records with evidence; a price market on the median price
-            at the deadline.
+            feed&apos;s reading at the deadline, which the team records with evidence
+            {visible.some((e) => e.proposal?.kind === "price") ? "; a price market on the median price at the deadline" : ""}.
           </>
         ) : (
           <>
@@ -2661,8 +2707,18 @@ function EventCard({
           <div>
             <dt>Yes if</dt>
             <dd className="tnum text-[13px] text-fg-mute">
-              {price.symbol ?? "The price"} {market.comparator === COMPARATOR.LessOrEqual ? "at most" : "at least"}{" "}
-              {price.decimals !== undefined ? `${formatScaled(market.threshold, price.decimals)} USD` : market.threshold.toString()} at the deadline
+              {price.symbol && price.decimals !== undefined ? (
+                <>
+                  {price.symbol} {market.comparator === COMPARATOR.LessOrEqual ? "at most" : "at least"}{" "}
+                  {formatScaled(market.threshold, price.decimals)} USD at the deadline
+                </>
+              ) : (
+                // Without a matching proposal record the asset and its decimals are unknown.
+                <>
+                  reading {COMPARATOR_SIGN[market.comparator] ?? "?"} {market.threshold.toString()}{" "}
+                  <span className="text-fg-dim">(raw on-chain value)</span>
+                </>
+              )}
             </dd>
           </div>
         )}
@@ -2674,7 +2730,13 @@ function EventCard({
                 "…"
               ) : reading.timestamp > 0 ? (
                 <>
-                  {price.decimals !== undefined ? `${formatScaled(reading.value, price.decimals)} USD` : reading.value.toString()}
+                  {price.decimals !== undefined ? (
+                    `${formatScaled(reading.value, price.decimals)} USD`
+                  ) : (
+                    <>
+                      {reading.value.toString()} <span className="text-fg-dim">(raw on-chain value)</span>
+                    </>
+                  )}
                   <span className="text-fg-dim"> · read {utcStamp(reading.timestamp)}</span>
                 </>
               ) : (

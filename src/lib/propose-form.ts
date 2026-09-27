@@ -5,6 +5,7 @@
  * derives what the status page shows.
  */
 import { GRID_S, PROPOSAL_ASSETS, TREASURY, validateProposal, type Proposal, type ProposalAsset, type ProposalKind, type ProposalStatus } from "./market-proposals";
+import { formatUsdc } from "./perennial-market";
 import { BLOCK_SECS, LOG_CHUNK_BLOCKS, ROUNDS, scanLogs } from "./rounds";
 
 /** The fixed settlement source of a price-at-a-deadline market (not an input). */
@@ -245,3 +246,21 @@ export function parseScanCache(raw: string | null): ScanCache | null {
   }
   return c as ScanCache;
 }
+
+/** A creator-share amount: "0.27 USDC", "< 0.01 USDC" for a sub-cent share, "0 USDC". */
+export function shareText(v: bigint): string {
+  return v > 0n && v < 10_000n ? "< 0.01 USDC" : `${formatUsdc(v, 2)} USDC`;
+}
+
+/** What the status page shows as forwarded for this market (R42): the agent's
+ *  transfers to the payee name no market, so their sum counts payouts for the payee's
+ *  other markets too (every treasury-bound proposal shares one payee). Shown up to
+ *  this market's earned share; unknown (undefined) while either total is unknown. */
+export function forwardedShown(forwarded: bigint | null | undefined, earned: bigint | null | undefined): bigint | undefined {
+  if (forwarded === null || forwarded === undefined || earned === null || earned === undefined) return undefined;
+  return forwarded < earned ? forwarded : earned;
+}
+
+/** The payee is the treasury (compare forwardPayee's lower-case result). */
+export const isTreasury = (payee: string, treasury: string = TREASURY) => payee.toLowerCase() === treasury.toLowerCase();
+

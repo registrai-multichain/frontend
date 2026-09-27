@@ -58,6 +58,8 @@ export interface ProposalMeta {
   kind: "event" | "price";
   rule?: string;
   source?: string;
+  /** The proposals API's record matched the market on chain (its words are shown). */
+  verified: boolean;
   /** Price markets: the asset's symbol and attested decimals (its threshold's units). */
   symbol?: string;
   decimals?: number;
@@ -654,6 +656,8 @@ export interface ProposalInfo {
   evidenceUrl?: string;
   /** The approval's creator payee; "" means the treasury. */
   creatorPayee?: string;
+  /** The approved market's terms (the signed approval message), to check against chain. */
+  terms?: { threshold: bigint; comparator: number; expiry: number };
 }
 
 const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() && v.length <= max ? v.trim() : undefined);
@@ -661,15 +665,22 @@ const httpsUrl = (v: unknown) => {
   const s = text(v, 2048);
   return s && /^https:\/\/\S+$/.test(s) ? s : undefined;
 };
+const intText = (v: unknown, re: RegExp) => (typeof v === "string" && re.test(v) ? v : typeof v === "number" && Number.isSafeInteger(v) ? String(v) : undefined);
 
-export function parseProposalInfo(json: unknown): ProposalInfo | null {
+/** The API's record for proposal `id`, or null when it is malformed or is another
+ *  proposal's record. */
+export function parseProposalInfo(json: unknown, id: string): ProposalInfo | null {
   const p = (json as { proposal?: unknown } | null)?.proposal as Record<string, unknown> | undefined;
-  if (!p || typeof p !== "object") return null;
+  if (!p || typeof p !== "object" || p.id !== id) return null;
   const question = text(p.question, 300);
   if (!question) return null;
   const kind = p.kind === "event" || p.kind === "price" ? p.kind : undefined;
   const outcome = (p.outcome as { message?: { evidenceUrl?: unknown } } | undefined)?.message;
   const payee = typeof p.creatorPayee === "string" && /^0x[0-9a-fA-F]{40}$/.test(p.creatorPayee) ? p.creatorPayee : "";
+  const msg = (p.approval as { message?: Record<string, unknown> } | undefined)?.message;
+  const th = intText(msg?.threshold, /^-?\d{1,78}$/);
+  const cmp = intText(msg?.comparator, /^\d{1,3}$/);
+  const exp = intText(msg?.expiry, /^\d{1,20}$/);
   return {
     question,
     kind,
@@ -678,29 +689,55 @@ export function parseProposalInfo(json: unknown): ProposalInfo | null {
     asset: text(p.asset, 16),
     evidenceUrl: httpsUrl(outcome?.evidenceUrl),
     creatorPayee: payee,
+    terms: th !== undefined && cmp !== undefined && exp !== undefined ? { threshold: BigInt(th), comparator: Number(cmp), expiry: Number(exp) } : undefined,
   };
 }
 
-/** The event-page description of a proposed market: the question from the API (else
- *  "Proposal #id"), the deadline from chain. Without the API, a threshold of 1 with
- *  GreaterOrEqual is a yes/no market (what the agent opens for kind 1). */
+/** What a proposals API answer means for the page: a record to parse, a definitive
+ *  "no record" (404 and other client errors: kept), or a transient failure (network,
+ *  429, 5xx: forgotten and asked again later). */
+export function proposalAnswer(status: number | "network"): "ok" | "missing" | "retry" {
+  if (status === "network" || status === 429 || status >= 500) return "retry";
+  return status >= 200 && status < 300 ? "ok" : "missing";
+}
+
+/** Backoff before asking again after `fails` transient failures: 10 s, doubling, at most 5 min. */
+export function proposalRetryMs(fails: number): number {
+  return Math.min(300_000, 10_000 * 2 ** Math.max(0, fails - 1));
+}
+
+type MarketTerms = Pick<RoundMarket, "threshold" | "comparator" | "expiry">;
+
+/** The API record describes THIS market: its signed approval's threshold, comparator
+ *  and expiry are the ones on chain. Anything else (a stale, edited or wrong record)
+ *  must not put its words on the market. */
+export function infoMatchesMarket(info: ProposalInfo | null | undefined, m: MarketTerms): info is ProposalInfo {
+  const t = info?.terms;
+  return Boolean(t && t.threshold === m.threshold && t.comparator === m.comparator && t.expiry === m.expiry);
+}
+
+/** The event-page description of a proposed market. The kind is the chain's (a
+ *  threshold of 1 with GreaterOrEqual is a yes/no market, what the agent opens for
+ *  kind 1; anything else is a price market). The question, rule, source and asset come
+ *  from the proposals API only when its record matches the market on chain; otherwise
+ *  the page says "Proposal #id" and shows the raw on-chain terms. */
 export function proposalEventMeta(
   m: Pick<RoundMarket, "key" | "marketId" | "expiry" | "threshold" | "comparator">,
   info: ProposalInfo | null | undefined,
   assets: Record<string, { symbol: string; decimals: number }> = {},
 ): EventMeta {
   const id = proposalIdOfKey(m.key);
-  const chainKind = m.threshold === 1n && m.comparator === COMPARATOR.GreaterOrEqual ? "event" : "price";
-  const kind = info?.kind ?? chainKind;
-  const asset = kind === "price" && info?.asset ? assets[info.asset] : undefined;
+  const kind = m.threshold === 1n && m.comparator === COMPARATOR.GreaterOrEqual ? "event" : "price";
+  const ok = infoMatchesMarket(info, m) ? info : undefined;
+  const asset = kind === "price" && ok?.asset ? assets[ok.asset] : undefined;
   return {
     key: m.key,
-    question: info?.question ?? `Proposal #${id}`,
+    question: ok?.question ?? `Proposal #${id}`,
     expiry: m.expiry,
     rehearsal: false,
     marketId: m.marketId,
-    evidenceUrl: info?.evidenceUrl ?? null,
-    proposal: { id, kind, rule: info?.rule, source: info?.source, symbol: asset?.symbol, decimals: asset?.decimals },
+    evidenceUrl: ok?.evidenceUrl ?? null,
+    proposal: { id, kind, verified: Boolean(ok), rule: ok?.rule, source: ok?.source, symbol: asset?.symbol, decimals: asset?.decimals },
   };
 }
 
@@ -744,12 +781,12 @@ export function extendCover(cover: Cover | undefined, from: bigint, to: bigint):
   return { lo: from < cover.lo ? from : cover.lo, hi: to > cover.hi ? to : cover.hi };
 }
 
-/** A proposal feed found by the background scan, and how far its market was searched. */
+/** A proposal feed found by the background scan, and how far its market was searched.
+ *  Only ids and block numbers are kept: the feed's key is re-read from the Registry on
+ *  every visit, so an edited record cannot relabel a feed. */
 export interface ProposalFeedRecord {
   feedId: Hex;
-  key: string;
   block: bigint;
-  disputeWindow: number;
   /** MarketCreated on this feed was searched through this block. */
   marketTo: bigint;
   marketId?: Hex;
@@ -761,6 +798,9 @@ export interface ProposalScanStore {
   cover?: Cover;
   feeds: Record<string, ProposalFeedRecord>;
 }
+
+/** At most this many feed records are kept (the newest by block). */
+export const PROPOSAL_STORE_MAX = 1000;
 
 export function serializeProposalStore(s: ProposalScanStore): string {
   return JSON.stringify({
@@ -785,24 +825,30 @@ export function parseProposalStore(raw: string | null): ProposalScanStore {
       out.cover = { lo: BigInt(c.lo), hi: BigInt(c.hi) };
     }
     if (!Array.isArray(j.feeds)) return empty;
-    for (const f of j.feeds.slice(0, 1000) as Array<Record<string, unknown>>) {
-      if (!f || typeof f.feedId !== "string" || !B32_RE.test(f.feedId) || typeof f.key !== "string" || !isProposalKey(f.key)) return empty;
+    const recs: ProposalFeedRecord[] = [];
+    for (const f of j.feeds as Array<Record<string, unknown>>) {
+      if (!f || typeof f.feedId !== "string" || !B32_RE.test(f.feedId)) return empty;
       if (typeof f.block !== "string" || !DEC_RE.test(f.block) || typeof f.marketTo !== "string" || !DEC_RE.test(f.marketTo)) return empty;
-      if (typeof f.disputeWindow !== "number" || !Number.isFinite(f.disputeWindow)) return empty;
       if (f.marketId !== undefined && (typeof f.marketId !== "string" || !B32_RE.test(f.marketId))) return empty;
-      out.feeds[f.feedId] = {
-        feedId: f.feedId as Hex,
-        key: f.key,
-        block: BigInt(f.block),
-        disputeWindow: f.disputeWindow,
-        marketTo: BigInt(f.marketTo),
-        marketId: f.marketId as Hex | undefined,
-      };
+      recs.push({ feedId: f.feedId as Hex, block: BigInt(f.block), marketTo: BigInt(f.marketTo), marketId: f.marketId as Hex | undefined });
     }
-    return out;
+    return { ...out, feeds: newestFeeds(recs) };
   } catch {
     return empty;
   }
+}
+
+function newestFeeds(recs: readonly ProposalFeedRecord[], max = PROPOSAL_STORE_MAX): Record<string, ProposalFeedRecord> {
+  const sorted = [...recs].sort((a, b) => (a.block > b.block ? -1 : a.block < b.block ? 1 : 0));
+  return Object.fromEntries(sorted.slice(0, max).map((f) => [f.feedId, f]));
+}
+
+/** The store without what can no longer show: feeds older than the scan's floor, and
+ *  feeds whose market search ended empty (a proposal never opened); then the newest
+ *  PROPOSAL_STORE_MAX by block. */
+export function pruneProposalStore(s: ProposalScanStore, floor: bigint, searchBlocks: bigint, max = PROPOSAL_STORE_MAX): ProposalScanStore {
+  const keep = Object.values(s.feeds).filter((f) => f.block >= floor && (f.marketId || f.marketTo < f.block + searchBlocks));
+  return { cover: s.cover, feeds: newestFeeds(keep, max) };
 }
 
 /** The sum of NanoLedger InternalTransfer amounts (the agent's forwarded creator share). */

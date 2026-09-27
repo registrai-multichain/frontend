@@ -8,9 +8,8 @@ import { marketsV4Abi, nanoLedgerAbi } from "@/lib/abi";
 import { getWalletChain, transportFor, type WalletChain } from "@/lib/chains";
 import { shortAddr } from "@/lib/format";
 import type { Proposal, ProposalKind } from "@/lib/market-proposals";
-import { formatUsdc } from "@/lib/perennial-market";
 import {
-  PRICE_SOURCE, feesScanEnd, forwardPayee, humanUtc, mergeFeeProgress, mergeScanProgress, parseScanCache, proposalFeedKey, proposalScanStart,
+  PRICE_SOURCE, feesScanEnd, forwardPayee, forwardedShown, humanUtc, isTreasury, shareText, mergeFeeProgress, mergeScanProgress, parseScanCache, proposalFeedKey, proposalScanStart,
   scanForward, statusChip, sumCreatorFees, type ScanCache,
 } from "@/lib/propose-form";
 import { PROPOSALS_API } from "@/lib/proposals-api";
@@ -42,7 +41,8 @@ type Loaded =
   | { id: string; kind: "error"; message: string };
 
 type OnChain =
-  | { kind: "opened"; marketId: Hex; creatorFees: bigint | null; forwarded: bigint | null }
+  /** null: could not be read just now; forwarded undefined: still reading. */
+  | { kind: "opened"; marketId: Hex; creatorFees: bigint | null; forwarded?: bigint | null }
   | { kind: "not-yet"; complete: boolean }
   | { kind: "error" };
 
@@ -74,7 +74,7 @@ function saveCache(id: string, c: ScanCache) {
  * payee after it opened counts too). Progress is cached per proposal, so a reload
  * only reads the blocks added since.
  */
-async function readOnChain(p: Proposal): Promise<OnChain> {
+async function readOnChain(p: Proposal, emit: (partial: OnChain) => void): Promise<OnChain> {
   const chain = getWalletChain(ROUNDS.chainId) as WalletChain;
   const client = createPublicClient({ chain: chain.viemChain, transport: transportFor(chain) });
   const C = ROUNDS.contracts;
@@ -137,45 +137,47 @@ async function readOnChain(p: Proposal): Promise<OnChain> {
   }
   const marketId = m.marketId as Hex;
 
-  // 3. Its creator fees, up to shortly after expiry.
+  // 3. Its creator fees, up to shortly after expiry, and 4. what the agent forwarded to
+  //    the payee since the market opened, up to the head (it forwards daily while the
+  //    market trades and once more after it settles). Read side by side; the earned
+  //    total is shown as soon as it is in.
   const mBlock = BigInt(m.blockNumber ?? "0");
   const createdTs = m.createdTs ?? headTs - Number(head - mBlock) * BLOCK_SECS;
   const end = feesScanEnd(head, mBlock, createdTs, m.expiry ?? headTs);
-  const from = cache.fees ? BigInt(cache.fees.scannedTo) + 1n : mBlock;
-  if (from <= end) {
-    const scan = await scanLogs(
-      (a, b) => client.getLogs({ address: C.MarketsV4, event: FEES_PAID, args: { marketId }, fromBlock: a, toBlock: b }),
-      from,
-      end,
-    );
-    cache.fees = mergeFeeProgress(cache.fees, from, scan.scannedTo, sumCreatorFees(scan.logs));
-    saveCache(p.id, cache);
-  }
-  const done = cache.fees && BigInt(cache.fees.scannedTo) >= end;
-
-  // 4. What the agent forwarded to the payee since the market opened, up to the head
-  //    (it forwards daily while the market trades and once more after it settles).
-  const payee = forwardPayee(p);
-  if (cache.fwd && cache.fwd.payee !== payee) delete cache.fwd;
-  const fFrom = cache.fwd ? BigInt(cache.fwd.scannedTo) + 1n : mBlock + 1n;
-  if (fFrom <= head) {
-    const scan = await scanLogs(
-      (a, b) =>
-        client.getLogs({ address: C.NanoLedger, event: INTERNAL_TRANSFER, args: { from: agent, to: payee as Hex }, fromBlock: a, toBlock: b }),
-      fFrom,
-      head,
-    );
-    const merged = mergeFeeProgress(cache.fwd, fFrom, scan.scannedTo, sumTransfers(scan.logs));
-    if (merged) cache.fwd = { ...merged, payee };
-    saveCache(p.id, cache);
-  }
-  const fwdDone = cache.fwd && BigInt(cache.fwd.scannedTo) >= head;
-  return {
-    kind: "opened",
-    marketId,
-    creatorFees: done ? BigInt(cache.fees!.sum) : null,
-    forwarded: fwdDone ? BigInt(cache.fwd!.sum) : null,
+  const readFees = async (): Promise<bigint | null> => {
+    const from = cache.fees ? BigInt(cache.fees.scannedTo) + 1n : mBlock;
+    if (from <= end) {
+      const scan = await scanLogs(
+        (a, b) => client.getLogs({ address: C.MarketsV4, event: FEES_PAID, args: { marketId }, fromBlock: a, toBlock: b }),
+        from,
+        end,
+      );
+      cache.fees = mergeFeeProgress(cache.fees, from, scan.scannedTo, sumCreatorFees(scan.logs));
+      saveCache(p.id, cache);
+    }
+    return cache.fees && BigInt(cache.fees.scannedTo) >= end ? BigInt(cache.fees.sum) : null;
   };
+  const readForwarded = async (): Promise<bigint | null> => {
+    const payee = forwardPayee(p);
+    if (cache.fwd && cache.fwd.payee !== payee) delete cache.fwd;
+    const fFrom = cache.fwd ? BigInt(cache.fwd.scannedTo) + 1n : mBlock + 1n;
+    if (fFrom <= head) {
+      const scan = await scanLogs(
+        (a, b) =>
+          client.getLogs({ address: C.NanoLedger, event: INTERNAL_TRANSFER, args: { from: agent, to: payee as Hex }, fromBlock: a, toBlock: b }),
+        fFrom,
+        head,
+      );
+      const merged = mergeFeeProgress(cache.fwd, fFrom, scan.scannedTo, sumTransfers(scan.logs));
+      if (merged) cache.fwd = { ...merged, payee };
+      saveCache(p.id, cache);
+    }
+    return cache.fwd && BigInt(cache.fwd.scannedTo) >= head ? BigInt(cache.fwd.sum) : null;
+  };
+  const fwd = readForwarded().catch(() => null);
+  const creatorFees = await readFees().catch(() => null);
+  emit({ kind: "opened", marketId, creatorFees });
+  return { kind: "opened", marketId, creatorFees, forwarded: await fwd };
 }
 
 export function ProposalStatus() {
@@ -208,7 +210,7 @@ export function ProposalStatus() {
   useEffect(() => {
     if (!proposal || !needsChain) return;
     let alive = true;
-    readOnChain(proposal)
+    readOnChain(proposal, (partial) => alive && setOnChain({ id: proposal.id, result: partial }))
       .then((result) => alive && setOnChain({ id: proposal.id, result }))
       .catch(() => alive && setOnChain({ id: proposal.id, result: { kind: "error" } }));
     return () => {
@@ -270,7 +272,8 @@ function ProposalCard({ p, chain, checking }: { p: Proposal; chain: OnChain | nu
   const opened = chain?.kind === "opened" ? chain : null;
   const chip = statusChip(p.status, Boolean(opened));
   const isPrice = p.kind === "price";
-  const payee = p.creatorPayee;
+  // Where the agent actually forwards: the treasury for an empty, zero or own-contract payee.
+  const payee = forwardPayee(p);
 
   return (
     <section className={`${s.panel} ${s.done}`} aria-labelledby="pp-question">
@@ -312,7 +315,7 @@ function ProposalCard({ p, chain, checking }: { p: Proposal; chain: OnChain | nu
         )}
         <div className={s.fact}>
           <dt>Creator share goes to</dt>
-          <dd>{payee ? <span className={s.mono} title={payee}>{shortAddr(payee)}</span> : "Registrai treasury"}</dd>
+          <dd>{isTreasury(payee) ? "Registrai treasury" : <span className={s.mono} title={payee}>{shortAddr(payee)}</span>}</dd>
         </div>
         <div className={s.fact}>
           <dt>Proposed</dt>
@@ -325,7 +328,10 @@ function ProposalCard({ p, chain, checking }: { p: Proposal; chain: OnChain | nu
 }
 
 function StatusCallout({ p, chain, checking }: { p: Proposal; chain: OnChain | null; checking: boolean }) {
+  const payee = forwardPayee(p);
+  const toTreasury = isTreasury(payee);
   if (chain?.kind === "opened") {
+    const shown = forwardedShown(chain.forwarded, chain.creatorFees);
     return (
       <div className={s.callout} data-tone="opened">
         <p>Opened on {ROUNDS.label} with a 5 USDC starting pool.</p>
@@ -333,10 +339,13 @@ function StatusCallout({ p, chain, checking }: { p: Proposal; chain: OnChain | n
           <Link className={s.marketLink} href={proposedMarketHref(chain.marketId)}>View the market →</Link>
         </p>
         <p>
-          Creator share earned: {chain.creatorFees === null ? "could not be read just now" : `${formatUsdc(chain.creatorFees, 2)} USDC`}
-          {" · "}forwarded so far: {chain.forwarded === null ? "could not be read just now" : `${formatUsdc(chain.forwarded, 2)} USDC`}
+          Creator share earned: {chain.creatorFees === null ? "could not be read just now" : shareText(chain.creatorFees)}
         </p>
-        <p>Registrai&#8217;s agent forwards it to {p.creatorPayee ? "the payee wallet" : "the Registrai treasury"} daily.</p>
+        <p>
+          Forwarded to {toTreasury ? "the Registrai treasury" : <span className={s.mono} title={payee}>{shortAddr(payee)}</span>} (up to this
+          market&#8217;s share): {chain.forwarded === null ? "could not be read just now" : shown === undefined ? "—" : shareText(shown)}
+        </p>
+        <p>Registrai&#8217;s agent forwards it to {toTreasury ? "the Registrai treasury" : "the payee wallet"} daily.</p>
       </div>
     );
   }
