@@ -37,6 +37,10 @@ import {
   type FeedCreatedLog,
   type MarketCreatedLog,
   type RoundMarket,
+  assetBySlug,
+  assetHref,
+  assetSlug,
+  eventHref,
 } from "./rounds";
 import { COMPARATOR, PHASE } from "./perennial-market";
 
@@ -509,5 +513,27 @@ describe("formatting", () => {
     expect(parseCoinbaseTicker({ message: "NotFound" })).toBeUndefined();
     expect(parseCoinbaseTicker({ price: "0" })).toBeUndefined();
     expect(parseCoinbaseTicker(null)).toBeUndefined();
+  });
+});
+
+describe("market pages (routes)", () => {
+  const assets = [
+    { key: "btc-usd", symbol: "BTC", name: "Bitcoin", product: "BTC-USD", decimals: 2 },
+    { key: "hype-usd", symbol: "HYPE", name: "Hyperliquid", product: "HYPE-USD", decimals: 3 },
+  ];
+  test("an asset's page lives at /rounds/<symbol>/", () => {
+    expect(assetSlug(assets[0])).toBe("btc");
+    expect(assetHref(assets[1])).toBe("/rounds/hype/");
+  });
+  test("a slug finds its asset, case-insensitively; an unknown one finds nothing", () => {
+    expect(assetBySlug("BTC", assets)?.key).toBe("btc-usd");
+    expect(assetBySlug("doge", assets)).toBeUndefined();
+  });
+  test("an event's page lives at /rounds/event/<key>/", () => {
+    expect(eventHref({ key: "arc-token-tradable" })).toBe("/rounds/event/arc-token-tradable/");
+  });
+  test("every deployed asset and event has a distinct page", () => {
+    const paths = [...ROUNDS.assets.map(assetHref), ...ROUNDS.events.map(eventHref)];
+    expect(new Set(paths).size).toBe(paths.length);
   });
 });
