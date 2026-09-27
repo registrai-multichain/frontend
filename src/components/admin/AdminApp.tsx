@@ -55,7 +55,7 @@ import { gaslessCandidates, gaslessState, type GaslessRequest } from "@/lib/gasl
 import { planOnboarding, safeBatchJson, singleTxSafeFile } from "@/lib/onboard-batch";
 import { NOMINATIONS, nominationTx, nominationsAbi, profileHash, readNominations, type Nomination, type NominationsReader } from "@/lib/nominations";
 import { profileOfListItem, projectPath, type ProjectListItem, type ProjectProfile } from "@/lib/projects";
-import type { NominationDraft } from "@/lib/drafts";
+import { draftStep, type NominationDraft } from "@/lib/drafts";
 import { sendBuildersTx } from "@/components/verify/sendTx";
 import { buildersClient } from "@/components/verify/useMyBuilder";
 import { useWonderContext, WonderStatusProvider } from "@/components/wonder/WonderBits";
@@ -402,7 +402,9 @@ function Dashboard({
 
         {view.projects && <ProjectsSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />}
 
-        {view.directOnboard && NOMINATIONS && <NominationsSection invites={invites.data ?? []} onInvitesChanged={() => invites.mutate()} />}
+        {view.directOnboard && NOMINATIONS && (
+          <NominationsSection invites={invites.data ?? []} onInvitesChanged={() => invites.mutate()} builders={chain.data ?? null} />
+        )}
 
         {view.wonder && WONDER_ON_BUILDERS && <WonderSection invites={invites.data ?? []} />}
       </div>
@@ -1768,6 +1770,7 @@ function ProjectsSection({
 /** arc-80's prepared drafts: review, then Invite → Save profile → Nominate, each once the step before is done. */
 function DraftsTable({
   invited,
+  builders,
   nominations,
   onInvitesChanged,
   onNominate,
@@ -1775,6 +1778,7 @@ function DraftsTable({
   busy,
 }: {
   invited: Set<string>;
+  builders: GalleryBuilder[] | null;
   nominations: Map<string, Nomination> | null;
   onInvitesChanged: () => void;
   onNominate: (source: string) => void;
@@ -1831,43 +1835,55 @@ function DraftsTable({
 
   if (drafts.error) return <p className="vf-error">Could not read the drafts: {(drafts.error as Error).message}</p>;
   if (!drafts.data) return <p className="vf-hint">Reading drafts…</p>;
-  const pending = drafts.data.filter((d) => {
+  // A verified builder's project (from the chain) only needs its profile saved.
+  const stepOf = (d: NominationDraft) => {
     const n = nominations?.get(d.source);
     const p = saved.data?.get(d.source);
-    return !(n?.active && p && n.profileHash === profileHash(p));
-  });
+    return draftStep(d, {
+      verified: Boolean(builders && inviteChainStatus(d.source, builders).kind === "verified"),
+      invited: invited.has(d.source),
+      saved: Boolean(p),
+      anchored: Boolean(n?.active && p && n.profileHash === profileHash(p)),
+    });
+  };
+  const pending = drafts.data.filter((d) => !stepOf(d).done);
   if (!pending.length) return <p className="vf-hint">No drafts waiting. New ones appear here once the investigation hands them over.</p>;
   return (
     <div className="adm-drafts">
       <h3>Drafts to review and sign</h3>
       <ul className="adm-list">
         {pending.map((d) => {
-          const isInvited = invited.has(d.source);
+          const step = stepOf(d);
           const p = saved.data?.get(d.source);
           const n = nominations?.get(d.source);
-          const hold = d.recommendation === "hold";
+          const hold = step.label === "hold";
+          const verified = step.label === "save profile";
           const expanded = open === d.source;
           return (
             <li key={d.source} className={hold ? "adm-muted" : undefined}>
               <b>{d.invite.name}</b> <span className="adm-sub">{sourceLabel(d.source)}</span>{" "}
-              <span className="bld-chip" data-kind={hold ? "lapsed" : "verified"}>{hold ? "hold" : "nominate"}</span>
+              <span className="bld-chip" data-kind={hold ? "lapsed" : "verified"}>{step.label}</span>
               <div className="adm-sub">{d.summary}</div>
               <div className="adm-sub">
-                {isInvited ? "✓ invited" : "not invited"} · {p ? "✓ profile saved" : "profile not saved"} ·{" "}
-                {n?.active ? (p && n.profileHash === profileHash(p) ? "✓ nominated" : "nominated (profile not anchored: re-nominate)") : "not nominated"}
+                {verified
+                  ? `verified builder: saving its profile is all it needs · ${p ? "✓ profile saved" : "profile not saved"}`
+                  : <>
+                      {invited.has(d.source) ? "✓ invited" : "not invited"} · {p ? "✓ profile saved" : "profile not saved"} ·{" "}
+                      {n?.active ? (p && n.profileHash === profileHash(p) ? "✓ nominated" : "nominated (profile not anchored: re-nominate)") : "not nominated"}
+                    </>}
               </div>
               <span className="flex flex-wrap gap-2">
                 <button type="button" className="vf-mini" onClick={() => setOpen(expanded ? null : d.source)}>{expanded ? "hide details" : "details"}</button>
-                {view.inviteForm && !isInvited && (
+                {view.inviteForm && step.actions.includes("invite") && (
                   <button type="button" className="vf-mini" disabled={working !== null} onClick={() => void invite(d)}>{working === d.source ? "…" : "Invite"}</button>
                 )}
-                {view.inviteForm && isInvited && (
+                {view.inviteForm && step.actions.includes("save") && (
                   <button type="button" className="vf-mini" disabled={working !== null} onClick={() => void save(d)}>{working === d.source ? "…" : p ? "Save profile again" : "Save profile"}</button>
                 )}
-                {isInvited && p && (
+                {step.actions.includes("nominate") && (
                   <button type="button" className="vf-mini" disabled={busy} onClick={() => onNominate(d.source)}>{n?.active ? "Re-nominate" : "Nominate"}</button>
                 )}
-                {view.safeFiles && isInvited && p && (
+                {view.safeFiles && step.actions.includes("nominate") && (
                   <button type="button" className="vf-mini" onClick={() => onSafeFile(d.source)}>Safe file</button>
                 )}
                 {view.inviteForm && <button type="button" className="vf-mini" onClick={() => void dismiss(d)}>drop</button>}
@@ -1906,7 +1922,7 @@ function DraftDetails({ d }: { d: NominationDraft }) {
 
 
 /** ProjectNominations: anchor an invited project on chain as nominated (the gallery's backup). */
-function NominationsSection({ invites, onInvitesChanged }: { invites: AdminInvite[]; onInvitesChanged: () => void }) {
+function NominationsSection({ invites, onInvitesChanged, builders }: { invites: AdminInvite[]; onInvitesChanged: () => void; builders: GalleryBuilder[] | null }) {
   const view = useContext(ViewCtx);
   const contract = NOMINATIONS!;
   const { address, walletChainId, switchChain } = useWallet();
@@ -1962,6 +1978,7 @@ function NominationsSection({ invites, onInvitesChanged }: { invites: AdminInvit
     <Section title="Nominate on chain">
       <DraftsTable
         invited={invited}
+        builders={builders}
         nominations={list.data ?? null}
         onInvitesChanged={onInvitesChanged}
         onNominate={(src) => void send(src, true)}

@@ -65,3 +65,22 @@ export function validateDraft(body: unknown): { ok: true; value: NominationDraft
   if (!p.ok) return { ok: false, error: `profile: ${p.error}` };
   return { ok: true, value: { source, invite, recommendation: b.recommendation, summary, investigation, investigatedAt, investigatedBy, profile: p.value } };
 }
+
+export type DraftAction = "invite" | "save" | "nominate";
+
+/**
+ * What a draft's row offers next. A project already claimed by a VERIFIED builder
+ * (from the chain, so it stays right if a project gets verified later) only needs its
+ * profile saved, and is done once it is (owner rule, 2026-09-27). Otherwise:
+ * invite, then save the profile, then nominate on chain; done once nominated with the
+ * saved profile's hash anchored.
+ */
+export function draftStep(
+  d: Pick<NominationDraft, "recommendation">,
+  s: { verified: boolean; invited: boolean; saved: boolean; anchored: boolean },
+): { label: "save profile" | DraftRecommendation; actions: DraftAction[]; done: boolean } {
+  if (s.verified) return { label: "save profile", actions: s.saved ? [] : ["save"], done: s.saved };
+  if (s.saved && s.anchored) return { label: d.recommendation, actions: [], done: true };
+  if (!s.invited) return { label: d.recommendation, actions: ["invite"], done: false };
+  return { label: d.recommendation, actions: s.saved ? ["save", "nominate"] : ["save"], done: false };
+}

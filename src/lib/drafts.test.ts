@@ -46,3 +46,26 @@ describe("validateDraft", () => {
     }
   });
 });
+
+describe("draftStep", () => {
+  const base = { recommendation: "nominate" as const };
+
+  test("an unclaimed project walks invite, save, nominate; done once nominated with its saved profile", async () => {
+    const { draftStep } = await import("./drafts");
+    expect(draftStep(base, { verified: false, invited: false, saved: false, anchored: false })).toEqual({ label: "nominate", actions: ["invite"], done: false });
+    expect(draftStep(base, { verified: false, invited: true, saved: false, anchored: false })).toEqual({ label: "nominate", actions: ["save"], done: false });
+    expect(draftStep(base, { verified: false, invited: true, saved: true, anchored: false })).toEqual({ label: "nominate", actions: ["save", "nominate"], done: false });
+    expect(draftStep(base, { verified: false, invited: true, saved: true, anchored: true }).done).toBe(true);
+  });
+
+  test("a verified builder's project only needs its profile saved, whatever the draft recommends", async () => {
+    const { draftStep } = await import("./drafts");
+    expect(draftStep({ recommendation: "hold" }, { verified: true, invited: false, saved: false, anchored: false })).toEqual({ label: "save profile", actions: ["save"], done: false });
+    expect(draftStep(base, { verified: true, invited: true, saved: true, anchored: false }).done).toBe(true);
+  });
+
+  test("a hold draft keeps its label and steps", async () => {
+    const { draftStep } = await import("./drafts");
+    expect(draftStep({ recommendation: "hold" }, { verified: false, invited: false, saved: false, anchored: false })).toEqual({ label: "hold", actions: ["invite"], done: false });
+  });
+});
