@@ -93,4 +93,45 @@ describe("/api/icon", () => {
     const res = await handleIcon(new Request(`${ORIGIN}/api/icon?source=domain:acme.dev`), { find: async () => null, xHandleOf: async () => { throw new Error("kv down"); }, cache: null });
     expect(res.status).toBe(404);
   });
+
+  test("the KV mirror stands in before the live X lookup, and never over the site's own icon", async () => {
+    let xAsked = false;
+    const viaMirror = await handleIcon(new Request(`${ORIGIN}/api/icon?source=domain:obrain.cloud`), {
+      find: async () => null,
+      mirror: async () => ({ bytes: JPEG, type: "image/jpeg" as const, url: "kv:avatar:domain:obrain.cloud" }),
+      xHandleOf: async () => "@obrainarc",
+      findX: async () => {
+        xAsked = true;
+        return null;
+      },
+      cache: null,
+    });
+    expect(viaMirror.status).toBe(200);
+    expect(viaMirror.headers.get("content-type")).toBe("image/jpeg");
+    expect(xAsked).toBe(false);
+    let mirrorAsked = false;
+    const own = await handleIcon(new Request(`${ORIGIN}/api/icon?source=domain:kairo.market`), {
+      find: async () => ({ bytes: PNG, type: "image/png" as const, url: "https://kairo.market/favicon.png" }),
+      mirror: async () => {
+        mirrorAsked = true;
+        return null;
+      },
+      cache: null,
+    });
+    expect(own.headers.get("content-type")).toBe("image/png");
+    expect(mirrorAsked).toBe(false);
+  });
+
+  test("a failing mirror read falls through to the live X lookup", async () => {
+    const res = await handleIcon(new Request(`${ORIGIN}/api/icon?source=domain:obrain.cloud`), {
+      find: async () => null,
+      mirror: async () => {
+        throw new Error("kv down");
+      },
+      xHandleOf: async () => "@obrainarc",
+      findX: async () => ({ bytes: JPEG, type: "image/jpeg" as const, url: "https://unavatar.io/x/obrainarc" }),
+      cache: null,
+    });
+    expect(res.status).toBe(200);
+  });
 });
