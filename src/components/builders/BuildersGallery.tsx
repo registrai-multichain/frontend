@@ -20,6 +20,7 @@ import {
   galleryCounts,
   showGalleryStats,
   greyReason,
+  cardLook,
   labelOf,
   mergeGallery,
   mergeNominees,
@@ -168,9 +169,9 @@ function StatusNote({ e, onChain }: { e: GalleryEntry; onChain?: boolean }) {
   if (e.kind === "invited" && onChain && NOMINATIONS) {
     return (
       <p className="bld-note">
-        Invited: not claimed yet ·{" "}
+        Nominated on Arc: on the public record, not claimed by the team yet ·{" "}
         <a className="pa-link" href={`${BUILDERS.explorer.url.replace(/\/$/, "")}/address/${NOMINATIONS}`} target="_blank" rel="noreferrer">
-          on-chain nomination ↗
+          the record ↗
         </a>
       </p>
     );
@@ -198,6 +199,7 @@ function BuilderCard({ e, highlighted, waiting, nominated = false, onChain = fal
   const proof = !b && e.source ? proofHref(e.source) : null;
   const projects = b ? b.projects.filter((p) => p.active).length : 0;
   const waitingText = e.kind === "invited" ? waitingLine(waiting) : null;
+  const look = cardLook(e.kind, onChain && Boolean(NOMINATIONS));
   const facts = [
     ...(b ? [{ label: "No.", value: <span className="tnum">{b.id}</span> }] : []),
     ...(b?.country && (e.kind === "verified" || e.kind === "nominated") ? [{ label: "from", value: <span title={regionName(b.country)}>{b.country}</span> }] : []),
@@ -206,15 +208,15 @@ function BuilderCard({ e, highlighted, waiting, nominated = false, onChain = fal
   return (
     <BuilderCardView
       id={b ? builderAnchor(b.id) : e.key}
-      kind={e.kind}
+      kind={look.kind}
       nameText={e.name}
       name={b ? <Link href={detailHref(b.id)} scroll={false} className="hover:text-accent">{e.name}</Link> : e.name}
       avatar={e.avatar}
       tone={e.kind === "verified" ? "ok" : e.kind === "invited" ? "invited" : "plain"}
-      pill={{ text: e.kind === "verified" ? "✓ Verified" : labelOf(e.kind), tone: e.kind === "verified" ? "ok" : e.kind === "invited" ? "unclaimed" : "muted" }}
+      pill={look.pill}
       sub={b ? (projects === 1 ? "1 project" : `${projects} projects`) : e.source ? <a href={sourceHref(e.source)} target="_blank" rel="noreferrer">{sourceLabel(e.source)} ↗</a> : undefined}
       facts={facts}
-      grey={toneOf(e.kind) === "grayscale"}
+      grey={look.grey}
       highlighted={highlighted}
       note={
         <>

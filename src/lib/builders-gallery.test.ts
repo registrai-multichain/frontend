@@ -7,6 +7,7 @@ import {
   FILTERS,
   browserProofCheck,
   buildGallerySnapshot,
+  cardLook,
   builderAnchor,
   claimHref,
   displayKind,
@@ -858,4 +859,18 @@ test("website icons are back (user, 2026-09-26): a verified domain shows its sit
 
 test("remove link: a mail to Registrai naming the project", () => {
   expect(removeHref("github:acme/widget")).toBe("mailto:contact@registrai.cc?subject=Please%20remove%20github%3Aacme%2Fwidget");
+});
+
+describe("cardLook: an invited project nominated on chain looks different from a plain invite", () => {
+  test("plain invite: grey, light 'Invited' pill", () => {
+    expect(cardLook("invited", false)).toEqual({ kind: "invited", grey: true, pill: { text: "Invited", tone: "unclaimed" } });
+  });
+  test("nominated on chain: in colour, its own kind and a solid 'Nominated on chain' pill", () => {
+    expect(cardLook("invited", true)).toEqual({ kind: "invited-onchain", grey: false, pill: { text: "Nominated on chain", tone: "onchain" } });
+  });
+  test("on-chain nomination changes nothing for a builder who claimed", () => {
+    expect(cardLook("verified", true)).toEqual({ kind: "verified", grey: false, pill: { text: "✓ Verified", tone: "ok" } });
+    expect(cardLook("nominated", true)).toEqual({ kind: "nominated", grey: false, pill: { text: "Nominated", tone: "muted" } });
+    expect(cardLook("lapsed", true)).toEqual({ kind: "lapsed", grey: true, pill: { text: "Lapsed", tone: "muted" } });
+  });
 });

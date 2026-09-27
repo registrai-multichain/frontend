@@ -25,7 +25,7 @@ export interface BuilderCardProps {
   nameText: string;
   avatar: string | null;
   tone: "ok" | "invited" | "plain";
-  pill: { text: string; tone?: "ok" | "unclaimed" | "muted" };
+  pill: { text: string; tone?: "ok" | "unclaimed" | "muted" | "onchain" };
   sub?: ReactNode;
   facts?: { label: string; value: ReactNode }[];
   note?: ReactNode;

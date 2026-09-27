@@ -36,6 +36,7 @@
 .pa-pill[data-tone="ok"] { background: color-mix(in srgb, var(--up) 13%, var(--bg-elev)); color: var(--up); }
 .pa-pill[data-tone="unclaimed"] { background: var(--unclaimed); color: var(--unclaimed-fg); }
 .pa-pill[data-tone="down"] { background: color-mix(in srgb, var(--down) 12%, var(--bg-elev)); color: var(--down); }
+.pa-pill[data-tone="onchain"] { background: var(--unclaimed-fg); color: var(--unclaimed); }
 .pa-pill[data-tone="muted"] { background: transparent; border: 1px solid var(--line); color: var(--fg-mute); }
 .pa-notice { border: 1px solid var(--line); border-radius: 10px; background: var(--bg-elev); padding: 10px 14px; color: var(--fg-mute); font-size: 14px; }
 .pa-notice[data-tone="down"] { border-color: color-mix(in srgb, var(--down) 35%, transparent); color: var(--down); }
@@ -165,6 +166,7 @@
 .paper-type .caption { font-family: inherit; font-size: 13px; letter-spacing: 0; text-transform: none; }
 .paper-type .pa-top-right button { border-radius: 999px; padding: 5px 14px; font-size: 14px; letter-spacing: 0; text-transform: capitalize; }
 .paper-type .bld-card { display: flex; flex-direction: column; box-shadow: none; clip-path: none; }
+.paper-type .bld-card[data-kind="invited-onchain"] { border: 1.5px dashed color-mix(in srgb, var(--unclaimed-fg) 80%, transparent); }
 .paper-type .bld-card[data-highlight="true"] { border-color: var(--accent); }
 .paper-type .bld-avatar { flex: none; width: 48px; height: 48px; border-color: var(--line); background: var(--bg); }
 .paper-type .bld-avatar span { font-family: var(--font-serif), Georgia, serif; font-size: 24px; font-weight: 400; color: var(--fg); }

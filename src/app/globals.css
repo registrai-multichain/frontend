@@ -1307,6 +1307,7 @@ a.vbadge:hover { background: color-mix(in srgb, var(--up) 10%, transparent); }
 .bld-card[data-tone="color"] { }
 .bld-card[data-kind="verified"] { border-color: color-mix(in srgb, var(--up) 40%, transparent); }
 .bld-card[data-kind="nominated"] { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.bld-card[data-kind="invited-onchain"] { border: 1.5px dashed color-mix(in srgb, var(--unclaimed-fg) 80%, transparent); }
 .bld-card[data-tone="grayscale"] { filter: grayscale(1); opacity: .58; }
 .bld-card[data-tone="grayscale"]:hover,
 .bld-card[data-tone="grayscale"]:focus-within { opacity: .85; }

@@ -350,6 +350,25 @@ export function greyReason(b: Pick<GalleryBuilder, "status" | "badge" | "project
 export const toneOf = (k: DisplayKind) => DISPLAY[k].tone;
 export const labelOf = (k: DisplayKind) => DISPLAY[k].label;
 
+/**
+ * Pure: how a gallery card looks. An invited project nominated on chain
+ * (ProjectNominations) is on the record: in colour, with its own kind and a solid
+ * "Nominated on chain" pill, where a plain invite is grey. (The "Nominated" kind is
+ * a different thing: a claimed builder awaiting onboarding.)
+ */
+export function cardLook(kind: DisplayKind, nominatedOnChain: boolean): {
+  kind: DisplayKind | "invited-onchain";
+  grey: boolean;
+  pill: { text: string; tone: "ok" | "unclaimed" | "muted" | "onchain" };
+} {
+  if (kind === "invited" && nominatedOnChain) return { kind: "invited-onchain", grey: false, pill: { text: "Nominated on chain", tone: "onchain" } };
+  return {
+    kind,
+    grey: toneOf(kind) === "grayscale",
+    pill: { text: kind === "verified" ? "✓ Verified" : labelOf(kind), tone: kind === "verified" ? "ok" : kind === "invited" ? "unclaimed" : "muted" },
+  };
+}
+
 // ───────────────────────────── projects on a card ─────────────────────────────
 
 /** A project chip: verified (the builder is onboarded), nominated (verified
