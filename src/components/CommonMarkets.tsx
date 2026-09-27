@@ -2539,8 +2539,18 @@ function EventMarkets({
         Event markets
       </h2>
       <p className="mb-4 mt-2 max-w-[60ch] text-[13px] text-fg-mute">
-        Longer questions on a curated feed. The team records the outcome with evidence when it happens; the market
-        settles on the feed&apos;s reading at the deadline.
+        {snap?.proposed.length ? (
+          <>
+            Longer questions, the team&apos;s and ones the community proposed. A yes/no market settles on its curated
+            feed&apos;s reading at the deadline, which the team records with evidence; a price market on the median price
+            at the deadline.
+          </>
+        ) : (
+          <>
+            Longer questions on a curated feed. The team records the outcome with evidence when it happens; the market
+            settles on the feed&apos;s reading at the deadline.
+          </>
+        )}
       </p>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((e) => (
