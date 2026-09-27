@@ -32,7 +32,7 @@ export const COMMON = {
   attestation: hexAddr(R.contracts?.Attestation),
   dispute: hexAddr(R.contracts?.Dispute),
 };
-const COMMON_ON = Boolean(COMMON.agent && COMMON.marketsV4 && COMMON.registry && COMMON.attestation && COMMON.dispute);
+export const COMMON_ON = Boolean(COMMON.agent && COMMON.marketsV4 && COMMON.registry && COMMON.attestation && COMMON.dispute);
 
 export type WalletKey = "safe" | "operator" | "onboarder" | "roundsAgent" | "deployer";
 export interface WalletInfo { key: WalletKey; label: string; address: Address; isSafe: boolean; what: string; cannot: string }
@@ -363,6 +363,13 @@ export function agoText(ms: number): string {
   if (s < 60) return `${s}s ago`;
   return `${Math.floor(s / 60)}m ago`;
 }
+
+/** The common markets' log scan: from the oracle's deploy block, oldest first, 5,000-block windows, at most 40 per read. */
+export const COMMON_SCAN = {
+  fromBlock: 23_010_997n, // the oracle (Registry, Attestation, Dispute); MarketsV4 came at 23,011,086
+  window: 5_000n,
+  maxPerLoad: 40,
+} as const;
 
 /** The buyback's log scan: 5,000-block windows (what Arc's RPC accepts), at most 40 back on first load (~28 h). */
 export const BUYBACK_LOG_SCAN = { window: 5_000n, maxBack: 40 } as const;

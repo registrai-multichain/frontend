@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { BuybackPanel } from "./BuybackPanel";
+import { CommonMarketsPanel } from "./CommonMarketsPanel";
 import { BIG, Donut, Swatch } from "./parts";
 import { parseAbi, type Address, type PublicClient } from "viem";
 import { CopyButton } from "@/components/perennial/CopyButton";
@@ -293,6 +294,8 @@ export function Transparency() {
           ))}
         </div>
       </section>
+
+      <CommonMarketsPanel marketsClass="lg:col-span-7" oracleClass="lg:col-span-5" />
 
       {/* Rules: one strip of compact tiles */}
       <section className={`${card} lg:col-span-12`} aria-labelledby="t-rules">
