@@ -359,6 +359,46 @@
     "hype-usd:5m-12": {
       "feedId": "0xde30fa6604e1610ebf1bf3f8ccc15570db6129a621c5608ddffbc0d3dcf8a91a",
       "disputeWindow": 600
+    },
+    "btc-usd:5m-13": {
+      "feedId": "0xecd8b654ceada180a52b8880c702f1c285b75a3f28d132a0e1c4218e2fdf6350",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-14": {
+      "feedId": "0xc00bcde5ef2d2ec6529f1f6fffd3a52dc551f9ac3659dfb6ef82f88d7bea9ddc",
+      "disputeWindow": 600
+    },
+    "eth-usd:5m-13": {
+      "feedId": "0xa767e090b2b0081f75fb80da389c65dbfd3ea6bf8b27382b9db825630a9582fc",
+      "disputeWindow": 600
+    },
+    "eth-usd:5m-14": {
+      "feedId": "0x2747c53f2a4655508f390de60b13b04a628ae91b61d826bfbd35e2b3f10871f9",
+      "disputeWindow": 600
+    },
+    "hype-usd:5m-13": {
+      "feedId": "0x9361eb115c1c0a492a8b2b49cc8ae1e8bbf45bcdb865b5771a8885524ed1acb0",
+      "disputeWindow": 600
+    },
+    "hype-usd:5m-14": {
+      "feedId": "0x931f4f2eb34ba67ae4fad1e9c4c7ac35670a264635606d62969d16b0c13eebb1",
+      "disputeWindow": 600
+    },
+    "sol-usd:5m-13": {
+      "feedId": "0x8dde6e8dcfc841acc33582535fa622e975b641be163a98a9e063653bad8659f0",
+      "disputeWindow": 600
+    },
+    "sol-usd:5m-14": {
+      "feedId": "0xa8e0fef0fb0ad85a4a5c9898734f04168fa145ab52d0ab58fa90517c932e5df6",
+      "disputeWindow": 600
+    },
+    "zec-usd:5m-13": {
+      "feedId": "0xe036cbcf9ad8671bba382eb85357106fcf27a1c41dfa8a570f2cafe44cd37dc0",
+      "disputeWindow": 600
+    },
+    "zec-usd:5m-14": {
+      "feedId": "0xcef2eacde83db643871bd1dd60ddd69eadaa70f9d6f627a508161163b0c86591",
+      "disputeWindow": 600
     }
   }
 }
