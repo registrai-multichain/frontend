@@ -1,10 +1,11 @@
+import { keccak256, toBytes } from "viem";
 import { describe, expect, test } from "vitest";
 import {
   EMPTY_FORM, PRICE_SOURCE, formatUtcDeadline, parseUtcDeadline, prepareSubmission, priceQuestion,
   feesScanEnd, mergeFeeProgress, mergeScanProgress, parseScanCache, proposalFeedDescription, proposalScanStart, scanForward,
-  statusChip, statusHref, sumCreatorFees, forwardPayee, forwardedShown, isTreasury, shareText, type ProposeFormState, type ScanCache,
+  statusChip, statusHref, sumCreatorFees, forwardPayee, forwardedShown, isTreasury, shareExact, shareText, statusWords, type ProposeFormState, type ScanCache,
 } from "./propose-form";
-import { TREASURY } from "./market-proposals";
+import { TREASURY, type Proposal } from "./market-proposals";
 import { DEFAULT_PROPOSALS_API, proposalsApiBase } from "./proposals-api";
 
 const NOW = 1_790_500_000; // 2026-09-27
@@ -106,6 +107,8 @@ describe("status page helpers", () => {
     expect(statusChip("approved", true).label).toBe("Opened");
     // the API alone never says Opened: only the chain lookup does
     expect(statusChip("opened", false).label).toBe("Approved — opening shortly");
+    expect(statusChip("approved", false, true).label).toBe("Approved — opening delayed");
+    expect(statusChip("approved", true, true).label).toBe("Opened");
     expect(statusChip("rejected", false).label).toBe("Not approved");
     expect(statusChip("queued", false).label).toBe("Phase 2 queue");
   });
@@ -225,11 +228,19 @@ describe("status page share lines (R42)", () => {
     expect(forwardedShown(null, 5n)).toBeUndefined();
     expect(forwardedShown(undefined, 5n)).toBeUndefined();
   });
-  test("a sub-cent share reads < 0.01, nothing reads 0", () => {
-    expect(shareText(9_000n)).toBe("< 0.01 USDC");
+  test("a share reads to 4 decimals (rounded down); under 0.0001 reads < 0.0001, nothing reads 0", () => {
+    expect(shareText(99n)).toBe("< 0.0001 USDC");
     expect(shareText(0n)).toBe("0 USDC");
-    expect(shareText(10_000n)).toBe("0.01 USDC");
-    expect(shareText(279_000n)).toBe("0.27 USDC");
+    expect(shareText(100n)).toBe("0.0001 USDC");
+    expect(shareText(9_000n)).toBe("0.009 USDC");
+    expect(shareText(279_000n)).toBe("0.279 USDC");
+    expect(shareText(279_123n)).toBe("0.2791 USDC");
+    expect(shareText(12_345_678_999n)).toBe("12345.6789 USDC");
+  });
+  test("shareExact gives all 6 decimals (the tooltip)", () => {
+    expect(shareExact(279_123n)).toBe("0.279123 USDC");
+    expect(shareExact(99n)).toBe("0.000099 USDC");
+    expect(shareExact(5_000_000n)).toBe("5.000000 USDC");
   });
   test("isTreasury compares case-insensitively", () => {
     expect(isTreasury(TREASURY.toLowerCase())).toBe(true);
@@ -237,3 +248,35 @@ describe("status page share lines (R42)", () => {
   });
 });
 
+
+describe("statusWords (I4, R54 F1)", () => {
+  const signedPayee = "0x2222222222222222222222222222222222222222";
+  const recordPayee = "0x3333333333333333333333333333333333333333";
+  const RULE = "Official post on the blog.";
+  const p = {
+    id: "pabcdefghij", kind: "event", question: "Will X ship?", rule: RULE, source: "https://evil.example/phish", deadline: 1_900_000_000,
+    creatorPayee: recordPayee, createdAt: "2026-09-28T00:00:00.000Z", status: "approved",
+  } as Proposal;
+  const message = {
+    proposalId: "pabcdefghij", kind: 1, question: "Will X ship?", ruleHash: keccak256(toBytes(RULE)), asset: "", comparator: 1,
+    threshold: "1", expiry: "1800000000", seed: "5000000", creatorPayee: signedPayee as `0x${string}`, nonce: "1",
+  };
+  test("verified: the deadline and payee come from the signed message, not the record beside it", () => {
+    const w = statusWords(p, { state: "ok", message });
+    expect(w.deadline).toBe(1_800_000_000);
+    expect(w.payee).toBe(signedPayee);
+    expect(w.question).toBe("Will X ship?");
+    expect(w.rule).toBe(RULE);
+    // the source is carried as text only (UnsignedSource renders it, never as a link)
+    expect(w.source).toBe("https://evil.example/phish");
+  });
+  test("unverified or still checking: Proposal #id, no deadline, no payee, no rule, no source", () => {
+    for (const state of ["bad", "checking"] as const) {
+      expect(statusWords(p, { state })).toEqual({ question: "Proposal #pabcdefghij", deadline: null, payee: null });
+    }
+  });
+  test("not approved yet: the submission's own words", () => {
+    const w = statusWords({ ...p, status: "pending" }, { state: "unsigned" });
+    expect(w).toMatchObject({ question: "Will X ship?", deadline: 1_900_000_000, payee: recordPayee, rule: RULE });
+  });
+});

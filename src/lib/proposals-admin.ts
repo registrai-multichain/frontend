@@ -6,8 +6,8 @@
  */
 import { isAddress } from "viem";
 import {
-  EVIDENCE_URL_MAX_BYTES, GRID_S, MAX_LEAD_S, MIN_LEAD_S, PROPOSAL_ASSETS, PROPOSAL_DOMAIN, SEED, TREASURY, utf8Bytes, validateProposal,
-  type ApprovalMessage, type Proposal, type ProposalAsset, type ProposalKind, type ProposalStatus,
+  EVENT_DISPUTE_S, EVIDENCE_URL_MAX_BYTES, GRID_S, MAX_LEAD_S, MIN_LEAD_S, OUTCOME_GRACE_S, PROPOSAL_ASSETS, PROPOSAL_DOMAIN, SEED, TREASURY,
+  outcomeCutoff, utf8Bytes, validateProposal, type ApprovalMessage, type Proposal, type ProposalAsset, type ProposalKind, type ProposalStatus,
 } from "./market-proposals";
 import { formatUtcDeadline, parseUtcDeadline } from "./propose-form";
 import { shortAddr } from "./format";
@@ -21,7 +21,7 @@ export const FILTERS: ReadonlyArray<{ id: ProposalFilter; label: string; count: 
 ];
 
 /** "Approved" also lists opened proposals: both are signed and immutable. */
-export function inFilter(p: Proposal, f: ProposalFilter): boolean {
+export function inFilter(p: Pick<Proposal, "status">, f: ProposalFilter): boolean {
   return f === "approved" ? p.status === "approved" || p.status === "opened" : p.status === f;
 }
 /** The filter that lists a proposal with this status (the pane follows it after an action). */
@@ -34,7 +34,7 @@ export function wrongChainMessage(chainId: number | undefined): string | null {
   return chainId === PROPOSAL_DOMAIN.chainId ? null : "Switch your wallet to Arc mainnet to sign.";
 }
 
-export function filterCounts(list: readonly Proposal[]): Record<ProposalFilter, number> {
+export function filterCounts(list: readonly Pick<Proposal, "status">[]): Record<ProposalFilter, number> {
   const out: Record<ProposalFilter, number> = { pending: 0, approved: 0, rejected: 0, queued: 0 };
   for (const p of list) for (const f of FILTERS) if (inFilter(p, f.id)) out[f.id]++;
   return out;
@@ -222,19 +222,61 @@ export function approvalText(m: ApprovalMessage, nowS: number, opts: { nonceAtSi
   ].join("\n");
 }
 
+/** M6: the nonce of the next signature: the clock in ms, but always above the admin's last
+ *  used nonce (from the API), so a signature once made on a machine whose clock ran ahead
+ *  cannot lock the admin out ("nonce already used"). */
+export function nextNonce(nowMs: number, lastNonce: bigint): bigint {
+  const now = BigInt(Math.floor(nowMs));
+  return now > lastNonce ? now : lastNonce + 1n;
+}
+
 // ───────────────────────────── record outcome ─────────────────────────────
 
+/** I1: when an outcome can still be recorded. The agent attests a yes/no proposal's
+ *  outcome `attestAt` (the deadline + OUTCOME_GRACE_S), taking what reached it before;
+ *  the form (and the API) close at `cutoff`, OUTCOME_PICKUP_S (10 min) earlier, so what
+ *  is signed there does reach it. `attested`: the attest time itself has passed. */
+export function outcomeWindow(
+  deadline: number,
+  nowS: number,
+): { attestAt: number; cutoff: number; closed: boolean; attested: boolean; pastDeadline: boolean } {
+  const cutoff = outcomeCutoff(deadline);
+  const attestAt = deadline + OUTCOME_GRACE_S;
+  return { attestAt, cutoff, closed: nowS > cutoff, attested: nowS >= attestAt, pastDeadline: nowS > deadline };
+}
+
+/** The closed form's text: before the attest time it says the agent attests then (not
+ *  that it has), after it that it attested. */
+export function tooLateText(deadline: number, nowS: number, recorded: boolean): string {
+  const { attestAt, attested } = outcomeWindow(deadline, nowS);
+  const when = shortUtc(attestAt, nowS);
+  const what = recorded ? "the outcome recorded here" : "no outcome, so the market settles No";
+  return attested
+    ? `The agent attested this market’s outcome at ${when}, 30 minutes after the deadline, from what it had received by then (${what}). An outcome signed now would never be applied.`
+    : `The agent attests this market’s outcome at ${when}, 30 minutes after the deadline, from what it has received by then (${what}). An outcome signed now might not reach it in time, so the form is closed.`;
+}
+
+/** The notice after an outcome is recorded: when the agent attests it and when the market settles. */
+export function outcomeRecordedText(id: string, yes: boolean, deadline: number, nowS: number): string {
+  const { attestAt } = outcomeWindow(deadline, nowS);
+  const hours = Math.round(EVENT_DISPUTE_S / 3600);
+  return `Outcome recorded for ${id}: ${yes ? "Yes" : "No"}. The agent picks it up within a few minutes and attests it at ${shortUtc(attestAt, nowS)}, 30 minutes after the deadline; the market settles when the ${hours}-hour dispute window after that ends.`;
+}
+
 export interface OutcomeProblem {
-  field: "value" | "evidence" | "since";
+  field: "value" | "evidence" | "since" | "window";
   error: string;
   /** The field is still empty: signing is blocked but nothing needs saying yet. */
   blank: boolean;
 }
 
-/** What stops "Sign outcome", in form order. A Yes must be dated by the deadline:
- *  the market asks whether it happened by then, so a later Yes settles as No. */
+/** What stops "Sign outcome", in form order: the window (outcomeWindow), then the fields.
+ *  The outcome must be dated by the deadline (the agent ignores a later one): the market
+ *  asks whether it happened by then, so a later Yes settles as No. */
 export function outcomeProblems(f: { value: boolean | null; evidence: string; sinceText: string; deadline: number; nowS: number }): OutcomeProblem[] {
   const out: OutcomeProblem[] = [];
+  if (outcomeWindow(f.deadline, f.nowS).closed)
+    out.push({ field: "window", blank: false, error: "Too late — use the dispute process: an outcome signed now might not reach the agent before it attests." });
   if (f.value === null) out.push({ field: "value", blank: true, error: "Pick Yes or No." });
   const evidence = f.evidence.trim();
   if (!/^https:\/\/\S+$/.test(evidence)) out.push({ field: "evidence", blank: !evidence, error: "Give the evidence as a public https link." });
@@ -244,7 +286,13 @@ export function outcomeProblems(f: { value: boolean | null; evidence: string; si
   if (!f.sinceText.trim()) out.push({ field: "since", blank: true, error: "Write when it happened as YYYY-MM-DD HH:MM (UTC)." });
   else if (since === null) out.push({ field: "since", blank: false, error: "Write when it happened as YYYY-MM-DD HH:MM (UTC)." });
   else if (since > f.nowS) out.push({ field: "since", blank: false, error: "That time is in the future." });
-  else if (f.value === true && since > f.deadline)
-    out.push({ field: "since", blank: false, error: "The event must have happened by the deadline; a Yes dated after it settles as No." });
+  else if (since > f.deadline)
+    out.push({
+      field: "since",
+      blank: false,
+      error: f.value === false
+        ? "Date a No at or before the deadline (the deadline itself is fine): the agent ignores a later date."
+        : "The event must have happened by the deadline; a Yes dated after it settles as No.",
+    });
   return out;
 }

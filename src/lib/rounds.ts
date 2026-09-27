@@ -346,6 +346,31 @@ export function parseMarketLogs(logs: readonly MarketCreatedLog[], book: FeedBoo
   return out;
 }
 
+/**
+ * R51: the agent's markets on feeds the book does not know yet. A stale deployment seed
+ * (a round feed the agent made after the JSON was written, like testnet's change feeds
+ * 13 and 14) would otherwise hide every round on it: parseMarketLogs drops a market on
+ * an unknown feed. The page keeps these logs and parses them again once the feed is
+ * learned, from FeedCreated(creator = agent) with the round description prefix
+ * (mergeFeedLogs), or from the Registry's record of the feed (feedLogFromRecord).
+ * Only the agent's own markets (creator and settling agent) are kept.
+ */
+export function marketsOnUnknownFeeds(logs: readonly MarketCreatedLog[], book: FeedBook, agent: Address): MarketCreatedLog[] {
+  return logs.filter((lg) => {
+    const a = lg.args;
+    return Boolean(a.marketId && a.feedId && sameAddr(a.creator, agent) && sameAddr(a.agent, agent) && !book.byId[a.feedId.toLowerCase()]);
+  });
+}
+
+/** A feed's Registry record (getFeed) as a FeedCreated-shaped log for mergeFeedLogs, which
+ *  keeps it only when the agent created it with a "registrai-data:" description. */
+export function feedLogFromRecord(
+  feedId: Hex,
+  r: { creator: Address; description: string; disputeWindow: bigint; exists: boolean },
+): FeedCreatedLog | null {
+  return r.exists ? { args: { feedId, creator: r.creator, description: r.description, disputeWindow: r.disputeWindow }, blockNumber: 0n, logIndex: 0 } : null;
+}
+
 /** First block of the rounds scan: the last ~2 hours, never before deploy. */
 export function scanStart(head: bigint, deployBlock: bigint, window: bigint = LOG_WINDOW_BLOCKS): bigint {
   const from = head > window ? head - window + 1n : 0n;

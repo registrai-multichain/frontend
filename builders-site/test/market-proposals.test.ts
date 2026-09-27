@@ -152,7 +152,7 @@ describe("admin review", () => {
     const s = setup();
     const id = await pending(s);
     await handleAdminReject(s.adminReq(`/x`, "POST", { reason: "no single public source" }), s.env, id);
-    const list = (await (await handleAdminList(s.adminReq(`/api/admin/market-proposals?status=rejected`, "GET"), s.env)).json()) as { proposals: Proposal[] };
+    const list = (await (await handleAdminList(s.adminReq(`/api/admin/market-proposals?status=rejected`, "GET"), s.env, ADMIN.address)).json()) as { proposals: Proposal[] };
     expect(list.proposals[0]).toMatchObject({ id, status: "rejected", reason: "no single public source" });
   });
   test("patching a rejected proposal back to pending clears the old rejection reason", async () => {

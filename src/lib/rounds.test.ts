@@ -56,6 +56,8 @@ import {
   serializeProposalStore,
   pruneProposalStore,
   foldProposalRange,
+  feedLogFromRecord,
+  marketsOnUnknownFeeds,
   proposalAnswer,
   proposalRetryMs,
   type ApprovalTerms,
@@ -896,5 +898,42 @@ describe("proposed markets", () => {
       expect(r2.store.feeds).toEqual({});
       expect(r2.store.orphans).toEqual({});
     });
+  });
+});
+
+describe("R51: round feeds missing from the deployment seed", () => {
+  // The testnet seed stops at change feed 12; the agent runs 15 (13 and 14 came later).
+  const seed = seedFeedBook(ROUNDS.feeds);
+  const FEED_13 = hex(0x1313);
+  const round13 = marketLog(700, FEED_13, 1_790_000_300, { threshold: 0n, comparator: COMPARATOR.GreaterThan });
+  const foreign = marketLog(701, FEED_13, 1_790_000_300, { threshold: 0n, creator: OTHER });
+
+  test("the seed lacks the feed, so a round on it is dropped, but held", () => {
+    expect(seed.byId[FEED_13]).toBeUndefined();
+    expect(parseMarketLogs([round13], seed, AGENT)).toEqual([]);
+    expect(marketsOnUnknownFeeds([round13, foreign], seed, AGENT)).toEqual([round13]);
+  });
+
+  test("FeedCreated(creator = agent) with the round prefix teaches the book the feed; the held round then shows", () => {
+    const learned = mergeFeedLogs(seed, [feedLog(FEED_13, "registrai-data:btc-usd-5m-change-13", 900n)], AGENT);
+    expect(learned.byKey["btc-usd:5m-13"]).toMatchObject({ feedId: FEED_13, asset: "btc-usd", change: true });
+    const [m] = parseMarketLogs(marketsOnUnknownFeeds([round13], seed, AGENT), learned, AGENT);
+    expect(m).toMatchObject({ marketId: hex(700), key: "btc-usd", change: true, threshold: 0n });
+    expect(marketsOnUnknownFeeds([round13], learned, AGENT)).toEqual([]);
+    // it groups with BTC's other rounds
+    const g = groupRounds([m], ["btc-usd"], 1_790_000_000);
+    expect(g["btc-usd"].current?.marketId).toBe(hex(700));
+  });
+
+  test("a round-prefixed feed created by someone else teaches nothing", () => {
+    const spoof = mergeFeedLogs(seed, [feedLog(FEED_13, "registrai-data:btc-usd-5m-change-13", 900n, OTHER)], AGENT);
+    expect(spoof.byId[FEED_13]).toBeUndefined();
+  });
+
+  test("the feed's Registry record (for a feed older than the scans) is learned the same way", () => {
+    const rec = feedLogFromRecord(FEED_13, { creator: AGENT, description: "registrai-data:btc-usd-5m-change-13", disputeWindow: 600n, exists: true });
+    const learned = mergeFeedLogs(seed, rec ? [rec] : [], AGENT);
+    expect(parseMarketLogs([round13], learned, AGENT)).toHaveLength(1);
+    expect(feedLogFromRecord(FEED_13, { creator: AGENT, description: "", disputeWindow: 0n, exists: false })).toBeNull();
   });
 });

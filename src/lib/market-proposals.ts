@@ -53,6 +53,8 @@ export interface SignedApproval { message: ApprovalMessageJson; signature: `0x${
 export interface SignedOutcome { message: OutcomeMessageJson; signature: `0x${string}`; signer: `0x${string}` }
 export interface Proposal extends ProposalInput {
   id: string; createdAt: string; status: ProposalStatus; reason?: string;
+  /** ISO time of the (first) approval: the status page says "opening delayed" when no market follows. */
+  approvedAt?: string;
   approval?: SignedApproval; outcome?: SignedOutcome; marketId?: string; forwarded?: string;
 }
 export interface ApprovalMessage {
@@ -60,6 +62,78 @@ export interface ApprovalMessage {
   threshold: bigint; expiry: bigint; seed: bigint; creatorPayee: `0x${string}`; nonce: bigint;
 }
 export interface OutcomeMessage { proposalId: string; value: bigint; since: bigint; evidenceUrl: string; nonce: bigint }
+
+/**
+ * The wallets whose MarketApproval / Outcome signatures the app trusts before it shows
+ * a proposed market's words (question, rule, source, asset, evidence). Must equal the
+ * builders-site ADMIN_ADDRESSES (builders-site/wrangler.toml) and the rounds agent's
+ * `approvers` (keeper config.arc-mainnet-rounds.json): a test checks both.
+ */
+export const PROPOSAL_APPROVERS: readonly `0x${string}`[] = ["0xb7eCf980a4732B75E57e2eC80903deE3964F2573"];
+
+/**
+ * A yes/no proposal's outcome: the agent attests it OUTCOME_GRACE_S after the deadline
+ * (keeper OUTCOME_GRACE_SECS), taking a signed outcome dated by the deadline that reached
+ * it before then. The admin form and the API close OUTCOME_PICKUP_S earlier (R54: 10 min,
+ * so at deadline + 20 min), a margin over the time the agent may need to see a new outcome
+ * (the feed's 30 s cache, KV propagation, its 60 s poll).
+ */
+export const OUTCOME_GRACE_S = 1800;
+export const OUTCOME_PICKUP_S = 600;
+/** The last second an outcome is taken for a proposal with this deadline. */
+export const outcomeCutoff = (deadline: number) => deadline + OUTCOME_GRACE_S - OUTCOME_PICKUP_S;
+/** The rounds agent's dispute window on a yes/no proposal feed (keeper EVENT_DISPUTE_WINDOW). */
+export const EVENT_DISPUTE_S = 43_200;
+
+/** The agent opens an approved proposal within minutes; past this with no market on chain,
+ *  the status page says "opening delayed" (the agent refused or deferred it, and alerted). */
+export const OPENING_DELAY_S = 900;
+
+/** When the proposal was approved (unix seconds): approvedAt, else (a record from before
+ *  approvedAt was stored) the approval's nonce, which the admin page takes from the clock
+ *  in milliseconds; null when neither is a plausible time. */
+export function approvedAtS(p: { approvedAt?: string; approval?: { message?: { nonce?: unknown } } }, nowS: number): number | null {
+  const t = p.approvedAt ? Date.parse(p.approvedAt) : NaN;
+  if (Number.isFinite(t)) return Math.floor(t / 1000);
+  const n = Number(p.approval?.message?.nonce);
+  return Number.isSafeInteger(n) && n > 1_600_000_000_000 && n / 1000 <= nowS + 86_400 ? Math.floor(n / 1000) : null;
+}
+
+/** Approved more than OPENING_DELAY_S ago (the caller knows no market is on chain). */
+export function openingOverdue(p: { status: ProposalStatus; approvedAt?: string; approval?: { message?: { nonce?: unknown } } }, nowS: number): boolean {
+  if (p.status !== "approved" && p.status !== "opened") return false;
+  const at = approvedAtS(p, nowS);
+  return at !== null && nowS - at > OPENING_DELAY_S;
+}
+
+/** A proposal as the admin list shows it: the KV key's metadata (at most 1024 bytes), so
+ *  listing needs no read per proposal. The full record is read when one is opened. */
+export interface ProposalSummary {
+  id: string; status: ProposalStatus; createdAt: string; kind: ProposalKind; question: string; deadline: number;
+  creatorPayee?: string; reason?: string; approvedAt?: string;
+  outcome?: { value: string; nonce: string };
+  /** The question was cut to fit the metadata. */
+  cut?: true;
+}
+/** Workers KV caps a key's metadata at 1024 bytes (serialized); keep a margin. */
+export const SUMMARY_MAX_BYTES = 1000;
+
+export function proposalSummary(p: Proposal): ProposalSummary {
+  const base: ProposalSummary = { id: p.id, status: p.status, createdAt: p.createdAt, kind: p.kind, question: p.question, deadline: p.deadline };
+  if (p.creatorPayee) base.creatorPayee = p.creatorPayee;
+  if (p.reason) base.reason = Array.from(p.reason).slice(0, 120).join("");
+  if (p.approvedAt) base.approvedAt = p.approvedAt;
+  if (p.outcome) base.outcome = { value: String(p.outcome.message.value), nonce: String(p.outcome.message.nonce) };
+  const fits = (x: ProposalSummary) => utf8Bytes(JSON.stringify(x)) <= SUMMARY_MAX_BYTES;
+  if (fits(base)) return base;
+  if (base.reason) base.reason = Array.from(base.reason).slice(0, 40).join("");
+  const chars = Array.from(p.question);
+  for (let n = chars.length; n > 0; n = Math.floor(n * 0.8)) {
+    const s: ProposalSummary = { ...base, question: `${chars.slice(0, n).join("")}…`, cut: true };
+    if (fits(s)) return s;
+  }
+  return { ...base, question: "", cut: true };
+}
 
 export const PROPOSAL_DOMAIN = { name: "Registrai Market Proposals", version: "1", chainId: 5042, verifyingContract: MARKETS_V4 } as const;
 const APPROVAL_TYPES = {
@@ -126,7 +200,8 @@ export function normalizeQuestion(q: string): string {
 
 /** What `p` duplicates: "live market" when a live market asks the same (normalised)
  *  question, else the id of another proposal that is not rejected and asks it; null if none. */
-export function duplicateOf(p: Proposal, others: Proposal[], liveQuestions: string[]): string | null {
+type QuestionOf = Pick<Proposal, "id" | "status" | "question">;
+export function duplicateOf(p: Pick<Proposal, "id" | "question">, others: readonly QuestionOf[], liveQuestions: readonly string[]): string | null {
   const q = normalizeQuestion(p.question);
   if (liveQuestions.some((l) => normalizeQuestion(l) === q)) return "live market";
   const hit = others.find((o) => o.id !== p.id && o.status !== "rejected" && normalizeQuestion(o.question) === q);

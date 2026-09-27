@@ -10,7 +10,10 @@ export function HowItWorks() {
           <li><b>You propose</b> the question, how it resolves, and the deadline.</li>
           <li><b>The team reviews it.</b> We may tighten the wording or deadline; you see the final version on its status page.</li>
           <li><b>Approved markets open</b> on Arc mainnet with a 5 USDC starting pool, signed by the team and opened by Registrai&#8217;s agent.</li>
-          <li><b>You earn the creator share:</b> 30% of the market&#8217;s trading fees, forwarded to your wallet.</li>
+          <li>
+            <b>You earn the creator share:</b> 30% of the market&#8217;s trading fees, forwarded to your Registrai trading balance on Arc;
+            withdraw it to your wallet from the balance menu.
+          </li>
         </ol>
       </section>
       <section className={s.panel} aria-labelledby="pp-fees">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useState } from "react";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { useWallet } from "@/components/WalletProvider";
 import { newsreader } from "@/components/proposals/fonts";
 import { ADMIN_SERVICE, type AdminRole } from "@/lib/builders-admin";
@@ -9,12 +9,14 @@ import { shortAddr } from "@/lib/format";
 import { humanizeError } from "@/lib/humanize-error";
 import { activeProvider } from "@/lib/wallets";
 import {
-  LIVE_KINDS, MARKETS_V4, PROPOSAL_ASSETS, SEED, approvalMessage, approvalTypedData, duplicateOf, fromJsonApproval,
-  fromJsonOutcome, normalizeQuestion, outcomeTypedData, toJsonApproval, toJsonOutcome, type Proposal, type ProposalAsset,
+  LIVE_KINDS, MARKETS_V4, PROPOSAL_ASSETS, SEED, approvalMessage, approvalTypedData, approvedAtS, duplicateOf, fromJsonApproval,
+  fromJsonOutcome, normalizeQuestion, openingOverdue, outcomeTypedData, proposalSummary, toJsonApproval, toJsonOutcome,
+  type Proposal, type ProposalAsset, type ProposalSummary,
 } from "@/lib/market-proposals";
 import {
-  FILTERS, ageLabel, applyDraft, approvalText, draftOf, filterCounts, filterOf, inFilter, isDirty, kindLabel,
-  outcomeProblems, parseUtcMinute, patchBody, proposalChecks, shortUtc, wrongChainMessage, type Draft, type ProposalFilter,
+  FILTERS, ageLabel, applyDraft, approvalText, draftOf, filterCounts, filterOf, inFilter, isDirty, kindLabel, nextNonce,
+  outcomeProblems, outcomeRecordedText, outcomeWindow, parseUtcMinute, tooLateText, patchBody, proposalChecks, shortUtc, wrongChainMessage,
+  type Draft, type ProposalFilter,
 } from "@/lib/proposals-admin";
 import { statusHref } from "@/lib/propose-form";
 import mainnetRounds from "@/lib/deployments/arc-mainnet-rounds.json";
@@ -47,6 +49,12 @@ const OWN = [
 
 type ApiState = { state: "checking" } | { state: "unavailable" } | { state: "ready"; address: string | null; role: AdminRole | null };
 type Done = (p: Proposal, notice?: string) => void;
+/** M6: the next signature's nonce (max(now, the admin's last + 1)), and marking one used. */
+type Nonces = { next: () => bigint; used: (n: bigint) => void };
+/** The list: every page of summaries (the API pages its KV list), and the admin's last nonce. */
+type ListData = { proposals: ProposalSummary[]; lastNonce: bigint };
+/** At most this many list pages (ADMIN_PAGE proposals each) are read. */
+const MAX_PAGES = 40;
 
 class SignedOut extends Error {}
 /** A refusal worded for the admin: shown as is (not through humanizeError). */
@@ -102,7 +110,7 @@ async function call<T>(path: string, init: { method?: string; body?: unknown } =
   return { status: res.status, body };
 }
 
-const byNewest = (a: Proposal, b: Proposal) => Date.parse(b.createdAt) - Date.parse(a.createdAt);
+const byNewest = (a: ProposalSummary, b: ProposalSummary) => Date.parse(b.createdAt) - Date.parse(a.createdAt);
 const idPath = (id: string) => `${API}/${encodeURIComponent(id)}`;
 
 export function ProposalsAdmin() {
@@ -128,12 +136,23 @@ export function ProposalsAdmin() {
   const role: AdminRole = (api.state === "ready" && api.role) || "admin";
   const signOut = useCallback(() => setApi({ state: "ready", address: null, role: null }), []);
 
-  const list = useSWR<Proposal[]>(
+  const list = useSWR<ListData>(
     admin ? ["admin-market-proposals", admin] : null,
     async () => {
-      const r = await call<{ proposals?: Proposal[]; error?: string }>(API);
-      if (r.status !== 200 || !r.body.proposals) throw new Error(r.body.error ?? `proposals (${r.status})`);
-      return r.body.proposals;
+      const proposals: ProposalSummary[] = [];
+      let lastNonce = 0n;
+      let cursor: string | null = null;
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const r: { status: number; body: { proposals?: ProposalSummary[]; cursor?: string | null; lastNonce?: string; error?: string } } = await call(
+          cursor ? `${API}?cursor=${encodeURIComponent(cursor)}` : API,
+        );
+        if (r.status !== 200 || !r.body.proposals) throw new Error(r.body.error ?? `proposals (${r.status})`);
+        proposals.push(...r.body.proposals);
+        if (page === 0 && /^\d{1,20}$/.test(r.body.lastNonce ?? "")) lastNonce = BigInt(r.body.lastNonce!);
+        cursor = r.body.cursor ?? null;
+        if (!cursor) break;
+      }
+      return { proposals, lastNonce };
     },
     { revalidateOnFocus: false, shouldRetryOnError: false },
   );
@@ -150,20 +169,44 @@ export function ProposalsAdmin() {
     return () => clearInterval(t);
   }, []);
 
-  const all = list.data ?? [];
+  const all = list.data?.proposals ?? [];
   const counts = filterCounts(all);
   const shown = all.filter((p) => inFilter(p, filter)).sort(byNewest);
   const selected = shown.find((p) => p.id === selectedId) ?? shown[0] ?? null;
+  // The list carries summaries; the open proposal is read in full.
+  const detail = useSWR<Proposal>(
+    admin && selected ? ["admin-market-proposal", selected.id] : null,
+    async ([, id]: [string, string]) => {
+      const r = await call<{ proposal?: Proposal; error?: string }>(idPath(id));
+      if (r.status !== 200 || !r.body.proposal) throw new Error(r.body.error ?? `proposal (${r.status})`);
+      return r.body.proposal;
+    },
+    { revalidateOnFocus: false, shouldRetryOnError: false },
+  );
+  useEffect(() => {
+    if (detail.error instanceof SignedOut) signOut();
+  }, [detail.error, signOut]);
+  const { mutate } = useSWRConfig();
+
+  // M6: never sign a nonce at or below the admin's last one (the API's, or one signed here since).
+  const [usedNonce, setUsedNonce] = useState(0n);
+  const serverNonce = list.data?.lastNonce ?? 0n;
+  const nonces: Nonces = {
+    next: () => nextNonce(Date.now(), serverNonce > usedNonce ? serverNonce : usedNonce),
+    used: (n) => setUsedNonce((u) => (n > u ? n : u)),
+  };
 
   /** After an action the pane follows the proposal to the filter of its new status. */
   const done: Done = useCallback(
     (p, text) => {
-      list.mutate((prev) => (prev ?? []).map((o) => (o.id === p.id ? p : o)), { revalidate: false });
+      const sum = proposalSummary(p);
+      list.mutate((prev) => prev && { ...prev, proposals: prev.proposals.map((o) => (o.id === p.id ? sum : o)) }, { revalidate: false });
+      void mutate(["admin-market-proposal", p.id], p, { revalidate: false });
       setFilter(filterOf(p.status));
       setSelectedId(p.id);
       if (text) setNotice(text);
     },
-    [list],
+    [list, mutate],
   );
   const failed = useCallback((e: unknown) => {
     if (e instanceof SignedOut) signOut();
@@ -264,8 +307,22 @@ export function ProposalsAdmin() {
                 />
               ))}
             </section>
-            {selected && (
-              <Detail key={selected.id} p={selected} all={all} now={now} admin={admin} role={role} onDone={done} onFailed={failed} />
+            {selected && detail.data?.id === selected.id && (
+              <Detail key={selected.id} p={detail.data} all={all} now={now} admin={admin} role={role} nonces={nonces} onDone={done} onFailed={failed} />
+            )}
+            {selected && detail.data?.id !== selected.id && (
+              <section className={s.detail} aria-label="Proposal detail">
+                {detail.error && !(detail.error instanceof SignedOut) ? (
+                  <p className={s.error} role="alert">
+                    Could not load {selected.id}: {(detail.error as Error).message}{" "}
+                    <button type="button" className={s.quiet} onClick={() => detail.mutate()}>
+                      Try again
+                    </button>
+                  </p>
+                ) : (
+                  <p className={s.state}>Loading {selected.id}…</p>
+                )}
+              </section>
             )}
           </div>
         )}
@@ -274,16 +331,16 @@ export function ProposalsAdmin() {
   );
 }
 
-function liveMatchOf(p: Proposal): string | null {
+function liveMatchOf(p: Pick<Proposal, "question">): string | null {
   const q = normalizeQuestion(p.question);
   return LIVE_QUESTIONS.find((l) => normalizeQuestion(l) === q) ?? null;
 }
 
-function payeeText(p: Proposal) {
+function payeeText(p: Pick<Proposal, "creatorPayee">) {
   return p.creatorPayee ? `creator ${shortAddr(p.creatorPayee).toLowerCase()}` : "no creator wallet → treasury";
 }
 
-function ProposalCard({ p, all, now, selected, onSelect }: { p: Proposal; all: Proposal[]; now: number; selected: boolean; onSelect: () => void }) {
+function ProposalCard({ p, all, now, selected, onSelect }: { p: ProposalSummary; all: ProposalSummary[]; now: number; selected: boolean; onSelect: () => void }) {
   const dup = p.status === "rejected" ? null : duplicateOf(p, all, LIVE_QUESTIONS);
   const nowS = Math.floor(now / 1000);
   let line: string;
@@ -298,6 +355,7 @@ function ProposalCard({ p, all, now, selected, onSelect }: { p: Proposal; all: P
         <span className={s.kindPill}>{kindLabel(p.kind)}</span>
         <span>{ageLabel(p.createdAt, now)}</span>
         {p.status === "opened" && <span>opened</span>}
+        {openingOverdue(p, nowS) && <span>approved {ageOf(approvedAtS(p, nowS), now)} · check it opened</span>}
         {p.outcome && <span>outcome recorded</span>}
         {dup && <span className={s.dup}>possible duplicate</span>}
       </span>
@@ -311,6 +369,11 @@ function ProposalCard({ p, all, now, selected, onSelect }: { p: Proposal; all: P
   );
 }
 
+/** "2 h ago", "just now" (the list's age wording without "submitted"). */
+function ageOf(s: number | null, now: number): string {
+  return s === null ? "" : ageLabel(new Date(s * 1000).toISOString(), now).replace(/^submitted /, "");
+}
+
 function heading(p: Proposal) {
   if (p.status === "approved" || p.status === "opened") return "Approved and signed";
   if (p.status === "rejected") return "Rejected · edit and approve to reopen";
@@ -319,9 +382,9 @@ function heading(p: Proposal) {
 }
 
 function Detail({
-  p, all, now, admin, role, onDone, onFailed,
+  p, all, now, admin, role, nonces, onDone, onFailed,
 }: {
-  p: Proposal; all: Proposal[]; now: number; admin: string; role: AdminRole; onDone: Done; onFailed: (e: unknown) => void;
+  p: Proposal; all: ProposalSummary[]; now: number; admin: string; role: AdminRole; nonces: Nonces; onDone: Done; onFailed: (e: unknown) => void;
 }) {
   const { address, isConnecting, error: walletError } = useWallet();
   const signer = useSigner(admin);
@@ -389,7 +452,7 @@ function Detail({
       if (!w) return;
       try {
         saved = await save();
-        const nonce = BigInt(Date.now()); // strictly increasing per admin; the API refuses a reuse
+        const nonce = nonces.next(); // above the admin's last nonce: the API refuses a reuse
         const msg = approvalMessage(saved, nonce);
         const signature = await w.walletClient.signTypedData({ account: w.address, ...approvalTypedData(msg) });
         const r = await call<{ proposal?: Proposal; error?: string }>(`${idPath(saved.id)}/approve`, {
@@ -397,6 +460,7 @@ function Detail({
           body: { message: toJsonApproval(msg), signature },
         });
         if (r.status !== 200 || !r.body.proposal) throw new Refusal(r.body.error ?? `Could not approve (${r.status}).`);
+        nonces.used(nonce);
         saved = null;
         onDone(r.body.proposal, `Approved ${p.id}: the agent opens it within a minute; its status page shows “Opened · market 0x…” with a link.`);
       } finally {
@@ -431,7 +495,18 @@ function Detail({
         <p className={s.callout} data-tone="approved">
           <b>{p.status === "opened" ? `Opened${p.marketId ? ` · market ${p.marketId}` : ""}` : "Approved"}.</b> Signed by{" "}
           <span className={s.mono}>{p.approval.signer}</span> with nonce {p.approval.message.nonce}. An approved proposal
-          cannot be edited or rejected: the agent may already be opening it.
+          cannot be edited or rejected: the agent may already have accepted it.
+        </p>
+      )}
+      {locked && p.approval && openingOverdue(p, nowS) && (
+        <p className={s.callout}>
+          <b>Approved {ageOf(approvedAtS(p, nowS), now)}.</b> The agent opens a market within minutes. If the public status
+          page does not show “Opened”, the opening is delayed: the agent refused or deferred it (daily cap, float, a check
+          it failed) and the team has been told in the agent&#8217;s alerts, which name the reason. The status page reads
+          the chain:{" "}
+          <a href={`${APP_SITE}${statusHref(p.id)}`} target="_blank" rel="noreferrer">
+            check it ↗
+          </a>
         </p>
       )}
       {p.status === "rejected" && (
@@ -617,7 +692,7 @@ function Detail({
         </p>
       )}
 
-      {outcomeForm && <RecordOutcome p={p} admin={admin} onDone={onDone} onFailed={onFailed} />}
+      {outcomeForm && <RecordOutcome p={p} admin={admin} nonces={nonces} onDone={onDone} onFailed={onFailed} />}
     </section>
   );
 }
@@ -631,7 +706,7 @@ function Tile({ label, value, mono }: { label: string; value: string; mono?: boo
   );
 }
 
-function RecordOutcome({ p, admin, onDone, onFailed }: { p: Proposal; admin: string; onDone: Done; onFailed: (e: unknown) => void }) {
+function RecordOutcome({ p, admin, nonces, onDone, onFailed }: { p: Proposal; admin: string; nonces: Nonces; onDone: Done; onFailed: (e: unknown) => void }) {
   const { address, error: walletError } = useWallet();
   const signer = useSigner(admin);
   const ids = { evidence: useId(), since: useId(), wallet: useId() };
@@ -646,7 +721,9 @@ function RecordOutcome({ p, admin, onDone, onFailed }: { p: Proposal; admin: str
   }, [address]);
   const recorded = p.outcome ? fromJsonOutcome(p.outcome.message) : null;
   const wrongWallet = Boolean(address && address.toLowerCase() !== admin.toLowerCase());
-  const problems = outcomeProblems({ value: yes, evidence, sinceText: since, deadline: p.deadline, nowS: Math.floor(Date.now() / 1000) });
+  const nowS = Math.floor(Date.now() / 1000);
+  const win = outcomeWindow(p.deadline, nowS);
+  const problems = outcomeProblems({ value: yes, evidence, sinceText: since, deadline: p.deadline, nowS });
   const shown = (field: "evidence" | "since") => problems.find((x) => x.field === field && !x.blank) ?? null;
   const missing = problems.filter((x) => x.blank);
   const invalid = { evidence: shown("evidence"), since: shown("since") };
@@ -659,14 +736,15 @@ function RecordOutcome({ p, admin, onDone, onFailed }: { p: Proposal; admin: str
       if (!w) return;
       const sinceS = parseUtcMinute(since);
       if (problems.length || yes === null || sinceS === null) throw new Refusal(problems[0]?.error ?? "Fill in the outcome first.");
-      const msg = { proposalId: p.id, value: yes ? 1n : 0n, since: BigInt(sinceS), evidenceUrl: evidence.trim(), nonce: BigInt(Date.now()) };
+      const msg = { proposalId: p.id, value: yes ? 1n : 0n, since: BigInt(sinceS), evidenceUrl: evidence.trim(), nonce: nonces.next() };
       const signature = await w.walletClient.signTypedData({ account: w.address, ...outcomeTypedData(msg) });
       const r = await call<{ proposal?: Proposal; error?: string }>(`${idPath(p.id)}/outcome`, {
         method: "POST",
         body: { message: toJsonOutcome(msg), signature },
       });
       if (r.status !== 200 || !r.body.proposal) throw new Refusal(r.body.error ?? `Could not record the outcome (${r.status}).`);
-      onDone(r.body.proposal, `Outcome recorded for ${p.id}: ${yes ? "Yes" : "No"}. The agent settles it after the deadline.`);
+      nonces.used(msg.nonce);
+      onDone(r.body.proposal, outcomeRecordedText(p.id, yes, p.deadline, Math.floor(Date.now() / 1000)));
     } catch (e) {
       if (e instanceof SignedOut) onFailed(e);
       else setError(asMessage(e));
@@ -676,18 +754,35 @@ function RecordOutcome({ p, admin, onDone, onFailed }: { p: Proposal; admin: str
   }
 
   const describe = (id: string, on: boolean) => [on ? id : null, wrongWallet ? ids.wallet : null].filter(Boolean).join(" ") || undefined;
+  const recordedLine = recorded && p.outcome && (
+    <p className={s.callout}>
+      Recorded: <b>{recorded.value === 1n ? "Yes" : "No"}</b> since {shortUtc(Number(recorded.since), nowS)},{" "}
+      <a href={recorded.evidenceUrl} target="_blank" rel="noreferrer">
+        evidence ↗
+      </a>
+      , signed by <span className={s.mono}>{shortAddr(p.outcome.signer)}</span>.{win.closed ? "" : " Signing again replaces it."}
+    </p>
+  );
+  if (win.closed) {
+    return (
+      <div className={s.outcome}>
+        <h3 className={s.h3}>Record outcome</h3>
+        {recordedLine}
+        <p className={s.callout} data-tone="rejected">
+          <b>Too late — use the dispute process.</b> {tooLateText(p.deadline, nowS, Boolean(recorded))}
+        </p>
+      </div>
+    );
+  }
   return (
     <div className={s.outcome}>
       <h3 className={s.h3}>Record outcome</h3>
-      {recorded && p.outcome && (
-        <p className={s.callout}>
-          Recorded: <b>{recorded.value === 1n ? "Yes" : "No"}</b> since {shortUtc(Number(recorded.since), Math.floor(Date.now() / 1000))},{" "}
-          <a href={recorded.evidenceUrl} target="_blank" rel="noreferrer">
-            evidence ↗
-          </a>
-          , signed by <span className={s.mono}>{shortAddr(p.outcome.signer)}</span>. Signing again replaces it.
-        </p>
-      )}
+      <p className={s.signedBy}>
+        Record by <b>{shortUtc(win.cutoff, nowS)}</b>
+        {win.pastDeadline ? " (the deadline has passed)" : ""}: the agent attests the outcome at {shortUtc(win.attestAt, nowS)}, 30 minutes after
+        the deadline, and takes only an outcome dated by the deadline that reached it before then. After that, use the dispute process.
+      </p>
+      {recordedLine}
       <fieldset className={s.radios}>
         <legend>What happened</legend>
         <label>
