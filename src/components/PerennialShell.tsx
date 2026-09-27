@@ -11,7 +11,9 @@ import { APP_NAV, DASHBOARD_URL } from "@/lib/site-nav";
 // Keep the server-to-client prop JSON-safe (viem's chain object carries functions).
 const WALLET_CHAIN = { id: PERENNIAL.chain.id, name: PERENNIAL.chain.name, shortName: PERENNIAL.chain.shortName };
 
-export function PerennialShell({ children }: { children: ReactNode }) {
+/** `status`: the footer's network line for a page whose contracts are not the
+ *  Perennial layer's (e.g. /rounds, live on mainnet before Perennial markets are). */
+export function PerennialShell({ children, status }: { children: ReactNode; status?: string }) {
   return (
     <div className="paper-theme paper-type flex min-h-screen flex-col">
       <header className="pa-topbar">
@@ -32,7 +34,7 @@ export function PerennialShell({ children }: { children: ReactNode }) {
 
       <footer className="pa-foot">
         <div className="pa-foot-in">
-          <span>{networkStatusLine(PERENNIAL)} · settles in {PERENNIAL.network === "mainnet" ? "USDC" : "test USDC"}</span>
+          <span>{status ?? networkStatusLine(PERENNIAL)} · settles in {PERENNIAL.network === "mainnet" ? "USDC" : "test USDC"}</span>
           <span className="flex flex-wrap gap-4">
             <Link href="/">Home</Link>
             <a href={DASHBOARD_URL}>Transparency ↗</a>
