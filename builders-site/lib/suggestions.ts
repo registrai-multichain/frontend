@@ -39,6 +39,21 @@ const WALLET_WINDOW_S = 24 * 3600;
 export const SUGGEST_SIG_MAX_AGE_MS = 10 * 60_000;
 const MAX_WALLETS = 200;
 const MAX_BY = 10;
+/** The anvil/hardhat test-mnemonic accounts (indexes 0-9). Their keys are public, and
+ *  people use them on real chains (index 0 had 638 Arc mainnet txs), so their
+ *  history proves nothing: refused outright. */
+export const PUBLIC_DEV_ACCOUNTS: ReadonlySet<string> = new Set([
+  "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+  "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+  "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc",
+  "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+  "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+  "0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc",
+  "0x976ea74026e726554db657fa54763abd0c3a0aa9",
+  "0x14dc79964da2c08b23698b3d3cc7ca32193d9955",
+  "0x23618e81e3f5cdf7f54c3d65f7fbc0abf5b21e8f",
+  "0xa0ee7a142d267c1f36714e4a8f75612f20a79720",
+]);
 /** Arc mainnet, Circle's official RPC: where a suggesting wallet must have transacted. */
 const ARC_MAINNET_RPC = "https://rpc.mainnet.arc.io";
 
@@ -127,6 +142,7 @@ export async function handleSuggest(req: Request, env: Env, deps: SuggestDeps = 
   }
   if (!valid) return errorJson(401, "The signature does not match this suggestion and wallet.");
   const addr = wallet.toLowerCase();
+  if (PUBLIC_DEV_ACCOUNTS.has(addr)) return errorJson(403, "That's a public test wallet: sign with your own wallet.");
 
   if (await env.INVITES.get(inviteKey(s.source))) return json({ ok: true, source: s.source, invited: true });
 

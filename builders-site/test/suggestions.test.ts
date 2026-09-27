@@ -7,6 +7,7 @@ import {
   SUGGEST_RATE_LIMIT,
   SUGGEST_TTL_S,
   SUGGEST_WALLET_DAILY,
+  PUBLIC_DEV_ACCOUNTS,
   handleAdminSuggestions,
   handleSuggest,
   listSuggestions,
@@ -16,14 +17,14 @@ import { MemoryKV } from "./memory-kv";
 const ORIGIN = "https://builder.registrai.cc";
 const T0 = Date.parse("2026-09-27T12:00:00.000Z");
 const acme = { name: "Acme Tool", website: "https://acme.dev", x: "@acmetool", github: "acme/tool" };
-// Anvil's well-known test keys (never funded anywhere real).
+// Fixed random keys (never funded anywhere). NOT the public anvil/hardhat keys: those are refused.
 const KEYS = [
-  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-  "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
-  "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
-  "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
-  "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a",
-  "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
+  "0x3ec912428587e37069d4d58feb4327017c5cfca8d34399e1b9b10938a4cc709d",
+  "0xd0da1b16554d9291f766b84ee2688aabf71ba7e15977e5e1a906671e41f3014a",
+  "0x67ad15f93f929f646b971dd3b3753a611d3fca1053472b8e223ea5e8623051a2",
+  "0xc36254344637279eb04184fa31335767edd7f56296e06e380c2455f2b27fcfbc",
+  "0x62a005a6bad8d94ab3e36558a224026bbdbbdbe0f9d89cf85162792b0362acbb",
+  "0x14995f44ef67afebd6bdfb1d91fee5b6ef019f373aa991eae9ef62e5e2e2d8a8",
 ] as const;
 const W = KEYS.map((k) => privateKeyToAccount(k));
 
@@ -112,6 +113,27 @@ describe("POST /api/suggestions", () => {
     expect((await post(acme, { issuedAt: new Date(T0 - 11 * 60_000).toISOString() })).status).toBe(401);
     expect((await post(acme, { issuedAt: new Date(T0 + 11 * 60_000).toISOString() })).status).toBe(401);
     expect((await post(acme, { issuedAt: "not a date" })).status).toBe(401);
+  });
+
+  test("the public dev accounts (anvil/hardhat test mnemonic) are refused even though they have Arc history", async () => {
+    const { env } = setup();
+    const anvil0 = privateKeyToAccount("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
+    const v = validateSuggestion(acme);
+    if (!v.ok) throw new Error(v.error);
+    const issuedAt = new Date(T0).toISOString();
+    const signature = await anvil0.signMessage({ message: suggestionMessage(v.value, issuedAt) });
+    const res = await handleSuggest(
+      new Request(`${ORIGIN}/api/suggestions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: ORIGIN },
+        body: JSON.stringify({ ...acme, wallet: anvil0.address, signature, issuedAt }),
+      }),
+      env,
+      { now: T0, getNonce: async () => 638 },
+    );
+    expect(res.status).toBe(403);
+    expect(PUBLIC_DEV_ACCOUNTS.has(anvil0.address.toLowerCase())).toBe(true);
+    expect(PUBLIC_DEV_ACCOUNTS.size).toBe(10);
   });
 
   test("a wallet that has never sent a transaction on Arc mainnet is refused", async () => {
