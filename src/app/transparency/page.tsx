@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { PerennialShell } from "@/components/PerennialShell";
+import { DashboardShell } from "@/components/transparency/DashboardShell";
 import { Transparency } from "@/components/transparency/Transparency";
 
 const DESCRIPTION =
@@ -14,8 +14,8 @@ export const metadata: Metadata = {
 
 export default function TransparencyPage() {
   return (
-    <PerennialShell>
+    <DashboardShell>
       <Transparency />
-    </PerennialShell>
+    </DashboardShell>
   );
 }
