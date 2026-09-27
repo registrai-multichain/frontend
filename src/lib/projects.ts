@@ -128,6 +128,13 @@ export function projectPath(source: string, admin = true): string {
   return `/api/${admin ? "admin/" : ""}projects/${encodeURIComponent(source)}`;
 }
 
+/** The profile inside a list item (without the server-computed status): what a nomination's hash is of. */
+export function profileOfListItem(item: ProjectListItem): ProjectProfile {
+  const { status: _status, ...profile } = item;
+  void _status;
+  return profile;
+}
+
 /** Strip what never leaves /admin. */
 export function publicProfile(p: ProjectProfile): PublicProjectProfile {
   const strip = <T extends DeclaredAddress>(a: T): Omit<T, "note"> => {

@@ -74,3 +74,17 @@ describe("nominationTx", () => {
     expect(decodeFunctionData({ abi: nominationsAbi, data: off.data as `0x${string}` })).toEqual({ functionName: "unnominate", args: ["domain:arctools.fun"] });
   });
 });
+
+describe("a list item hashes like the stored profile once its status is dropped", () => {
+  test("profileOfListItem(item) hashes as the profile the nomination anchored", async () => {
+    const { profileHash } = await import("./nominations");
+    const { profileOfListItem } = await import("./projects");
+    const profile = {
+      source: "domain:arctools.fun", name: "ArcTools", website: "https://arctools.fun",
+      deployers: [], contracts: [], metrics: [] as never[], declaredBy: "0xb7", declaredAt: "2026-09-27T12:00:00.000Z",
+    };
+    const item = { ...profile, status: "invited" as const };
+    expect(profileHash(profileOfListItem(item))).toBe(profileHash(profile));
+    expect(profileHash(item)).not.toBe(profileHash(profile));
+  });
+});

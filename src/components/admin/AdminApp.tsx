@@ -54,7 +54,8 @@ import { activeProvider } from "@/lib/wallets";
 import { gaslessCandidates, gaslessState, type GaslessRequest } from "@/lib/gasless-registrations";
 import { planOnboarding, safeBatchJson, singleTxSafeFile } from "@/lib/onboard-batch";
 import { NOMINATIONS, nominationTx, nominationsAbi, profileHash, readNominations, type Nomination, type NominationsReader } from "@/lib/nominations";
-import { projectPath, type ProjectProfile } from "@/lib/projects";
+import { profileOfListItem, projectPath, type ProjectListItem, type ProjectProfile } from "@/lib/projects";
+import type { NominationDraft } from "@/lib/drafts";
 import { sendBuildersTx } from "@/components/verify/sendTx";
 import { buildersClient } from "@/components/verify/useMyBuilder";
 import { useWonderContext, WonderStatusProvider } from "@/components/wonder/WonderBits";
@@ -401,7 +402,7 @@ function Dashboard({
 
         {view.projects && <ProjectsSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />}
 
-        {view.directOnboard && NOMINATIONS && <NominationsSection invites={invites.data ?? []} />}
+        {view.directOnboard && NOMINATIONS && <NominationsSection invites={invites.data ?? []} onInvitesChanged={() => invites.mutate()} />}
 
         {view.wonder && WONDER_ON_BUILDERS && <WonderSection invites={invites.data ?? []} />}
       </div>
@@ -1764,8 +1765,148 @@ function ProjectsSection({
 
 // ───────────────────────────── on-chain nominations ─────────────────────────────
 
+/** arc-80's prepared drafts: review, then Invite → Save profile → Nominate, each once the step before is done. */
+function DraftsTable({
+  invited,
+  nominations,
+  onInvitesChanged,
+  onNominate,
+  onSafeFile,
+  busy,
+}: {
+  invited: Set<string>;
+  nominations: Map<string, Nomination> | null;
+  onInvitesChanged: () => void;
+  onNominate: (source: string) => void;
+  onSafeFile: (source: string) => void;
+  busy: boolean;
+}) {
+  const view = useContext(ViewCtx);
+  const drafts = useSWR("admin-drafts", async () => {
+    const r = await call<{ drafts?: NominationDraft[]; error?: string }>("/api/admin/drafts");
+    if (r.status !== 200 || !r.body.drafts) throw new Error(r.body.error ?? `drafts (${r.status})`);
+    return r.body.drafts;
+  }, { revalidateOnFocus: false, shouldRetryOnError: false });
+  const saved = useSWR("admin-projects-saved", async () => {
+    const r = await call<{ projects?: ProjectListItem[] }>("/api/admin/projects");
+    const out = new Map<string, ProjectProfile>();
+    // The list adds a server-computed `status`; the anchored hash is of the profile alone.
+    for (const p of r.body.projects ?? []) if (p.declaredBy) out.set(p.source, profileOfListItem(p));
+    return out;
+  }, { revalidateOnFocus: false, shouldRetryOnError: false });
+  const [open, setOpen] = useState<string | null>(null);
+  const [working, setWorking] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
+
+  async function invite(d: NominationDraft) {
+    setWorking(d.source);
+    setMsg({});
+    const r = await call<{ invite?: AdminInvite; error?: string }>("/api/admin/invites", {
+      method: "POST",
+      body: { source: d.source, name: d.invite.name, x: d.invite.x ?? "", note: `Draft (${d.investigatedBy}, ${d.investigatedAt}): ${d.summary}`.slice(0, 500) },
+    });
+    setWorking(null);
+    if ((r.status === 201 || r.status === 409) && r.body.invite) {
+      onInvitesChanged();
+      setMsg({ ok: `Invited ${d.invite.name}: its claim link and DM are in the invites list.` });
+    } else setMsg({ error: r.body.error ?? `could not invite (${r.status})` });
+  }
+
+  async function save(d: NominationDraft) {
+    setWorking(d.source);
+    setMsg({});
+    const r = await call<{ profile?: ProjectProfile; error?: string }>(projectPath(d.source), { method: "PUT", body: d.profile });
+    setWorking(null);
+    if (r.status === 200) {
+      await saved.mutate();
+      setMsg({ ok: `Saved ${d.invite.name}'s profile.` });
+    } else setMsg({ error: r.body.error ?? `could not save (${r.status})` });
+  }
+
+  async function dismiss(d: NominationDraft) {
+    if (!window.confirm(`Drop the draft for ${d.invite.name}? (The investigation file stays.)`)) return;
+    await call(`/api/admin/drafts/${encodeURIComponent(d.source)}`, { method: "DELETE" });
+    await drafts.mutate();
+  }
+
+  if (drafts.error) return <p className="vf-error">Could not read the drafts: {(drafts.error as Error).message}</p>;
+  if (!drafts.data) return <p className="vf-hint">Reading drafts…</p>;
+  const pending = drafts.data.filter((d) => {
+    const n = nominations?.get(d.source);
+    const p = saved.data?.get(d.source);
+    return !(n?.active && p && n.profileHash === profileHash(p));
+  });
+  if (!pending.length) return <p className="vf-hint">No drafts waiting. New ones appear here once the investigation hands them over.</p>;
+  return (
+    <div className="adm-drafts">
+      <h3>Drafts to review and sign</h3>
+      <ul className="adm-list">
+        {pending.map((d) => {
+          const isInvited = invited.has(d.source);
+          const p = saved.data?.get(d.source);
+          const n = nominations?.get(d.source);
+          const hold = d.recommendation === "hold";
+          const expanded = open === d.source;
+          return (
+            <li key={d.source} className={hold ? "adm-muted" : undefined}>
+              <b>{d.invite.name}</b> <span className="adm-sub">{sourceLabel(d.source)}</span>{" "}
+              <span className="bld-chip" data-kind={hold ? "lapsed" : "verified"}>{hold ? "hold" : "nominate"}</span>
+              <div className="adm-sub">{d.summary}</div>
+              <div className="adm-sub">
+                {isInvited ? "✓ invited" : "not invited"} · {p ? "✓ profile saved" : "profile not saved"} ·{" "}
+                {n?.active ? (p && n.profileHash === profileHash(p) ? "✓ nominated" : "nominated (profile not anchored: re-nominate)") : "not nominated"}
+              </div>
+              <span className="flex flex-wrap gap-2">
+                <button type="button" className="vf-mini" onClick={() => setOpen(expanded ? null : d.source)}>{expanded ? "hide details" : "details"}</button>
+                {view.inviteForm && !isInvited && (
+                  <button type="button" className="vf-mini" disabled={working !== null} onClick={() => void invite(d)}>{working === d.source ? "…" : "Invite"}</button>
+                )}
+                {view.inviteForm && isInvited && (
+                  <button type="button" className="vf-mini" disabled={working !== null} onClick={() => void save(d)}>{working === d.source ? "…" : p ? "Save profile again" : "Save profile"}</button>
+                )}
+                {isInvited && p && (
+                  <button type="button" className="vf-mini" disabled={busy} onClick={() => onNominate(d.source)}>{n?.active ? "Re-nominate" : "Nominate"}</button>
+                )}
+                {view.safeFiles && isInvited && p && (
+                  <button type="button" className="vf-mini" onClick={() => onSafeFile(d.source)}>Safe file</button>
+                )}
+                {view.inviteForm && <button type="button" className="vf-mini" onClick={() => void dismiss(d)}>drop</button>}
+              </span>
+              {expanded && <DraftDetails d={d} />}
+            </li>
+          );
+        })}
+      </ul>
+      {msg.ok && <p className="vf-ok">{msg.ok}</p>}
+      {msg.error && <p className="vf-error">{msg.error}</p>}
+    </div>
+  );
+}
+
+function DraftDetails({ d }: { d: NominationDraft }) {
+  const pr = d.profile;
+  const addr = (a: string) => <a href={`${BUILDERS.explorer.url.replace(/\/$/, "")}/address/${a}`} target="_blank" rel="noreferrer">{shortAddr(a)}</a>;
+  return (
+    <div className="adm-sub">
+      <p>
+        <a href={pr.website} target="_blank" rel="noreferrer">{pr.website} ↗</a>
+        {pr.x && <> · <a href={xHref(pr.x)} target="_blank" rel="noreferrer">{pr.x}{pr.xChecked ? " ✓" : ""} ↗</a></>}
+        {pr.github && <> · <a href={sourceHref(pr.github)} target="_blank" rel="noreferrer">{sourceLabel(pr.github)} ↗</a></>}
+        {" · "}investigation: <code>{d.investigation}</code>
+      </p>
+      {pr.deployers.length > 0 && <p>Deployers: {pr.deployers.map((x, i) => <span key={x.address}>{i ? ", " : ""}{addr(x.address)}{x.note ? ` (${x.note})` : ""}</span>)}</p>}
+      {pr.contracts.length > 0 && <p>Contracts: {pr.contracts.map((x, i) => <span key={x.address}>{i ? ", " : ""}{x.label} {addr(x.address)}</span>)}</p>}
+      {pr.token && <p>Token: {addr(pr.token.address)}{pr.token.note ? ` (${pr.token.note})` : ""}</p>}
+      <p>Metrics: {pr.metrics.length ? pr.metrics.join(", ") : "none"}</p>
+      {pr.redFlags?.length ? <p className="vf-error">Red flags: {pr.redFlags.join("; ")}</p> : null}
+    </div>
+  );
+}
+
+
+
 /** ProjectNominations: anchor an invited project on chain as nominated (the gallery's backup). */
-function NominationsSection({ invites }: { invites: AdminInvite[] }) {
+function NominationsSection({ invites, onInvitesChanged }: { invites: AdminInvite[]; onInvitesChanged: () => void }) {
   const view = useContext(ViewCtx);
   const contract = NOMINATIONS!;
   const { address, walletChainId, switchChain } = useWallet();
@@ -1819,6 +1960,22 @@ function NominationsSection({ invites }: { invites: AdminInvite[] }) {
   const rows = [...(list.data ?? new Map<string, Nomination>()).entries()];
   return (
     <Section title="Nominate on chain">
+      <DraftsTable
+        invited={invited}
+        nominations={list.data ?? null}
+        onInvitesChanged={onInvitesChanged}
+        onNominate={(src) => void send(src, true)}
+        onSafeFile={(src) => {
+          setInput(src);
+          void (async () => {
+            const tx = nominationTx(contract, src, true, await hashFor(src));
+            download(safeFileName(`nominate-${src.replace(/[^a-z0-9]+/g, "-")}`, Date.now()),
+              singleTxSafeFile(tx, { chainId: BUILDERS.chainId, createdAt: Date.now(), name: `Registrai: nominate ${src}` }));
+            setMsg({ ok: "Safe file downloaded." });
+          })();
+        }}
+        busy={busy}
+      />
       <p className="vf-note">
         Anchor an invited project as <b>nominated</b> on {BUILDERS.label} (ProjectNominations): the onboarder wallet or the Safe.
         It records the project and a fingerprint of its saved profile; the gallery links to it. No funds, no markets yet.
