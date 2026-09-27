@@ -14,7 +14,7 @@
  */
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { formatPrice } from "@/lib/rounds";
-import { niceTicks, resample, smoothPath, stepPath, trimSeries, type Pt } from "@/lib/rounds-chart";
+import { inPlayBand, niceTicks, resample, smoothPath, stepPath, trimSeries, type Pt } from "@/lib/rounds-chart";
 
 export type Tick = { t: number; p: number };
 export type PriceStream = {
@@ -308,7 +308,7 @@ export function PriceChart({
   const ticks = niceTicks(yLo, yHi, 3).filter((v) => Y(v) > 8 && Y(v) < H - 4 && (head === undefined || Math.abs(Y(v) - Y(head)) > 16));
   const minutes: number[] = [];
   for (let t = Math.ceil(x0 / 120) * 120; t <= x1; t += 120) minutes.push(t);
-  const inPlay = roundStart !== undefined && roundEnd !== undefined;
+  const band = roundStart !== undefined && roundEnd !== undefined ? inPlayBand(X(roundStart), X(roundEnd), W, width) : undefined;
 
   return (
     <div ref={box} className="relative w-full select-none" style={{ height }}>
@@ -324,17 +324,23 @@ export function PriceChart({
             </clipPath>
           </defs>
 
-          {/* the round in play */}
-          {inPlay && (
+          {/* the round in play, kept inside the chart */}
+          {band && (
             <g>
-              <rect x={X(roundStart!)} y={0} width={Math.max(0, X(roundEnd!) - X(roundStart!))} height={H} fill="var(--fg)" opacity="0.035" />
-              <line x1={X(roundEnd!)} x2={X(roundEnd!)} y1={0} y2={H} stroke="var(--line-strong)" strokeDasharray="2 3" />
-              <text x={X(roundStart!) + 4} y={13} className="fill-fg-dim" fontSize="12">
-                in play
-              </text>
-              <text x={X(roundEnd!) + 4} y={13} className="fill-fg-dim" fontSize="12">
-                next round
-              </text>
+              <rect x={band.x} y={0} width={band.w} height={H} fill="var(--fg)" opacity="0.035" clipPath={`url(#clip-${gid})`} />
+              {band.endX !== null && (
+                <line x1={band.endX} x2={band.endX} y1={0} y2={H} stroke="var(--line-strong)" strokeDasharray="2 3" />
+              )}
+              {band.inPlay && (
+                <text x={band.inPlay.x} y={13} textAnchor={band.inPlay.anchor} className="fill-fg-dim" fontSize="12">
+                  in play
+                </text>
+              )}
+              {band.next && (
+                <text x={band.next.x} y={13} textAnchor={band.next.anchor} className="fill-fg-dim" fontSize="12">
+                  next round
+                </text>
+              )}
             </g>
           )}
 

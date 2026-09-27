@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
   applyTrade,
+  IN_PLAY_LABEL_W,
+  NEXT_ROUND_LABEL_W,
+  inPlayBand,
   cashOutValue,
   niceTicks,
   pnl,
@@ -145,5 +148,57 @@ describe("drawing", () => {
     const s = [1, 2, 3, 4, 5].map((t) => ({ t: t * 10 }));
     expect(trimSeries(s, 50, 15).map((p) => p.t)).toEqual([30, 40, 50]);
     expect(trimSeries(s, 500, 15).map((p) => p.t)).toEqual([50]);
+  });
+});
+
+describe("inPlayBand", () => {
+  // a 400 px card chart: 324 px of plot, 76 px of right axis
+  const W = 324;
+  const SVG = 400;
+
+  test("a round wholly on the plot draws as is, labels beside their edges", () => {
+    expect(inPlayBand(100, 250, W, SVG)).toEqual({
+      x: 100, w: 150, endX: 250,
+      inPlay: { x: 104, anchor: "start" },
+      next: { x: 254, anchor: "start" },
+    });
+  });
+
+  test("a round whose end is past the plot is clamped to it, with no end line or next-round label", () => {
+    const b = inPlayBand(290, 700, W, SVG);
+    expect(b.x).toBe(290);
+    expect(b.x + b.w).toBe(W);
+    expect(b.endX).toBeNull();
+    expect(b.next).toBeNull();
+    // too little room right of the start: the label is right-aligned inside the plot
+    expect(b.inPlay).toEqual({ x: W - 4, anchor: "end" });
+  });
+
+  test("nothing ever reaches past the plot (band, in-play label) or the chart (next-round label)", () => {
+    for (const plot of [150, 230, 324, 800]) {
+      const svg = plot + 76;
+      for (let start = -200; start <= plot + 200; start += 7) {
+        for (const len of [0, 5, 40, 120, 600]) {
+          const b = inPlayBand(start, start + len, plot, svg);
+          expect(b.x).toBeGreaterThanOrEqual(0);
+          expect(b.x + b.w).toBeLessThanOrEqual(plot);
+          if (b.inPlay) {
+            const [l, r] = b.inPlay.anchor === "start" ? [b.inPlay.x, b.inPlay.x + IN_PLAY_LABEL_W] : [b.inPlay.x - IN_PLAY_LABEL_W, b.inPlay.x];
+            expect(l).toBeGreaterThanOrEqual(0);
+            expect(r).toBeLessThanOrEqual(plot);
+          }
+          if (b.endX !== null) expect(b.endX).toBeLessThanOrEqual(plot);
+          if (b.next) {
+            const [l, r] = b.next.anchor === "start" ? [b.next.x, b.next.x + NEXT_ROUND_LABEL_W] : [b.next.x - NEXT_ROUND_LABEL_W, b.next.x];
+            expect(l).toBeGreaterThanOrEqual(0);
+            expect(r).toBeLessThanOrEqual(svg);
+          }
+        }
+      }
+    }
+  });
+
+  test("a round off the plot draws nothing", () => {
+    expect(inPlayBand(-300, -100, W, SVG)).toMatchObject({ w: 0, endX: null, inPlay: null, next: null });
   });
 });

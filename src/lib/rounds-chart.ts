@@ -216,3 +216,41 @@ export function trimSeries<T extends { t: number }>(s: readonly T[], now: number
   if (i === -1) return s.length ? [s[s.length - 1]] : [];
   return s.slice(Math.max(0, i - 1));
 }
+
+/** Approximate widths (px) of the in-play band's two 12 px labels. */
+export const IN_PLAY_LABEL_W = 42;
+export const NEXT_ROUND_LABEL_W = 62;
+
+type BandLabel = { x: number; anchor: "start" | "end" } | null;
+
+/**
+ * Where the price chart draws the round in play, kept inside the chart. `start`
+ * and `end` are the round's x positions (either may lie past the plot, e.g. at
+ * a round's start its end is minutes ahead of the axis); `plotW` is the plot's
+ * width and `svgW` the whole chart's, right axis included. The band is clamped
+ * to [0, plotW]; the end line and the "next round" label show only while the
+ * round's end is on the plot; each label sits beside its edge where it fits,
+ * else is right-aligned against it, else is left out.
+ */
+export function inPlayBand(
+  start: number,
+  end: number,
+  plotW: number,
+  svgW: number,
+): { x: number; w: number; endX: number | null; inPlay: BandLabel; next: BandLabel } {
+  const clamp = (v: number) => Math.min(plotW, Math.max(0, v));
+  const x = clamp(start);
+  const w = Math.max(0, clamp(end) - x);
+  const endX = end >= 0 && end <= plotW ? end : null;
+  let inPlay: BandLabel = null;
+  if (w > 0) {
+    if (x + 4 + IN_PLAY_LABEL_W <= plotW) inPlay = { x: x + 4, anchor: "start" };
+    else if (plotW - 4 - IN_PLAY_LABEL_W >= 0) inPlay = { x: plotW - 4, anchor: "end" };
+  }
+  let next: BandLabel = null;
+  if (endX !== null) {
+    if (endX + 4 + NEXT_ROUND_LABEL_W <= svgW) next = { x: endX + 4, anchor: "start" };
+    else if (endX - 4 - NEXT_ROUND_LABEL_W >= 0) next = { x: endX - 4, anchor: "end" };
+  }
+  return { x, w, endX, inPlay, next };
+}
