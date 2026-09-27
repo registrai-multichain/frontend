@@ -16,6 +16,11 @@ export const SEED = 5_000_000n;
 export const MIN_LEAD_S = 24 * 3600;
 export const MAX_LEAD_S = 366 * 24 * 3600;
 export const GRID_S = 300;
+/** The form's question cap (UTF-16 units, at most 900 UTF-8 bytes: inside the agent's 1200-byte cap). */
+export const QUESTION_MAX = 300;
+/** The rounds agent refuses a signed outcome whose evidenceUrl is longer (keeper/proposals.py STRING_MAX_BYTES). */
+export const EVIDENCE_URL_MAX_BYTES = 2048;
+export const utf8Bytes = (s: string) => new TextEncoder().encode(s).length;
 export const PROPOSAL_ASSETS = {
   "btc-usd": { symbol: "BTC", decimals: 2 },
   "eth-usd": { symbol: "ETH", decimals: 2 },
@@ -83,7 +88,7 @@ export function validateProposal(body: unknown, nowS: number): V {
   const kind = b.kind as ProposalKind;
   if (!["event", "price", "builder", "wonder"].includes(kind)) return bad("kind", "Pick a market type.");
   const question = str(b.question);
-  if (question.length < 10 || question.length > 300) return bad("question", "Write the question in 10 to 300 characters.");
+  if (question.length < 10 || question.length > QUESTION_MAX) return bad("question", `Write the question in 10 to ${QUESTION_MAX} characters.`);
   const rule = str(b.rule);
   if (rule.length > 1000) return bad("rule", "Keep the rule under 1000 characters.");
   const source = str(b.source);

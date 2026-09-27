@@ -5,8 +5,8 @@
  */
 import { getAddress, recoverTypedDataAddress, type Hex } from "viem";
 import {
-  LIVE_KINDS, approvalMessage, approvalTypedData, fromJsonApproval, fromJsonOutcome, newProposalId,
-  outcomeTypedData, toJsonApproval, validateProposal, type ApprovalMessageJson, type OutcomeMessageJson, type Proposal,
+  EVIDENCE_URL_MAX_BYTES, LIVE_KINDS, QUESTION_MAX, approvalMessage, approvalTypedData, fromJsonApproval, fromJsonOutcome, newProposalId,
+  outcomeTypedData, toJsonApproval, utf8Bytes, validateProposal, type ApprovalMessageJson, type OutcomeMessageJson, type Proposal,
 } from "../../src/lib/market-proposals";
 import type { Env } from "./env";
 import { errorJson, json, readJson } from "./http";
@@ -179,6 +179,9 @@ export async function handleAdminApprove(req: Request, env: Env, id: string, adm
   if (p.status !== "pending" && p.status !== "approved") return errorJson(409, `cannot approve a ${p.status} proposal`);
   const b = (await readJson(req)) as { message?: ApprovalMessageJson; signature?: string } | undefined;
   if (!b?.message || typeof b.signature !== "string") return errorJson(400, "message and signature required");
+  // R24: never store a signature the rounds agent would refuse as malformed.
+  if (typeof b.message.question !== "string" || b.message.question.length > QUESTION_MAX)
+    return errorJson(400, `the question must be at most ${QUESTION_MAX} characters`, { field: "question" });
   let expected: ApprovalMessageJson;
   try {
     expected = toJsonApproval(approvalMessage(p, BigInt(b.message.nonce)));
@@ -206,7 +209,10 @@ export async function handleAdminOutcome(req: Request, env: Env, id: string, adm
   if (p.status !== "opened" && p.status !== "approved") return errorJson(409, "only an approved or opened market takes an outcome");
   const b = (await readJson(req)) as { message?: OutcomeMessageJson; signature?: string } | undefined;
   if (!b?.message || typeof b.signature !== "string" || b.message.proposalId !== id) return errorJson(400, "message and signature for this proposal required");
-  if (!/^https:\/\//.test(b.message.evidenceUrl)) return errorJson(400, "evidence must be an https link", { field: "evidenceUrl" });
+  if (typeof b.message.evidenceUrl !== "string" || !/^https:\/\//.test(b.message.evidenceUrl)) return errorJson(400, "evidence must be an https link", { field: "evidenceUrl" });
+  // R24: the rounds agent refuses a longer evidenceUrl as malformed; never store one.
+  if (utf8Bytes(b.message.evidenceUrl) > EVIDENCE_URL_MAX_BYTES)
+    return errorJson(400, `the evidence link must be at most ${EVIDENCE_URL_MAX_BYTES} bytes`, { field: "evidenceUrl" });
   let signer: string;
   try {
     signer = await recoverTypedDataAddress({ ...outcomeTypedData(fromJsonOutcome(b.message)), signature: b.signature as Hex });

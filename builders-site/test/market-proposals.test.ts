@@ -182,6 +182,42 @@ describe("admin review", () => {
     const feed = (await (await handleOutcomesFeed(new Request("https://x"), s.env)).json()) as { outcomes: { id: string }[] };
     expect(feed.outcomes.map((o) => o.id)).toEqual([id]);
   });
+  test("R24: approve refuses a question over 300 characters, so the agent never sees a signature it would refuse", async () => {
+    const s = setup();
+    const id = await pending(s);
+    const stored = await current(s, id);
+    // a record that bypassed the form's cap (e.g. written to KV by hand)
+    await s.kv.put(`mp:${id}`, JSON.stringify({ ...stored, question: "Q".repeat(301) }));
+    const msg = approvalMessage({ ...stored, question: "Q".repeat(301) }, 1n);
+    const signature = await ADMIN.signTypedData(approvalTypedData(msg));
+    const res = await handleAdminApprove(s.adminReq(`/x`, "POST", { message: toJsonApproval(msg), signature }), s.env, id, ADMIN.address);
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { field?: string }).field).toBe("question");
+    expect((await current(s, id)).approval).toBeUndefined();
+    // exactly 300 is fine
+    await s.kv.put(`mp:${id}`, JSON.stringify({ ...stored, question: "Q".repeat(300) }));
+    const ok = approvalMessage({ ...stored, question: "Q".repeat(300) }, 2n);
+    const okRes = await handleAdminApprove(s.adminReq(`/x`, "POST", { message: toJsonApproval(ok), signature: await ADMIN.signTypedData(approvalTypedData(ok)) }), s.env, id, ADMIN.address);
+    expect(okRes.status).toBe(200);
+  });
+  test("R24: an outcome whose evidenceUrl is over 2048 bytes is refused and not stored", async () => {
+    const s = setup();
+    const id = await pending(s);
+    expect((await approve(s, id)).res.status).toBe(200);
+    const base = "https://www.circle.com/blog/";
+    const post = async (evidenceUrl: string, nonce: bigint) => {
+      const out = { proposalId: id, value: 1n, since: BigInt(nowS), evidenceUrl, nonce };
+      const sig = await ADMIN.signTypedData(outcomeTypedData(out));
+      return handleAdminOutcome(s.adminReq(`/x`, "POST", { message: toJsonOutcome(out), signature: sig }), s.env, id, ADMIN.address);
+    };
+    const long = await post(base + "x".repeat(2049 - base.length), 2n);
+    expect(long.status).toBe(400);
+    expect(((await long.json()) as { field?: string }).field).toBe("evidenceUrl");
+    // bytes, not characters: 700 three-byte characters
+    expect((await post(base + "€".repeat(700), 3n)).status).toBe(400);
+    expect((await current(s, id)).outcome).toBeUndefined();
+    expect((await post(base + "x".repeat(2048 - base.length), 4n)).status).toBe(200);
+  });
   test("an outcome signed by another wallet is refused", async () => {
     const s = setup();
     const id = await pending(s);

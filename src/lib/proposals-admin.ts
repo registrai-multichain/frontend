@@ -6,7 +6,7 @@
  */
 import { isAddress } from "viem";
 import {
-  GRID_S, MAX_LEAD_S, MIN_LEAD_S, PROPOSAL_ASSETS, PROPOSAL_DOMAIN, SEED, TREASURY, validateProposal,
+  EVIDENCE_URL_MAX_BYTES, GRID_S, MAX_LEAD_S, MIN_LEAD_S, PROPOSAL_ASSETS, PROPOSAL_DOMAIN, SEED, TREASURY, utf8Bytes, validateProposal,
   type ApprovalMessage, type Proposal, type ProposalAsset, type ProposalKind, type ProposalStatus,
 } from "./market-proposals";
 import { formatUtcDeadline, parseUtcDeadline } from "./propose-form";
@@ -238,6 +238,8 @@ export function outcomeProblems(f: { value: boolean | null; evidence: string; si
   if (f.value === null) out.push({ field: "value", blank: true, error: "Pick Yes or No." });
   const evidence = f.evidence.trim();
   if (!/^https:\/\/\S+$/.test(evidence)) out.push({ field: "evidence", blank: !evidence, error: "Give the evidence as a public https link." });
+  else if (utf8Bytes(evidence) > EVIDENCE_URL_MAX_BYTES)
+    out.push({ field: "evidence", blank: false, error: `Keep the evidence link under ${EVIDENCE_URL_MAX_BYTES} bytes: the agent ignores a longer one.` });
   const since = parseUtcMinute(f.sinceText);
   if (!f.sinceText.trim()) out.push({ field: "since", blank: true, error: "Write when it happened as YYYY-MM-DD HH:MM (UTC)." });
   else if (since === null) out.push({ field: "since", blank: false, error: "Write when it happened as YYYY-MM-DD HH:MM (UTC)." });

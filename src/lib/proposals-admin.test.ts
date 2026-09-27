@@ -165,6 +165,14 @@ describe("outcomeProblems", () => {
     expect(outcomeProblems({ ...ok, sinceText: "Dec 1" })).toEqual([{ field: "since", blank: false, error: "Write when it happened as YYYY-MM-DD HH:MM (UTC)." }]);
     expect(outcomeProblems({ ...ok, sinceText: "2027-01-03 00:00" })[0].error).toBe("That time is in the future.");
   });
+  test("an evidence link the agent would refuse (over 2048 bytes) blocks signing (R24)", () => {
+    const base = "https://www.circle.com/blog/";
+    expect(outcomeProblems({ ...ok, evidence: base + "x".repeat(2048 - base.length) })).toEqual([]);
+    const long = outcomeProblems({ ...ok, evidence: base + "x".repeat(2049 - base.length) });
+    expect(long.map((x) => [x.field, x.blank])).toEqual([["evidence", false]]);
+    // bytes, not characters: 700 three-byte characters are 2100 bytes
+    expect(outcomeProblems({ ...ok, evidence: base + "€".repeat(700) })[0]?.field).toBe("evidence");
+  });
   test("a Yes dated after the deadline is refused; a No is not", () => {
     const late = { ...ok, sinceText: "2027-01-01 10:00" };
     expect(outcomeProblems(late)).toEqual([
