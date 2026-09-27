@@ -17,7 +17,7 @@ test("app.registrai.cc: built for mainnet, ships only the markets app, deploys t
 
 test("dashboard.registrai.cc: built for mainnet, ships only the transparency page at its root, deploys to registrai-dashboard", () => {
   const pkg = JSON.parse(readFileSync(resolve(FRONTEND, "package.json"), "utf8"));
-  expect(pkg.scripts["deploy:dashboard"]).toMatch(/^NEXT_PUBLIC_PERENNIAL_NETWORK=mainnet next build && bash scripts\/build-dashboard-site\.sh && wrangler pages deploy dist-dashboard --project-name=registrai-dashboard --branch=main$/);
+  expect(pkg.scripts["deploy:dashboard"]).toMatch(/^NEXT_PUBLIC_PERENNIAL_NETWORK=mainnet next build && bash scripts\/build-dashboard-site\.sh && cd dashboard-site && wrangler pages deploy \.\.\/dist-dashboard --project-name=registrai-dashboard --branch=main$/);
   const build = readFileSync(resolve(FRONTEND, "scripts/build-dashboard-site.sh"), "utf8");
   const shipped = /for x in ([^;]*); do/s.exec(build)![1].replace(/\\\n/g, " ").split(/\s+/).filter(Boolean);
   expect(shipped).toContain("_next");

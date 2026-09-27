@@ -1,0 +1,7 @@
+# Cloudflare Pages config for dashboard.registrai.cc (project registrai-dashboard).
+# `npm run deploy:dashboard` builds dist-dashboard/ (scripts/build-dashboard-site.sh) and
+# deploys it FROM this directory, so wrangler picks up dashboard-site/functions (the
+# REGI supply endpoints CoinGecko reads) and the other sites never get them.
+name = "registrai-dashboard"
+compatibility_date = "2026-05-01"
+pages_build_output_dir = "../dist-dashboard"
