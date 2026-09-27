@@ -17,7 +17,7 @@
  * Markets on the legacy price feeds ("registrai-data:btc-usd": the strike is
  * the price at open, the round is [expiry − 5m, expiry]) still settle and show.
  */
-import type { Address, Hex } from "viem";
+import { keccak256, toBytes, type Address, type Hex } from "viem";
 import testnetDeployment from "./deployments/arc-testnet-rounds.json";
 import mainnetDeployment from "./deployments/arc-mainnet-rounds.json";
 import { selectPerennialNetwork } from "./perennial-network";
@@ -646,6 +646,19 @@ export function proposedMarkets(markets: readonly RoundMarket[], now: number): R
 
 /** A proposal's public record from GET /api/market-proposals/<id>, narrowed to what
  *  the market page shows. Untrusted input: anything malformed is dropped. */
+export interface ApprovalTerms {
+  threshold: bigint;
+  comparator: number;
+  expiry: number;
+  /** 1 = yes/no event, 2 = price at a deadline. */
+  kind: number;
+  question: string;
+  /** "" for a yes/no market. */
+  asset: string;
+  /** keccak256 of the rule as signed. */
+  ruleHash?: Hex;
+}
+
 export interface ProposalInfo {
   question: string;
   kind?: "event" | "price";
@@ -656,8 +669,9 @@ export interface ProposalInfo {
   evidenceUrl?: string;
   /** The approval's creator payee; "" means the treasury. */
   creatorPayee?: string;
-  /** The approved market's terms (the signed approval message), to check against chain. */
-  terms?: { threshold: bigint; comparator: number; expiry: number };
+  /** What the admin signed (the approval message): checked against chain and against
+   *  the record's own words before any of them is shown. */
+  terms?: ApprovalTerms;
 }
 
 const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() && v.length <= max ? v.trim() : undefined);
@@ -681,6 +695,14 @@ export function parseProposalInfo(json: unknown, id: string): ProposalInfo | nul
   const th = intText(msg?.threshold, /^-?\d{1,78}$/);
   const cmp = intText(msg?.comparator, /^\d{1,3}$/);
   const exp = intText(msg?.expiry, /^\d{1,20}$/);
+  const knd = intText(msg?.kind, /^\d{1,3}$/);
+  const sq = text(msg?.question, 1200);
+  const sa = typeof msg?.asset === "string" && msg.asset.length <= 16 ? msg.asset : undefined;
+  const rh = typeof msg?.ruleHash === "string" && /^0x[0-9a-fA-F]{64}$/.test(msg.ruleHash) ? (msg.ruleHash.toLowerCase() as Hex) : undefined;
+  const terms =
+    th !== undefined && cmp !== undefined && exp !== undefined && knd !== undefined && sq !== undefined && sa !== undefined
+      ? { threshold: BigInt(th), comparator: Number(cmp), expiry: Number(exp), kind: Number(knd), question: sq, asset: sa, ruleHash: rh }
+      : undefined;
   return {
     question,
     kind,
@@ -689,16 +711,17 @@ export function parseProposalInfo(json: unknown, id: string): ProposalInfo | nul
     asset: text(p.asset, 16),
     evidenceUrl: httpsUrl(outcome?.evidenceUrl),
     creatorPayee: payee,
-    terms: th !== undefined && cmp !== undefined && exp !== undefined ? { threshold: BigInt(th), comparator: Number(cmp), expiry: Number(exp) } : undefined,
+    terms,
   };
 }
 
 /** What a proposals API answer means for the page: a record to parse, a definitive
- *  "no record" (404 and other client errors: kept), or a transient failure (network,
- *  429, 5xx: forgotten and asked again later). */
+ *  "no such proposal" (404, 410: kept), or anything else (a network error or timeout,
+ *  429, 5xx, any other 4xx: forgotten and asked again later). */
 export function proposalAnswer(status: number | "network"): "ok" | "missing" | "retry" {
-  if (status === "network" || status === 429 || status >= 500) return "retry";
-  return status >= 200 && status < 300 ? "ok" : "missing";
+  if (status === "network") return "retry";
+  if (status >= 200 && status < 300) return "ok";
+  return status === 404 || status === 410 ? "missing" : "retry";
 }
 
 /** Backoff before asking again after `fails` transient failures: 10 s, doubling, at most 5 min. */
@@ -709,35 +732,47 @@ export function proposalRetryMs(fails: number): number {
 type MarketTerms = Pick<RoundMarket, "threshold" | "comparator" | "expiry">;
 
 /** The API record describes THIS market: its signed approval's threshold, comparator
- *  and expiry are the ones on chain. Anything else (a stale, edited or wrong record)
- *  must not put its words on the market. */
-export function infoMatchesMarket(info: ProposalInfo | null | undefined, m: MarketTerms): info is ProposalInfo {
+ *  and expiry are the ones on chain, and the record's question and asset are the ones
+ *  signed. Anything else (a stale, edited or wrong record) must not put its words on
+ *  the market. */
+export function infoMatchesMarket(info: ProposalInfo | null | undefined, m: MarketTerms): info is ProposalInfo & { terms: ApprovalTerms } {
   const t = info?.terms;
-  return Boolean(t && t.threshold === m.threshold && t.comparator === m.comparator && t.expiry === m.expiry);
+  return Boolean(
+    t &&
+      t.threshold === m.threshold &&
+      t.comparator === m.comparator &&
+      t.expiry === m.expiry &&
+      (t.kind === 1 || t.kind === 2) &&
+      info!.question === t.question &&
+      (info!.asset ?? "") === t.asset,
+  );
 }
 
-/** The event-page description of a proposed market. The kind is the chain's (a
- *  threshold of 1 with GreaterOrEqual is a yes/no market, what the agent opens for
- *  kind 1; anything else is a price market). The question, rule, source and asset come
- *  from the proposals API only when its record matches the market on chain; otherwise
- *  the page says "Proposal #id" and shows the raw on-chain terms. */
+/** The event-page description of a proposed market. When the proposals API's record
+ *  matches the market (infoMatchesMarket), the signed approval gives the kind, the
+ *  question and the asset, and the record its rule (only if it hashes to the signed
+ *  ruleHash), source and evidence. Otherwise the page says "Proposal #id", shows the raw
+ *  on-chain terms, and takes the kind from chain: a threshold of 1 with GreaterOrEqual
+ *  is a yes/no market (what the agent opens for kind 1), anything else a price market. */
 export function proposalEventMeta(
   m: Pick<RoundMarket, "key" | "marketId" | "expiry" | "threshold" | "comparator">,
   info: ProposalInfo | null | undefined,
   assets: Record<string, { symbol: string; decimals: number }> = {},
 ): EventMeta {
   const id = proposalIdOfKey(m.key);
-  const kind = m.threshold === 1n && m.comparator === COMPARATOR.GreaterOrEqual ? "event" : "price";
   const ok = infoMatchesMarket(info, m) ? info : undefined;
-  const asset = kind === "price" && ok?.asset ? assets[ok.asset] : undefined;
+  const chainKind = m.threshold === 1n && m.comparator === COMPARATOR.GreaterOrEqual ? "event" : "price";
+  const kind = ok ? (ok.terms.kind === 2 ? "price" : "event") : chainKind;
+  const asset = kind === "price" && ok?.terms.asset ? assets[ok.terms.asset] : undefined;
+  const rule = ok?.rule && ok.terms.ruleHash && keccak256(toBytes(ok.rule)) === ok.terms.ruleHash ? ok.rule : undefined;
   return {
     key: m.key,
-    question: ok?.question ?? `Proposal #${id}`,
+    question: ok?.terms.question ?? `Proposal #${id}`,
     expiry: m.expiry,
     rehearsal: false,
     marketId: m.marketId,
     evidenceUrl: ok?.evidenceUrl ?? null,
-    proposal: { id, kind, verified: Boolean(ok), rule: ok?.rule, source: ok?.source, symbol: asset?.symbol, decimals: asset?.decimals },
+    proposal: { id, kind, verified: Boolean(ok), rule, source: ok?.source, symbol: asset?.symbol, decimals: asset?.decimals },
   };
 }
 
@@ -843,11 +878,13 @@ function newestFeeds(recs: readonly ProposalFeedRecord[], max = PROPOSAL_STORE_M
   return Object.fromEntries(sorted.slice(0, max).map((f) => [f.feedId, f]));
 }
 
-/** The store without what can no longer show: feeds older than the scan's floor, and
- *  feeds whose market search ended empty (a proposal never opened); then the newest
- *  PROPOSAL_STORE_MAX by block. */
-export function pruneProposalStore(s: ProposalScanStore, floor: bigint, searchBlocks: bigint, max = PROPOSAL_STORE_MAX): ProposalScanStore {
-  const keep = Object.values(s.feeds).filter((f) => f.block >= floor && (f.marketId || f.marketTo < f.block + searchBlocks));
+/** The store without what can no longer show: feeds older than the scan's floor (a
+ *  proposal's deadline is at most a year after its feed, so past the floor its market,
+ *  opened or not, is over); then the newest PROPOSAL_STORE_MAX by block. A feed whose
+ *  market search came up empty stays: the agent may still open it (a retried open, or
+ *  one waiting on its float), and the page's own scan catches that on a feed in its book. */
+export function pruneProposalStore(s: ProposalScanStore, floor: bigint, max = PROPOSAL_STORE_MAX): ProposalScanStore {
+  const keep = Object.values(s.feeds).filter((f) => f.block >= floor);
   return { cover: s.cover, feeds: newestFeeds(keep, max) };
 }
 

@@ -207,6 +207,10 @@ const COMPARATOR_SIGN: Record<number, string> = { 0: ">", 1: "≥", 2: "<", 3: "
 const settled = (phase: number | undefined) => phase === PHASE.Resolved || phase === PHASE.Voided;
 const sameAddress = (a?: string, b?: string) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
 const ZERO_ID = `0x${"0".repeat(64)}`;
+/** Stored proposal feeds re-read per Multicall3 eth_call, and the calldata budget
+ *  that keeps each such chunk in one call (a getFeed call is ~100 bytes of it). */
+const VERIFY_CHUNK = 25;
+const VERIFY_BATCH_BYTES = 8_192;
 const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const blocksFor = (secs: number) => BigInt(Math.ceil(secs / BLOCK_SECS));
 
@@ -656,16 +660,26 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
 
     // The stored records name feeds by id only: what each feed is (its creator and
     // description, hence its key) is read from the Registry before it joins the book.
-    let verified = false;
-    const verify = async () => {
-      const ids = recs().map((f) => f.feedId);
+    // One chunk at a time (VERIFY_CHUNK feeds in one Multicall3 eth_call), one after
+    // another in the loop below; a failed chunk stays pending and is read again on its
+    // own, and a feed joins the book (and its market is described) only once verified.
+    const unverified = new Set(recs().map((f) => f.feedId as string));
+    const verifyChunk = async () => {
+      const ids = [...unverified].filter((f) => store.feeds[f]).slice(0, VERIFY_CHUNK) as Hex[];
+      if (!ids.length) {
+        unverified.clear();
+        return;
+      }
       const rows = (await client.multicall({
         contracts: ids.map((f) => ({ address: C.Registry, abi: registryAbi, functionName: "getFeed" as const, args: [f] as const })),
         allowFailure: false,
         multicallAddress: MULTICALL3,
+        batchSize: VERIFY_BATCH_BYTES,
       })) as unknown as Array<{ creator: Address; description: string; disputeWindow: bigint; exists: boolean }>;
       const logs: FeedCreatedLog[] = [];
+      let described = false;
       ids.forEach((feedId, i) => {
+        unverified.delete(feedId);
         const r = rows[i];
         const key = r?.exists && sameAddress(r.creator, D.agent) ? feedKeyFromDescription(r.description) : null;
         if (!key || !isProposalKey(key)) {
@@ -673,10 +687,14 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
           return;
         }
         logs.push({ args: { feedId, creator: r.creator, description: r.description, disputeWindow: r.disputeWindow }, blockNumber: store.feeds[feedId].block, logIndex: 0 });
+        const mid = store.feeds[feedId].marketId;
+        if (mid) {
+          d.describe.add(mid);
+          described = true;
+        }
       });
       d.book = mergeFeedLogs(d.book, logs, D.agent);
-      for (const f of recs()) if (f.marketId) d.describe.add(f.marketId);
-      if (recs().some((f) => f.marketId)) void refreshRef.current?.();
+      if (described) void refreshRef.current?.();
     };
 
     void (async () => {
@@ -686,9 +704,9 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
           continue;
         }
         try {
-          if (!verified) {
-            if (recs().length) await verify();
-            verified = true;
+          if (unverified.size) {
+            await verifyChunk();
+            continue;
           }
           const head = await client.getBlockNumber();
           const back = blocksFor(PROPOSAL_LOOKBACK_SECS);
@@ -705,7 +723,7 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
           //    (the agent opens the market in the pass that provisions the feed).
           const searchEnd = (f: { feedId: string; block: bigint }) => searchUntil(f, head);
           const pending = recs()
-            .filter((f) => !f.marketId && f.marketTo < searchEnd(f))
+            .filter((f) => !f.marketId && d.book.byId[f.feedId] && f.marketTo < searchEnd(f))
             .sort((a, b) => (a.block > b.block ? -1 : a.block < b.block ? 1 : 0));
           if (pending.length) {
             const f = pending[0];
@@ -739,7 +757,7 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
             d.book = mergeFeedLogs(d.book, logs, D.agent);
             store.cover = extendCover(store.cover, range[0], range[1]);
           }
-          store = pruneProposalStore(store, floor, blocksFor(PROPOSAL_MARKET_SEARCH_SECS));
+          store = pruneProposalStore(store, floor);
           saveProposed(store);
           if (found) void refreshRef.current?.();
         } catch {
@@ -819,15 +837,17 @@ function useLivePools(client: PublicClient, ids: readonly Hex[], paused: boolean
 }
 
 /** Proposals' public records (the question, rule and source) from the proposals API.
- *  A record, or a definitive "none" (404: the page says "Proposal #id"), is kept for
- *  the page's lifetime; a network error, 429 or 5xx is forgotten and asked again on
- *  a later refresh, with backoff (proposalRetryMs). */
+ *  A record, or a definitive "none" (404/410: the page says "Proposal #id"), is kept
+ *  for the page's lifetime; anything else (a network error or 10 s timeout, 429, 5xx,
+ *  another 4xx) is forgotten and asked again on a later refresh, with backoff
+ *  (proposalRetryMs). */
 const proposalInfoCache = new Map<string, Promise<ProposalInfo | null | "retry">>();
 const proposalFails = new Map<string, { fails: number; at: number }>();
 function fetchProposalInfo(id: string): Promise<ProposalInfo | null | "retry"> {
   let p = proposalInfoCache.get(id);
   if (!p) {
-    p = fetch(`${PROPOSALS_API}/${encodeURIComponent(id)}`)
+    // A stalled request must end (and be retried): 10 s, then it counts as a network failure.
+    p = fetch(`${PROPOSALS_API}/${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(10_000) })
       .then(async (r) => {
         const a = proposalAnswer(r.status);
         return a === "ok" ? parseProposalInfo(await r.json(), id) : a === "missing" ? null : ("retry" as const);
