@@ -4,6 +4,7 @@ import { StatusBadge } from "./StatusBadge";
 import { NavMenu } from "./NavMenu";
 import { BrandLockup } from "./Brand";
 import { COMMON_MARKETS_HREF } from "@/lib/common-markets";
+import { REGISTRAI_X_URL } from "@/lib/regi";
 
 /** `wide`: a page of market tiles (the common markets grid) uses a wider column. */
 export function Shell({ children, wide = false }: { children: React.ReactNode; wide?: boolean }) {
@@ -72,6 +73,9 @@ function Footer({ w }: { w: string }) {
           <div className="flex items-center gap-4 text-2xs tracking-wide text-fg-dim">
             <a href="/brand/registrai-brand-kit-regi.zip" download className="hover:text-accent transition-colors">
               brand kit ↓
+            </a>
+            <a href={REGISTRAI_X_URL} target="_blank" rel="me noreferrer" className="hover:text-accent transition-colors">
+              x ↗
             </a>
             <a
               href="https://github.com/registrai-multichain"

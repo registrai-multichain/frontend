@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono, Instrument_Serif, Instrument_Sans } from "next/font/google";
 import { Providers } from "@/components/Providers";
+import { REGISTRAI_X_HANDLE } from "@/lib/regi";
 import "./globals.css";
 import "./paper.css";
 
@@ -55,6 +56,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
+    site: `@${REGISTRAI_X_HANDLE}`,
+    creator: `@${REGISTRAI_X_HANDLE}`,
     title: TITLE,
     description: DESCRIPTION,
     images: ["/social/registrai-landing-regi.png"],

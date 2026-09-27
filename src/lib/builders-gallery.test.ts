@@ -12,6 +12,7 @@ import {
   claimHref,
   displayKind,
   filterGallery,
+  filterLabel,
   galleryCounts,
   showGalleryStats,
   galleryRowsFromRecords,
@@ -80,7 +81,7 @@ describe("display: status -> kind, label, tone", () => {
   test("claimed in colour, lapsed and invited in grayscale", () => {
     expect(DISPLAY).toEqual({
       verified: { label: "Verified", tone: "color" },
-      nominated: { label: "Nominated", tone: "color" },
+      nominated: { label: "Onboarding", tone: "color" },
       lapsed: { label: "Lapsed", tone: "grayscale" },
       unconfirmed: { label: "Unconfirmed", tone: "grayscale" },
       invited: { label: "Invited", tone: "grayscale" },
@@ -90,7 +91,12 @@ describe("display: status -> kind, label, tone", () => {
     expect(toneOf("nominated")).toBe("color");
     expect(toneOf("lapsed")).toBe("grayscale");
     expect(toneOf("invited")).toBe("grayscale");
-    expect(labelOf("nominated")).toBe("Nominated");
+    // "nominated" (internal) is a claimed builder awaiting onboarding: shown as "Onboarding",
+    // so "Nominated" means only an on-chain nomination (filter "onchain").
+    expect(labelOf("nominated")).toBe("Onboarding");
+    expect(filterLabel("onchain")).toBe("Nominated");
+    expect(filterLabel("nominated")).toBe("Onboarding");
+    expect(filterLabel("all")).toBe("All");
   });
 
   test("chain status maps to a kind; unverified and inactive are not shown", () => {
@@ -266,7 +272,7 @@ describe("mergeGallery", () => {
   });
 
   test("counts: countries only from claimed builders", () => {
-    expect(galleryCounts(entries)).toEqual({ all: 6, verified: 2, nominated: 1, lapsed: 1, unconfirmed: 0, invited: 2, countries: 2 });
+    expect(galleryCounts(entries)).toEqual({ all: 6, verified: 2, nominated: 1, onchain: 0, lapsed: 1, unconfirmed: 0, invited: 2, countries: 2 });
     // unconfirmed builders are listed but never counted as claimed, nor their country
     const withUnconfirmed = mergeGallery([...builders, row(8, { status: "unconfirmed", country: "FR", projects: [proj(80, "domain:u.example.org", { status: "unconfirmed" })] })], nominees);
     expect(galleryCounts(withUnconfirmed)).toMatchObject({ verified: 2, nominated: 1, unconfirmed: 1, countries: 2 });
@@ -278,8 +284,18 @@ describe("mergeGallery", () => {
     expect(showGalleryStats(galleryCounts(mergeGallery([], nominees)))).toBe(nominees.length > 0);
   });
 
+  test("an invite nominated on chain counts as Nominated, not Invited", () => {
+    const onChain = new Set(["github:someone/unclaimed"]);
+    expect(galleryCounts(entries, onChain)).toMatchObject({ all: 6, onchain: 1, invited: 1 });
+    expect(galleryCounts(entries)).toMatchObject({ onchain: 0, invited: 2 });
+    expect(filterGallery(entries, "onchain", "", onChain).map((e) => e.name)).toEqual(["Unclaimed"]);
+    expect(filterGallery(entries, "invited", "", onChain).map((e) => e.name)).toEqual(["Deactivated"]);
+    expect(filterGallery(entries, "onchain", "")).toEqual([]);
+    expect(parseFilter("onchain")).toBe("onchain");
+  });
+
   test("filters and search", () => {
-    expect(FILTERS).toEqual(["all", "verified", "nominated", "unconfirmed", "lapsed", "invited"]);
+    expect(FILTERS).toEqual(["all", "verified", "nominated", "onchain", "invited", "unconfirmed", "lapsed"]);
     expect(filterGallery(entries, "all", "")).toHaveLength(6);
     expect(filterGallery(entries, "verified", "").map((e) => e.builder?.id)).toEqual([4, 3]);
     expect(filterGallery(entries, "invited", "").map((e) => e.name)).toEqual(["Unclaimed", "Deactivated"]);
@@ -866,11 +882,22 @@ describe("cardLook: an invited project nominated on chain looks different from a
     expect(cardLook("invited", false)).toEqual({ kind: "invited", grey: true, pill: { text: "Invited", tone: "unclaimed" } });
   });
   test("nominated on chain: in colour, its own kind and a solid 'Nominated on chain' pill", () => {
-    expect(cardLook("invited", true)).toEqual({ kind: "invited-onchain", grey: false, pill: { text: "Nominated on chain", tone: "onchain" } });
+    expect(cardLook("invited", true)).toEqual({ kind: "invited-onchain", grey: false, pill: { text: "Nominated", tone: "onchain" } });
   });
   test("on-chain nomination changes nothing for a builder who claimed", () => {
     expect(cardLook("verified", true)).toEqual({ kind: "verified", grey: false, pill: { text: "✓ Verified", tone: "ok" } });
-    expect(cardLook("nominated", true)).toEqual({ kind: "nominated", grey: false, pill: { text: "Nominated", tone: "muted" } });
+    expect(cardLook("nominated", true)).toEqual({ kind: "nominated", grey: false, pill: { text: "Onboarding", tone: "muted" } });
     expect(cardLook("lapsed", true)).toEqual({ kind: "lapsed", grey: true, pill: { text: "Lapsed", tone: "muted" } });
+  });
+});
+
+describe("cardLook: a project that went dark keeps its card, stamped", () => {
+  test("gone dark: its own kind, a 'Gone dark' pill in the down tone and a stamp, whatever else is true", () => {
+    const gone = { kind: "gone-dark", grey: false, pill: { text: "Gone dark", tone: "down" }, stamp: "Gone dark" };
+    expect(cardLook("invited", true, true)).toEqual(gone);
+    expect(cardLook("invited", false, true)).toEqual(gone);
+  });
+  test("not gone dark: unchanged", () => {
+    expect(cardLook("invited", true, false)).toEqual(cardLook("invited", true));
   });
 });

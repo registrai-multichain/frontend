@@ -276,11 +276,11 @@ function BuilderStatus({ active, hasBadge, proofsBroken }: { active: boolean; ha
   }
   return (
     <div className="vf-banner vf-banner-ok" role="status">
-      <strong>Nominated · waiting for Registrai</strong>
+      <strong>Onboarding · waiting for Registrai</strong>
       <p>
         Your claim is registered and checks out. To become <b>verified</b>, Registrai reviews it and onboards your builder
         in its next batch: that issues your Verified Builder Badge to this wallet. There&apos;s nothing else for you to do;
-        just keep the proof file published. Your gallery card turns from Nominated to Verified when the badge is issued.
+        just keep the proof file published. Your gallery card turns from Onboarding to Verified when the badge is issued.
       </p>
     </div>
   );

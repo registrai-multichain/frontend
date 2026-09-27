@@ -17,6 +17,7 @@ import {
   checkLiveProofs,
   claimHref,
   filterGallery,
+  filterLabel,
   galleryCounts,
   showGalleryStats,
   greyReason,
@@ -51,6 +52,7 @@ import { BuilderEconomyFacts } from "@/components/builders/BuilderEconomyFacts";
 import { nextBadgeImage } from "@/lib/verify-invite";
 import { Avatar, BuilderCardView } from "./BuilderCardView";
 import { NOMINATIONS, readNominations, type Nomination, type NominationsReader } from "@/lib/nominations";
+import { goneDarkDate, goneDarkOf } from "@/lib/gone-dark";
 
 const REG = BUILDERS.contracts.BuilderRegistry;
 const BADGE = BUILDERS.contracts.VerifiedBuilderBadge;
@@ -166,6 +168,20 @@ function StatusNote({ e, onChain }: { e: GalleryEntry; onChain?: boolean }) {
   const b = e.builder;
   if (e.kind === "nominated") return <p className="bld-note">Proof checked. We add it within a day.</p>;
   if ((e.kind === "lapsed" || e.kind === "unconfirmed") && b) return <p className="bld-note">{greyReason(b)}</p>;
+  const gone = goneDarkOf(e.source);
+  if (gone) {
+    return (
+      <p className="bld-note">
+        Gone dark · {goneDarkDate(gone.since)}: {gone.reason} · check:{" "}
+        {gone.evidence.map((x, i) => (
+          <span key={x.url}>
+            {i > 0 && " · "}
+            <a className="pa-link" href={x.url} target="_blank" rel="noreferrer">{x.label} ↗</a>
+          </span>
+        ))}
+      </p>
+    );
+  }
   if (e.kind === "invited" && onChain && NOMINATIONS) {
     return (
       <p className="bld-note">
@@ -199,7 +215,7 @@ function BuilderCard({ e, highlighted, waiting, nominated = false, onChain = fal
   const proof = !b && e.source ? proofHref(e.source) : null;
   const projects = b ? b.projects.filter((p) => p.active).length : 0;
   const waitingText = e.kind === "invited" ? waitingLine(waiting) : null;
-  const look = cardLook(e.kind, onChain && Boolean(NOMINATIONS));
+  const look = cardLook(e.kind, onChain && Boolean(NOMINATIONS), Boolean(goneDarkOf(e.source)));
   const facts = [
     ...(b ? [{ label: "No.", value: <span className="tnum">{b.id}</span> }] : []),
     ...(b?.country && (e.kind === "verified" || e.kind === "nominated") ? [{ label: "from", value: <span title={regionName(b.country)}>{b.country}</span> }] : []),
@@ -214,6 +230,7 @@ function BuilderCard({ e, highlighted, waiting, nominated = false, onChain = fal
       avatar={e.avatar}
       tone={e.kind === "verified" ? "ok" : e.kind === "invited" ? "invited" : "plain"}
       pill={look.pill}
+      stamp={look.stamp}
       sub={b ? (projects === 1 ? "1 project" : `${projects} projects`) : e.source ? <a href={sourceHref(e.source)} target="_blank" rel="noreferrer">{sourceLabel(e.source)} ↗</a> : undefined}
       facts={facts}
       grey={look.grey}
@@ -243,7 +260,7 @@ function BuilderCard({ e, highlighted, waiting, nominated = false, onChain = fal
   );
 }
 
-const PROJECT_STATUS_LABEL = { verified: "Verified", nominated: "Nominated", lapsed: "Lapsed", unconfirmed: "Unconfirmed" } as const;
+const PROJECT_STATUS_LABEL = { verified: "Verified", nominated: "Onboarding", lapsed: "Lapsed", unconfirmed: "Unconfirmed" } as const;
 
 /** Every project of a builder (removed ones too): source, proof, status. */
 function ProjectList({ b }: { b: GalleryBuilder }) {
@@ -391,11 +408,13 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
   const entries = useMemo(() => mergeGallery(builders, nominees), [builders, nominees]);
   const invitedSources = useMemo(() => entries.filter((e) => e.kind === "invited" && e.source).map((e) => e.source!), [entries]);
   const wonder = useWonderStatus(invitedSources);
-  const counts = useMemo(() => galleryCounts(entries), [entries]);
+  // A project that went dark leaves the Nominated count and filter, and sits under Invited with its stamp.
+  const onChainSources = useMemo(() => new Set([...onChainNominations].filter(([s, n]) => n.active && !goneDarkOf(s)).map(([s]) => s)), [onChainNominations]);
+  const counts = useMemo(() => galleryCounts(entries, onChainSources), [entries, onChainSources]);
 
   const [filter, setFilter] = useState<GalleryFilter>("all");
   const [query, setQuery] = useState("");
-  const shown = useMemo(() => filterGallery(entries, filter, query), [entries, filter, query]);
+  const shown = useMemo(() => filterGallery(entries, filter, query, onChainSources), [entries, filter, query, onChainSources]);
 
   // ?builder=<id>: the detail view of that builder (the card stays highlighted underneath).
   const router = useRouter();
@@ -422,7 +441,7 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
         {showGalleryStats(counts) ? (
           <p className="pa-lede">
             Every project here claimed its place with a signed proof. {counts.verified} verified, {counts.nominated} waiting for
-            onboarding, {counts.invited} invited{counts.countries ? `, from ${counts.countries} ${counts.countries === 1 ? "country" : "countries"}` : ""}.
+            onboarding, {counts.onchain} nominated, {counts.invited} invited{counts.countries ? `, from ${counts.countries} ${counts.countries === 1 ? "country" : "countries"}` : ""}.
           </p>
         ) : (
           <p className="pa-lede">
@@ -457,7 +476,7 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
             <nav className="pa-tabs" aria-label="Filter builders">
               {FILTERS.filter((f) => f !== "unconfirmed" || counts.unconfirmed > 0).map((f) => (
                 <button key={f} type="button" className="pa-tab" aria-pressed={filter === f} data-kind={f} onClick={() => setFilter(f)}>
-                  {f === "all" ? "All" : labelOf(f)} <span className="tnum opacity-70">{chipCount(f)}</span>
+                  {filterLabel(f)} <span className="tnum opacity-70">{chipCount(f)}</span>
                 </button>
               ))}
             </nav>

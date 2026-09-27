@@ -649,7 +649,7 @@ function StatusChip({ s }: { s: InviteChainStatus | null }) {
   if (s.kind === "nominated")
     return (
       <span className="bld-chip" data-kind="nominated" title={`builder #${s.builderId}${s.unchecked ? " · proof not readable just now" : ""}`}>
-        Nominated{s.unchecked ? " · unchecked" : ""}
+        Onboarding{s.unchecked ? " · unchecked" : ""}
       </span>
     );
   if (s.kind === "unconfirmed")
