@@ -175,6 +175,36 @@ export async function findSiteIcon(
   }
 }
 
+const X_HANDLE_RE = /^@?([A-Za-z0-9_]{1,15})$/;
+
+/**
+ * The X profile picture of a handle through unavatar.io (it resolves X's
+ * current picture; `fallback=false` answers 404 instead of a generic image),
+ * or null for a handle that is not one.
+ */
+export function xAvatarUrl(handle: string): string | null {
+  const m = X_HANDLE_RE.exec(handle.trim());
+  return m ? `https://unavatar.io/x/${m[1]}?fallback=false` : null;
+}
+
+/**
+ * Server side: a project's X profile picture, the fallback when its site has
+ * no usable icon (a bot wall, or none at all). Same rules as a site icon: https
+ * only, redirects re-checked, capped bytes, and it must sniff as an image.
+ */
+export async function findXAvatar(
+  handle: string,
+  o: { fetchImpl?: typeof fetch; timeoutMs?: number } = {},
+): Promise<SiteIcon | null> {
+  const url = xAvatarUrl(handle);
+  if (!url) return null;
+  const signal = AbortSignal.timeout(o.timeoutMs ?? ICON_TIMEOUT_MS);
+  const r = await safeGet(url, { fetchImpl: o.fetchImpl ?? fetch, signal, max: ICON_MAX_BYTES, accept: "image/*" }).catch(() => null);
+  if (!r) return null;
+  const type = sniffImageType(r.bytes);
+  return type ? { bytes: r.bytes, type, url: r.url } : null;
+}
+
 /** The picture URL a page shows for a domain source: this site's /api/icon (relative, so it is same-origin). */
 export function siteIconPath(source: string): string {
   return `${ICON_API_PATH}?source=${encodeURIComponent(source)}`;
