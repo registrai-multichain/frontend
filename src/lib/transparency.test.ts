@@ -287,7 +287,7 @@ describe("common markets and nominations on the dashboard", () => {
       expect(byKey).toMatchObject({
         oracleRegistry: r.contracts.Registry!.toLowerCase(),
         attestation: r.contracts.Attestation!.toLowerCase(),
-        dispute: "0xf62cd073f6748f56a0233c43c2ce02640faa75d8",
+        dispute: r.contracts.Dispute!.toLowerCase(),
         marketsV4: r.contracts.MarketsV4.toLowerCase(),
       });
     } else {

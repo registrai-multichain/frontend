@@ -30,10 +30,9 @@ export const COMMON = {
   marketsV4: hexAddr(R.contracts?.MarketsV4),
   registry: hexAddr(R.contracts?.Registry),
   attestation: hexAddr(R.contracts?.Attestation),
-  // Not in the rounds file (yet): contracts/deployments/arc-mainnet-common-markets.json, verified on chain 2026-09-27.
-  dispute: "0xf62Cd073F6748F56a0233c43C2ce02640FAa75d8" as Address,
+  dispute: hexAddr(R.contracts?.Dispute),
 };
-const COMMON_ON = Boolean(COMMON.agent && COMMON.marketsV4 && COMMON.registry && COMMON.attestation);
+const COMMON_ON = Boolean(COMMON.agent && COMMON.marketsV4 && COMMON.registry && COMMON.attestation && COMMON.dispute);
 
 export type WalletKey = "safe" | "operator" | "onboarder" | "roundsAgent" | "deployer";
 export interface WalletInfo { key: WalletKey; label: string; address: Address; isSafe: boolean; what: string; cannot: string }
@@ -99,7 +98,7 @@ export const CONTRACTS: ContractInfo[] = [
     what: "The price feeds and each agent's bond per feed (at least 2 USDC); a reading ruled wrong slashes the bond." },
   { key: "attestation", name: "Attestation", address: COMMON.attestation!, audit: "internally reviewed",
     what: "The agents' readings, each with a hash of its evidence, challengeable until final." },
-  { key: "dispute", name: "Dispute", address: COMMON.dispute, audit: "internally reviewed",
+  { key: "dispute", name: "Dispute", address: COMMON.dispute!, audit: "internally reviewed",
     what: "Challenges of readings: anyone can stake to challenge, always accepted; the feed's resolver (the Safe) rules." },
   ] as ContractInfo[]) : []),
 ];
