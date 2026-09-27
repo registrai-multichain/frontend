@@ -25,7 +25,9 @@ export interface BuilderCardProps {
   nameText: string;
   avatar: string | null;
   tone: "ok" | "invited" | "plain";
-  pill: { text: string; tone?: "ok" | "unclaimed" | "muted" | "onchain" };
+  pill: { text: string; tone?: "ok" | "unclaimed" | "muted" | "onchain" | "down" };
+  /** A rubber-stamp mark over the card (e.g. "Gone dark"); decorative, the note says it in words. */
+  stamp?: string;
   sub?: ReactNode;
   facts?: { label: string; value: ReactNode }[];
   note?: ReactNode;
@@ -40,6 +42,7 @@ export interface BuilderCardProps {
 export function BuilderCardView(p: BuilderCardProps) {
   return (
     <li id={p.id} className="bld-card pa-card" data-kind={p.kind} data-tone={p.grey ? "grayscale" : undefined} data-highlight={p.highlighted ? "true" : undefined}>
+      {p.stamp && <span className="bld-stamp" aria-hidden="true">{p.stamp}</span>}
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <span className="pa-pill" data-tone={p.pill.tone}>{p.pill.text}</span>
