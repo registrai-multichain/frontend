@@ -61,6 +61,11 @@ import { buildersClient } from "@/components/verify/useMyBuilder";
 import { useWonderContext, WonderStatusProvider } from "@/components/wonder/WonderBits";
 import { releaseView, usd, waitingAmount, WONDER_ON_BUILDERS, wonderMarketsAbi } from "@/lib/wonder";
 import { cancelReleaseSafeFile, nominateInput, nominateSafeFile } from "@/lib/wonder-admin";
+import { ADMIN_SECTIONS, adminNav, adminSections, sectionFromHash, type AdminSection, type AdminSectionId } from "@/lib/admin-sections";
+import { AdminShell } from "./AdminShell";
+import { ADMIN_DEPLOYMENT } from "./deployment";
+import a from "./admin.module.css";
+import x from "./admin-app.module.css";
 
 const REG = BUILDERS.contracts.BuilderRegistry;
 const CARE = BUILDERS.contracts.CaretakerRegistry;
@@ -75,6 +80,85 @@ type ApiState = { state: "checking" } | { state: "unavailable" } | { state: "rea
 
 /** What the signed-in role may see and do (adminView); read by the rows and sections below. */
 const ViewCtx = createContext<AdminView>(adminView("admin"));
+
+
+/** The section on screen (from the URL hash) and the rail's pending counts, reported by each section. */
+const ActiveCtx = createContext<AdminSectionId | null>(null);
+type Report = (id: AdminSectionId, n: number | null | undefined) => void;
+const CountCtx = createContext<Report>(() => undefined);
+
+/** A section's pending count for its rail badge (0 and unknown: no badge). */
+function useRailCount(id: AdminSectionId, n: number | null | undefined) {
+  const report = useContext(CountCtx);
+  useEffect(() => report(id, n), [report, id, n]);
+}
+
+/** The URL hash, kept in step with the address bar. A new section starts at the top. */
+function useHash(): string {
+  const [hash, setHash] = useState("");
+  useEffect(() => {
+    setHash(window.location.hash);
+    const on = () => {
+      setHash(window.location.hash);
+      window.scrollTo(0, 0);
+    };
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
+  return hash;
+}
+
+/**
+ * One rail section: its heading and lede, then its cards. Every section stays mounted
+ * (hidden when another is on screen), so its reads, polling, forms in progress and
+ * wallet prompts carry on exactly as when the page showed them all at once.
+ */
+function AdminPage({ id, aside, children }: { id: AdminSectionId; aside?: ReactNode; children: ReactNode }) {
+  const active = useContext(ActiveCtx);
+  const s = ADMIN_SECTIONS.find((x) => x.id === id)!;
+  return (
+    <div className={x.page} hidden={active !== id} data-section={id}>
+      <div className={a.head}>
+        <div>
+          <h1 className={a.h1}>{s.title}</h1>
+          <p className={a.sub}>{s.lede}</p>
+        </div>
+        {aside}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** The rail's foot: the connected wallet (connect, switch network, disconnect), as the old header's wallet button. */
+function RailWallet() {
+  const { address, isConnecting, walletChainId, connect, disconnect, switchChain } = useWallet();
+  if (!address) {
+    return (
+      <div className={a.railFoot}>
+        <span>No wallet connected</span>
+        <button type="button" className={a.linkButton} onClick={connect} disabled={isConnecting}>
+          {isConnecting ? "Connecting…" : "Connect wallet"}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className={a.railFoot}>
+      <span>
+        Wallet <span className={a.mono}>{shortAddr(address).toLowerCase()}</span>
+      </span>
+      {walletChainId !== BUILDERS.chainId && (
+        <button type="button" className={a.linkButton} onClick={() => switchChain(BUILDERS.chainId)}>
+          Switch to {BUILDERS.chain.name}
+        </button>
+      )}
+      <button type="button" className={a.linkButton} onClick={disconnect} title={`${BUILDERS.chain.name} · disconnect`}>
+        Disconnect
+      </button>
+    </div>
+  );
+}
 
 class SignedOut extends Error {}
 
@@ -127,13 +211,16 @@ function CopyButton({ text, label = "copy" }: { text: string; label?: string }) 
   );
 }
 
-function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
+/** A card inside a section page, with an optional heading (and something beside it). */
+function Section({ title, aside, children }: { title?: string; aside?: ReactNode; children: ReactNode }) {
   return (
-    <section className="adm-section">
-      <header className="adm-section-head">
-        <h2>{title}</h2>
-        {aside}
-      </header>
+    <section className={x.card} aria-label={title ? undefined : "Details"}>
+      {(title || aside) && (
+        <header className={x.cardHead}>
+          {title && <h2 className={a.h2}>{title}</h2>}
+          {aside}
+        </header>
+      )}
       {children}
     </section>
   );
@@ -194,41 +281,39 @@ export function AdminApp({ revocationCheckpoint = null }: { revocationCheckpoint
     };
   }, []);
 
+  if (api.state === "ready" && api.address) {
+    return (
+      <Dashboard
+        admin={api.address}
+        role={api.role ?? "admin"}
+        revocationCheckpoint={revocationCheckpoint}
+        onSignedOut={() => setApi({ state: "ready", address: null, role: null })}
+      />
+    );
+  }
   return (
-    <>
-      <header className="perennial-app-header">
+    <AdminShell nav={adminNav(adminSections(adminView("admin"), ADMIN_DEPLOYMENT), "")} active={null} who={null} foot={<RailWallet />}>
+      <div className={a.head}>
         <div>
-          <div className="perennial-app-status">
-            <i /> {BUILDERS.label} · admin
-          </div>
-          <h1>Builders admin</h1>
-          <p>
-            Invites, the onboarding queue, badge actions, recoveries and projects. What only the Safe may do (revokes,
-            recoveries, project switches) is a Safe batch file. This page sends two kinds of transaction itself:
+          <h1 className={a.h1}>{api.state === "ready" ? "Sign in" : "Builders admin"}</h1>
+          <p className={a.sub}>
+            Invites, the onboarding queue, badge actions, recoveries and projects on {BUILDERS.label}. What only the Safe may
+            do (revokes, recoveries, project switches) is a Safe batch file. This page sends two kinds of transaction itself:
             onboarding, from an onboarder wallet the Safe gave its two roles, and finishing a recovery (anyone may).
           </p>
         </div>
-      </header>
-
-      {api.state === "checking" && <p className="vf-hint">Checking the admin API…</p>}
+      </div>
+      {api.state === "checking" && <p className={a.state}>Checking the admin API…</p>}
       {api.state === "unavailable" && (
-        <div className="bld-empty">
-          <p>Admin runs on builder.registrai.cc.</p>
-          <a className="vf-link" href={`${BUILDERS_SITE}/admin/`}>
-            Open {BUILDERS_SITE.replace("https://", "")}/admin →
-          </a>
+        <div className={a.stateBox}>
+          <h2 className={a.stateTitle}>Admin runs on builder.registrai.cc</h2>
+          <p className={a.state}>
+            <a href={`${BUILDERS_SITE}/admin/`}>Open {BUILDERS_SITE.replace("https://", "")}/admin →</a>
+          </p>
         </div>
       )}
-      {api.state === "ready" && !api.address && <SignIn onSignedIn={(address, role) => setApi({ state: "ready", address, role })} />}
-      {api.state === "ready" && api.address && (
-        <Dashboard
-          admin={api.address}
-          role={api.role ?? "admin"}
-          revocationCheckpoint={revocationCheckpoint}
-          onSignedOut={() => setApi({ state: "ready", address: null, role: null })}
-        />
-      )}
-    </>
+      {api.state === "ready" && <SignIn onSignedIn={(address, role) => setApi({ state: "ready", address, role })} />}
+    </AdminShell>
   );
 }
 
@@ -353,39 +438,51 @@ function Dashboard({
 
   const wonderSources = WONDER_ON_BUILDERS ? (invites.data ?? []).map((i) => i.source) : [];
   const view = adminView(role);
+  const sections: AdminSection[] = useMemo(() => adminSections(adminView(role), ADMIN_DEPLOYMENT), [role]);
+  const active = sectionFromHash(useHash(), sections);
+  const [counts, setCounts] = useState<Partial<Record<AdminSectionId, number | null>>>({});
+  const report: Report = useCallback((id, n) => {
+    const v = n ? n : null;
+    setCounts((c) => ((c[id] ?? null) === v ? c : { ...c, [id]: v }));
+  }, []);
+  const foot = (
+    <>
+      <RailWallet />
+      <div className={a.railFoot}>
+        {REG && (
+          <button type="button" className={a.linkButton} onClick={() => chain.mutate()} disabled={chain.isValidating}>
+            {chain.isValidating ? "Reading chain…" : "Re-read chain"}
+          </button>
+        )}
+        <button type="button" className={a.linkButton} onClick={signOut}>
+          Sign out
+        </button>
+      </div>
+    </>
+  );
   return (
     <ViewCtx.Provider value={view}>
     <WonderStatusProvider sources={wonderSources}>
-      <div className="adm-stack">
-        <div className="adm-bar">
-          <span>
-            Signed in as <b className="tnum">{shortAddr(admin)}</b>
-            {role === "onboarder" && <> · onboarder: you can read everything here and onboard builders from this wallet</>}
-          </span>
-          <span className="adm-bar-actions">
-            <a className="vf-mini" href="/admin/proposals/">
-              Market proposals →
-            </a>
-            {REG && (
-              <button type="button" className="vf-mini" onClick={() => chain.mutate()} disabled={chain.isValidating}>
-                {chain.isValidating ? "reading chain…" : "re-read chain"}
-              </button>
-            )}
-            <button type="button" className="vf-mini" onClick={signOut}>
-              sign out
-            </button>
-          </span>
-        </div>
+    <ActiveCtx.Provider value={active}>
+    <CountCtx.Provider value={report}>
+      <AdminShell nav={adminNav(sections, "", counts)} active={active} who={{ address: admin, role }} foot={foot}>
+        {role === "onboarder" && (
+          <p className={a.callout}>
+            <b>Onboarder session.</b> You can read everything here and onboard builders from this wallet.
+          </p>
+        )}
 
-        {view.inviteForm && <InviteForm onChanged={() => invites.mutate()} />}
+        <AdminPage id="invites">
+          {view.inviteForm && <InviteForm onChanged={() => invites.mutate()} />}
 
-        <InvitesTable
-          invites={invites.data}
-          error={invites.error && !(invites.error instanceof SignedOut) ? String((invites.error as Error).message) : null}
-          builders={chain.data ?? null}
-          chainNote={chainNote}
-          onChanged={() => invites.mutate()}
-        />
+          <InvitesTable
+            invites={invites.data}
+            error={invites.error && !(invites.error instanceof SignedOut) ? String((invites.error as Error).message) : null}
+            builders={chain.data ?? null}
+            chainNote={chainNote}
+            onChanged={() => invites.mutate()}
+          />
+        </AdminPage>
 
         <SuggestionsSection onInvited={() => invites.mutate()} onSignedOut={onSignedOut} />
 
@@ -410,7 +507,9 @@ function Dashboard({
         )}
 
         {view.wonder && WONDER_ON_BUILDERS && <WonderSection invites={invites.data ?? []} />}
-      </div>
+      </AdminShell>
+    </CountCtx.Provider>
+    </ActiveCtx.Provider>
     </WonderStatusProvider>
     </ViewCtx.Provider>
   );
@@ -550,6 +649,7 @@ function SuggestionsSection({ onInvited, onSignedOut }: { onInvited: () => void;
   useEffect(() => {
     if (list.error instanceof SignedOut) onSignedOut();
   }, [list.error, onSignedOut]);
+  useRailCount("suggestions", list.data?.length);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
 
@@ -578,7 +678,8 @@ function SuggestionsSection({ onInvited, onSignedOut }: { onInvited: () => void;
   }
 
   return (
-    <Section title="Suggestions">
+    <AdminPage id="suggestions">
+      <Section>
       <p className="vf-note">
         Projects the public suggested at /suggest (website plus X or another public link). Check the social proof, then invite: the
         evidence goes into the invite&apos;s private note. Nothing is public until you invite.
@@ -631,7 +732,8 @@ function SuggestionsSection({ onInvited, onSignedOut }: { onInvited: () => void;
       )}
       {msg.ok && <p className="vf-ok">{msg.ok}</p>}
       {msg.error && <p className="vf-error">{msg.error}</p>}
-    </Section>
+      </Section>
+    </AdminPage>
   );
 }
 
@@ -799,6 +901,7 @@ function InvitesTable({
   // Without a chain read every invite counts as not claimed.
   const chase = rows.filter((r) => needsFollowUp(r.inv, r.status ?? { kind: "invited" }, now));
   const shown = followUp ? chase : rows;
+  useRailCount("invites", invites ? chase.length : null);
 
   return (
     <Section
@@ -924,6 +1027,7 @@ function GaslessSection({
     () => (requests.data && builders ? requests.data.filter((r) => gaslessState(r, builders).kind !== "done") : null),
     [requests.data, builders],
   );
+  useRailCount("register-requests", open?.length);
   // Re-check every open request's proof against the wallet that asked, now.
   const proofs = useSWR(
     open && open.length ? ["admin-register-proofs", ...open.map((r) => `${r.source}|${r.builder}`)] : null,
@@ -959,7 +1063,8 @@ function GaslessSection({
   }
 
   return (
-    <Section title="Register for builders without gas">
+    <AdminPage id="register-requests">
+      <Section>
       {requests.error && !(requests.error instanceof SignedOut) ? (
         <p className="vf-error">Could not read the requests: {(requests.error as Error).message}</p>
       ) : !requests.data ? (
@@ -1042,7 +1147,8 @@ function GaslessSection({
           )}
         </>
       )}
-    </Section>
+      </Section>
+    </AdminPage>
   );
 }
 
@@ -1097,6 +1203,7 @@ function OnboardingSection({
         : null,
     [builders, badge, revoked],
   );
+  useRailCount("onboarding", queue?.included.length);
 
   // Direct onboarding: the connected wallet must hold BOTH onboarder roles.
   const directPossible = Boolean(REG && CARE && OPERATOR && badge);
@@ -1222,7 +1329,8 @@ function OnboardingSection({
   ) : null;
 
   return (
-    <Section title="Onboarding queue">
+    <AdminPage id="onboarding">
+      <Section>
       {missing.length ? (
         <p className="vf-hint">Onboarding needs {missing.join(", ")} on {BUILDERS.label}.</p>
       ) : !queue ? (
@@ -1364,7 +1472,8 @@ function OnboardingSection({
           )}
         </>
       )}
-    </Section>
+      </Section>
+    </AdminPage>
   );
 }
 
@@ -1387,13 +1496,16 @@ function BadgeSection({
 
   if (!BUILDERS.badgesOn || !BADGE) {
     return (
-      <Section title="Badge actions">
+      <AdminPage id="badges">
+      <Section>
         <p className="vf-hint">No Verified Builder Badge on {BUILDERS.label}.</p>
-      </Section>
+        </Section>
+      </AdminPage>
     );
   }
   return (
-    <Section title="Badge actions">
+    <AdminPage id="badges">
+      <Section>
       {!builders ? (
         <p className="vf-hint">{chainNote}</p>
       ) : holders.length === 0 ? (
@@ -1437,7 +1549,8 @@ function BadgeSection({
         </div>
       )}
       {confirm && <RevokeDialog b={confirm} name={nameOf(confirm)} onClose={() => setConfirm(null)} />}
-    </Section>
+      </Section>
+    </AdminPage>
   );
 }
 
@@ -1525,12 +1638,15 @@ function RecoverySection({
     const client = createPublicClient({ chain: BUILDERS.chain.viemChain, transport: transportFor(BUILDERS.chain, { batch: true }) }) as PublicClient;
     return readRecoveries(client as unknown as GalleryReader, REG!, ids);
   }, { revalidateOnFocus: false });
+  useRailCount("recovery", pending.data?.length);
 
   if (!REG) {
     return (
-      <Section title="Recovery">
+      <AdminPage id="recovery">
+      <Section>
         <p className="vf-hint">No builder registry on {BUILDERS.label}.</p>
-      </Section>
+        </Section>
+      </AdminPage>
     );
   }
 
@@ -1572,7 +1688,8 @@ function RecoverySection({
 
   const rows = pending.data ?? [];
   return (
-    <Section title="Recovery">
+    <AdminPage id="recovery">
+      <Section>
       <p className="vf-note">
         For a builder who lost their key (or had it stolen): <code>startRecovery(builderId, newOwner)</code> from the Safe. The
         current owner sees a banner on /verify and may cancel it for 7 days; after that anyone can finish it. The new wallet
@@ -1675,7 +1792,8 @@ function RecoverySection({
           view transaction ↗
         </a>
       )}
-    </Section>
+      </Section>
+    </AdminPage>
   );
 }
 
@@ -1700,8 +1818,8 @@ function ProjectsSection({
   }, [builders, query, nameOf]);
   if (!REG) return null;
   return (
-    <Section
-      title="Projects"
+    <AdminPage
+      id="projects"
       aside={
         <label className="bld-search">
           <span className="sr-only">Filter projects</span>
@@ -1709,6 +1827,7 @@ function ProjectsSection({
         </label>
       }
     >
+      <Section>
       <p className="vf-note">
         Active projects on {BUILDERS.label}. <b>Deactivate</b> downloads a one-transaction Safe batch,{" "}
         <code>setProjectActive(projectId, false)</code> (e.g. a fraudulent claim). The project keeps its id and history; the
@@ -1764,7 +1883,8 @@ function ProjectsSection({
           </table>
         </div>
       )}
-    </Section>
+      </Section>
+    </AdminPage>
   );
 }
 
@@ -1836,8 +1956,6 @@ function DraftsTable({
     await drafts.mutate();
   }
 
-  if (drafts.error) return <p className="vf-error">Could not read the drafts: {(drafts.error as Error).message}</p>;
-  if (!drafts.data) return <p className="vf-hint">Reading drafts…</p>;
   // A verified builder's project (from the chain) only needs its profile saved.
   const stepOf = (d: NominationDraft) => {
     const n = nominations?.get(d.source);
@@ -1849,8 +1967,12 @@ function DraftsTable({
       anchored: Boolean(n?.active && p && n.profileHash === profileHash(p)),
     });
   };
-  const pending = drafts.data.filter((d) => !stepOf(d).done);
-  if (!pending.length) return <p className="vf-hint">No drafts waiting. New ones appear here once the investigation hands them over.</p>;
+  const pending = drafts.data ? drafts.data.filter((d) => !stepOf(d).done) : null;
+  useRailCount("nominations", pending?.length);
+
+  if (drafts.error) return <p className="vf-error">Could not read the drafts: {(drafts.error as Error).message}</p>;
+  if (!drafts.data) return <p className="vf-hint">Reading drafts…</p>;
+  if (!pending?.length) return <p className="vf-hint">No drafts waiting. New ones appear here once the investigation hands them over.</p>;
   return (
     <div className="adm-drafts">
       <h3>Drafts to review and sign</h3>
@@ -1978,7 +2100,8 @@ function NominationsSection({ invites, onInvitesChanged, builders }: { invites: 
 
   const rows = [...(list.data ?? new Map<string, Nomination>()).entries()];
   return (
-    <Section title="Nominate on chain">
+    <AdminPage id="nominations">
+      <Section>
       <DraftsTable
         invited={invited}
         builders={builders}
@@ -2036,7 +2159,8 @@ function NominationsSection({ invites, onInvitesChanged, builders }: { invites: 
           ))}
         </ul>
       )}
-    </Section>
+      </Section>
+    </AdminPage>
   );
 }
 
@@ -2091,7 +2215,8 @@ function WonderSection({ invites }: { invites: AdminInvite[] }) {
     .map((s) => ({ s, st: wonder.status[s] }))
     .filter((r) => r.st && (r.st.nominated || r.st.escrow > 0n || r.st.pending || r.st.releasedTo));
   return (
-    <Section title="Wonder markets">
+    <AdminPage id="wonder">
+      <Section>
       <p className="vf-note">
         Nominate an invited project to open wonder markets on it (the onboarder wallet or the Safe). Un-nominate when a
         team opts out: no new wonder markets; existing ones settle and their escrow expires 90% to the season pool, 10% to the treasury. The
@@ -2141,6 +2266,7 @@ function WonderSection({ invites }: { invites: AdminInvite[] }) {
           </table>
         </div>
       )}
-    </Section>
+      </Section>
+    </AdminPage>
   );
 }

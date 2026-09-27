@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { useWallet } from "@/components/WalletProvider";
-import { ADMIN_SERVICE, type AdminRole } from "@/lib/builders-admin";
+import { ADMIN_SERVICE, adminView, type AdminRole } from "@/lib/builders-admin";
+import { adminNav, adminSections } from "@/lib/admin-sections";
 import { shortAddr } from "@/lib/format";
 import { humanizeError } from "@/lib/humanize-error";
 import { activeProvider } from "@/lib/wallets";
@@ -20,6 +21,7 @@ import {
 import { statusHref } from "@/lib/propose-form";
 import mainnetRounds from "@/lib/deployments/arc-mainnet-rounds.json";
 import { AdminShell, type AdminNavItem } from "./AdminShell";
+import { ADMIN_DEPLOYMENT } from "./deployment";
 import a from "./admin.module.css";
 import pa from "./proposals-admin.module.css";
 
@@ -217,7 +219,7 @@ export function ProposalsAdmin() {
   }, [signOut]);
 
   return (
-    <AdminShell nav={proposalsNav(list.data ? counts.pending : null)} active="proposals" who={admin ? { address: admin, role } : null}>
+    <AdminShell nav={proposalsNav(role, list.data ? counts.pending : null)} active="proposals" who={admin ? { address: admin, role } : null}>
       <div className={s.head}>
         <div>
           <h1 className={s.h1}>Market proposals</h1>
@@ -312,13 +314,9 @@ export function ProposalsAdmin() {
   );
 }
 
-function proposalsNav(pending: number | null): AdminNavItem[] {
-  return [
-    { key: "invites", label: "Invites", href: "/admin/#invites" },
-    { key: "register-requests", label: "Register requests", href: "/admin/#register-requests" },
-    { key: "suggestions", label: "Project suggestions", href: "/admin/#suggestions" },
-    { key: "proposals", label: "Market proposals", href: "/admin/proposals/", count: pending },
-  ];
+/** The admin rail: the /admin sections this session sees (links into /admin), then this page. */
+function proposalsNav(role: AdminRole, pending: number | null): AdminNavItem[] {
+  return adminNav(adminSections(adminView(role), ADMIN_DEPLOYMENT), "/admin/", { proposals: pending });
 }
 
 function liveMatchOf(p: Pick<Proposal, "question">): string | null {

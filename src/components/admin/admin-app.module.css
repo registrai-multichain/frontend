@@ -1,0 +1,19 @@
+/* /admin (AdminApp): the section pages and their cards, inside AdminShell. The tokens and
+   the shared primitives (headings, fields, buttons, pills) are in admin.module.css. */
+
+.page { display: flex; min-width: 0; flex-direction: column; gap: 18px; }
+.card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+  border: 1px solid var(--pp-rule);
+  border-radius: 16px;
+  padding: 22px 24px;
+  background: var(--pp-field);
+}
+.cardHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+
+@media (max-width: 639px) {
+  .card { padding: 18px 16px; }
+}
