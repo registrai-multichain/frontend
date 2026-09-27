@@ -36,6 +36,7 @@ import { attestationAbi, marketsV4Abi, nanoLedgerAbi, registryAbi, usdcAbi } fro
 import { PROPOSAL_ASSETS } from "@/lib/market-proposals";
 import { PRICE_SOURCE, statusHref } from "@/lib/propose-form";
 import { PROPOSALS_API } from "@/lib/proposals-api";
+import { verifiedProposalInfo } from "@/lib/proposal-signature";
 import { humanizeError } from "@/lib/humanize-error";
 import {
   COMPARATOR,
@@ -92,11 +93,12 @@ import {
   extendCover,
   feedKeyFromDescription,
   foldProposalRange,
+  feedLogFromRecord,
+  marketsOnUnknownFeeds,
   formatChange,
   isMarketId,
   isProposalKey,
   nextBackfill,
-  parseProposalInfo,
   parseProposalStore,
   proposalAnswer,
   proposalRetryMs,
@@ -210,6 +212,8 @@ const ZERO_ID = `0x${"0".repeat(64)}`;
 /** Stored proposal feeds re-read per Multicall3 eth_call, and the calldata budget
  *  that keeps each such chunk in one call (a getFeed call is ~100 bytes of it). */
 const VERIFY_CHUNK = 25;
+/** At most this many markets wait for their feed to be learned (R51). */
+const HELD_MAX = 5_000;
 const VERIFY_BATCH_BYTES = 8_192;
 /** A feed the page knows as something other than a proposal (a round or config event feed). */
 const isOtherFeed = (book: FeedBook, feedId: string) => {
@@ -283,6 +287,11 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
     notOurs: new Set<string>(),
     /** The proposal scan's store, while the overview runs it (see the backfill below). */
     pstore: undefined as ProposalScanStore | undefined,
+    /** R51: the agent's markets on feeds not in the book yet (a stale seed), by market id:
+     *  parsed again once the feed is learned. */
+    held: new Map<string, MarketCreatedLog>(),
+    /** Feeds whose Registry record is not an agent feed of ours: never asked again. */
+    foreignFeeds: new Set<string>(),
   });
   const busy = useRef(false);
   const again = useRef(false);
@@ -381,6 +390,8 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
         const marketLogs = mk.logs as unknown as MarketCreatedLog[];
         d.book = mergeFeedLogs(d.book, feedLogs, D.agent);
         for (const m of parseMarketLogs(marketLogs, d.book, D.agent)) d.markets.set(m.marketId, m);
+        // R51: markets on feeds the book lacks wait until the feed is learned (1c below).
+        for (const lg of marketsOnUnknownFeeds(marketLogs, d.book, D.agent)) if (d.held.size < HELD_MAX) d.held.set(lg.args.marketId!.toLowerCase(), lg);
         // The proposal scan's store (overview): record proposal feeds and their markets
         // seen here too, so a later visit knows them without scanning these blocks again.
         if (d.pstore) {
@@ -391,6 +402,39 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
         // Advance only over what both scans covered.
         const covered = feeds.scannedTo < mk.scannedTo ? feeds.scannedTo : mk.scannedTo;
         if (covered >= from) d.scannedTo = covered;
+      }
+
+      // 1c. R51: learn the feeds of held markets. FeedCreated(creator = agent) teaches the
+      //     book new feeds (the scans above and the overview's backfill); a feed older than
+      //     what has been scanned is read from its Registry record, once per feed. Held
+      //     markets whose feed is now known (a round, an event or a proposal) join the page.
+      if (d.held.size) {
+        const ask = [...new Set([...d.held.values()].map((lg) => lg.args.feedId!.toLowerCase()))].filter(
+          (f) => !d.book.byId[f] && !d.foreignFeeds.has(f),
+        ) as Hex[];
+        if (ask.length) {
+          const recs = await Promise.all(
+            ask.map((f) =>
+              (client.readContract({ address: C.Registry, abi: registryAbi, functionName: "getFeed", args: [f] }) as Promise<{
+                creator: Address; description: string; disputeWindow: bigint; exists: boolean;
+              }>).catch(() => undefined),
+            ),
+          );
+          const logs: FeedCreatedLog[] = [];
+          ask.forEach((f, i) => {
+            const r = recs[i];
+            if (!r) return; // not read: asked again next refresh
+            const lg = feedLogFromRecord(f, r);
+            if (lg && sameAddress(r.creator, D.agent) && feedKeyFromDescription(r.description)) logs.push(lg);
+            else d.foreignFeeds.add(f);
+          });
+          d.book = mergeFeedLogs(d.book, logs, D.agent);
+        }
+        for (const m of parseMarketLogs([...d.held.values()], d.book, D.agent)) d.markets.set(m.marketId, m);
+        for (const [id, lg] of d.held) {
+          const f = lg.args.feedId!.toLowerCase();
+          if (d.book.byId[f] || d.foreignFeeds.has(f)) d.held.delete(id);
+        }
       }
 
       // 2. The connected wallet's markets (Bought logs) — the only ones that can
@@ -819,7 +863,10 @@ function useLivePools(client: PublicClient, ids: readonly Hex[], paused: boolean
   return pools;
 }
 
-/** Proposals' public records (the question, rule and source) from the proposals API.
+/** Proposals' public records (the question, rule and source) from the proposals API,
+ *  checked against the team's signature (verifiedProposalInfo): a record whose approval
+ *  does not recover to a compiled approver keeps no words, so the market shows as
+ *  "Proposal #id" with its on-chain terms.
  *  A record, or a definitive "none" (404/410: the page says "Proposal #id"), is kept
  *  for the page's lifetime; anything else (a network error or 10 s timeout, 429, 5xx,
  *  another 4xx) is forgotten and asked again on a later refresh, with backoff
@@ -833,7 +880,8 @@ function fetchProposalInfo(id: string): Promise<ProposalInfo | null | "retry"> {
     p = fetch(`${PROPOSALS_API}/${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(10_000) })
       .then(async (r) => {
         const a = proposalAnswer(r.status);
-        return a === "ok" ? parseProposalInfo(await r.json(), id) : a === "missing" ? null : ("retry" as const);
+        // I4: only what the team's signature vouches for (else "Proposal #id").
+        return a === "ok" ? verifiedProposalInfo(await r.json(), id) : a === "missing" ? null : ("retry" as const);
       })
       .catch(() => "retry" as const)
       .then((res) => {

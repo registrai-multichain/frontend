@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   EMPTY_FORM, PRICE_SOURCE, formatUtcDeadline, parseUtcDeadline, prepareSubmission, priceQuestion,
   feesScanEnd, mergeFeeProgress, mergeScanProgress, parseScanCache, proposalFeedDescription, proposalScanStart, scanForward,
-  statusChip, statusHref, sumCreatorFees, forwardPayee, forwardedShown, isTreasury, shareText, type ProposeFormState, type ScanCache,
+  statusChip, statusHref, sumCreatorFees, forwardPayee, forwardedShown, isTreasury, shareExact, shareText, type ProposeFormState, type ScanCache,
 } from "./propose-form";
 import { TREASURY } from "./market-proposals";
 import { DEFAULT_PROPOSALS_API, proposalsApiBase } from "./proposals-api";
@@ -106,6 +106,8 @@ describe("status page helpers", () => {
     expect(statusChip("approved", true).label).toBe("Opened");
     // the API alone never says Opened: only the chain lookup does
     expect(statusChip("opened", false).label).toBe("Approved — opening shortly");
+    expect(statusChip("approved", false, true).label).toBe("Approved — opening delayed");
+    expect(statusChip("approved", true, true).label).toBe("Opened");
     expect(statusChip("rejected", false).label).toBe("Not approved");
     expect(statusChip("queued", false).label).toBe("Phase 2 queue");
   });
@@ -225,11 +227,19 @@ describe("status page share lines (R42)", () => {
     expect(forwardedShown(null, 5n)).toBeUndefined();
     expect(forwardedShown(undefined, 5n)).toBeUndefined();
   });
-  test("a sub-cent share reads < 0.01, nothing reads 0", () => {
-    expect(shareText(9_000n)).toBe("< 0.01 USDC");
+  test("a share reads to 4 decimals (rounded down); under 0.0001 reads < 0.0001, nothing reads 0", () => {
+    expect(shareText(99n)).toBe("< 0.0001 USDC");
     expect(shareText(0n)).toBe("0 USDC");
-    expect(shareText(10_000n)).toBe("0.01 USDC");
-    expect(shareText(279_000n)).toBe("0.27 USDC");
+    expect(shareText(100n)).toBe("0.0001 USDC");
+    expect(shareText(9_000n)).toBe("0.009 USDC");
+    expect(shareText(279_000n)).toBe("0.279 USDC");
+    expect(shareText(279_123n)).toBe("0.2791 USDC");
+    expect(shareText(12_345_678_999n)).toBe("12345.6789 USDC");
+  });
+  test("shareExact gives all 6 decimals (the tooltip)", () => {
+    expect(shareExact(279_123n)).toBe("0.279123 USDC");
+    expect(shareExact(99n)).toBe("0.000099 USDC");
+    expect(shareExact(5_000_000n)).toBe("5.000000 USDC");
   });
   test("isTreasury compares case-insensitively", () => {
     expect(isTreasury(TREASURY.toLowerCase())).toBe(true);

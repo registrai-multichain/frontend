@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { createPublicClient, getAbiItem, parseAbiItem, type Hex } from "viem";
+import { createPublicClient, getAbiItem, keccak256, parseAbiItem, toBytes, type Hex } from "viem";
 import { marketsV4Abi, nanoLedgerAbi } from "@/lib/abi";
 import { getWalletChain, transportFor, type WalletChain } from "@/lib/chains";
 import { shortAddr } from "@/lib/format";
-import type { Proposal, ProposalKind } from "@/lib/market-proposals";
+import { OPENING_DELAY_S, openingOverdue, type ApprovalMessageJson, type Proposal, type ProposalKind } from "@/lib/market-proposals";
+import { verifiedApproval } from "@/lib/proposal-signature";
 import {
-  PRICE_SOURCE, feesScanEnd, forwardPayee, forwardedShown, humanUtc, isTreasury, shareText, mergeFeeProgress, mergeScanProgress, parseScanCache, proposalFeedKey, proposalScanStart,
-  scanForward, statusChip, sumCreatorFees, type ScanCache,
+  PRICE_SOURCE, feesScanEnd, forwardPayee, forwardedShown, humanUtc, isTreasury, shareExact, shareText, mergeFeeProgress, mergeScanProgress, parseScanCache,
+  proposalFeedKey, proposalScanStart, scanForward, statusChip, sumCreatorFees, type ScanCache,
 } from "@/lib/propose-form";
 import { PROPOSALS_API } from "@/lib/proposals-api";
 import {
@@ -220,6 +221,31 @@ export function ProposalStatus() {
 
   const chain = proposal && onChain?.id === proposal.id ? onChain.result : null;
 
+  // I4: an approved proposal's words are the market's: shown only under the team's signature.
+  const [signed, setSigned] = useState<{ id: string; message: ApprovalMessageJson | null } | null>(null);
+  useEffect(() => {
+    if (!proposal?.approval) return;
+    let alive = true;
+    void verifiedApproval(proposal.approval, proposal.id).then((message) => alive && setSigned({ id: proposal.id, message }));
+    return () => {
+      alive = false;
+    };
+  }, [proposal]);
+  const signature: Signature = !proposal || !(proposal.status === "approved" || proposal.status === "opened")
+    ? { state: "unsigned" }
+    : signed?.id !== proposal.id
+      ? { state: "checking" }
+      : signed.message
+        ? { state: "ok", message: signed.message }
+        : { state: "bad" };
+
+  // "Opening delayed" turns on by the clock (I3), so the page re-renders once a minute.
+  const [nowS, setNowS] = useState(() => Math.floor(Date.now() / 1000));
+  useEffect(() => {
+    const t = setInterval(() => setNowS(Math.floor(Date.now() / 1000)), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
   let body: React.ReactNode;
   if (!id || !valid) {
     body = (
@@ -238,7 +264,7 @@ export function ProposalStatus() {
   } else if (current.kind === "error") {
     body = <Notice title="Could not load the proposal.">Reason: {current.message}. Try again in a minute.</Notice>;
   } else {
-    body = <ProposalCard p={current.proposal} chain={chain} checking={needsChain && !chain} />;
+    body = <ProposalCard p={current.proposal} chain={chain} checking={needsChain && !chain} signature={signature} nowS={nowS} />;
   }
 
   return (
@@ -268,12 +294,31 @@ function Notice({ title, busy, children }: { title: string; busy?: boolean; chil
   );
 }
 
-function ProposalCard({ p, chain, checking }: { p: Proposal; chain: OnChain | null; checking: boolean }) {
+/** The approval's signature check (I4): "unsigned" for a proposal not approved yet (its
+ *  words are the submission's own); "ok" / "bad" once checked. */
+type Signature = { state: "unsigned" } | { state: "checking" } | { state: "bad" } | { state: "ok"; message: ApprovalMessageJson };
+
+/** I3: approved over OPENING_DELAY_S ago and the chain, read to the head, has no market for it. */
+const isDelayed = (p: Proposal, chain: OnChain | null, nowS: number) => chain?.kind === "not-yet" && chain.complete && openingOverdue(p, nowS);
+
+function ProposalCard({ p, chain, checking, signature, nowS }: { p: Proposal; chain: OnChain | null; checking: boolean; signature: Signature; nowS: number }) {
   const opened = chain?.kind === "opened" ? chain : null;
-  const chip = statusChip(p.status, Boolean(opened));
+  const chip = statusChip(p.status, Boolean(opened), isDelayed(p, chain, nowS));
   const isPrice = p.kind === "price";
   // Where the agent actually forwards: the treasury for an empty, zero or own-contract payee.
   const payee = forwardPayee(p);
+  // An approved proposal shows the signed question, the rule only when it hashes to the signed
+  // ruleHash, and its source only under a valid signature; otherwise "Proposal #id".
+  const words =
+    signature.state === "unsigned"
+      ? { question: p.question, rule: p.rule, source: p.source }
+      : signature.state === "ok"
+        ? {
+            question: signature.message.question,
+            rule: p.rule && keccak256(toBytes(p.rule)) === signature.message.ruleHash.toLowerCase() ? p.rule : undefined,
+            source: p.source,
+          }
+        : { question: `Proposal #${p.id}`, rule: undefined, source: undefined };
 
   return (
     <section className={`${s.panel} ${s.done}`} aria-labelledby="pp-question">
@@ -282,17 +327,23 @@ function ProposalCard({ p, chain, checking }: { p: Proposal; chain: OnChain | nu
         <span className={s.kindLabel}>{KIND_LABEL[p.kind] ?? p.kind}</span>
         <span className={s.idLabel}>{p.id}</span>
       </div>
-      <h2 id="pp-question" className={s.question}>{p.question}</h2>
+      <h2 id="pp-question" className={s.question}>{words.question}</h2>
+      {signature.state === "bad" && (
+        <p className={s.ruleText}>
+          The team&#8217;s signature on this proposal could not be verified, so its wording is not shown here. The market&#8217;s terms on
+          chain are what counts.
+        </p>
+      )}
       {isPrice ? (
         <div className={s.ruleBlock}>
           <span className={s.ruleLabel}>Settles on</span>
           <p className={s.ruleText}>{PRICE_SOURCE}.</p>
         </div>
       ) : (
-        p.rule && (
+        words.rule && (
           <div className={s.ruleBlock}>
             <span className={s.ruleLabel}>Resolves Yes if</span>
-            <p className={s.ruleText}>{p.rule}</p>
+            <p className={s.ruleText}>{words.rule}</p>
           </div>
         )
       )}
@@ -301,33 +352,46 @@ function ProposalCard({ p, chain, checking }: { p: Proposal; chain: OnChain | nu
           <dt>Deadline</dt>
           <dd>{humanUtc(p.deadline)}</dd>
         </div>
-        {!isPrice && p.source && (
+        {!isPrice && words.source && (
           <div className={s.fact}>
             <dt>Where the answer comes from</dt>
             <dd>
-              {/^https:\/\//.test(p.source) ? (
-                <a href={p.source} target="_blank" rel="noreferrer noopener">{p.source.replace(/^https:\/\//, "")} ↗</a>
+              {/^https:\/\//.test(words.source) ? (
+                <a href={words.source} target="_blank" rel="noreferrer noopener">{words.source.replace(/^https:\/\//, "")} ↗</a>
               ) : (
-                p.source
+                words.source
               )}
             </dd>
           </div>
         )}
         <div className={s.fact}>
           <dt>Creator share goes to</dt>
-          <dd>{isTreasury(payee) ? "Registrai treasury" : <span className={s.mono} title={payee}>{shortAddr(payee)}</span>}</dd>
+          <dd>
+            {isTreasury(payee) ? (
+              "Registrai treasury"
+            ) : (
+              <>
+                <span className={s.mono} title={payee}>{shortAddr(payee)}</span>&#8217;s Registrai balance on {ROUNDS.label}
+              </>
+            )}
+          </dd>
         </div>
         <div className={s.fact}>
           <dt>Proposed</dt>
           <dd>{Number.isFinite(Date.parse(p.createdAt)) ? humanUtc(Math.floor(Date.parse(p.createdAt) / 1000)) : "—"}</dd>
         </div>
       </dl>
-      <StatusCallout p={p} chain={chain} checking={checking} />
+      <StatusCallout p={p} chain={chain} checking={checking} nowS={nowS} />
     </section>
   );
 }
 
-function StatusCallout({ p, chain, checking }: { p: Proposal; chain: OnChain | null; checking: boolean }) {
+/** An amount to 4 decimals, the exact 6 in its tooltip. */
+function Share({ v }: { v: bigint }) {
+  return <span title={shareExact(v)}>{shareText(v)}</span>;
+}
+
+function StatusCallout({ p, chain, checking, nowS }: { p: Proposal; chain: OnChain | null; checking: boolean; nowS: number }) {
   const payee = forwardPayee(p);
   const toTreasury = isTreasury(payee);
   if (chain?.kind === "opened") {
@@ -339,13 +403,20 @@ function StatusCallout({ p, chain, checking }: { p: Proposal; chain: OnChain | n
           <Link className={s.marketLink} href={proposedMarketHref(chain.marketId)}>View the market →</Link>
         </p>
         <p>
-          Creator share earned: {chain.creatorFees === null ? "could not be read just now" : shareText(chain.creatorFees)}
+          Creator share earned: {chain.creatorFees === null ? "could not be read just now" : <Share v={chain.creatorFees} />}
         </p>
         <p>
           Forwarded to {toTreasury ? "the Registrai treasury" : <span className={s.mono} title={payee}>{shortAddr(payee)}</span>} (up to this
-          market&#8217;s share): {chain.forwarded === null ? "could not be read just now" : shown === undefined ? "—" : shareText(shown)}
+          market&#8217;s share): {chain.forwarded === null ? "could not be read just now" : shown === undefined ? "—" : <Share v={shown} />}
         </p>
-        <p>Registrai&#8217;s agent forwards it to {toTreasury ? "the Registrai treasury" : "the payee wallet"} daily.</p>
+        {toTreasury ? (
+          <p>Registrai&#8217;s agent forwards it to the Registrai treasury daily.</p>
+        ) : (
+          <p>
+            Registrai&#8217;s agent forwards it daily to the payee&#8217;s Registrai trading balance on {ROUNDS.label} (NanoLedger), not straight
+            to the wallet: it shows in the wallet once withdrawn from the balance menu.
+          </p>
+        )}
       </div>
     );
   }
@@ -364,6 +435,16 @@ function StatusCallout({ p, chain, checking }: { p: Proposal; chain: OnChain | n
       );
     case "approved":
     case "opened":
+      if (isDelayed(p, chain, nowS))
+        return (
+          <div className={s.callout}>
+            <p>
+              <b>Approved — opening delayed; the team has been told.</b> Registrai&#8217;s agent did not open it within{" "}
+              {OPENING_DELAY_S / 60} minutes of the approval: it may be waiting for a free slot (it opens a few new markets a day), or it
+              could not open it as signed. This page finds the market on chain once it opens.
+            </p>
+          </div>
+        );
       return (
         <div className={s.callout}>
           <p>Approved and signed by the team. Registrai&#8217;s agent opens it on {ROUNDS.label} within a few minutes; this page finds it on chain.</p>

@@ -108,12 +108,13 @@ export const statusHref = (id: string) => `/propose/status/?id=${encodeURICompon
 export type ChipTone = "pending" | "approved" | "opened" | "rejected" | "queued";
 /** The status chip; `openedOnChain`: the agent's market for it was found on chain.
  *  Only that says Opened: the API never learns that a market was opened, so its
- *  own "opened" status reads as approved. */
-export function statusChip(status: ProposalStatus, openedOnChain: boolean): { label: string; tone: ChipTone } {
+ *  own "opened" status reads as approved. `delayed` (I3): approved more than
+ *  OPENING_DELAY_S ago and the chain, read completely, has no market for it. */
+export function statusChip(status: ProposalStatus, openedOnChain: boolean, delayed = false): { label: string; tone: ChipTone } {
   if (openedOnChain) return { label: "Opened", tone: "opened" };
   switch (status) {
     case "approved":
-    case "opened": return { label: "Approved — opening shortly", tone: "approved" };
+    case "opened": return { label: delayed ? "Approved — opening delayed" : "Approved — opening shortly", tone: "approved" };
     case "rejected": return { label: "Not approved", tone: "rejected" };
     case "queued": return { label: "Phase 2 queue", tone: "queued" };
     default: return { label: "Pending review", tone: "pending" };
@@ -247,9 +248,16 @@ export function parseScanCache(raw: string | null): ScanCache | null {
   return c as ScanCache;
 }
 
-/** A creator-share amount: "0.27 USDC", "< 0.01 USDC" for a sub-cent share, "0 USDC". */
+/** A creator-share amount to 4 decimals (rounded down): "0.2791 USDC", "< 0.0001 USDC" for a
+ *  share under a hundredth of a cent, "0 USDC". shareExact gives all 6 (the title tooltip). */
 export function shareText(v: bigint): string {
-  return v > 0n && v < 10_000n ? "< 0.01 USDC" : `${formatUsdc(v, 2)} USDC`;
+  return v > 0n && v < 100n ? "< 0.0001 USDC" : `${formatUsdc(v, 4)} USDC`;
+}
+/** The exact amount, all 6 decimals: "0.279123 USDC". */
+export function shareExact(v: bigint): string {
+  const neg = v < 0n;
+  const a = neg ? -v : v;
+  return `${neg ? "-" : ""}${a / 1_000_000n}.${(a % 1_000_000n).toString().padStart(6, "0")} USDC`;
 }
 
 /** What the status page shows as forwarded for this market (R42): the agent's
