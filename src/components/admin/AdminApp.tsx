@@ -40,6 +40,7 @@ import {
 import { formatCountdown, recoveryView, transferTargetError, utcMinute } from "@/lib/builder-ownership";
 import { verifiedBuilderAbi } from "@/lib/verified-builders-chain";
 import { badgeImageBase, serialLabel } from "@/lib/verified-builder-badge";
+import { suggestionInvite, type AdminSuggestion } from "@/lib/suggestions";
 import { normalizeSource, sourceLabel } from "@/lib/verified-builders";
 import {
   onboardStepCall,
@@ -380,6 +381,8 @@ function Dashboard({
           onChanged={() => invites.mutate()}
         />
 
+        <SuggestionsSection onInvited={() => invites.mutate()} onSignedOut={onSignedOut} />
+
         <GaslessSection builders={chain.data ?? null} chainNote={chainNote} onSignedOut={onSignedOut} />
 
         <OnboardingSection
@@ -516,6 +519,96 @@ function InviteForm({ onChanged }: { onChanged: () => void }) {
       </form>
       {error && <p className="vf-error">{error}</p>}
       {result && <InviteLink invite={result.invite} existed={result.existed} />}
+    </Section>
+  );
+}
+
+// ───────────────────────────── public suggestions ─────────────────────────────
+
+function SuggestionsSection({ onInvited, onSignedOut }: { onInvited: () => void; onSignedOut: () => void }) {
+  const view = useContext(ViewCtx);
+  const list = useSWR<AdminSuggestion[]>(
+    "admin-suggestions",
+    async () => {
+      const r = await call<{ suggestions?: AdminSuggestion[]; error?: string }>("/api/admin/suggestions");
+      if (r.status === 401) throw new SignedOut();
+      if (r.status !== 200 || !r.body.suggestions) throw new Error(r.body.error ?? `suggestions (${r.status})`);
+      return r.body.suggestions;
+    },
+    { revalidateOnFocus: false, shouldRetryOnError: false },
+  );
+  useEffect(() => {
+    if (list.error instanceof SignedOut) onSignedOut();
+  }, [list.error, onSignedOut]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
+
+  async function dismiss(source: string) {
+    await call(`/api/admin/suggestions?source=${encodeURIComponent(source)}`, { method: "DELETE" });
+    await list.mutate();
+  }
+
+  async function invite(s: AdminSuggestion) {
+    setBusy(s.source);
+    setMsg({});
+    try {
+      const r = await call<{ invite?: AdminInvite; error?: string }>("/api/admin/invites", { method: "POST", body: suggestionInvite(s) });
+      if ((r.status === 201 || r.status === 409) && r.body.invite) {
+        await dismiss(s.source);
+        onInvited();
+        setMsg({ ok: r.status === 201 ? `Invited ${s.name}: its claim link is in the invites list.` : `${s.name} was already invited.` });
+      } else {
+        setMsg({ error: r.body.error ?? `could not invite (${r.status})` });
+      }
+    } catch (err) {
+      setMsg({ error: (err as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Section title="Suggestions">
+      <p className="vf-note">
+        Projects the public suggested at /suggest (website plus X or another public link). Check the social proof, then invite: the
+        evidence goes into the invite&apos;s private note. Nothing is public until you invite.
+      </p>
+      {list.error && !(list.error instanceof SignedOut) ? (
+        <p className="vf-error">Could not read the suggestions: {(list.error as Error).message}</p>
+      ) : !list.data ? (
+        <p className="vf-hint">Reading suggestions…</p>
+      ) : list.data.length === 0 ? (
+        <p className="vf-hint">No open suggestions.</p>
+      ) : (
+        <ul className="adm-list">
+          {list.data.map((s) => (
+            <li key={s.source}>
+              <b>{s.name}</b> <span className="adm-sub">{sourceLabel(s.source)} · ×{s.count} · last {isoDay(s.lastAt)}</span>
+              <div className="adm-sub">
+                <a href={s.website} target="_blank" rel="noreferrer noopener">{s.website} ↗</a>
+                {s.x && <> · <a href={xHref(s.x)} target="_blank" rel="noreferrer noopener">{s.x} ↗</a></>}
+                {s.social && <> · <a href={s.social} target="_blank" rel="noreferrer noopener">{s.social} ↗</a></>}
+                {s.github && <> · <a href={sourceHref(s.github)} target="_blank" rel="noreferrer noopener">{sourceLabel(s.github)} ↗</a></>}
+                {!s.github && <> · no GitHub repo: no markets</>}
+              </div>
+              {s.why && <div className="adm-sub">“{s.why}”</div>}
+              {s.by.length > 0 && <div className="adm-sub">by {s.by.join(", ")}</div>}
+              {view.inviteForm && (
+                <span className="flex gap-2">
+                  <button type="button" className="vf-mini" disabled={busy !== null} onClick={() => invite(s)}>
+                    {busy === s.source ? "inviting…" : "invite"}
+                  </button>
+                  <button type="button" className="vf-mini" disabled={busy !== null} onClick={() => dismiss(s.source)}>
+                    dismiss
+                  </button>
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {msg.ok && <p className="vf-ok">{msg.ok}</p>}
+      {msg.error && <p className="vf-error">{msg.error}</p>}
     </Section>
   );
 }
