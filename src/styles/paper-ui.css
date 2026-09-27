@@ -48,3 +48,38 @@
   --line: var(--pu-rule); --line-strong: var(--pu-edge);
 }
 .paper-ui .pu-bridge .pa-lede { color: var(--pu-lede); }
+
+/* ── Perennial builder markets, wonder markets and the atlas (Task 11b) ── */
+/* A pa-pill that opts into pu-pill, and the builder cards' pills (BuilderCardView is
+   shared with the builders gallery, so it is reached only from here): the mockup's
+   outlined pill. Each tone keeps its meaning; the on-chain nomination stays solid. */
+.paper-ui .pa-pill.pu-pill,
+.paper-ui .bld-card .pa-pill { border: 1px solid var(--pu-edge); padding: 1px 8px; background: transparent; color: var(--pu-muted); font-size: 12px; font-weight: 500; }
+.paper-ui .pa-pill.pu-pill[data-tone="ok"],
+.paper-ui .bld-card .pa-pill[data-tone="ok"] { border-color: color-mix(in srgb, var(--pu-up) 40%, transparent); color: var(--pu-up); }
+.paper-ui .pa-pill.pu-pill[data-tone="down"],
+.paper-ui .bld-card .pa-pill[data-tone="down"] { border-color: color-mix(in srgb, var(--pu-down) 40%, transparent); color: var(--pu-down); }
+.paper-ui .pa-pill.pu-pill[data-tone="unclaimed"],
+.paper-ui .bld-card .pa-pill[data-tone="unclaimed"] { border-color: color-mix(in srgb, var(--unclaimed-fg) 35%, transparent); background: color-mix(in srgb, var(--unclaimed) 55%, transparent); color: var(--unclaimed-fg); }
+.paper-ui .bld-card .pa-pill[data-tone="onchain"] { border-color: var(--unclaimed-fg); background: var(--unclaimed-fg); color: var(--unclaimed); }
+.paper-ui .wonder-label { border-color: var(--pu-edge); border-radius: 999px; color: var(--pu-muted); }
+
+/* Builder cards: the card's radius, padding and display face. Borders are left to the
+   kind rules (verified, onboarding, the dashed on-chain nomination, highlight). */
+.paper-ui .bld-card { border-radius: 16px; padding: 22px; }
+.paper-ui .bld-card .pa-h3,
+.paper-ui .bld-avatar span { font-family: var(--pu-display); letter-spacing: -0.02em; }
+.paper-ui .bld-avatar { clip-path: none; border-radius: 12px; }
+
+/* Dialogs (open a market, the trading balance) and notices. */
+.paper-ui .pa-dialog { border-color: var(--pu-rule); border-radius: 16px; background: var(--pu-card); }
+.paper-ui .pa-dialog .pa-h3 { font-family: var(--pu-display); letter-spacing: -0.02em; }
+.paper-ui .pu-bridge .pa-notice { border-radius: 12px; }
+
+/* The atlas: its panels and boards take the card radius; the page title the display face. */
+.paper-ui .pu-bridge .perennial-app-header h1 { font-family: var(--pu-display); letter-spacing: -0.02em; }
+.paper-ui .atlas-panel,
+.paper-ui .board,
+.paper-ui .atlas-unattributed,
+.paper-ui .atlas-globe-empty { overflow: hidden; border-radius: 16px; }
+.paper-ui .board-head h3 { font-family: var(--pu-display); font-size: 20px; font-weight: 400; letter-spacing: -0.01em; }

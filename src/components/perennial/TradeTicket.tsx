@@ -111,7 +111,7 @@ export function TradeTicket({ data, tx, market: m, initialSide = "Yes" }: { data
   })();
 
   const connectBtn = (
-    <button type="button" className="pa-btn pa-btn--block" onClick={tx.connectOrSwitch}>
+    <button type="button" className="pa-btn pa-btn--block pu-btn pu-btn--primary" onClick={tx.connectOrSwitch}>
       {tx.address ? `Switch to ${D.label}` : "Connect wallet"}
     </button>
   );
@@ -126,7 +126,7 @@ export function TradeTicket({ data, tx, market: m, initialSide = "Yes" }: { data
       {state === "connect" && (
         <>
           <p className="pa-muted">{st.canTrade ? "Browsing works without a wallet." : statusSentence(st.key, m.expiry)}</p>
-          <button type="button" className="pa-btn pa-btn--block" onClick={tx.connectOrSwitch}>
+          <button type="button" className="pa-btn pa-btn--block pu-btn pu-btn--primary" onClick={tx.connectOrSwitch}>
             {st.canTrade ? "Connect wallet to trade" : "Connect wallet to collect"}
           </button>
         </>
@@ -139,7 +139,7 @@ export function TradeTicket({ data, tx, market: m, initialSide = "Yes" }: { data
       {state === "fund" && (
         <>
           <p>You have $0 to trade.</p>
-          <button type="button" className="pa-btn pa-btn--block" onClick={openFunds}>Add funds</button>
+          <button type="button" className="pa-btn pa-btn--block pu-btn pu-btn--primary" onClick={openFunds}>Add funds</button>
         </>
       )}
 
@@ -154,13 +154,13 @@ export function TradeTicket({ data, tx, market: m, initialSide = "Yes" }: { data
           </div>
           <div className="pa-yn">
             {(["Yes", "No"] as const).map((c) => (
-              <button key={c} type="button" className="pa-pick" data-side={c.toLowerCase()} aria-pressed={side === c} onClick={() => setSide(c)}>
+              <button key={c} type="button" className={`pa-pick pu-btn ${c === "Yes" ? "pu-btn--up" : "pu-btn--down"}`} data-side={c.toLowerCase()} aria-pressed={side === c} onClick={() => setSide(c)}>
                 <span>{c}</span>
                 <span className="tnum">{c === "Yes" ? yp : 100 - yp}¢</span>
               </button>
             ))}
           </div>
-          <label className="pa-field">
+          <label className="pa-field pu-input">
             <span>{mode === "buy" ? "Amount" : "Shares"}</span>
             <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0.00" aria-label={mode === "buy" ? "Amount in USDC" : "Shares to sell"} />
             <span>{mode === "buy" ? "USDC" : side}</span>
@@ -194,7 +194,7 @@ export function TradeTicket({ data, tx, market: m, initialSide = "Yes" }: { data
               {q.priceImpact > 0.05 && <p className="text-down pa-small">This order moves the price by {(q.priceImpact * 100).toFixed(1)}%.</p>}
             </div>
           )}
-          <button type="button" className="pa-btn pa-btn--block" onClick={trade} disabled={tx.busy || !q || !slip.ok || !data.acct}>
+          <button type="button" className="pa-btn pa-btn--block pu-btn pu-btn--primary" onClick={trade} disabled={tx.busy || !q || !slip.ok || !data.acct}>
             {tx.pending === mode ? (mode === "buy" ? "Buying…" : "Selling…") : tradeLabel(mode, side, amt?.ok ? amt.value : undefined)}
           </button>
           <p className="pa-muted pa-small">
@@ -216,12 +216,12 @@ export function TradeTicket({ data, tx, market: m, initialSide = "Yes" }: { data
           {tx.needsConnect ? connectBtn : (
             <>
               {st.canResolve && (
-                <button type="button" className="pa-btn pa-btn--block" onClick={settle("resolve", "Market settled.")} disabled={tx.busy}>
+                <button type="button" className="pa-btn pa-btn--block pu-btn pu-btn--primary" onClick={settle("resolve", "Market settled.")} disabled={tx.busy}>
                   {tx.pending === "resolve" ? "Settling…" : "Settle now (anyone can)"}
                 </button>
               )}
               {st.canVoid && (
-                <button type="button" className="pa-btn pa-btn--block" onClick={settle("voidMarket", "Market voided.")} disabled={tx.busy}>
+                <button type="button" className="pa-btn pa-btn--block pu-btn pu-btn--primary" onClick={settle("voidMarket", "Market voided.")} disabled={tx.busy}>
                   {tx.pending === "voidMarket" ? "Voiding…" : "Void now (anyone can)"}
                 </button>
               )}
@@ -234,12 +234,12 @@ export function TradeTicket({ data, tx, market: m, initialSide = "Yes" }: { data
         <>
           <p>{resultLine}</p>
           {st.canRedeem && redeemable > 0n && (
-            <button type="button" className="pa-btn pa-btn--yes pa-btn--block" onClick={settle("redeem", `Collected ${usdText(redeemable)}.`)} disabled={tx.busy}>
+            <button type="button" className="pa-btn pa-btn--yes pa-btn--block pu-btn pu-btn--up is-active" onClick={settle("redeem", `Collected ${usdText(redeemable)}.`)} disabled={tx.busy}>
               {tx.pending === "redeem" ? "Collecting…" : m.phase === PHASE.Voided ? `Refund ${usdText(redeemable)}` : `Collect ${usdText(redeemable)}`}
             </button>
           )}
           {st.canClaimLP && pos.lp > 0n && (
-            <button type="button" className="pa-btn pa-btn--quiet pa-btn--block" onClick={settle("claimLP", `Collected your liquidity, ${usdText(lpPreview)}.`)} disabled={tx.busy}>
+            <button type="button" className="pa-btn pa-btn--quiet pa-btn--block pu-btn pu-btn--quiet" onClick={settle("claimLP", `Collected your liquidity, ${usdText(lpPreview)}.`)} disabled={tx.busy}>
               {tx.pending === "claimLP" ? "Collecting…" : `Collect your liquidity ${pos.claimableLP !== undefined ? "" : "≈ "}${usdText(lpPreview)}`}
             </button>
           )}

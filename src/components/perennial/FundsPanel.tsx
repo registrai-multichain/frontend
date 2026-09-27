@@ -58,7 +58,7 @@ export function FundsPanel({ onClose }: { onClose: () => void }) {
       {tx.needsConnect ? (
         <div className="pa-stack">
           <p className="pa-muted">{tx.address ? `Switch your wallet to ${D.label} to add funds.` : "Connect a wallet to add funds."}</p>
-          <button type="button" className="pa-btn pa-btn--block" onClick={tx.connectOrSwitch}>
+          <button type="button" className="pa-btn pa-btn--block pu-btn pu-btn--primary" onClick={tx.connectOrSwitch}>
             {tx.address ? `Switch to ${D.label}` : "Connect wallet"}
           </button>
         </div>
@@ -66,7 +66,7 @@ export function FundsPanel({ onClose }: { onClose: () => void }) {
         <div className="pa-stack">
           <div className="pa-kv"><span>To trade</span><b>{data ? usdText(data.ledger) : error ? "couldn't read" : "…"}</b></div>
           <div className="pa-kv"><span>In your wallet</span><b>{data ? usdText(walletBal) : "…"}</b></div>
-          <label className="pa-field">
+          <label className="pa-field pu-input">
             <span>Add</span>
             <input value={amt} onChange={(e) => setAmt(e.target.value)} inputMode="decimal" placeholder="0.00" aria-label="Amount to add in USDC" />
             <span>USDC</span>
@@ -77,10 +77,10 @@ export function FundsPanel({ onClose }: { onClose: () => void }) {
             ))}
             <button type="button" className="pa-chip" onClick={() => setAmt(formatUsdc(depositMax, 6))}>Max {usdText(depositMax)}</button>
           </div>
-          <button type="button" className="pa-btn pa-btn--block" onClick={deposit} disabled={tx.busy || !data}>
+          <button type="button" className="pa-btn pa-btn--block pu-btn pu-btn--primary" onClick={deposit} disabled={tx.busy || !data}>
             {tx.pending === "deposit" ? "Adding…" : "Add funds"}
           </button>
-          <button type="button" className="pa-btn pa-btn--quiet pa-btn--block" onClick={withdraw} disabled={tx.busy || !data}>
+          <button type="button" className="pa-btn pa-btn--quiet pa-btn--block pu-btn pu-btn--quiet" onClick={withdraw} disabled={tx.busy || !data}>
             {tx.pending === "withdraw" ? "Withdrawing…" : "Withdraw all"}
           </button>
           <p className="pa-muted pa-small">Moving funds in takes one approval and one transaction. Your wallet keeps $0.10 for gas.</p>

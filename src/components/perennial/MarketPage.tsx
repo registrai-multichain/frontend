@@ -58,23 +58,23 @@ export function MarketPage({ data, tx, market: m, initialSide }: { data: Perenni
       <Link href="/perennial/" className="pa-muted hover:text-fg">← All markets</Link>
       <div className="pa-market mt-4">
         <div>
-          <span className="pa-pill" data-tone={wonder ? "unclaimed" : undefined}>
+          <span className="pa-pill pu-pill" data-tone={wonder ? "unclaimed" : undefined}>
             {wonder ? `Unclaimed · ${subject}` : `${subject}${metric ? ` · ${metric}` : ""}`}
           </span>
-          <h1 className="pa-h1 mt-3">{data.questionFor(m)}</h1>
+          <h1 className="pa-h1 pu-h mt-3">{data.questionFor(m)}</h1>
           <p className="pa-muted mt-2">
             {st.canTrade ? `Closes ${when(m.expiry)} · ${timeLeft(data.chainNow, m.expiry)}` : statusShort(st.key)} · {usdText(potOf(m))} in the pot
           </p>
           <MarketLabels subject={m.subject} />
 
           <div className="mt-6 flex items-baseline gap-3">
-            <span className="pa-serif text-up" style={{ fontSize: 44, lineHeight: 1 }}>{yp}%</span>
+            <span className="pa-serif pu-h text-up" style={{ fontSize: 44, lineHeight: 1 }}>{yp}%</span>
             <span className="pa-muted">chance of Yes, by today&apos;s price</span>
           </div>
           <div className="pa-bar mt-3"><i style={{ width: `${yp}%` }} /></div>
 
           <section className="mt-8 pa-stack">
-            <h2 className="pa-h3">How this settles</h2>
+            <h2 className="pa-h3 pu-h">How this settles</h2>
             <p>
               {settlesText({
                 subject, metric, threshold: m.threshold, comparator: m.comparator, expiry: m.expiry,
@@ -90,7 +90,7 @@ export function MarketPage({ data, tx, market: m, initialSide }: { data: Perenni
           </section>
 
           <section className="mt-8 pa-stack">
-            <h2 className="pa-h3">Who it pays</h2>
+            <h2 className="pa-h3 pu-h">Who it pays</h2>
             {wonder ? (
               <p>Half of every fee here waits for {subject}&apos;s team until they claim the project.</p>
             ) : b ? (
@@ -106,8 +106,8 @@ export function MarketPage({ data, tx, market: m, initialSide }: { data: Perenni
 
           {holds && (
             <section className="mt-8">
-              <h2 className="pa-h3 mb-2">Your position</h2>
-              <div className="pa-card">
+              <h2 className="pa-h3 pu-h mb-2">Your position</h2>
+              <div className="pa-card pu-card pu-card--static">
                 {pos.yes > 0n && <div className="pa-kv"><span>Yes shares</span><span>{formatUsdc(pos.yes, 2)} · pays {usdText(pos.yes)} if Yes</span></div>}
                 {pos.no > 0n && <div className="pa-kv"><span>No shares</span><span>{formatUsdc(pos.no, 2)} · pays {usdText(pos.no)} if No</span></div>}
                 {pos.netCost !== undefined && <div className="pa-kv"><span>You paid, net</span><span>{usdText(pos.netCost)}</span></div>}
@@ -139,7 +139,7 @@ export function MarketPage({ data, tx, market: m, initialSide }: { data: Perenni
         </div>
 
         <div className="pa-ticket">
-          <div className="pa-card">
+          <div className="pa-card pu-card pu-card--static">
             <TradeTicket data={data} tx={tx} market={m} initialSide={initialSide} />
           </div>
         </div>

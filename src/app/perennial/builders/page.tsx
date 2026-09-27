@@ -11,7 +11,9 @@ export const metadata: Metadata = {
 export default function PerennialBuildersPage() {
   return (
     <PerennialShell>
-      <BuildersPage />
+      <div className="pu-bridge">
+        <BuildersPage />
+      </div>
     </PerennialShell>
   );
 }

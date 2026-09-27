@@ -12,7 +12,9 @@ export const metadata: Metadata = {
 export default function WonderPage() {
   return (
     <PerennialShell>
-      <PerennialApp initialTab="unclaimed" />
+      <div className="pu-bridge">
+        <PerennialApp initialTab="unclaimed" />
+      </div>
     </PerennialShell>
   );
 }

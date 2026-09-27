@@ -86,6 +86,20 @@ describe("paper-ui layer", () => {
   test("the app shell's root carries .paper-ui", () => {
     expect(read("src/components/PerennialShell.tsx")).toMatch(/className=\{?[`"][^`"]*\bpaper-ui\b/);
   });
+
+  test("the Perennial, wonder, builders and atlas pages opt into the token bridge", () => {
+    for (const page of ["src/app/perennial/page.tsx", "src/app/perennial/wonder/page.tsx", "src/app/perennial/builders/page.tsx", "src/app/atlas/page.tsx"]) {
+      expect(read(page), page).toMatch(/className="[^"]*\bpu-bridge\b/);
+    }
+  });
+
+  test("builder cards keep their kind borders: no layer rule sets a border on the card itself", () => {
+    // BuilderCardView is shared with the builders gallery; its kinds (verified, onboarding,
+    // the dashed on-chain nomination, highlight) are told apart by their borders.
+    const onCard = cssRules(css).filter((r) => splitSelectors(r.selector).some((s) => /\.bld-card(?::[\w-]+)*$/.test(s)));
+    expect(onCard.length).toBeGreaterThan(0);
+    for (const r of onCard) expect(r.body, r.selector).not.toMatch(/(^|;|\s)border(-color|-style|-width)?\s*:/);
+  });
 });
 
 describe("the shared tokens and .paper-type stay as they were", () => {
