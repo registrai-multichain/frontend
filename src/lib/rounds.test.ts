@@ -54,6 +54,7 @@ import {
   parseProposalStore,
   serializeProposalStore,
   pruneProposalStore,
+  foldProposalRange,
   proposalAnswer,
   proposalRetryMs,
   type ApprovalTerms,
@@ -765,47 +766,124 @@ describe("proposed markets", () => {
     const store = {
       cover: { lo: 100n, hi: 20_000n },
       feeds: {
-        [hex(0xf1)]: { feedId: hex(0xf1), block: 160n, marketTo: 5_159n, marketId: hex(0x51) },
-        [hex(0xf2)]: { feedId: hex(0xf2), block: 150n, marketTo: 149n },
+        [hex(0xf1)]: { feedId: hex(0xf1), block: 160n, marketId: hex(0x51), marketBlock: 170n },
+        [hex(0xf2)]: { feedId: hex(0xf2), block: 150n, marketId: undefined, marketBlock: undefined },
       },
+      orphans: { [hex(0xf3)]: { marketId: hex(0x53), block: 180n } },
     };
     expect(parseProposalStore(serializeProposalStore(store))).toEqual(store);
-    expect(parseProposalStore(null)).toEqual({ feeds: {} });
-    expect(parseProposalStore("{nope")).toEqual({ feeds: {} });
-    expect(parseProposalStore(JSON.stringify({ cover: { lo: "9", hi: "1" }, feeds: [] }))).toEqual({ feeds: {} });
+    const EMPTY = { feeds: {}, orphans: {} };
+    expect(parseProposalStore(null)).toEqual(EMPTY);
+    expect(parseProposalStore("{nope")).toEqual(EMPTY);
+    expect(parseProposalStore(JSON.stringify({ cover: { lo: "9", hi: "1" }, feeds: [] }))).toEqual(EMPTY);
     const badBlock = JSON.parse(serializeProposalStore(store));
     badBlock.feeds[0].block = "-1";
-    expect(parseProposalStore(JSON.stringify(badBlock))).toEqual({ feeds: {} });
+    expect(parseProposalStore(JSON.stringify(badBlock))).toEqual(EMPTY);
     const badId = JSON.parse(serializeProposalStore(store));
     badId.feeds[1].marketId = "0x12";
-    expect(parseProposalStore(JSON.stringify(badId))).toEqual({ feeds: {} });
+    expect(parseProposalStore(JSON.stringify(badId))).toEqual(EMPTY);
+    const badOrphan = JSON.parse(serializeProposalStore(store));
+    badOrphan.orphans[0].marketId = "nope";
+    expect(parseProposalStore(JSON.stringify(badOrphan))).toEqual(EMPTY);
     // a planted key or label is not part of the record: it is dropped, never trusted
     const planted = JSON.parse(serializeProposalStore(store));
     planted.feeds[0].key = "p-pzzzzzzzzzz";
-    expect(Object.keys(parseProposalStore(JSON.stringify(planted)).feeds[hex(0xf1)]).sort()).toEqual(["block", "feedId", "marketId", "marketTo"]);
+    expect(Object.keys(parseProposalStore(JSON.stringify(planted)).feeds[hex(0xf1)]).sort()).toEqual(["block", "feedId", "marketBlock", "marketId"]);
   });
 
-  test("the store keeps the newest records by block, not the first ones", () => {
-    const feeds = Array.from({ length: 1_005 }, (_, i) => ({ feedId: hex(0x1000 + i), block: BigInt(i), marketTo: BigInt(i) }));
-    const raw = serializeProposalStore({ feeds: Object.fromEntries(feeds.map((f) => [f.feedId, f])) });
+  test("the store keeps the newest records by block, up to 2000", () => {
+    const feeds = Array.from({ length: 2_005 }, (_, i) => ({ feedId: hex(0x10000 + i), block: BigInt(i), marketId: hex(0x90000 + i) }));
+    const raw = serializeProposalStore({ feeds: Object.fromEntries(feeds.map((f) => [f.feedId, f])), orphans: {} });
     const kept = Object.values(parseProposalStore(raw).feeds).map((f) => f.block);
-    expect(kept.length).toBe(1_000);
-    expect(kept.includes(1_004n) && !kept.includes(4n) && kept.includes(5n)).toBe(true);
+    expect(kept.length).toBe(2_000);
+    expect(kept.includes(2_004n) && !kept.includes(4n) && kept.includes(5n)).toBe(true);
   });
 
-  test("pruneProposalStore drops only feeds before the floor; a never-opened feed stays (the agent may still open it)", () => {
+  test("pruneProposalStore: feeds and orphans before the floor go; a never-opened feed stays (the agent may still open it)", () => {
     const s = {
       cover: { lo: 0n, hi: 50_000n },
       feeds: {
-        [hex(1)]: { feedId: hex(1), block: 900n, marketTo: 5_000n, marketId: hex(0x11) }, // before the floor
-        [hex(2)]: { feedId: hex(2), block: 2_000n, marketTo: 2_000n + 600n }, // searched to its end, no market yet
-        [hex(3)]: { feedId: hex(3), block: 3_000n, marketTo: 3_100n }, // still searching
-        [hex(4)]: { feedId: hex(4), block: 4_000n, marketTo: 9_000n, marketId: hex(0x44) }, // opened
+        [hex(1)]: { feedId: hex(1), block: 900n, marketId: hex(0x11) }, // before the floor
+        [hex(2)]: { feedId: hex(2), block: 2_000n }, // no market yet, long ago
+        [hex(3)]: { feedId: hex(3), block: 3_000n }, // no market yet, recent
+        [hex(4)]: { feedId: hex(4), block: 4_000n, marketId: hex(0x44) }, // opened
       },
+      orphans: { [hex(5)]: { marketId: hex(0x55), block: 800n }, [hex(6)]: { marketId: hex(0x66), block: 5_000n } },
     };
-    const out = pruneProposalStore(s, 1_000n);
+    const out = pruneProposalStore(s, 1_000n, 2_500n);
     expect(Object.keys(out.feeds).sort()).toEqual([hex(2), hex(3), hex(4)].sort());
+    expect(Object.keys(out.orphans)).toEqual([hex(6)]);
     expect(out.cover).toEqual(s.cover);
-    expect(Object.keys(pruneProposalStore(s, 0n, 1).feeds)).toEqual([hex(4)]);
+  });
+
+  test("pruneProposalStore over the cap evicts never-opened feeds past their search first", () => {
+    const s = {
+      feeds: {
+        [hex(2)]: { feedId: hex(2), block: 9_000n }, // newest, but no market and past its search
+        [hex(3)]: { feedId: hex(3), block: 2_000n, marketId: hex(0x33) }, // oldest, opened
+        [hex(4)]: { feedId: hex(4), block: 9_990n }, // no market, still within its search
+      },
+      orphans: {},
+    };
+    expect(Object.keys(pruneProposalStore(s, 0n, 9_500n, 2).feeds).sort()).toEqual([hex(3), hex(4)].sort());
+    expect(Object.keys(pruneProposalStore(s, 0n, 9_500n, 1).feeds)).toEqual([hex(4)]);
+  });
+
+  describe("foldProposalRange: markets found wherever they open", () => {
+    const P1 = hex(0xf1);
+    const ROUND = FEED_BTC;
+    const DAY = 172_800n; // blocks per day at 0.5 s
+    const feedAt = (block: bigint) => feedLog(P1, "registrai-data:p-pabcdefghij", block, AGENT, 43_200n);
+    const marketAt = (id: number, feedId: Hex, block: bigint, creator: Address = AGENT) =>
+      marketLog(id, feedId, 1_800_000_000, { block, threshold: 1n, comparator: COMPARATOR.GreaterOrEqual, creator });
+    const other = (f: string) => f === ROUND.toLowerCase();
+    const EMPTY = { feeds: {}, orphans: {} };
+
+    test("a market opened on day 4 is found by a first-time visitor (backward scan: market before feed)", () => {
+      const feedBlock = 1_000_000n;
+      const marketBlock = feedBlock + 4n * DAY;
+      // the newer range first: the market, its feed not known yet
+      const r1 = foldProposalRange(EMPTY, [], [marketAt(0x71, P1, marketBlock), marketAt(0x72, ROUND, marketBlock)], AGENT, other);
+      expect(r1.attached).toEqual([]);
+      expect(Object.keys(r1.store.orphans)).toEqual([P1]); // the round market is not an orphan
+      // ...the visitor leaves, and comes back: the store survives the round trip
+      const back = parseProposalStore(serializeProposalStore(r1.store));
+      // then the older range: the feed
+      const r2 = foldProposalRange(back, [feedAt(feedBlock)], [], AGENT, other);
+      expect(r2.attached).toEqual([hex(0x71)]);
+      expect(r2.store.feeds[P1]).toMatchObject({ block: feedBlock, marketId: hex(0x71), marketBlock });
+      expect(r2.store.orphans).toEqual({});
+    });
+
+    test("a market opened on day 4 is found by a returning visitor (forward scan: feed stored earlier)", () => {
+      const feedBlock = 1_000_000n;
+      const first = foldProposalRange(EMPTY, [feedAt(feedBlock)], [], AGENT, other);
+      expect(first.store.feeds[P1].marketId).toBeUndefined();
+      const stored = parseProposalStore(serializeProposalStore(first.store));
+      const later = foldProposalRange(stored, [], [marketAt(0x71, P1, feedBlock + 4n * DAY)], AGENT, other);
+      expect(later.attached).toEqual([hex(0x71)]);
+      expect(later.store.feeds[P1].marketId).toBe(hex(0x71));
+    });
+
+    test("feed and market in one range; the newest market wins; strangers' markets are ignored", () => {
+      const r = foldProposalRange(EMPTY, [feedAt(10n)], [marketAt(0x71, P1, 12n), marketAt(0x73, P1, 11n), marketAt(0x74, P1, 13n, OTHER)], AGENT, other);
+      expect(r.store.feeds[P1].marketId).toBe(hex(0x71));
+      expect(r.store.orphans).toEqual({});
+    });
+
+    test("only the agent's proposal feeds are stored; a round feed's orphan is dropped when the feed turns up", () => {
+      const ORPH = hex(0xe1);
+      const r1 = foldProposalRange(EMPTY, [], [marketAt(0x75, ORPH, 50n)], AGENT, other);
+      expect(Object.keys(r1.store.orphans)).toEqual([ORPH]);
+      const r2 = foldProposalRange(
+        r1.store,
+        [feedLog(ORPH, "registrai-data:btc-usd-5m-change-9", 10n), feedLog(hex(0xe2), "registrai-data:p-pqrstuvwxyz", 11n, OTHER)],
+        [],
+        AGENT,
+        other,
+      );
+      expect(r2.store.feeds).toEqual({});
+      expect(r2.store.orphans).toEqual({});
+    });
   });
 });

@@ -776,8 +776,9 @@ export function proposalEventMeta(
   };
 }
 
-/** Days a proposal feed is searched for its market: the agent opens it in the pass
- *  that provisions the feed, so a feed with no market after this was never opened. */
+/** A proposal feed with no market this long after it was provisioned is, most likely,
+ *  one the agent never opened (the agent opens it in the pass that provisions the
+ *  feed): the first to go when the store is full. */
 export const PROPOSAL_MARKET_SEARCH_SECS = 3 * 86_400;
 /** How far back proposal feeds are searched: a proposed market's deadline is at most
  *  366 days after it opens, plus a day for settlement. */
@@ -816,76 +817,160 @@ export function extendCover(cover: Cover | undefined, from: bigint, to: bigint):
   return { lo: from < cover.lo ? from : cover.lo, hi: to > cover.hi ? to : cover.hi };
 }
 
-/** A proposal feed found by the background scan, and how far its market was searched.
- *  Only ids and block numbers are kept: the feed's key is re-read from the Registry on
- *  every visit, so an edited record cannot relabel a feed. */
+/** A proposal feed found by a scan, and its market once one is seen. Only ids and block
+ *  numbers are kept: the feed's key is re-read from the Registry on every visit, so an
+ *  edited record cannot relabel a feed. */
 export interface ProposalFeedRecord {
   feedId: Hex;
   block: bigint;
-  /** MarketCreated on this feed was searched through this block. */
-  marketTo: bigint;
   marketId?: Hex;
+  /** Block of the market's MarketCreated (the newest one wins). */
+  marketBlock?: bigint;
 }
 
-/** The background scan's progress, kept in localStorage so a return visit reads only
- *  the blocks added since (bigints as decimal strings). */
+/** A MarketCreated(creator = agent) seen before its feed: a backward scan meets a
+ *  market before the (older) feed it is on. Kept until the feed turns up. */
+export interface OrphanMarket {
+  marketId: Hex;
+  block: bigint;
+}
+
+/** The scans' progress, kept in localStorage so a return visit reads only the blocks
+ *  added since (bigints as decimal strings). */
 export interface ProposalScanStore {
   cover?: Cover;
   feeds: Record<string, ProposalFeedRecord>;
+  /** feedId -> the newest market seen on a feed not known yet. */
+  orphans: Record<string, OrphanMarket>;
 }
 
-/** At most this many feed records are kept (the newest by block). */
-export const PROPOSAL_STORE_MAX = 1000;
+/** At most this many feed records (and as many orphans) are kept. */
+export const PROPOSAL_STORE_MAX = 2000;
 
 export function serializeProposalStore(s: ProposalScanStore): string {
   return JSON.stringify({
     cover: s.cover ? { lo: s.cover.lo.toString(), hi: s.cover.hi.toString() } : undefined,
-    feeds: Object.values(s.feeds).map((f) => ({ ...f, block: f.block.toString(), marketTo: f.marketTo.toString() })),
+    feeds: Object.values(s.feeds).map((f) => ({
+      feedId: f.feedId, block: f.block.toString(), marketId: f.marketId, marketBlock: f.marketBlock?.toString(),
+    })),
+    orphans: Object.entries(s.orphans).map(([feedId, o]) => ({ feedId, marketId: o.marketId, block: o.block.toString() })),
   });
 }
 
 const DEC_RE = /^\d{1,20}$/;
 const B32_RE = /^0x[0-9a-f]{64}$/;
+const optDec = (v: unknown) => v === undefined || (typeof v === "string" && DEC_RE.test(v));
 
 /** A stored scan, or an empty one when missing or malformed (then it scans afresh). */
 export function parseProposalStore(raw: string | null): ProposalScanStore {
-  const empty: ProposalScanStore = { feeds: {} };
+  const empty: ProposalScanStore = { feeds: {}, orphans: {} };
   if (!raw) return empty;
   try {
-    const j = JSON.parse(raw) as { cover?: { lo?: unknown; hi?: unknown }; feeds?: unknown };
-    const out: ProposalScanStore = { feeds: {} };
+    const j = JSON.parse(raw) as { cover?: { lo?: unknown; hi?: unknown }; feeds?: unknown; orphans?: unknown };
+    const out: ProposalScanStore = { feeds: {}, orphans: {} };
     const c = j.cover;
     if (c !== undefined) {
       if (typeof c.lo !== "string" || typeof c.hi !== "string" || !DEC_RE.test(c.lo) || !DEC_RE.test(c.hi) || BigInt(c.lo) > BigInt(c.hi)) return empty;
       out.cover = { lo: BigInt(c.lo), hi: BigInt(c.hi) };
     }
-    if (!Array.isArray(j.feeds)) return empty;
+    if (!Array.isArray(j.feeds) || !Array.isArray(j.orphans ?? [])) return empty;
     const recs: ProposalFeedRecord[] = [];
     for (const f of j.feeds as Array<Record<string, unknown>>) {
       if (!f || typeof f.feedId !== "string" || !B32_RE.test(f.feedId)) return empty;
-      if (typeof f.block !== "string" || !DEC_RE.test(f.block) || typeof f.marketTo !== "string" || !DEC_RE.test(f.marketTo)) return empty;
+      if (typeof f.block !== "string" || !DEC_RE.test(f.block) || !optDec(f.marketBlock)) return empty;
       if (f.marketId !== undefined && (typeof f.marketId !== "string" || !B32_RE.test(f.marketId))) return empty;
-      recs.push({ feedId: f.feedId as Hex, block: BigInt(f.block), marketTo: BigInt(f.marketTo), marketId: f.marketId as Hex | undefined });
+      recs.push({
+        feedId: f.feedId as Hex, block: BigInt(f.block), marketId: f.marketId as Hex | undefined,
+        marketBlock: f.marketBlock === undefined ? undefined : BigInt(f.marketBlock as string),
+      });
     }
-    return { ...out, feeds: newestFeeds(recs) };
+    const orphans: Array<[string, OrphanMarket]> = [];
+    for (const o of (j.orphans ?? []) as Array<Record<string, unknown>>) {
+      if (!o || typeof o.feedId !== "string" || !B32_RE.test(o.feedId) || typeof o.marketId !== "string" || !B32_RE.test(o.marketId)) return empty;
+      if (typeof o.block !== "string" || !DEC_RE.test(o.block)) return empty;
+      orphans.push([o.feedId, { marketId: o.marketId as Hex, block: BigInt(o.block) }]);
+    }
+    return pruneProposalStore({ cover: out.cover, feeds: Object.fromEntries(recs.map((f) => [f.feedId, f])), orphans: Object.fromEntries(orphans) }, 0n, 0n);
   } catch {
     return empty;
   }
 }
 
-function newestFeeds(recs: readonly ProposalFeedRecord[], max = PROPOSAL_STORE_MAX): Record<string, ProposalFeedRecord> {
-  const sorted = [...recs].sort((a, b) => (a.block > b.block ? -1 : a.block < b.block ? 1 : 0));
-  return Object.fromEntries(sorted.slice(0, max).map((f) => [f.feedId, f]));
+const byBlockDesc = <T extends { block: bigint }>(a: T, b: T) => (a.block > b.block ? -1 : a.block < b.block ? 1 : 0);
+
+/**
+ * The store without what can no longer show, and within its cap:
+ * - feeds (and orphans) older than the scan's floor go: a proposal's deadline is at
+ *   most a year after its feed, so past the floor its market, opened or not, is over;
+ * - a feed with no market yet stays otherwise: the agent may still open it (a retried
+ *   open, or one waiting on its float), and a later scan attaches it;
+ * - over PROPOSAL_STORE_MAX, feeds with no market provisioned before `staleBefore`
+ *   (past the time the agent opens a market) go first, oldest first, then the oldest
+ *   of the rest; orphans keep the newest.
+ */
+export function pruneProposalStore(s: ProposalScanStore, floor: bigint, staleBefore: bigint, max = PROPOSAL_STORE_MAX): ProposalScanStore {
+  const live = Object.values(s.feeds).filter((f) => f.block >= floor);
+  const stale = (f: ProposalFeedRecord) => !f.marketId && f.block < staleBefore;
+  const keep = [...live.filter((f) => !stale(f)).sort(byBlockDesc), ...live.filter(stale).sort(byBlockDesc)].slice(0, max);
+  const orphans = Object.entries(s.orphans)
+    .filter(([, o]) => o.block >= floor)
+    .sort((a, b) => byBlockDesc(a[1], b[1]))
+    .slice(0, max);
+  return { cover: s.cover, feeds: Object.fromEntries(keep.map((f) => [f.feedId, f])), orphans: Object.fromEntries(orphans) };
 }
 
-/** The store without what can no longer show: feeds older than the scan's floor (a
- *  proposal's deadline is at most a year after its feed, so past the floor its market,
- *  opened or not, is over); then the newest PROPOSAL_STORE_MAX by block. A feed whose
- *  market search came up empty stays: the agent may still open it (a retried open, or
- *  one waiting on its float), and the page's own scan catches that on a feed in its book. */
-export function pruneProposalStore(s: ProposalScanStore, floor: bigint, max = PROPOSAL_STORE_MAX): ProposalScanStore {
-  const keep = Object.values(s.feeds).filter((f) => f.block >= floor);
-  return { cover: s.cover, feeds: newestFeeds(keep, max) };
+/**
+ * Fold one scanned block range into the store: its FeedCreated logs (the agent's
+ * proposal feeds) and its MarketCreated logs, fetched with creator = agent. A market
+ * on a stored feed is attached to it (the newest wins); one on a feed not known yet is
+ * kept as an orphan until its feed turns up in an older range (a backward scan meets
+ * the market first); one on a feed the page knows as something else (`otherFeed`: a
+ * round or a config event) is ignored. Returns the market ids newly attached.
+ */
+export function foldProposalRange(
+  store: ProposalScanStore,
+  feedLogs: readonly FeedCreatedLog[],
+  marketLogs: readonly MarketCreatedLog[],
+  agent: Address,
+  otherFeed: (feedId: string) => boolean,
+  prefix = ROUNDS.descriptionPrefix,
+): { store: ProposalScanStore; attached: Hex[] } {
+  const feeds = { ...store.feeds };
+  const orphans = { ...store.orphans };
+  const attached: Hex[] = [];
+  const attach = (feedId: string, marketId: Hex, block: bigint) => {
+    const f = feeds[feedId];
+    if (f.marketBlock !== undefined && f.marketBlock >= block && f.marketId) return;
+    feeds[feedId] = { ...f, marketId, marketBlock: block };
+    attached.push(marketId);
+  };
+  for (const lg of feedLogs) {
+    const { feedId, creator, description } = lg.args;
+    if (!feedId || !sameAddr(creator, agent)) continue;
+    const key = feedKeyFromDescription(description, prefix);
+    const id = feedId.toLowerCase();
+    if (!key || !isProposalKey(key)) {
+      delete orphans[id]; // a round or event feed: its markets are not proposals
+      continue;
+    }
+    if (feeds[id]) continue;
+    feeds[id] = { feedId: id as Hex, block: lg.blockNumber ?? 0n };
+  }
+  for (const lg of marketLogs) {
+    const a = lg.args;
+    if (!a.marketId || !a.feedId || !sameAddr(a.creator, agent) || !sameAddr(a.agent, agent)) continue;
+    const feedId = a.feedId.toLowerCase();
+    const marketId = a.marketId.toLowerCase() as Hex;
+    const block = lg.blockNumber ?? 0n;
+    if (feeds[feedId]) attach(feedId, marketId, block);
+    else if (!otherFeed(feedId) && (!orphans[feedId] || orphans[feedId].block < block)) orphans[feedId] = { marketId, block };
+  }
+  for (const [feedId, o] of Object.entries(orphans)) {
+    if (!feeds[feedId]) continue;
+    attach(feedId, o.marketId, o.block);
+    delete orphans[feedId];
+  }
+  return { store: { cover: store.cover, feeds, orphans }, attached };
 }
 
 /** The sum of NanoLedger InternalTransfer amounts (the agent's forwarded creator share). */

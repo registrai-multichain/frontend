@@ -52,7 +52,6 @@ import {
 } from "@/lib/perennial-market";
 import {
   BLOCK_SECS,
-  LOG_CHUNK_BLOCKS,
   PROPOSAL_LOOKBACK_SECS,
   PROPOSAL_MARKET_SEARCH_SECS,
   ROUNDS,
@@ -92,6 +91,7 @@ import {
   eventHref,
   extendCover,
   feedKeyFromDescription,
+  foldProposalRange,
   formatChange,
   isMarketId,
   isProposalKey,
@@ -211,17 +211,22 @@ const ZERO_ID = `0x${"0".repeat(64)}`;
  *  that keeps each such chunk in one call (a getFeed call is ~100 bytes of it). */
 const VERIFY_CHUNK = 25;
 const VERIFY_BATCH_BYTES = 8_192;
+/** A feed the page knows as something other than a proposal (a round or config event feed). */
+const isOtherFeed = (book: FeedBook, feedId: string) => {
+  const f = book.byId[feedId];
+  return Boolean(f && !isProposalKey(f.key));
+};
 const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const blocksFor = (secs: number) => BigInt(Math.ceil(secs / BLOCK_SECS));
 
 // The background scan for proposal feeds (older than the page's two-hour window),
 // remembered per browser so a return visit reads only the blocks added since.
-const proposedKey = () => `registrai.rounds.proposed.v2.${D.chainId}.${C.MarketsV4.toLowerCase()}.${D.agent.toLowerCase()}`;
+const proposedKey = () => `registrai.rounds.proposed.v3.${D.chainId}.${C.MarketsV4.toLowerCase()}.${D.agent.toLowerCase()}`;
 function loadProposed(): ProposalScanStore {
   try {
     return parseProposalStore(localStorage.getItem(proposedKey()));
   } catch {
-    return { feeds: {} };
+    return { feeds: {}, orphans: {} };
   }
 }
 function saveProposed(s: ProposalScanStore) {
@@ -276,6 +281,8 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
     describe: new Set<string>(),
     /** Ids read from chain that are not the agent's markets: never asked again. */
     notOurs: new Set<string>(),
+    /** The proposal scan's store, while the overview runs it (see the backfill below). */
+    pstore: undefined as ProposalScanStore | undefined,
   });
   const busy = useRef(false);
   const again = useRef(false);
@@ -299,7 +306,9 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
         const logs = await client.getLogs({
           address: C.MarketsV4,
           event: MARKET_CREATED,
-          args: { feedId: Object.keys(d.book.byId) as Hex[] },
+          // One indexed topic (the creator), never a list of feed ids: parseMarketLogs keeps
+          // only markets on the agent's known feeds.
+          args: { creator: D.agent },
           fromBlock: head > FIRST_PAINT_BLOCKS ? head - FIRST_PAINT_BLOCKS : 0n,
           toBlock: head,
         });
@@ -352,31 +361,35 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
       //    window (first load) or since the last scan. Chunked ≤ 5000 blocks.
       const from = d.scannedTo < 0n ? scanStart(head, D.deployBlock) : d.scannedTo + 1n;
       if (from <= head) {
-        // Feeds and markets are scanned side by side (markets filtered to the
-        // feeds known so far); a feed first seen in this range gets its own
-        // market scan right after, so nothing on it is missed.
-        const marketsOn = (ids: Hex[], to: bigint) =>
-          scanLogs(
-            (a, b) => client.getLogs({ address: C.MarketsV4, event: MARKET_CREATED, args: { feedId: ids }, fromBlock: a, toBlock: b }),
-            from,
-            to,
-          );
-        const known = Object.keys(d.book.byId) as Hex[];
+        // Feeds and markets side by side. Markets are filtered by their creator (one
+        // indexed topic: a list of feed ids would grow with every feed the agent ever
+        // made, past what an RPC accepts); parseMarketLogs keeps the agent's markets on
+        // the agent's known feeds, the feeds of this range included.
         const [feeds, mk] = await Promise.all([
           scanLogs(
             (a, b) => client.getLogs({ address: C.Registry, event: FEED_CREATED, args: { creator: D.agent }, fromBlock: a, toBlock: b }),
             from,
             head,
           ),
-          marketsOn(known, head),
+          scanLogs(
+            (a, b) => client.getLogs({ address: C.MarketsV4, event: MARKET_CREATED, args: { creator: D.agent }, fromBlock: a, toBlock: b }),
+            from,
+            head,
+          ),
         ]);
-        d.book = mergeFeedLogs(d.book, feeds.logs as unknown as FeedCreatedLog[], D.agent);
-        const fresh = (Object.keys(d.book.byId) as Hex[]).filter((id) => !known.includes(id));
-        const extra = fresh.length ? await marketsOn(fresh, head) : { logs: [], scannedTo: head };
-        const logs = [...mk.logs, ...extra.logs] as unknown as MarketCreatedLog[];
-        for (const m of parseMarketLogs(logs, d.book, D.agent)) d.markets.set(m.marketId, m);
-        // Advance only over what every scan covered.
-        const covered = [feeds.scannedTo, mk.scannedTo, extra.scannedTo].reduce((x, y) => (y < x ? y : x));
+        const feedLogs = feeds.logs as unknown as FeedCreatedLog[];
+        const marketLogs = mk.logs as unknown as MarketCreatedLog[];
+        d.book = mergeFeedLogs(d.book, feedLogs, D.agent);
+        for (const m of parseMarketLogs(marketLogs, d.book, D.agent)) d.markets.set(m.marketId, m);
+        // The proposal scan's store (overview): record proposal feeds and their markets
+        // seen here too, so a later visit knows them without scanning these blocks again.
+        if (d.pstore) {
+          const r = foldProposalRange(d.pstore, feedLogs, marketLogs, D.agent, (f) => isOtherFeed(d.book, f));
+          d.pstore = r.store;
+          for (const id of r.attached) if (!d.markets.has(id)) d.describe.add(id);
+        }
+        // Advance only over what both scans covered.
+        const covered = feeds.scannedTo < mk.scannedTo ? feeds.scannedTo : mk.scannedTo;
         if (covered >= from) d.scannedTo = covered;
       }
 
@@ -633,39 +646,38 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
     refreshRef.current = refresh;
   }, [refresh]);
 
-  // Proposal feeds older than the recent window. A proposed market trades for up to
-  // a year, far past the two-hour scan, and nothing on chain lists the agent's feeds,
-  // so this walks FeedCreated(creator = agent) back from the head in the background,
-  // one paced eth_getLogs at a time (the page's refresh interleaves with it), and
-  // looks for the market opened on each proposal feed it finds. Progress is kept
-  // per browser, so a return visit only reads the blocks added since.
+  // Proposal feeds and markets older than the recent window. A proposed market trades
+  // for up to a year, far past the two-hour scan, and nothing on chain lists the
+  // agent's feeds, so this walks the chain back from the head in the background, one
+  // block range at a time: FeedCreated(creator = agent) and MarketCreated(creator =
+  // agent) over the same range (two paced eth_getLogs; the page's refresh interleaves
+  // with them). A market on a stored proposal feed is attached to it; one met before
+  // its (older) feed waits as an orphan until the feed turns up. Every range is read
+  // once per browser: the store keeps the progress, so a return visit reads only the
+  // blocks added since, and a market opened late (after its feed) is found there.
   useEffect(() => {
     if (!backfill) return;
     let alive = true;
     const d = disc.current;
-    let store = loadProposed();
-    const recs = () => Object.values(store.feeds);
-    const keyOf = (feedId: string) => d.book.byId[feedId]?.key;
-    // How far each feed's market is searched this visit: to the head when the feed
-    // joined the page's book (from then on the page's own scan includes it), at most
-    // PROPOSAL_MARKET_SEARCH_SECS past the feed.
-    const until = new Map<string, bigint>();
-    const searchUntil = (f: { feedId: string; block: bigint }, head: bigint) => {
-      if (!until.has(f.feedId)) {
-        const end = f.block + blocksFor(PROPOSAL_MARKET_SEARCH_SECS);
-        until.set(f.feedId, end < head ? end : head);
+    d.pstore = loadProposed();
+
+    const describeNew = (ids: readonly Hex[]) => {
+      let any = false;
+      for (const id of ids) {
+        if (d.markets.has(id)) continue;
+        d.describe.add(id);
+        any = true;
       }
-      return until.get(f.feedId)!;
+      if (any) void refreshRef.current?.();
     };
 
     // The stored records name feeds by id only: what each feed is (its creator and
-    // description, hence its key) is read from the Registry before it joins the book.
-    // One chunk at a time (VERIFY_CHUNK feeds in one Multicall3 eth_call), one after
-    // another in the loop below; a failed chunk stays pending and is read again on its
-    // own, and a feed joins the book (and its market is described) only once verified.
-    const unverified = new Set(recs().map((f) => f.feedId as string));
+    // description, hence its key) is read from the Registry before it joins the book,
+    // VERIFY_CHUNK feeds per Multicall3 eth_call, one chunk per step of the loop below;
+    // a failed chunk stays pending and is read again on its own.
+    const unverified = new Set(Object.keys(d.pstore.feeds));
     const verifyChunk = async () => {
-      const ids = [...unverified].filter((f) => store.feeds[f]).slice(0, VERIFY_CHUNK) as Hex[];
+      const ids = [...unverified].filter((f) => d.pstore?.feeds[f]).slice(0, VERIFY_CHUNK) as Hex[];
       if (!ids.length) {
         unverified.clear();
         return;
@@ -676,25 +688,24 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
         multicallAddress: MULTICALL3,
         batchSize: VERIFY_BATCH_BYTES,
       })) as unknown as Array<{ creator: Address; description: string; disputeWindow: bigint; exists: boolean }>;
+      const store = d.pstore!;
       const logs: FeedCreatedLog[] = [];
-      let described = false;
+      const markets: Hex[] = [];
       ids.forEach((feedId, i) => {
         unverified.delete(feedId);
         const r = rows[i];
+        const rec = store.feeds[feedId];
+        if (!rec) return;
         const key = r?.exists && sameAddress(r.creator, D.agent) ? feedKeyFromDescription(r.description) : null;
         if (!key || !isProposalKey(key)) {
           delete store.feeds[feedId];
           return;
         }
-        logs.push({ args: { feedId, creator: r.creator, description: r.description, disputeWindow: r.disputeWindow }, blockNumber: store.feeds[feedId].block, logIndex: 0 });
-        const mid = store.feeds[feedId].marketId;
-        if (mid) {
-          d.describe.add(mid);
-          described = true;
-        }
+        logs.push({ args: { feedId, creator: r.creator, description: r.description, disputeWindow: r.disputeWindow }, blockNumber: rec.block, logIndex: 0 });
+        if (rec.marketId) markets.push(rec.marketId);
       });
       d.book = mergeFeedLogs(d.book, logs, D.agent);
-      if (described) void refreshRef.current?.();
+      describeNew(markets);
     };
 
     void (async () => {
@@ -711,55 +722,26 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
           const head = await client.getBlockNumber();
           const back = blocksFor(PROPOSAL_LOOKBACK_SECS);
           const floor = head > back && head - back > D.deployBlock ? head - back : D.deployBlock;
-          let found = false;
-          // Markets the page's own scan already found for a stored feed.
-          for (const f of recs()) {
-            const key = keyOf(f.feedId);
-            if (f.marketId || !key) continue;
-            const m = latestMarketFor([...d.markets.values()], key);
-            if (m && m.feedId === f.feedId) f.marketId = m.marketId;
+          const search = blocksFor(PROPOSAL_MARKET_SEARCH_SECS);
+          const staleBefore = head > search ? head - search : 0n;
+          // The next stretch, newest first, back to a year (plus a day) before the head
+          // and never before the deployment.
+          const range = nextBackfill(d.pstore!.cover, head, floor);
+          if (!range) {
+            d.pstore = pruneProposalStore(d.pstore!, floor, staleBefore);
+            saveProposed(d.pstore);
+            await pause(60_000); // all covered; the page's own scan follows new blocks
+            continue;
           }
-          // 1. A proposal feed without its market yet: the next chunk after it
-          //    (the agent opens the market in the pass that provisions the feed).
-          const searchEnd = (f: { feedId: string; block: bigint }) => searchUntil(f, head);
-          const pending = recs()
-            .filter((f) => !f.marketId && d.book.byId[f.feedId] && f.marketTo < searchEnd(f))
-            .sort((a, b) => (a.block > b.block ? -1 : a.block < b.block ? 1 : 0));
-          if (pending.length) {
-            const f = pending[0];
-            const from = f.marketTo + 1n;
-            const end = searchEnd(f);
-            const to = from + LOG_CHUNK_BLOCKS - 1n < end ? from + LOG_CHUNK_BLOCKS - 1n : end;
-            const logs = await client.getLogs({ address: C.MarketsV4, event: MARKET_CREATED, args: { feedId: [f.feedId] }, fromBlock: from, toBlock: to });
-            const ms = parseMarketLogs(logs as unknown as MarketCreatedLog[], d.book, D.agent).filter((m) => m.feedId === f.feedId);
-            for (const m of ms) d.markets.set(m.marketId, m);
-            if (ms.length) {
-              f.marketId = ms[ms.length - 1].marketId;
-              found = true;
-            }
-            f.marketTo = to;
-          } else {
-            // 2. The next stretch of FeedCreated logs, newest first, back to a year
-            //    (plus a day) before the head and never before the deployment.
-            const range = nextBackfill(store.cover, head, floor);
-            if (!range) {
-              await pause(60_000); // all covered; the page's own scan follows new blocks
-              continue;
-            }
-            const logs = (await client.getLogs({
-              address: C.Registry, event: FEED_CREATED, args: { creator: D.agent }, fromBlock: range[0], toBlock: range[1],
-            })) as unknown as FeedCreatedLog[];
-            const b = mergeFeedLogs(seedFeedBook({}), logs, D.agent);
-            for (const f of Object.values(b.byId)) {
-              if (!isProposalKey(f.key) || store.feeds[f.feedId]) continue;
-              store.feeds[f.feedId] = { feedId: f.feedId, block: f.blockNumber, marketTo: f.blockNumber - 1n };
-            }
-            d.book = mergeFeedLogs(d.book, logs, D.agent);
-            store.cover = extendCover(store.cover, range[0], range[1]);
-          }
-          store = pruneProposalStore(store, floor);
-          saveProposed(store);
-          if (found) void refreshRef.current?.();
+          const [feedLogs, marketLogs] = (await Promise.all([
+            client.getLogs({ address: C.Registry, event: FEED_CREATED, args: { creator: D.agent }, fromBlock: range[0], toBlock: range[1] }),
+            client.getLogs({ address: C.MarketsV4, event: MARKET_CREATED, args: { creator: D.agent }, fromBlock: range[0], toBlock: range[1] }),
+          ])) as unknown as [FeedCreatedLog[], MarketCreatedLog[]];
+          d.book = mergeFeedLogs(d.book, feedLogs, D.agent);
+          const r = foldProposalRange(d.pstore!, feedLogs, marketLogs, D.agent, (f) => isOtherFeed(d.book, f));
+          d.pstore = pruneProposalStore({ ...r.store, cover: extendCover(r.store.cover, range[0], range[1]) }, floor, staleBefore);
+          saveProposed(d.pstore);
+          describeNew(r.attached);
         } catch {
           await pause(5_000); // the RPC is busy or down: try the same range again
         }
@@ -767,6 +749,7 @@ function useRoundsData(client: PublicClient, address: Address | undefined, focus
     })();
     return () => {
       alive = false;
+      d.pstore = undefined;
     };
   }, [client, backfill]);
 
