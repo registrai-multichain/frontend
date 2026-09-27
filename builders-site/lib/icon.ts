@@ -3,7 +3,8 @@
  * (src/lib/site-icon.ts), so the gallery shows it instead of an initial.
  *
  *   200 the image (PNG, JPEG, GIF, WebP or ICO by its bytes), cached a day:
- *       the site's own icon, else the project's X profile picture (the X
+ *       the site's own icon, else its mirrored picture in KV (lib/avatars.ts,
+ *       loaded by scripts/load-avatars.ts), else the project's X profile picture live (the X
  *       handle of its invite, through unavatar.io, fetched here so visitors
  *       never contact it and the page CSP stays same-origin)
  *   404 no usable icon and no X picture (the page shows the initial), cached an hour
@@ -25,6 +26,8 @@ const SAFE = { "x-content-type-options": "nosniff", "content-security-policy": "
 
 export interface IconHandlerDeps {
   find?: (source: string) => Promise<SiteIcon | null>;
+  /** The picture mirrored in KV (avatar:<source>); absent = no mirror. */
+  mirror?: (source: string) => Promise<SiteIcon | null>;
   /** The project's X handle ("@name"), from its invite; absent = no X fallback. */
   xHandleOf?: (source: string) => Promise<string | null>;
   findX?: (handle: string) => Promise<SiteIcon | null>;
@@ -53,7 +56,7 @@ export async function handleIcon(req: Request, deps: IconHandlerDeps = {}): Prom
   const hit = cache ? await cache.match(key) : undefined;
   if (hit) return hit;
 
-  const icon = (await (deps.find ?? findSiteIcon)(source)) ?? (await xFallback(source, deps));
+  const icon = (await (deps.find ?? findSiteIcon)(source)) ?? (await mirrored(source, deps)) ?? (await xFallback(source, deps));
   const res = icon
     ? new Response(icon.bytes as unknown as BodyInit, { status: 200, headers: { ...SAFE, "content-type": icon.type, "cache-control": `public, max-age=${ICON_CACHE_S}` } })
     : new Response("no icon", { status: 404, headers: { ...SAFE, "content-type": "text/plain", "cache-control": `public, max-age=${ICON_MISS_CACHE_S}` } });
@@ -71,6 +74,16 @@ async function xFallback(source: string, deps: IconHandlerDeps): Promise<SiteIco
   try {
     const handle = await deps.xHandleOf(source);
     return handle ? await (deps.findX ?? findXAvatar)(handle) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The KV-mirrored picture of a source, or null (none, or a failed read: the live lookup follows). */
+async function mirrored(source: string, deps: IconHandlerDeps): Promise<SiteIcon | null> {
+  if (!deps.mirror) return null;
+  try {
+    return await deps.mirror(source);
   } catch {
     return null;
   }
