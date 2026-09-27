@@ -32,6 +32,8 @@ ADMIN_ADDRESSES = "0xb7ecf980a4732b75e57e2ec80903dee3964f2573"
 ONBOARDER_ADDRESSES = "0x80e81588175558d565ffc1f63fe0513a61316405"
 # Sign-in messages, the CSRF Origin check and claim links are bound to it.
 SITE_ORIGIN = "https://builder.registrai.cc"
+# The only origin /api/market-proposals accepts public submissions from (CORS).
+PROPOSALS_ALLOWED_ORIGIN = "https://app.registrai.cc"
 
 # ── Secrets (NOT here: set once per project, they survive deploys) ──────────
 # NONCE_SECRET   HMAC key of the stateless /admin sign-in nonces

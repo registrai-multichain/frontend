@@ -42,6 +42,8 @@ export interface Env {
   NONCE_SECRET?: string;
   /** Pages SECRET: the Telegram bot's bearer for /api/bot/invites. Unset = that route fails closed (503). */
   BOT_SECRET?: string;
+  /** https://app.registrai.cc — the only origin /api/market-proposals accepts submissions from (CORS). */
+  PROPOSALS_ALLOWED_ORIGIN?: string;
 }
 
 export interface PagesContext<D extends Record<string, unknown> = Record<string, unknown>> {
