@@ -45,14 +45,50 @@ async function readSupply(fetchRpc: FetchRpc) {
   return regiSupply({ total, burned, protocol });
 }
 
-/** The public RPC rate-limits bursts: one retry after `retryMs` before answering 503. */
+/** The public RPC rate-limits per IP, and Workers share their IPs: up to 3 tries,
+ *  `retryMs` then twice that apart, before answering 503. */
 async function readSupplyRetrying(fetchRpc: FetchRpc, retryMs: number) {
-  try {
-    return await readSupply(fetchRpc);
-  } catch {
-    if (retryMs > 0) await new Promise((r) => setTimeout(r, retryMs));
-    return readSupply(fetchRpc);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await readSupply(fetchRpc);
+    } catch (e) {
+      if (attempt >= 2) throw e;
+      if (retryMs > 0) await new Promise((r) => setTimeout(r, retryMs * (attempt + 1)));
+    }
   }
+}
+
+/** The subset of the Workers Cache API used here. */
+export interface KeptCache {
+  match(req: Request): Promise<Response | undefined>;
+  put(req: Request, res: Response): Promise<void>;
+}
+
+/** How long the last good answer may stand in for a failed read. */
+export const LAST_GOOD_SECS = 86_400;
+
+/**
+ * Serve `compute()`; keep every 200 as the last good answer for its URL, and when a
+ * later read fails with a 5xx (the shared public RPC rate-limits), serve the kept one
+ * marked `x-registrai-stale: 1` instead: supply moves only with burns, so a slightly
+ * old number beats an error for a poller like CoinGecko.
+ */
+export async function withLastGood(cache: KeptCache, req: Request, compute: () => Promise<Response>): Promise<Response> {
+  const key = new Request(`${new URL(req.url).origin}${new URL(req.url).pathname}?last-good`, { method: "GET" });
+  const res = await compute();
+  if (res.status === 200) {
+    const kept = new Response(res.clone().body, res);
+    kept.headers.set("cache-control", `public, max-age=${LAST_GOOD_SECS}`);
+    await cache.put(key, kept);
+    return res;
+  }
+  if (res.status < 500) return res;
+  const last = await cache.match(key);
+  if (!last) return res;
+  const stale = new Response(last.body, last);
+  stale.headers.set("x-registrai-stale", "1");
+  stale.headers.set("cache-control", "no-store");
+  return stale;
 }
 
 export async function handleRegiSupply(kind: string, fetchRpc: FetchRpc = fetchArcRpc, retryMs = 1500): Promise<Response> {

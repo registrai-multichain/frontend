@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { encodeAbiParameters, type Hex } from "viem";
 import { formatSupply, regiSupply } from "../../src/lib/regi-supply";
-import { handleRegiSupply, type FetchRpc } from "../lib/supply";
+import { handleRegiSupply, withLastGood, type FetchRpc } from "../lib/supply";
 
 const E18 = 10n ** 18n;
 const u = (v: bigint) => encodeAbiParameters([{ type: "uint256" }], [v]);
@@ -69,6 +69,15 @@ describe("GET /api/regi/<kind>", () => {
     expect(n).toBe(2);
   });
 
+  test("up to two rate-limited answers are retried (3 tries)", async () => {
+    const ok = rpc(values).fetchRpc;
+    let n = 0;
+    const flaky: FetchRpc = async (body) => (n++ < 2 ? Promise.reject(new Error("429")) : ok(body));
+    const r = await handleRegiSupply("circulating-supply", flaky, 0);
+    expect(r.status).toBe(200);
+    expect(n).toBe(3);
+  });
+
   test("an RPC failure is a 503, never a wrong number", async () => {
     const r = await handleRegiSupply("circulating-supply", rpc(values, true).fetchRpc, 0);
     expect(r.status).toBe(503);
@@ -76,5 +85,49 @@ describe("GET /api/regi/<kind>", () => {
 
   test("an unknown kind is a 404", async () => {
     expect((await handleRegiSupply("price", rpc(values).fetchRpc)).status).toBe(404);
+  });
+});
+
+/** A Cache API stand-in (the Workers cache): keyed by URL. */
+function memoryCache() {
+  const m = new Map<string, Response>();
+  return {
+    m,
+    match: async (req: Request) => m.get(req.url)?.clone(),
+    put: async (req: Request, res: Response) => void m.set(req.url, res.clone()),
+  };
+}
+
+describe("withLastGood: the shared public RPC fails often, supply moves slowly", () => {
+  const URL_ = "https://dashboard.registrai.cc/api/regi/circulating-supply";
+  const ok = () => new Response("964000000", { status: 200, headers: { "content-type": "text/plain" } });
+  const down = () => new Response("Arc RPC unavailable", { status: 503 });
+
+  test("a good answer is served and kept", async () => {
+    const c = memoryCache();
+    const r = await withLastGood(c, new Request(URL_), async () => ok());
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("964000000");
+    expect(r.headers.get("x-registrai-stale")).toBeNull();
+  });
+
+  test("when the RPC fails, the last good answer is served, marked stale", async () => {
+    const c = memoryCache();
+    await withLastGood(c, new Request(URL_), async () => ok());
+    const r = await withLastGood(c, new Request(URL_), async () => down());
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("964000000");
+    expect(r.headers.get("x-registrai-stale")).toBe("1");
+  });
+
+  test("with nothing kept yet, the failure passes through", async () => {
+    const r = await withLastGood(memoryCache(), new Request(URL_), async () => down());
+    expect(r.status).toBe(503);
+  });
+
+  test("a 404 is never replaced by a kept answer", async () => {
+    const c = memoryCache();
+    const r = await withLastGood(c, new Request(URL_ + "x"), async () => new Response("not found", { status: 404 }));
+    expect(r.status).toBe(404);
   });
 });
