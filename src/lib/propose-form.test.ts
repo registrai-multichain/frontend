@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest";
 import {
   EMPTY_FORM, PRICE_SOURCE, formatUtcDeadline, parseUtcDeadline, prepareSubmission, priceQuestion,
-  proposalFeedDescription, proposalScanStart, scanForward, statusChip, statusHref, sumCreatorFees, type ProposeFormState,
+  feesScanEnd, mergeFeeProgress, mergeScanProgress, parseScanCache, proposalFeedDescription, proposalScanStart, scanForward,
+  statusChip, statusHref, sumCreatorFees, type ProposeFormState, type ScanCache,
 } from "./propose-form";
-import { PROPOSALS_API } from "./proposals-api";
+import { DEFAULT_PROPOSALS_API, proposalsApiBase } from "./proposals-api";
 
 const NOW = 1_790_500_000; // 2026-09-27
 const DEC31_2300 = Date.UTC(2026, 11, 31, 23, 0) / 1000;
@@ -98,11 +99,12 @@ describe("prepareSubmission", () => {
 });
 
 describe("status page helpers", () => {
-  test("chip labels; the chain decides Opened", () => {
+  test("chip labels; only the chain decides Opened", () => {
     expect(statusChip("pending", false).label).toBe("Pending review");
     expect(statusChip("approved", false).label).toBe("Approved — opening shortly");
     expect(statusChip("approved", true).label).toBe("Opened");
-    expect(statusChip("opened", false).label).toBe("Opened");
+    // the API alone never says Opened: only the chain lookup does
+    expect(statusChip("opened", false).label).toBe("Approved — opening shortly");
     expect(statusChip("rejected", false).label).toBe("Not approved");
     expect(statusChip("queued", false).label).toBe("Phase 2 queue");
   });
@@ -111,7 +113,10 @@ describe("status page helpers", () => {
   });
   test("status link and API base", () => {
     expect(statusHref("pabcdefghij")).toBe("/propose/status/?id=pabcdefghij");
-    expect(PROPOSALS_API).toBe("https://builder.registrai.cc/api/market-proposals");
+    expect(DEFAULT_PROPOSALS_API).toBe("https://builder.registrai.cc/api/market-proposals");
+    expect(proposalsApiBase(undefined)).toBe(DEFAULT_PROPOSALS_API);
+    expect(proposalsApiBase("")).toBe(DEFAULT_PROPOSALS_API);
+    expect(proposalsApiBase("http://127.0.0.1:8788/api/market-proposals")).toBe("http://127.0.0.1:8788/api/market-proposals");
   });
   test("creator share = the sum of FeesPaid.creatorFee", () => {
     expect(sumCreatorFees([{ args: { creatorFee: 1_500_000n } }, { args: {} }, { args: { creatorFee: 250_000n } }])).toBe(1_750_000n);
@@ -142,5 +147,48 @@ describe("scanForward", () => {
       return [];
     };
     expect(await scanForward(failing, 0n, 30_000n, () => false, 10_000n, 5_000n)).toMatchObject({ complete: false, scannedTo: 9_999n });
+  });
+});
+
+describe("bounded status reads", () => {
+  test("the fee scan ends 600 blocks after the market's expiry block, or at the head", () => {
+    // market at block 1000 created at t=0, expiry t=3600 -> expiry block 1000 + 7200 = 8200
+    expect(feesScanEnd(1_000_000n, 1_000n, 0, 3_600)).toBe(8_800n);
+    expect(feesScanEnd(5_000n, 1_000n, 0, 3_600)).toBe(5_000n);
+    // a fractional block rounds up
+    expect(feesScanEnd(1_000_000n, 1_000n, 0, 3_601)).toBe(8_802n);
+    // expiry before creation (never on chain) clamps to the market's block
+    expect(feesScanEnd(1_000_000n, 1_000n, 100, 50)).toBe(1_600n);
+  });
+
+  test("scan progress only advances over a contiguous range", () => {
+    expect(mergeScanProgress(undefined, 100n, 499n)).toBe(499n);
+    expect(mergeScanProgress(99n, 100n, 499n)).toBe(499n);
+    // nothing scanned in this pass (first chunk failed)
+    expect(mergeScanProgress(99n, 100n, 99n)).toBe(99n);
+    // a range that does not start right after the cached end leaves a gap: keep the cache
+    expect(mergeScanProgress(99n, 200n, 499n)).toBe(99n);
+    // never goes backwards
+    expect(mergeScanProgress(600n, 100n, 499n)).toBe(600n);
+  });
+
+  test("the fee sum adds only what a contiguous pass read", () => {
+    expect(mergeFeeProgress(undefined, 1_000n, 4_999n, 7n)).toEqual({ scannedTo: "4999", sum: "7" });
+    expect(mergeFeeProgress({ scannedTo: "4999", sum: "7" }, 5_000n, 9_999n, 3n)).toEqual({ scannedTo: "9999", sum: "10" });
+    expect(mergeFeeProgress({ scannedTo: "4999", sum: "7" }, 5_000n, 4_999n, 0n)).toEqual({ scannedTo: "4999", sum: "7" });
+    expect(mergeFeeProgress({ scannedTo: "4999", sum: "7" }, 6_000n, 9_999n, 3n)).toEqual({ scannedTo: "4999", sum: "7" });
+  });
+
+  test("a stored cache is read back only when its shape is right", () => {
+    const c: ScanCache = {
+      feed: { scannedTo: "123", feedId: "0xab" },
+      market: { scannedTo: "150", marketId: "0xcd", blockNumber: "140", createdTs: 10, expiry: 99 },
+      fees: { scannedTo: "160", sum: "5" },
+    };
+    expect(parseScanCache(JSON.stringify(c))).toEqual(c);
+    expect(parseScanCache(JSON.stringify({ feed: { scannedTo: "7" } }))).toEqual({ feed: { scannedTo: "7" } });
+    for (const bad of [null, "", "{", "[]", JSON.stringify({ feed: { scannedTo: 7 } }), JSON.stringify({ feed: { scannedTo: "x" } }), JSON.stringify({ fees: { scannedTo: "1", sum: "2" } })]) {
+      expect(parseScanCache(bad)).toBeNull();
+    }
   });
 });

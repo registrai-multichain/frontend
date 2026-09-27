@@ -102,6 +102,8 @@
 }
 .phaseNote { margin: 2px 0 0; color: var(--pp-accent); font-size: 13px; }
 
+/* A field and its error: the error sits outside the <label>, linked by aria-describedby. */
+.fieldBox { display: flex; min-width: 0; flex-direction: column; gap: 6px; }
 .field { display: flex; min-width: 0; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 500; }
 .opt { color: var(--pp-label); font-weight: 400; }
 .input,
@@ -145,7 +147,7 @@
 .textarea[aria-invalid="true"],
 .select[aria-invalid="true"] { border-color: var(--pp-error); }
 .root .input::placeholder,
-.root .textarea::placeholder { color: #757575; opacity: 1; }
+.root .textarea::placeholder { color: var(--pp-label); opacity: 1; } /* #7a7266 on #fffdf9: 4.67:1 */
 .fixed {
   box-sizing: border-box;
   display: flex;

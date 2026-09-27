@@ -48,7 +48,8 @@ export function ProposeForm() {
   const set = <K extends keyof ProposeFormState>(key: K, value: ProposeFormState[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
     const field = FIELD_OF[key] ?? key;
-    if (problem?.field === field || (key === "asset" && problem?.field === "price")) setProblem(null);
+    // another market type shows other fields: its errors start fresh
+    if (key === "kind" || problem?.field === field || (key === "asset" && problem?.field === "price")) setProblem(null);
   };
   const onText = (key: "question" | "rule" | "source" | "deadlineText" | "why" | "creatorPayee" | "contact" | "price" | "website2") =>
     (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => set(key, e.target.value);
@@ -109,7 +110,8 @@ export function ProposeForm() {
               <p className={s.doneText}>
                 Track it here:{" "}
                 <Link className={s.link} href={statusHref(done.id)}>
-                  app.registrai.cc{statusHref(done.id)}
+                  {window.location.host}
+                  {statusHref(done.id)}
                 </Link>
               </p>
               <p className={s.doneText}>
@@ -153,35 +155,41 @@ export function ProposeForm() {
                 {isPrice ? (
                   <>
                     <div className={s.three}>
-                      <label className={s.field}>
-                        Asset
-                        <select
-                          id={fieldId("asset")}
-                          className={s.select}
-                          value={form.asset}
-                          onChange={(e) => set("asset", e.target.value as ProposalAsset)}
-                          aria-invalid={Boolean(errorFor("asset"))}
-                        >
-                          {(Object.keys(PROPOSAL_ASSETS) as ProposalAsset[]).map((a) => (
-                            <option key={a} value={a}>{PROPOSAL_ASSETS[a].symbol}</option>
-                          ))}
-                        </select>
+                      <div className={s.fieldBox}>
+                        <label className={s.field}>
+                          Asset
+                          <select
+                            id={fieldId("asset")}
+                            className={s.select}
+                            value={form.asset}
+                            onChange={(e) => set("asset", e.target.value as ProposalAsset)}
+                            aria-invalid={Boolean(errorFor("asset"))}
+                            aria-describedby={errorFor("asset") ? fieldId("asset-error") : undefined}
+                          >
+                            {(Object.keys(PROPOSAL_ASSETS) as ProposalAsset[]).map((a) => (
+                              <option key={a} value={a}>{PROPOSAL_ASSETS[a].symbol}</option>
+                            ))}
+                          </select>
+                        </label>
                         <FieldError id="asset" message={errorFor("asset")} />
-                      </label>
-                      <label className={s.field}>
-                        Resolves Yes if the price is
-                        <select
-                          id={fieldId("comparator")}
-                          className={s.select}
-                          value={form.comparator}
-                          onChange={(e) => set("comparator", Number(e.target.value) === 3 ? 3 : 1)}
-                          aria-invalid={Boolean(errorFor("comparator"))}
-                        >
-                          <option value={1}>at least</option>
-                          <option value={3}>at most</option>
-                        </select>
+                      </div>
+                      <div className={s.fieldBox}>
+                        <label className={s.field}>
+                          Resolves Yes if the price is
+                          <select
+                            id={fieldId("comparator")}
+                            className={s.select}
+                            value={form.comparator}
+                            onChange={(e) => set("comparator", Number(e.target.value) === 3 ? 3 : 1)}
+                            aria-invalid={Boolean(errorFor("comparator"))}
+                            aria-describedby={errorFor("comparator") ? fieldId("comparator-error") : undefined}
+                          >
+                            <option value={1}>at least</option>
+                            <option value={3}>at most</option>
+                          </select>
+                        </label>
                         <FieldError id="comparator" message={errorFor("comparator")} />
-                      </label>
+                      </div>
                       <TextField name="price" label="Price (USD)" value={form.price} onChange={onText("price")} error={errorFor("price")} placeholder="100000" inputMode="decimal" />
                     </div>
                     <div className={s.two}>
@@ -310,22 +318,24 @@ type TextFieldProps = {
 function TextField({ name, errorKey, label, value, onChange, error, placeholder, large, type = "text", inputMode, spellCheck }: TextFieldProps) {
   const key = errorKey ?? name;
   return (
-    <label className={s.field}>
-      {label}
-      <input
-        id={fieldId(key)}
-        type={type}
-        className={large ? `${s.input} ${s.inputLg}` : s.input}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        inputMode={inputMode}
-        spellCheck={spellCheck}
-        aria-invalid={Boolean(error)}
-        aria-describedby={error ? fieldId(`${key}-error`) : undefined}
-      />
+    <div className={s.fieldBox}>
+      <label className={s.field}>
+        {label}
+        <input
+          id={fieldId(key)}
+          type={type}
+          className={large ? `${s.input} ${s.inputLg}` : s.input}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          inputMode={inputMode}
+          spellCheck={spellCheck}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? fieldId(`${key}-error`) : undefined}
+        />
+      </label>
       <FieldError id={key} message={error} />
-    </label>
+    </div>
   );
 }
 
@@ -334,19 +344,21 @@ function TextArea({ name, label, rows, value, onChange, error, placeholder }: {
   onChange: (e: ChangeEvent<HTMLTextAreaElement>) => void; error: string | null; placeholder?: string;
 }) {
   return (
-    <label className={s.field}>
-      {label}
-      <textarea
-        id={fieldId(name)}
-        className={s.textarea}
-        rows={rows}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        aria-invalid={Boolean(error)}
-        aria-describedby={error ? fieldId(`${name}-error`) : undefined}
-      />
+    <div className={s.fieldBox}>
+      <label className={s.field}>
+        {label}
+        <textarea
+          id={fieldId(name)}
+          className={s.textarea}
+          rows={rows}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? fieldId(`${name}-error`) : undefined}
+        />
+      </label>
       <FieldError id={name} message={error} />
-    </label>
+    </div>
   );
 }

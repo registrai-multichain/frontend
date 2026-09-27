@@ -105,12 +105,14 @@ export function prepareSubmission(f: ProposeFormState, nowS: number): Submission
 export const statusHref = (id: string) => `/propose/status/?id=${encodeURIComponent(id)}`;
 
 export type ChipTone = "pending" | "approved" | "opened" | "rejected" | "queued";
-/** The status chip; `openedOnChain`: the agent's market for it was found on chain
- *  (the API never learns that a market was opened). */
+/** The status chip; `openedOnChain`: the agent's market for it was found on chain.
+ *  Only that says Opened: the API never learns that a market was opened, so its
+ *  own "opened" status reads as approved. */
 export function statusChip(status: ProposalStatus, openedOnChain: boolean): { label: string; tone: ChipTone } {
-  if (openedOnChain || status === "opened") return { label: "Opened", tone: "opened" };
+  if (openedOnChain) return { label: "Opened", tone: "opened" };
   switch (status) {
-    case "approved": return { label: "Approved — opening shortly", tone: "approved" };
+    case "approved":
+    case "opened": return { label: "Approved — opening shortly", tone: "approved" };
     case "rejected": return { label: "Not approved", tone: "rejected" };
     case "queued": return { label: "Phase 2 queue", tone: "queued" };
     default: return { label: "Pending review", tone: "pending" };
@@ -155,4 +157,63 @@ export async function scanForward<T>(
     if (found(logs)) break;
   }
   return { logs, scannedTo, complete: true };
+}
+
+// ───────────── bounded status reads (R13) ─────────────
+
+/** Fees are paid only while trading is open: scan FeesPaid up to the market's
+ *  expiry block (estimated from its creation time at BLOCK_SECS) plus a 600-block
+ *  margin, never past the head. */
+export function feesScanEnd(head: bigint, marketBlock: bigint, marketTs: number, expiry: number, blockSecs = BLOCK_SECS, marginBlocks = 600n): bigint {
+  const ahead = BigInt(Math.max(0, Math.ceil((expiry - marketTs) / blockSecs)));
+  const end = marketBlock + ahead + marginBlocks;
+  return end < head ? end : head;
+}
+
+/** Scan progress cached per proposal (sessionStorage), so a reload scans only the
+ *  new range. Blocks and amounts are decimal strings (bigint is not JSON). */
+export interface ScanCache {
+  feed: { scannedTo: string; feedId?: string };
+  market?: { scannedTo: string; marketId?: string; blockNumber?: string; createdTs?: number; expiry?: number };
+  fees?: { scannedTo: string; sum: string };
+}
+
+/** The new "scanned to" after a pass over [from, scannedTo]: it advances only
+ *  when the pass continues the cached range without a gap, and never goes back. */
+export function mergeScanProgress(prev: bigint | undefined, from: bigint, scannedTo: bigint): bigint | undefined {
+  if (prev !== undefined && from > prev + 1n) return prev;
+  if (scannedTo < from) return prev;
+  return prev === undefined || scannedTo > prev ? scannedTo : prev;
+}
+
+/** Add a fee pass over [from, scannedTo] (sum `add`) to the cached total. */
+export function mergeFeeProgress(prev: ScanCache["fees"], from: bigint, scannedTo: bigint, add: bigint): NonNullable<ScanCache["fees"]> | undefined {
+  const before = prev ? BigInt(prev.scannedTo) : undefined;
+  if (scannedTo < from || (before !== undefined && from !== before + 1n)) return prev;
+  return { scannedTo: scannedTo.toString(), sum: ((prev ? BigInt(prev.sum) : 0n) + add).toString() };
+}
+
+const DEC = /^\d+$/;
+const optStr = (v: unknown) => v === undefined || typeof v === "string";
+const optNum = (v: unknown) => v === undefined || (typeof v === "number" && Number.isFinite(v));
+
+/** A stored cache, or null when it is missing or not the expected shape. */
+export function parseScanCache(raw: string | null): ScanCache | null {
+  if (!raw) return null;
+  let c: unknown;
+  try {
+    c = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!c || typeof c !== "object" || Array.isArray(c)) return null;
+  const { feed, market, fees } = c as Record<string, Record<string, unknown> | undefined>;
+  if (!feed || typeof feed.scannedTo !== "string" || !DEC.test(feed.scannedTo) || !optStr(feed.feedId)) return null;
+  if (market !== undefined) {
+    if (typeof market.scannedTo !== "string" || !DEC.test(market.scannedTo) || !optStr(market.marketId)) return null;
+    if (!(market.blockNumber === undefined || (typeof market.blockNumber === "string" && DEC.test(market.blockNumber)))) return null;
+    if (!optNum(market.createdTs) || !optNum(market.expiry)) return null;
+  }
+  if (fees !== undefined && (typeof fees.scannedTo !== "string" || !DEC.test(fees.scannedTo) || typeof fees.sum !== "string" || !DEC.test(fees.sum))) return null;
+  return c as ScanCache;
 }

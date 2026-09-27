@@ -10,11 +10,12 @@ import { shortAddr } from "@/lib/format";
 import type { Proposal, ProposalKind } from "@/lib/market-proposals";
 import { formatUsdc } from "@/lib/perennial-market";
 import {
-  PRICE_SOURCE, humanUtc, proposalFeedKey, proposalScanStart, scanForward, statusChip, sumCreatorFees,
+  PRICE_SOURCE, feesScanEnd, humanUtc, mergeFeeProgress, mergeScanProgress, parseScanCache, proposalFeedKey, proposalScanStart,
+  scanForward, statusChip, sumCreatorFees, type ScanCache,
 } from "@/lib/propose-form";
 import { PROPOSALS_API } from "@/lib/proposals-api";
 import {
-  ROUNDS, mergeFeedLogs, parseMarketLogs, scanLogs, seedFeedBook, type FeedCreatedLog, type MarketCreatedLog,
+  BLOCK_SECS, ROUNDS, mergeFeedLogs, parseMarketLogs, scanLogs, seedFeedBook, type FeedCreatedLog, type MarketCreatedLog,
 } from "@/lib/rounds";
 import { newsreader } from "./fonts";
 import { HowItWorks } from "./HowItWorks";
@@ -44,11 +45,30 @@ type OnChain =
   | { kind: "not-yet"; complete: boolean }
   | { kind: "error" };
 
+const CACHE_KEY = (id: string) => `registrai:proposal-scan:v1:${ROUNDS.chainId}:${ROUNDS.agent.toLowerCase()}:${id}`;
+/** sessionStorage may be unavailable (private mode, blocked storage): then every load scans afresh. */
+function loadCache(id: string): ScanCache | null {
+  try {
+    return parseScanCache(window.sessionStorage.getItem(CACHE_KEY(id)));
+  } catch {
+    return null;
+  }
+}
+function saveCache(id: string, c: ScanCache) {
+  try {
+    window.sessionStorage.setItem(CACHE_KEY(id), JSON.stringify(c));
+  } catch {
+    // no storage: nothing to resume from next time
+  }
+}
+
 /**
  * The API never learns that a market was opened: read it from chain. The rounds
  * agent provisions the feed "registrai-data:p-<id>" (FeedCreated on the Registry,
  * creator = the agent), then opens the market on it (MarketCreated on MarketsV4);
- * the creator share is the sum of that market's FeesPaid.creatorFee.
+ * the creator share is the sum of that market's FeesPaid.creatorFee, paid only
+ * while it trades, so that scan ends shortly after its expiry (R13). Progress is
+ * cached per proposal, so a reload only reads the blocks added since.
  */
 async function readOnChain(p: Proposal): Promise<OnChain> {
   const chain = getWalletChain(ROUNDS.chainId) as WalletChain;
@@ -57,38 +77,78 @@ async function readOnChain(p: Proposal): Promise<OnChain> {
   const agent = ROUNDS.agent;
   const block = await client.getBlock({ blockTag: "latest" });
   const head = block.number;
-  const createdS = Math.floor(Date.parse(p.createdAt) / 1000) || 0;
-  const from = proposalScanStart(head, Number(block.timestamp), createdS, ROUNDS.deployBlock);
+  const headTs = Number(block.timestamp);
   const key = proposalFeedKey(p.id);
+  const createdS = Math.floor(Date.parse(p.createdAt) / 1000) || 0;
+  const cache: ScanCache = loadCache(p.id) ?? { feed: { scannedTo: (proposalScanStart(head, headTs, createdS, ROUNDS.deployBlock) - 1n).toString() } };
 
-  const feedScan = await scanForward(
-    (a, b) => client.getLogs({ address: C.Registry, event: FEED_CREATED, args: { creator: agent }, fromBlock: a, toBlock: b }),
-    from,
-    head,
-    (logs) => Object.values(mergeFeedLogs(seedFeedBook({}), logs as unknown as FeedCreatedLog[], agent).byKey).some((f) => f.key === key),
-  );
-  const book = mergeFeedLogs(seedFeedBook({}), feedScan.logs as unknown as FeedCreatedLog[], agent);
-  const feeds = Object.values(book.byId).filter((f) => f.key === key);
-  if (!feeds.length) return { kind: "not-yet", complete: feedScan.complete };
+  // 1. The agent's feed for this proposal.
+  if (!cache.feed.feedId) {
+    const prev = BigInt(cache.feed.scannedTo);
+    const from = prev + 1n;
+    if (from <= head) {
+      const scan = await scanForward(
+        (a, b) => client.getLogs({ address: C.Registry, event: FEED_CREATED, args: { creator: agent }, fromBlock: a, toBlock: b }),
+        from,
+        head,
+        (logs) => Boolean(mergeFeedLogs(seedFeedBook({}), logs as unknown as FeedCreatedLog[], agent).byKey[key]),
+      );
+      const feed = mergeFeedLogs(seedFeedBook({}), scan.logs as unknown as FeedCreatedLog[], agent).byKey[key];
+      cache.feed.scannedTo = (mergeScanProgress(prev, from, scan.scannedTo) ?? prev).toString();
+      if (feed) {
+        cache.feed.feedId = feed.feedId;
+        cache.market = { scannedTo: (feed.blockNumber - 1n).toString() };
+      }
+      saveCache(p.id, cache);
+      if (!feed) return { kind: "not-yet", complete: scan.complete };
+    }
+    if (!cache.feed.feedId) return { kind: "not-yet", complete: true };
+  }
+  const feedId = cache.feed.feedId as Hex;
 
-  const feedFrom = feeds.reduce((m, f) => (f.blockNumber < m ? f.blockNumber : m), head);
-  const ids = feeds.map((f) => f.feedId);
-  const found = (logs: readonly unknown[]) => parseMarketLogs(logs as MarketCreatedLog[], book, agent).length > 0;
-  const marketScan = await scanForward(
-    (a, b) => client.getLogs({ address: C.MarketsV4, event: MARKET_CREATED, args: { feedId: ids }, fromBlock: a, toBlock: b }),
-    feedFrom,
-    head,
-    found,
-  );
-  const market = parseMarketLogs(marketScan.logs as unknown as MarketCreatedLog[], book, agent)[0];
-  if (!market) return { kind: "not-yet", complete: marketScan.complete };
+  // 2. The market on it.
+  // (a cache always records the market scan with the feed; rebuild it from the proposal's start if not)
+  const m = (cache.market ??= { scannedTo: (proposalScanStart(head, headTs, createdS, ROUNDS.deployBlock) - 1n).toString() });
+  if (!m.marketId) {
+    const prev = BigInt(m.scannedTo);
+    const from = prev + 1n;
+    if (from > head) return { kind: "not-yet", complete: true };
+    const book = seedFeedBook({ [key]: { feedId, disputeWindow: 0 } });
+    const scan = await scanForward(
+      (a, b) => client.getLogs({ address: C.MarketsV4, event: MARKET_CREATED, args: { feedId: [feedId] }, fromBlock: a, toBlock: b }),
+      from,
+      head,
+      (logs) => parseMarketLogs(logs as unknown as MarketCreatedLog[], book, agent).length > 0,
+    );
+    const market = parseMarketLogs(scan.logs as unknown as MarketCreatedLog[], book, agent)[0];
+    m.scannedTo = (mergeScanProgress(prev, from, scan.scannedTo) ?? prev).toString();
+    if (market) {
+      m.marketId = market.marketId;
+      m.blockNumber = market.blockNumber.toString();
+      m.expiry = market.expiry;
+      m.createdTs = await client.getBlock({ blockNumber: market.blockNumber }).then((b) => Number(b.timestamp), () => undefined);
+    }
+    saveCache(p.id, cache);
+    if (!market) return { kind: "not-yet", complete: scan.complete };
+  }
+  const marketId = m.marketId as Hex;
 
-  const fees = await scanLogs(
-    (a, b) => client.getLogs({ address: C.MarketsV4, event: FEES_PAID, args: { marketId: market.marketId }, fromBlock: a, toBlock: b }),
-    market.blockNumber,
-    head,
-  );
-  return { kind: "opened", marketId: market.marketId, creatorFees: fees.complete ? sumCreatorFees(fees.logs) : null };
+  // 3. Its creator fees, up to shortly after expiry.
+  const mBlock = BigInt(m.blockNumber ?? "0");
+  const createdTs = m.createdTs ?? headTs - Number(head - mBlock) * BLOCK_SECS;
+  const end = feesScanEnd(head, mBlock, createdTs, m.expiry ?? headTs);
+  const from = cache.fees ? BigInt(cache.fees.scannedTo) + 1n : mBlock;
+  if (from <= end) {
+    const scan = await scanLogs(
+      (a, b) => client.getLogs({ address: C.MarketsV4, event: FEES_PAID, args: { marketId }, fromBlock: a, toBlock: b }),
+      from,
+      end,
+    );
+    cache.fees = mergeFeeProgress(cache.fees, from, scan.scannedTo, sumCreatorFees(scan.logs));
+    saveCache(p.id, cache);
+  }
+  const done = cache.fees && BigInt(cache.fees.scannedTo) >= end;
+  return { kind: "opened", marketId, creatorFees: done ? BigInt(cache.fees!.sum) : null };
 }
 
 export function ProposalStatus() {
