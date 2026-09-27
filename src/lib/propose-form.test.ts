@@ -2,8 +2,9 @@ import { describe, expect, test } from "vitest";
 import {
   EMPTY_FORM, PRICE_SOURCE, formatUtcDeadline, parseUtcDeadline, prepareSubmission, priceQuestion,
   feesScanEnd, mergeFeeProgress, mergeScanProgress, parseScanCache, proposalFeedDescription, proposalScanStart, scanForward,
-  statusChip, statusHref, sumCreatorFees, type ProposeFormState, type ScanCache,
+  statusChip, statusHref, sumCreatorFees, forwardPayee, type ProposeFormState, type ScanCache,
 } from "./propose-form";
+import { TREASURY } from "./market-proposals";
 import { DEFAULT_PROPOSALS_API, proposalsApiBase } from "./proposals-api";
 
 const NOW = 1_790_500_000; // 2026-09-27
@@ -187,8 +188,30 @@ describe("bounded status reads", () => {
     };
     expect(parseScanCache(JSON.stringify(c))).toEqual(c);
     expect(parseScanCache(JSON.stringify({ feed: { scannedTo: "7" } }))).toEqual({ feed: { scannedTo: "7" } });
+    const f: ScanCache = { ...c, fwd: { scannedTo: "170", sum: "3", payee: "0x000000000000000000000000000000000000dead" } };
+    expect(parseScanCache(JSON.stringify(f))).toEqual(f);
+    expect(parseScanCache(JSON.stringify({ ...f, fwd: { scannedTo: "170", sum: "3", payee: "treasury" } }))).toBeNull();
+    expect(parseScanCache(JSON.stringify({ ...f, fwd: { scannedTo: "170", sum: "-3", payee: "0x000000000000000000000000000000000000dead" } }))).toBeNull();
     for (const bad of [null, "", "{", "[]", JSON.stringify({ feed: { scannedTo: 7 } }), JSON.stringify({ feed: { scannedTo: "x" } }), JSON.stringify({ fees: { scannedTo: "1", sum: "2" } })]) {
       expect(parseScanCache(bad)).toBeNull();
     }
+  });
+});
+
+describe("forwarded creator share (R37)", () => {
+  const own = { agent: "0x31CCE575eC134bFD57c46997A295Ab14Ab887BB4", ledger: "0x02D278930B67A290fEfE93Ac049a086A9b5e0FB5", markets: "0xddf0814e6C95E1A0585c16dbb012c611ae23A220" };
+  const payee = "0x000000000000000000000000000000000000dEaD";
+  const signed = (creatorPayee: string) => ({ message: { creatorPayee } }) as never;
+  test("the signed approval's payee, else the proposal's, lower-cased", () => {
+    expect(forwardPayee({ creatorPayee: payee }, own)).toBe(payee.toLowerCase());
+    expect(forwardPayee({ creatorPayee: undefined, approval: signed(payee) }, own)).toBe(payee.toLowerCase());
+    expect(forwardPayee({ creatorPayee: "0x1111111111111111111111111111111111111111", approval: signed(payee) }, own)).toBe(payee.toLowerCase());
+  });
+  test("an empty, zero or own-contract payee means the treasury", () => {
+    expect(forwardPayee({ creatorPayee: undefined }, own)).toBe(TREASURY.toLowerCase());
+    expect(forwardPayee({ creatorPayee: "" }, own)).toBe(TREASURY.toLowerCase());
+    expect(forwardPayee({ creatorPayee: payee, approval: signed(`0x${"0".repeat(40)}`) }, own)).toBe(TREASURY.toLowerCase());
+    for (const x of Object.values(own)) expect(forwardPayee({ creatorPayee: x.toLowerCase() }, own)).toBe(TREASURY.toLowerCase());
+    expect(forwardPayee({ creatorPayee: "nope" }, own)).toBe(TREASURY.toLowerCase());
   });
 });

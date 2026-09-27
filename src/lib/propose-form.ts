@@ -4,7 +4,7 @@
  * ./market-proposals; this file only turns form state into the API body and
  * derives what the status page shows.
  */
-import { GRID_S, PROPOSAL_ASSETS, validateProposal, type ProposalAsset, type ProposalKind, type ProposalStatus } from "./market-proposals";
+import { GRID_S, PROPOSAL_ASSETS, TREASURY, validateProposal, type Proposal, type ProposalAsset, type ProposalKind, type ProposalStatus } from "./market-proposals";
 import { BLOCK_SECS, LOG_CHUNK_BLOCKS, ROUNDS, scanLogs } from "./rounds";
 
 /** The fixed settlement source of a price-at-a-deadline market (not an input). */
@@ -176,6 +176,8 @@ export interface ScanCache {
   feed: { scannedTo: string; feedId?: string };
   market?: { scannedTo: string; marketId?: string; blockNumber?: string; createdTs?: number; expiry?: number };
   fees?: { scannedTo: string; sum: string };
+  /** NanoLedger InternalTransfer(agent -> payee) after the market's block (R37). */
+  fwd?: { scannedTo: string; sum: string; payee: string };
 }
 
 /** The new "scanned to" after a pass over [from, scannedTo]: it advances only
@@ -194,6 +196,27 @@ export function mergeFeeProgress(prev: ScanCache["fees"], from: bigint, scannedT
 }
 
 const DEC = /^\d+$/;
+const ADDR = /^0x[0-9a-fA-F]{40}$/;
+const ZERO_ADDR = /^0x0{40}$/;
+
+/**
+ * Where the agent forwards a proposed market's creator share: the approval's signed
+ * creatorPayee (the proposal's before it is signed), and the treasury (RegiFeeSplitter) when it is
+ * empty, not an address, the zero address, or one of the agent's own contracts (as
+ * the agent's forward_payee does). Lower-case.
+ */
+export function forwardPayee(
+  p: Pick<Proposal, "creatorPayee" | "approval">,
+  own: { agent: string; ledger?: string | null; markets?: string | null } = { agent: ROUNDS.agent, ledger: ROUNDS.contracts.NanoLedger, markets: ROUNDS.contracts.MarketsV4 },
+  treasury: string = TREASURY,
+): string {
+  // Once signed, the approval decides (its zero address means the treasury).
+  const signed = p.approval?.message;
+  const raw = signed ? (typeof signed.creatorPayee === "string" ? signed.creatorPayee : "") : p.creatorPayee ?? "";
+  const a = raw.toLowerCase();
+  const refused = [own.agent, own.ledger, own.markets].some((x) => x && x.toLowerCase() === a);
+  return ADDR.test(a) && !ZERO_ADDR.test(a) && !refused ? a : treasury.toLowerCase();
+}
 const optStr = (v: unknown) => v === undefined || typeof v === "string";
 const optNum = (v: unknown) => v === undefined || (typeof v === "number" && Number.isFinite(v));
 
@@ -215,5 +238,10 @@ export function parseScanCache(raw: string | null): ScanCache | null {
     if (!optNum(market.createdTs) || !optNum(market.expiry)) return null;
   }
   if (fees !== undefined && (typeof fees.scannedTo !== "string" || !DEC.test(fees.scannedTo) || typeof fees.sum !== "string" || !DEC.test(fees.sum))) return null;
+  const { fwd } = c as Record<string, Record<string, unknown> | undefined>;
+  if (fwd !== undefined) {
+    if (typeof fwd.scannedTo !== "string" || !DEC.test(fwd.scannedTo) || typeof fwd.sum !== "string" || !DEC.test(fwd.sum)) return null;
+    if (typeof fwd.payee !== "string" || !ADDR.test(fwd.payee)) return null;
+  }
   return c as ScanCache;
 }

@@ -41,6 +41,18 @@ import {
   assetHref,
   assetSlug,
   eventHref,
+  extendCover,
+  isMarketId,
+  isProposalKey,
+  nextBackfill,
+  parseProposalInfo,
+  proposalEventMeta,
+  proposalIdOfKey,
+  proposedMarketHref,
+  proposedMarkets,
+  sumTransfers,
+  parseProposalStore,
+  serializeProposalStore,
 } from "./rounds";
 import { COMPARATOR, PHASE } from "./perennial-market";
 
@@ -535,5 +547,150 @@ describe("market pages (routes)", () => {
   test("every deployed asset and event has a distinct page", () => {
     const paths = [...ROUNDS.assets.map(assetHref), ...ROUNDS.events.map(eventHref)];
     expect(new Set(paths).size).toBe(paths.length);
+  });
+});
+
+describe("proposed markets", () => {
+  test("a proposal feed key is recognised and yields its id", () => {
+    expect(feedKeyFromDescription("registrai-data:p-pabcdefghij")).toBe("p-pabcdefghij");
+    expect(isProposalKey("p-pabcdefghij")).toBe(true);
+    expect(isProposalKey("btc-usd:5m-3")).toBe(false);
+    expect(proposalIdOfKey("p-pabcdefghij")).toBe("pabcdefghij");
+  });
+
+  test("only a well-formed proposal id counts as a proposal key", () => {
+    expect(isProposalKey("p-pabcdefghi")).toBe(false); // 9 characters
+    expect(isProposalKey("p-pABCDEFGHIJ")).toBe(false);
+    expect(isProposalKey("p-pabcdefgh18")).toBe(false); // 1 and 8 are not base32
+    expect(isProposalKey("arc-token-tradable")).toBe(false);
+    expect(feedKeyFromDescription("registrai-data:p-pabcdefghij", "registrai-data:")).toBe("p-pabcdefghij");
+  });
+
+  test("market ids and the market page route", () => {
+    expect(isMarketId(hex(7))).toBe(true);
+    expect(isMarketId("0x12")).toBe(false);
+    expect(isMarketId(`${hex(7)}00`)).toBe(false);
+    expect(proposedMarketHref(`0x${"AB".repeat(32)}`)).toBe(`/rounds/market/?id=0x${"ab".repeat(32)}`);
+  });
+
+  const FEED_P1 = hex(0xf1);
+  const FEED_P2 = hex(0xf2);
+  const pbook = mergeFeedLogs(
+    book,
+    [feedLog(FEED_P1, "registrai-data:p-pabcdefghij", 20n, AGENT, 43_200n), feedLog(FEED_P2, "registrai-data:p-pqrstuvwxyz", 21n, AGENT, 600n)],
+    AGENT,
+  );
+
+  test("proposal feeds join the book and their markets are discovered like events", () => {
+    expect(pbook.byKey["p-pabcdefghij"]).toMatchObject({ feedId: FEED_P1, asset: "p-pabcdefghij", change: false });
+    const ms = parseMarketLogs(
+      [marketLog(30, FEED_P1, 5_000, { threshold: 1n, comparator: COMPARATOR.GreaterOrEqual }), marketLog(31, FEED_P2, 6_000, { threshold: 300_000n, comparator: COMPARATOR.LessOrEqual })],
+      pbook,
+      AGENT,
+    );
+    expect(ms.map((m) => m.key)).toEqual(["p-pabcdefghij", "p-pqrstuvwxyz"]);
+  });
+
+  test("a look-alike market on a proposal feed (not opened by the agent) is ignored", () => {
+    expect(parseMarketLogs([marketLog(32, FEED_P1, 5_000, { creator: OTHER })], pbook, AGENT)).toEqual([]);
+  });
+
+  test("proposedMarkets: newest per proposal, open ones first by deadline, then finished newest first", () => {
+    const mk = (id: number, key: string, expiry: number, block: bigint): RoundMarket => ({
+      marketId: hex(id), feedId: FEED_P1, key, change: false, agent: AGENT, threshold: 1n, comparator: 1, expiry, liquidity: 0n, blockNumber: block,
+    });
+    const list = proposedMarkets(
+      [
+        mk(1, "p-paaaaaaaaaa", 900, 1n),
+        mk(2, "p-paaaaaaaaaa", 2_000, 5n), // re-opened: supersedes #1
+        mk(3, "p-pbbbbbbbbbb", 1_500, 2n),
+        mk(4, "p-pcccccccccc", 800, 3n),
+        mk(5, "p-pdddddddddd", 700, 4n),
+        mk(6, "btc-usd", 5_000, 6n), // not a proposal
+      ],
+      1_000,
+    );
+    expect(list.map((m) => m.marketId)).toEqual([hex(3), hex(2), hex(4), hex(5)]);
+  });
+
+  test("parseProposalInfo keeps only well-formed public fields", () => {
+    const info = parseProposalInfo({
+      proposal: {
+        id: "pabcdefghij", kind: "event", question: "  Will X ship by Friday?  ", rule: "Yes if the release is tagged.",
+        source: "https://example.org/releases", creatorPayee: "0x000000000000000000000000000000000000dEaD",
+        outcome: { message: { evidenceUrl: "https://example.org/v1" } }, contact: "never shown",
+      },
+    });
+    expect(info).toEqual({
+      question: "Will X ship by Friday?", kind: "event", rule: "Yes if the release is tagged.", source: "https://example.org/releases",
+      asset: undefined, evidenceUrl: "https://example.org/v1", creatorPayee: "0x000000000000000000000000000000000000dEaD",
+    });
+    expect(parseProposalInfo({ proposal: { question: "" } })).toBeNull();
+    expect(parseProposalInfo({ error: "no such proposal" })).toBeNull();
+    expect(parseProposalInfo(null)).toBeNull();
+    const odd = parseProposalInfo({ proposal: { question: "Q?", kind: "wonder", source: "javascript:alert(1)", creatorPayee: "nope", outcome: { message: { evidenceUrl: "http://x" } } } });
+    expect(odd).toMatchObject({ kind: undefined, source: undefined, evidenceUrl: undefined, creatorPayee: "" });
+    expect(parseProposalInfo({ proposal: { question: "x".repeat(301) } })).toBeNull();
+  });
+
+  test("proposalEventMeta: the API's question, else Proposal #id; the kind from the API, else from the chain", () => {
+    const m = { key: "p-pabcdefghij", marketId: hex(9), expiry: 1_800_000_000, threshold: 1n, comparator: COMPARATOR.GreaterOrEqual };
+    expect(proposalEventMeta(m, null)).toMatchObject({
+      key: "p-pabcdefghij", question: "Proposal #pabcdefghij", expiry: 1_800_000_000, rehearsal: false, marketId: hex(9),
+      proposal: { id: "pabcdefghij", kind: "event" },
+    });
+    const price = { ...m, threshold: 300_000n, comparator: COMPARATOR.LessOrEqual };
+    expect(proposalEventMeta(price, undefined).proposal?.kind).toBe("price");
+    const assets = { "btc-usd": { symbol: "BTC", decimals: 2 } };
+    const meta = proposalEventMeta(price, { question: "BTC at most 3,000.00 at the deadline?", kind: "price", asset: "btc-usd" }, assets);
+    expect(meta.question).toBe("BTC at most 3,000.00 at the deadline?");
+    expect(meta.proposal).toMatchObject({ kind: "price", symbol: "BTC", decimals: 2 });
+    expect(proposalEventMeta(m, { question: "Q?", evidenceUrl: "https://e.org/x" }).evidenceUrl).toBe("https://e.org/x");
+  });
+
+  test("nextBackfill: newest chunk first, then new blocks, then back to the floor", () => {
+    expect(nextBackfill(undefined, 20_000n, 0n, 5_000n)).toEqual([15_001n, 20_000n]);
+    expect(nextBackfill(undefined, 3_000n, 1_000n, 5_000n)).toEqual([1_000n, 3_000n]);
+    expect(nextBackfill({ lo: 15_001n, hi: 20_000n }, 20_000n, 0n, 5_000n)).toEqual([10_001n, 15_000n]);
+    expect(nextBackfill({ lo: 15_001n, hi: 20_000n }, 27_000n, 0n, 5_000n)).toEqual([20_001n, 25_000n]);
+    // under a chunk of new blocks: the page's recent scan has them, keep going back
+    expect(nextBackfill({ lo: 15_001n, hi: 20_000n }, 24_999n, 0n, 5_000n)).toEqual([10_001n, 15_000n]);
+    expect(nextBackfill({ lo: 0n, hi: 20_000n }, 24_999n, 0n, 5_000n)).toBeNull();
+    expect(nextBackfill({ lo: 15_001n, hi: 20_000n }, 20_000n, 12_000n, 5_000n)).toEqual([12_000n, 15_000n]);
+    expect(nextBackfill({ lo: 12_000n, hi: 20_000n }, 20_000n, 12_000n, 5_000n)).toBeNull();
+    expect(nextBackfill(undefined, 10n, 20n, 5_000n)).toBeNull();
+  });
+
+  test("extendCover grows only over a touching range", () => {
+    expect(extendCover(undefined, 10n, 20n)).toEqual({ lo: 10n, hi: 20n });
+    expect(extendCover({ lo: 10n, hi: 20n }, 21n, 30n)).toEqual({ lo: 10n, hi: 30n });
+    expect(extendCover({ lo: 10n, hi: 20n }, 1n, 9n)).toEqual({ lo: 1n, hi: 20n });
+    expect(extendCover({ lo: 10n, hi: 20n }, 22n, 30n)).toEqual({ lo: 10n, hi: 20n }); // a gap: unchanged
+    expect(extendCover({ lo: 10n, hi: 20n }, 30n, 29n)).toEqual({ lo: 10n, hi: 20n }); // empty range
+  });
+
+  test("sumTransfers adds the forwarded amounts", () => {
+    expect(sumTransfers([{ args: { amount: 1_000_000n } }, { args: {} }, { args: { amount: 250_000n } }])).toBe(1_250_000n);
+    expect(sumTransfers([])).toBe(0n);
+  });
+
+  test("the scan store round-trips and a malformed one starts afresh", () => {
+    const store = {
+      cover: { lo: 100n, hi: 20_000n },
+      feeds: {
+        [hex(0xf1)]: { feedId: hex(0xf1), key: "p-pabcdefghij", block: 150n, disputeWindow: 43_200, marketTo: 5_149n, marketId: hex(0x51) },
+        [hex(0xf2)]: { feedId: hex(0xf2), key: "p-pqrstuvwxyz", block: 160n, disputeWindow: 600, marketTo: 159n },
+      },
+    };
+    expect(parseProposalStore(serializeProposalStore(store))).toEqual(store);
+    expect(parseProposalStore(null)).toEqual({ feeds: {} });
+    expect(parseProposalStore("{nope")).toEqual({ feeds: {} });
+    expect(parseProposalStore(JSON.stringify({ cover: { lo: "9", hi: "1" }, feeds: [] }))).toEqual({ feeds: {} });
+    const badKey = JSON.parse(serializeProposalStore(store));
+    badKey.feeds[0].key = "btc-usd";
+    expect(parseProposalStore(JSON.stringify(badKey))).toEqual({ feeds: {} });
+    const badId = JSON.parse(serializeProposalStore(store));
+    badId.feeds[1].marketId = "0x12";
+    expect(parseProposalStore(JSON.stringify(badId))).toEqual({ feeds: {} });
   });
 });

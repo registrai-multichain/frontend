@@ -32,9 +32,13 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { useWallet } from "./WalletProvider";
 import { getWalletChain, transportFor, txUrl as txUrlFor, type WalletChain } from "@/lib/chains";
 import { activeProvider } from "@/lib/wallets";
-import { attestationAbi, marketsV4Abi, nanoLedgerAbi, usdcAbi } from "@/lib/abi";
+import { attestationAbi, marketsV4Abi, nanoLedgerAbi, registryAbi, usdcAbi } from "@/lib/abi";
+import { PROPOSAL_ASSETS } from "@/lib/market-proposals";
+import { PRICE_SOURCE, statusHref } from "@/lib/propose-form";
+import { PROPOSALS_API } from "@/lib/proposals-api";
 import { humanizeError } from "@/lib/humanize-error";
 import {
+  COMPARATOR,
   OUTCOME,
   PHASE,
   TRADE_DEADLINE_SECS,
@@ -48,6 +52,9 @@ import {
 } from "@/lib/perennial-market";
 import {
   BLOCK_SECS,
+  LOG_CHUNK_BLOCKS,
+  PROPOSAL_LOOKBACK_SECS,
+  PROPOSAL_MARKET_SEARCH_SECS,
   ROUNDS,
   ROUND_TRADE_WINDOW_SECS,
   candleCloseAt,
@@ -83,8 +90,22 @@ import {
   type RoundStatus,
   assetHref,
   eventHref,
+  extendCover,
   formatChange,
+  isMarketId,
+  isProposalKey,
+  nextBackfill,
+  parseProposalInfo,
+  parseProposalStore,
+  proposalEventMeta,
+  proposalIdOfKey,
+  proposedMarketHref,
+  proposedMarkets,
+  serializeProposalStore,
   type AssetRounds,
+  type ProposalInfo,
+  type ProposalMeta,
+  type ProposalScanStore,
 } from "@/lib/rounds";
 import { cashOutValue, pnl, poolPrices, replayPool, type Trade } from "@/lib/rounds-chart";
 import { OddsChart, PriceChart, usePriceStream, type PriceStream } from "./RoundCharts";
@@ -166,14 +187,40 @@ type Snapshot = {
   /** The wallet's markets that anyone may settle right now (the agent is late or down). */
   settleable: Record<string, "resolve" | "void">;
   eventReadings: Record<string, EventReading>;
-  /** Event key -> its market id (discovered, else the deploy seed). */
+  /** Event key -> its market id (discovered, else the deploy seed); proposal keys too. */
   eventMarkets: Record<string, Hex>;
+  /** Markets opened from approved proposals: the newest per proposal, open ones first. */
+  proposed: RoundMarket[];
+  /** The page's market (/rounds/market/?id=) is not a market of the agent's. */
+  focusMissing?: boolean;
   ledgerBal?: bigint;
   walletBal?: bigint;
   feeBps?: bigint;
 };
 
 const settled = (phase: number | undefined) => phase === PHASE.Resolved || phase === PHASE.Voided;
+const sameAddress = (a?: string, b?: string) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
+const ZERO_ID = `0x${"0".repeat(64)}`;
+const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const blocksFor = (secs: number) => BigInt(Math.ceil(secs / BLOCK_SECS));
+
+// The background scan for proposal feeds (older than the page's two-hour window),
+// remembered per browser so a return visit reads only the blocks added since.
+const proposedKey = () => `registrai.rounds.proposed.v1.${D.chainId}.${C.MarketsV4.toLowerCase()}.${D.agent.toLowerCase()}`;
+function loadProposed(): ProposalScanStore {
+  try {
+    return parseProposalStore(localStorage.getItem(proposedKey()));
+  } catch {
+    return { feeds: {} };
+  }
+}
+function saveProposed(s: ProposalScanStore) {
+  try {
+    localStorage.setItem(proposedKey(), serializeProposalStore(s));
+  } catch {
+    /* private mode: the next visit scans again */
+  }
+}
 
 // The markets this browser's wallet traded, remembered locally: the log scan only
 // looks back ~2 hours, and a position must not vanish from "Your claims" after that.
@@ -196,7 +243,10 @@ function saveMine(a: Address, ids: Set<string>) {
 
 // ───────────────────────────── data ─────────────────────────────
 
-function useRoundsData(client: PublicClient, address: Address | undefined) {
+/** `focus`: a market the page shows by id (/rounds/market/?id=), described from chain
+ *  whatever its age. `backfill`: search proposal feeds older than the recent window
+ *  (the overview, whose Events tab lists every proposed market). */
+function useRoundsData(client: PublicClient, address: Address | undefined, focus?: Hex, backfill = false) {
   const [snap, setSnap] = useState<Snapshot>();
   const [loadError, setLoadError] = useState<string>();
   const disc = useRef({
@@ -212,6 +262,10 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
     /** Trade logs per tracked market, and how far each was scanned. */
     trades: new Map<string, Map<string, Trade>>(),
     tradeCursor: new Map<string, bigint>(),
+    /** Market ids to describe from chain on the next refresh (the proposal scan's finds). */
+    describe: new Set<string>(),
+    /** Ids read from chain that are not the agent's markets: never asked again. */
+    notOurs: new Set<string>(),
   });
   const busy = useRef(false);
   const again = useRef(false);
@@ -260,7 +314,7 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
         setSnap((prev) =>
           prev ?? {
             chainNow, readAt: Date.now() / 1000, head, markets, trades: {}, book: d.book, state: Object.fromEntries(rows),
-            readings: {}, holdings: {}, redeemable: {}, settleable: {}, eventReadings: {}, eventMarkets,
+            readings: {}, holdings: {}, redeemable: {}, settleable: {}, eventReadings: {}, eventMarkets, proposed: [],
           },
         );
       } catch {
@@ -335,27 +389,56 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
           if (r.scannedTo >= mFrom) d.mineScannedTo = r.scannedTo;
           saveMine(address, d.mine);
         }
-        // Markets remembered from earlier visits (older than the scan): describe
-        // them from the chain, on the agent's known feeds only.
-        const older = [...d.mine].filter((id) => !d.markets.has(id));
-        if (older.length) {
-          const rows = await Promise.all(
-            older.map((id) =>
-              (client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "getMarket", args: [id as Hex] }) as Promise<{
-                feedId: Hex; agent: Address; threshold: bigint; comparator: number; expiry: bigint;
-              }>).catch(() => undefined),
-            ),
-          );
-          older.forEach((id, i) => {
-            const m = rows[i];
-            const feed = m && d.book.byId[m.feedId.toLowerCase()];
-            if (!m || !feed || m.agent.toLowerCase() !== D.agent.toLowerCase()) return;
-            d.markets.set(id, {
-              marketId: id as Hex, feedId: feed.feedId, key: feed.asset, change: feed.change, agent: m.agent,
-              threshold: m.threshold, comparator: Number(m.comparator), expiry: Number(m.expiry), liquidity: 0n, blockNumber: 0n,
-            });
+      }
+
+      // 2b. Markets known only by id: the wallet's from earlier visits (older than
+      //     the scan), the page's own market, and the proposal scan's finds.
+      //     Described from chain; only the agent's own markets on its own feeds count.
+      const older = [
+        ...(address ? [...d.mine] : []),
+        ...(focus ? [focus] : []),
+        ...d.describe,
+      ].filter((id, i, all) => all.indexOf(id) === i && !d.markets.has(id) && !d.notOurs.has(id));
+      if (older.length) {
+        const rows = await Promise.all(
+          older.map((id) =>
+            (client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "getMarket", args: [id as Hex] }) as Promise<{
+              feedId: Hex; agent: Address; creator: Address; threshold: bigint; comparator: number; expiry: bigint;
+            }>).catch(() => undefined),
+          ),
+        );
+        // A feed outside the scanned window: its Registry record names creator and description.
+        const unknown = [...new Set(rows.flatMap((m) => (m && m.feedId !== ZERO_ID && !d.book.byId[m.feedId.toLowerCase()] ? [m.feedId.toLowerCase() as Hex] : [])))];
+        const feeds = await Promise.all(
+          unknown.map((f) =>
+            (client.readContract({ address: C.Registry, abi: registryAbi, functionName: "getFeed", args: [f] }) as Promise<{
+              creator: Address; description: string; disputeWindow: bigint; exists: boolean;
+            }>).catch(() => undefined),
+          ),
+        );
+        const feedFailed = new Set(unknown.filter((_, i) => !feeds[i]));
+        d.book = mergeFeedLogs(
+          d.book,
+          unknown.flatMap((f, i) => {
+            const r = feeds[i];
+            return r?.exists ? [{ args: { feedId: f, creator: r.creator, description: r.description, disputeWindow: r.disputeWindow }, blockNumber: 0n, logIndex: 0 }] : [];
+          }),
+          D.agent,
+        );
+        older.forEach((id, i) => {
+          const m = rows[i];
+          if (!m || feedFailed.has(m.feedId.toLowerCase() as Hex)) return; // not read: try again next refresh
+          const feed = d.book.byId[m.feedId.toLowerCase()];
+          d.describe.delete(id);
+          if (!feed || !sameAddress(m.agent, D.agent) || !sameAddress(m.creator, D.agent)) {
+            d.notOurs.add(id);
+            return;
+          }
+          d.markets.set(id, {
+            marketId: id as Hex, feedId: feed.feedId, key: feed.asset, change: feed.change, agent: m.agent,
+            threshold: m.threshold, comparator: Number(m.comparator), expiry: Number(m.expiry), liquidity: 0n, blockNumber: 0n,
           });
-        }
+        });
       }
 
       // 3. Which markets matter now.
@@ -368,6 +451,12 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
         const found = latestMarketFor(markets, e.key)?.marketId ?? (e.marketId ? (e.marketId.toLowerCase() as Hex) : undefined);
         if (found) eventMarkets[e.key] = found;
       }
+      // Proposed markets are event markets too: the newest per proposal feed, and on
+      // its own page the market the link names.
+      const proposed = proposedMarkets(markets, chainNow);
+      for (const m of proposed) eventMarkets[m.key] = m.marketId;
+      const focused = focus ? d.markets.get(focus) : undefined;
+      if (focused && isProposalKey(focused.key)) eventMarkets[focused.key] = focused.marketId;
       const current = Object.values(groups).flatMap((g) => [g.current?.marketId, g.inPlay?.marketId].filter((x): x is Hex => Boolean(x)));
       const recent = Object.values(groups).flatMap((g) => g.recent);
       const eventIds = Object.values(eventMarkets);
@@ -439,8 +528,9 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
         Promise.all(toRead.map(readMarket)),
         d.feeBps ?? (client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "TRADE_FEE_BPS" }) as Promise<bigint>),
         Promise.all(
-          D.events.map(async (e): Promise<[string, EventReading] | null> => {
-            const feed = d.book.byKey[e.key];
+          [...D.events.map((e) => e.key), ...Object.keys(eventMarkets).filter(isProposalKey)].map(async (key): Promise<[string, EventReading] | null> => {
+            // A proposal's reading is on its market's own feed.
+            const feed = isProposalKey(key) ? d.book.byId[d.markets.get(eventMarkets[key])?.feedId ?? ""] : d.book.byKey[key];
             if (!feed) return null;
             const [value, timestamp] = (await client.readContract({
               address: C.Attestation,
@@ -448,7 +538,7 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
               functionName: "latestValue",
               args: [feed.feedId, D.agent],
             })) as readonly [bigint, bigint, boolean];
-            return [e.key, { value, timestamp: Number(timestamp) }];
+            return [key, { value, timestamp: Number(timestamp) }];
           }),
         ),
         address ? (client.readContract({ address: C.NanoLedger, abi: nanoLedgerAbi, functionName: "balanceOf", args: [address] }) as Promise<bigint>) : undefined,
@@ -510,6 +600,8 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
         settleable,
         eventReadings: Object.fromEntries(eventReadings.filter((x): x is [string, EventReading] => x !== null)),
         eventMarkets,
+        proposed,
+        focusMissing: Boolean(focus && d.notOurs.has(focus)) || Boolean(focused && !isProposalKey(focused.key)),
         ledgerBal,
         walletBal,
         feeBps,
@@ -525,11 +617,111 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
         setTimeout(() => void refreshRef.current?.(), 0);
       }
     }
-  }, [client, address]);
+  }, [client, address, focus]);
   const refreshRef = useRef<() => Promise<void>>(undefined);
   useEffect(() => {
     refreshRef.current = refresh;
   }, [refresh]);
+
+  // Proposal feeds older than the recent window. A proposed market trades for up to
+  // a year, far past the two-hour scan, and nothing on chain lists the agent's feeds,
+  // so this walks FeedCreated(creator = agent) back from the head in the background,
+  // one paced eth_getLogs at a time (the page's refresh interleaves with it), and
+  // looks for the market opened on each proposal feed it finds. Progress is kept
+  // per browser, so a return visit only reads the blocks added since.
+  useEffect(() => {
+    if (!backfill) return;
+    let alive = true;
+    const d = disc.current;
+    const store = loadProposed();
+    const recs = () => Object.values(store.feeds);
+    const asLogs = (fs: ReturnType<typeof recs>): FeedCreatedLog[] =>
+      fs.map((f) => ({
+        args: { feedId: f.feedId, creator: D.agent, description: `${D.descriptionPrefix}${f.key}`, disputeWindow: BigInt(f.disputeWindow) },
+        blockNumber: f.block,
+        logIndex: 0,
+      }));
+    d.book = mergeFeedLogs(d.book, asLogs(recs()), D.agent);
+    for (const f of recs()) if (f.marketId) d.describe.add(f.marketId);
+    if (recs().some((f) => f.marketId)) void refreshRef.current?.();
+    // How far each feed's market is searched this visit: to the head when the feed
+    // joined the page's book (from then on the page's own scan includes it), at most
+    // PROPOSAL_MARKET_SEARCH_SECS past the feed.
+    const until = new Map<string, bigint>();
+    const searchUntil = (f: { feedId: string; block: bigint }, head: bigint) => {
+      if (!until.has(f.feedId)) {
+        const end = f.block + blocksFor(PROPOSAL_MARKET_SEARCH_SECS);
+        until.set(f.feedId, end < head ? end : head);
+      }
+      return until.get(f.feedId)!;
+    };
+
+    void (async () => {
+      while (alive) {
+        if (document.hidden) {
+          await pause(2_000);
+          continue;
+        }
+        try {
+          const head = await client.getBlockNumber();
+          let found = false;
+          // Markets the page's own scan already found for a stored feed.
+          for (const f of recs()) {
+            if (f.marketId) continue;
+            const m = latestMarketFor([...d.markets.values()], f.key);
+            if (m && m.feedId === f.feedId) f.marketId = m.marketId;
+          }
+          // 1. A proposal feed without its market yet: the next chunk after it
+          //    (the agent opens the market in the pass that provisions the feed).
+          const searchEnd = (f: { feedId: string; block: bigint }) => searchUntil(f, head);
+          const pending = recs()
+            .filter((f) => !f.marketId && f.marketTo < searchEnd(f))
+            .sort((a, b) => (a.block > b.block ? -1 : a.block < b.block ? 1 : 0));
+          if (pending.length) {
+            const f = pending[0];
+            const from = f.marketTo + 1n;
+            const end = searchEnd(f);
+            const to = from + LOG_CHUNK_BLOCKS - 1n < end ? from + LOG_CHUNK_BLOCKS - 1n : end;
+            const logs = await client.getLogs({ address: C.MarketsV4, event: MARKET_CREATED, args: { feedId: [f.feedId] }, fromBlock: from, toBlock: to });
+            const ms = parseMarketLogs(logs as unknown as MarketCreatedLog[], d.book, D.agent).filter((m) => m.feedId === f.feedId);
+            for (const m of ms) d.markets.set(m.marketId, m);
+            if (ms.length) {
+              f.marketId = ms[ms.length - 1].marketId;
+              found = true;
+            }
+            f.marketTo = to;
+          } else {
+            // 2. The next stretch of FeedCreated logs, newest first, back to a year
+            //    (plus a day) before the head and never before the deployment.
+            const back = blocksFor(PROPOSAL_LOOKBACK_SECS);
+            const floor = head > back && head - back > D.deployBlock ? head - back : D.deployBlock;
+            const range = nextBackfill(store.cover, head, floor);
+            if (!range) {
+              await pause(60_000); // all covered; the page's own scan follows new blocks
+              continue;
+            }
+            const logs = (await client.getLogs({
+              address: C.Registry, event: FEED_CREATED, args: { creator: D.agent }, fromBlock: range[0], toBlock: range[1],
+            })) as unknown as FeedCreatedLog[];
+            const b = mergeFeedLogs(seedFeedBook({}), logs, D.agent);
+            for (const f of Object.values(b.byId)) {
+              if (!isProposalKey(f.key) || store.feeds[f.feedId]) continue;
+              store.feeds[f.feedId] = { feedId: f.feedId, key: f.key, block: f.blockNumber, disputeWindow: f.disputeWindow, marketTo: f.blockNumber - 1n };
+            }
+            d.book = mergeFeedLogs(d.book, logs, D.agent);
+            store.cover = extendCover(store.cover, range[0], range[1]);
+          }
+          saveProposed(store);
+          if (found) void refreshRef.current?.();
+        } catch {
+          await pause(5_000); // the RPC is busy or down: try the same range again
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [client, backfill]);
 
   return { snap, loadError, refresh };
 }
@@ -595,6 +787,42 @@ function useLivePools(client: PublicClient, ids: readonly Hex[], paused: boolean
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, key]);
   return pools;
+}
+
+/** Proposals' public records (the question, rule and source), fetched once per id
+ *  from the proposals API. null: the API did not answer or has no such proposal,
+ *  and the page says "Proposal #id". */
+const proposalInfoCache = new Map<string, Promise<ProposalInfo | null>>();
+function fetchProposalInfo(id: string): Promise<ProposalInfo | null> {
+  let p = proposalInfoCache.get(id);
+  if (!p) {
+    p = fetch(`${PROPOSALS_API}/${encodeURIComponent(id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then(parseProposalInfo, () => null);
+    proposalInfoCache.set(id, p);
+  }
+  return p;
+}
+function useProposalInfo(ids: readonly string[]) {
+  const [got, setGot] = useState<Record<string, ProposalInfo | null>>({});
+  const key = ids.join(",");
+  useEffect(() => {
+    let alive = true;
+    for (const id of key ? key.split(",") : []) {
+      void fetchProposalInfo(id).then((info) => {
+        if (alive) setGot((prev) => (id in prev ? prev : { ...prev, [id]: info }));
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [key]);
+  return got;
+}
+
+/** A proposed market's event description, with the API's record when it has come in. */
+function proposedMeta(m: RoundMarket, info: Record<string, ProposalInfo | null>): EventMeta {
+  return proposalEventMeta(m, info[proposalIdOfKey(m.key)], PROPOSAL_ASSETS);
 }
 
 /** The snapshot with the live lane's newer pool reads laid over it. */
@@ -845,8 +1073,13 @@ const SessionCtx = createContext<Session | undefined>(undefined);
 
 // ───────────────────────────── page ─────────────────────────────
 
-/** Which page: the overview grid, one asset's market page, or one event's page. */
-export type RoundsView = { kind: "overview" } | { kind: "asset"; key: string } | { kind: "event"; key: string };
+/** Which page: the overview grid, one asset's market page, one event's page, or a proposed market's page. */
+export type RoundsView =
+  | { kind: "overview" }
+  | { kind: "asset"; key: string }
+  | { kind: "event"; key: string }
+  /** A market opened from an approved proposal: /rounds/market/?id=<marketId>. */
+  | { kind: "proposed"; marketId: Hex };
 
 export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsView }) {
   const { address, walletChainId, connect, switchChain } = useWallet();
@@ -861,7 +1094,14 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
       }) as PublicClient,
     [],
   );
-  const { snap: fullSnap, loadError, refresh } = useRoundsData(client, address);
+  const focus = view.kind === "proposed" && isMarketId(view.marketId) ? (view.marketId.toLowerCase() as Hex) : undefined;
+  const { snap: fullSnap, loadError, refresh } = useRoundsData(client, address, focus, view.kind === "overview");
+  // The proposals' questions, for every proposed market the page knows of.
+  const proposalIds = useMemo(
+    () => [...new Set((fullSnap?.markets ?? []).filter((m) => isProposalKey(m.key)).map((m) => proposalIdOfKey(m.key)))].sort(),
+    [fullSnap?.markets],
+  );
+  const proposalInfo = useProposalInfo(proposalIds);
   const stream = usePriceStream(useMemo(() => D.assets.map((a) => a.product), []));
   const tx = useTx(client, refresh);
   // A wallet transaction in flight (not a one-click one, which uses no wallet).
@@ -962,6 +1202,10 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
   const canTrade = Boolean(address && onChain && !stale);
   const pageAsset = view.kind === "asset" ? D.assets.find((a) => a.key === view.key) : undefined;
   const pageEvent = view.kind === "event" ? D.events.find((e) => e.key === view.key) : undefined;
+  const focusMarket = focus ? fullSnap?.markets.find((m) => m.marketId === focus && isProposalKey(m.key)) : undefined;
+  const pageProposed = focusMarket ? proposedMeta(focusMarket, proposalInfo) : undefined;
+  // Until the first read says whether the id is one of the agent's markets.
+  const proposedLoading = view.kind === "proposed" && Boolean(focus) && !pageProposed && !fullSnap?.focusMissing;
 
   return (
     <SessionCtx.Provider value={session}>
@@ -1010,9 +1254,22 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
           <EventRules />
         </div>
       )}
-      {view.kind !== "overview" && !pageAsset && !pageEvent && <p className="text-fg-mute">This market does not exist.</p>}
+      {pageProposed && (
+        <div className="max-w-[760px]">
+          <EventCard ev={pageProposed} snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={canTrade} address={address} page />
+          <EventRules proposal={pageProposed.proposal} />
+        </div>
+      )}
+      {proposedLoading && (
+        <div className="max-w-[760px]" aria-busy="true">
+          <div className="pu-card pu-card--static text-[13px] text-fg-mute">Reading the market from {D.label}…</div>
+        </div>
+      )}
+      {view.kind !== "overview" && !pageAsset && !pageEvent && !pageProposed && !proposedLoading && (
+        <p className="text-fg-mute">This market does not exist.</p>
+      )}
 
-      {address && <Claims snap={snap} tx={tx} now={now} />}
+      {address && <Claims snap={snap} tx={tx} now={now} info={proposalInfo} />}
 
       {view.kind === "overview" && (
       <>
@@ -1063,7 +1320,7 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
       )}
 
       {tab === "events" && (
-        <EventMarkets snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={canTrade} address={address} />
+        <EventMarkets snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={canTrade} address={address} info={proposalInfo} />
       )}
       </>
       )}
@@ -1771,20 +2028,56 @@ function PastRounds({ asset, rounds, snap, now }: { asset: AssetMeta; rounds: re
   );
 }
 
-function EventRules() {
+/** An event market's rules; a proposed market adds its own rule, source and origin. */
+function EventRules({ proposal }: { proposal?: ProposalMeta }) {
+  const price = proposal?.kind === "price";
   return (
     <section className="mt-8" aria-labelledby="erules-h">
       <h2 id="erules-h" className="pu-h mb-2 text-[24px] leading-none">
         Rules
       </h2>
       <ul className="list-disc space-y-1.5 pl-5 text-[14px] leading-relaxed text-fg-mute">
-        <li>The market settles on the curated feed&apos;s reading at the deadline: Yes if it says the event happened by then.</li>
-        <li>
-          The team records the outcome with evidence when it happens. Anyone can challenge a reading during its dispute
-          window; a challenged reading waits for the dispute resolver&apos;s ruling.
-        </li>
+        {price ? (
+          <>
+            <li>
+              The market settles on the agent&apos;s reading at the deadline: the {PRICE_SOURCE.charAt(0).toLowerCase() + PRICE_SOURCE.slice(1)}.
+              Yes if it meets the line above.
+            </li>
+            <li>
+              Anyone can challenge a reading during its dispute window; a challenged reading waits for the dispute
+              resolver&apos;s ruling.
+            </li>
+          </>
+        ) : (
+          <>
+            {proposal?.rule && <li>Resolves Yes if: {proposal.rule}</li>}
+            {proposal?.source && (
+              <li>
+                Where the answer comes from:{" "}
+                <a href={proposal.source} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">
+                  {proposal.source.replace(/^https:\/\//, "")} ↗
+                </a>
+              </li>
+            )}
+            <li>The market settles on the curated feed&apos;s reading at the deadline: Yes if it says the event happened by then.</li>
+            <li>
+              The team records the outcome with evidence when it happens. Anyone can challenge a reading during its dispute
+              window; a challenged reading waits for the dispute resolver&apos;s ruling.
+            </li>
+          </>
+        )}
         <li>If no valid reading lands in time the market voids and every trader gets their net cost back.</li>
         <li>Every buy and sell pays a 1% trading fee; nothing is charged at settlement.</li>
+        {proposal && (
+          <li>
+            Proposed by the community and approved by the team (
+            <Link href={statusHref(proposal.id)} className="text-accent hover:underline">
+              proposal {proposal.id}
+            </Link>
+            ). The creator share of its trading fees goes to the proposer&apos;s wallet, or to the Registrai treasury when
+            none was given.
+          </li>
+        )}
       </ul>
     </section>
   );
@@ -2098,7 +2391,7 @@ function statusFor(m: RoundMarket, snap: Snapshot | undefined, now: number): Rou
 
 // ───────────────────────────── claims ─────────────────────────────
 
-function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
+function Claims({ snap, tx, now, info }: { snap?: Snapshot; tx: Tx; now: number; info: Record<string, ProposalInfo | null> }) {
   const ses = useContext(SessionCtx);
   if (!snap) return null;
   const known = snap.markets.filter((m) => snap.redeemable[m.marketId] !== undefined);
@@ -2107,7 +2400,9 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
   const rows = new Set([...toSettle.map((m) => `settle:${m.marketId}`), ...claims.map((c) => `claim:${c.market.marketId}`)]);
   const orphan = tx.st.scope && /^(claim|settle):/.test(tx.st.scope) && !rows.has(tx.st.scope) ? tx.st.scope : undefined;
   const assetOf = (key: string) => D.assets.find((a) => a.key === key);
-  const eventOf = (key: string) => D.events.find((e) => e.key === key);
+  const eventOf = (key: string) =>
+    D.events.find((e) => e.key === key) ??
+    (isProposalKey(key) ? { question: info[proposalIdOfKey(key)]?.question ?? `Proposal #${proposalIdOfKey(key)}` } : undefined);
   return (
     <section className="mt-10" aria-labelledby="claims-h">
       <h2 id="claims-h" className="pu-h mb-3 text-[24px] leading-none">
@@ -2218,6 +2513,7 @@ function EventMarkets({
   tx,
   canTrade,
   address,
+  info,
 }: {
   snap?: Snapshot;
   now: number;
@@ -2226,12 +2522,17 @@ function EventMarkets({
   tx: Tx;
   canTrade: boolean;
   address?: Address;
+  info: Record<string, ProposalInfo | null>;
 }) {
-  const visible = D.events.filter((e) => {
-    const id = snap?.eventMarkets[e.key];
-    const st = id ? snap?.state[id] : undefined;
-    return eventVisible(e, st?.phase, e.expiry, now || e.expiry);
-  });
+  const visible = [
+    ...D.events.filter((e) => {
+      const id = snap?.eventMarkets[e.key];
+      const st = id ? snap?.state[id] : undefined;
+      return eventVisible(e, st?.phase, e.expiry, now || e.expiry);
+    }),
+    // Markets opened from approved proposals, found on chain.
+    ...(snap?.proposed ?? []).map((m) => proposedMeta(m, info)),
+  ];
   return (
     <section aria-labelledby="events-h">
       <h2 id="events-h" className="pu-h text-[30px] leading-none">
@@ -2243,7 +2544,7 @@ function EventMarkets({
       </p>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((e) => (
-          <EventCard key={e.key} ev={e} snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={canTrade} address={address} />
+          <EventCard key={e.marketId && e.proposal ? e.marketId : e.key} ev={e} snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={canTrade} address={address} />
         ))}
       </div>
     </section>
@@ -2272,8 +2573,10 @@ function EventCard({
   /** On its own page: a larger title, no link to itself. */
   page?: boolean;
 }) {
-  const openPage = useCardLink(eventHref(ev));
-  const id = snap?.eventMarkets[ev.key];
+  const id = ev.proposal ? ev.marketId ?? undefined : snap?.eventMarkets[ev.key];
+  const href = ev.proposal && id ? proposedMarketHref(id) : eventHref(ev);
+  const openPage = useCardLink(href);
+  const price = ev.proposal?.kind === "price" ? ev.proposal : undefined;
   const st = id ? snap?.state[id] : undefined;
   const feed = snap?.book.byKey[ev.key];
   const market: RoundMarket | undefined =
@@ -2322,11 +2625,16 @@ function EventCard({
       className={`pu-card flex min-w-0 flex-col ${page ? "pu-card--static" : "cursor-pointer transition-colors"}`}
     >
       {ev.rehearsal && <div className="mb-2 text-[13px] text-accent">Testnet rehearsal of the settlement flow, short-dated.</div>}
+      {ev.proposal && (
+        <div className="mb-2">
+          <span className="pu-pill pu-pill--accent">Community proposal</span>
+        </div>
+      )}
       {page ? (
         <h1 className="pu-h text-[32px] leading-tight">{ev.question}</h1>
       ) : (
         <h3 className="pu-h text-[21px] leading-snug">
-          <Link href={eventHref(ev)} className="hover:underline">
+          <Link href={href} className="hover:underline">
             {ev.question}
           </Link>
         </h3>
@@ -2339,6 +2647,32 @@ function EventCard({
             {now && now < expiry ? <span className="text-fg-dim"> · {timeLeft(expiry - now)} left</span> : null}
           </dd>
         </div>
+        {price && market && (
+          <div>
+            <dt>Yes if</dt>
+            <dd className="tnum text-[13px] text-fg-mute">
+              {price.symbol ?? "The price"} {market.comparator === COMPARATOR.LessOrEqual ? "at most" : "at least"}{" "}
+              {price.decimals !== undefined ? `${formatScaled(market.threshold, price.decimals)} USD` : market.threshold.toString()} at the deadline
+            </dd>
+          </div>
+        )}
+        {price ? (
+          <div>
+            <dt>Settlement price</dt>
+            <dd className="tnum text-[13px] text-fg-mute">
+              {!reading ? (
+                "…"
+              ) : reading.timestamp > 0 ? (
+                <>
+                  {price.decimals !== undefined ? `${formatScaled(reading.value, price.decimals)} USD` : reading.value.toString()}
+                  <span className="text-fg-dim"> · read {utcStamp(reading.timestamp)}</span>
+                </>
+              ) : (
+                "Read at the deadline."
+              )}
+            </dd>
+          </div>
+        ) : (
         <div>
           <dt>Feed reading</dt>
           <dd className="tnum text-[13px] text-fg-mute">
@@ -2352,6 +2686,8 @@ function EventCard({
             )}
           </dd>
         </div>
+        )}
+        {!price && (
         <div>
           <dt>Evidence</dt>
           <dd className="text-[13px] text-fg-mute">
@@ -2363,6 +2699,7 @@ function EventCard({
             )}
           </dd>
         </div>
+        )}
       </dl>
 
       {!id && snap && <p className="mt-3 text-[13px] text-fg-dim">This market has not been opened yet.</p>}

@@ -46,6 +46,21 @@ export interface EventMeta {
   marketId?: Hex | null;
   /** Where the team published the proof once the event happened. */
   evidenceUrl?: string | null;
+  /** A market opened from an approved proposal (discovered on chain, not in the deployment). */
+  proposal?: ProposalMeta;
+}
+
+/** What the page knows about a proposed market beyond the chain: the proposals API's
+ *  public record (question, rule, source), or only the proposal id when it is down. */
+export interface ProposalMeta {
+  id: string;
+  /** "event": yes/no on a curated feed; "price": median spot at the deadline. */
+  kind: "event" | "price";
+  rule?: string;
+  source?: string;
+  /** Price markets: the asset's symbol and attested decimals (its threshold's units). */
+  symbol?: string;
+  decimals?: number;
 }
 
 export interface RoundsDeployment {
@@ -580,6 +595,219 @@ export function evidenceNote(value: bigint | undefined, evidenceUrl?: string | n
   if (value === undefined) return "Reading the feed…";
   if (value <= 0n) return "No evidence recorded yet.";
   return evidenceUrl ? "Recorded as happened. Evidence:" : "Recorded as happened. The evidence link is published with the reading.";
+}
+
+// ───────────────────────────── proposed markets ─────────────────────────────
+//
+// Markets opened from admin-approved proposals (spec §6). The rounds agent
+// provisions a feed "registrai-data:p-<proposalId>" and opens one market on it;
+// neither is in the deployment JSON, so both are discovered from chain. The
+// question comes from the public proposals API, falling back to "Proposal #id".
+
+const PROPOSAL_KEY = /^p-p[a-z2-7]{10}$/;
+
+/** A proposal feed's key: "p-" + a proposal id ("p" + 10 base32 characters). */
+export function isProposalKey(key: string): boolean {
+  return PROPOSAL_KEY.test(key);
+}
+
+/** "p-pabcdefghij" -> "pabcdefghij". */
+export function proposalIdOfKey(key: string): string {
+  return key.slice(2);
+}
+
+/** A bytes32 market id as the page's query parameter carries it. */
+export function isMarketId(s: string): s is Hex {
+  return /^0x[0-9a-fA-F]{64}$/.test(s);
+}
+
+/** A proposed market's page: one static route, the market id in the query. */
+export function proposedMarketHref(marketId: string): string {
+  return `/rounds/market/?id=${marketId.toLowerCase()}`;
+}
+
+/** The newest market on each proposal feed (a market is never re-opened on another
+ *  contract, but a feed can in principle carry more than one), open ones first by
+ *  deadline, then the finished ones newest deadline first. */
+export function proposedMarkets(markets: readonly RoundMarket[], now: number): RoundMarket[] {
+  const latest = new Map<string, RoundMarket>();
+  for (const m of markets) {
+    if (!isProposalKey(m.key)) continue;
+    const prev = latest.get(m.key);
+    if (!prev || m.blockNumber > prev.blockNumber) latest.set(m.key, m);
+  }
+  const open = (m: RoundMarket) => m.expiry > now;
+  return [...latest.values()].sort((a, b) =>
+    open(a) !== open(b) ? (open(a) ? -1 : 1) : open(a) ? a.expiry - b.expiry : b.expiry - a.expiry,
+  );
+}
+
+/** A proposal's public record from GET /api/market-proposals/<id>, narrowed to what
+ *  the market page shows. Untrusted input: anything malformed is dropped. */
+export interface ProposalInfo {
+  question: string;
+  kind?: "event" | "price";
+  rule?: string;
+  source?: string;
+  asset?: string;
+  /** From the admin-signed outcome, when one is recorded (https only). */
+  evidenceUrl?: string;
+  /** The approval's creator payee; "" means the treasury. */
+  creatorPayee?: string;
+}
+
+const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() && v.length <= max ? v.trim() : undefined);
+const httpsUrl = (v: unknown) => {
+  const s = text(v, 2048);
+  return s && /^https:\/\/\S+$/.test(s) ? s : undefined;
+};
+
+export function parseProposalInfo(json: unknown): ProposalInfo | null {
+  const p = (json as { proposal?: unknown } | null)?.proposal as Record<string, unknown> | undefined;
+  if (!p || typeof p !== "object") return null;
+  const question = text(p.question, 300);
+  if (!question) return null;
+  const kind = p.kind === "event" || p.kind === "price" ? p.kind : undefined;
+  const outcome = (p.outcome as { message?: { evidenceUrl?: unknown } } | undefined)?.message;
+  const payee = typeof p.creatorPayee === "string" && /^0x[0-9a-fA-F]{40}$/.test(p.creatorPayee) ? p.creatorPayee : "";
+  return {
+    question,
+    kind,
+    rule: text(p.rule, 1000),
+    source: httpsUrl(p.source),
+    asset: text(p.asset, 16),
+    evidenceUrl: httpsUrl(outcome?.evidenceUrl),
+    creatorPayee: payee,
+  };
+}
+
+/** The event-page description of a proposed market: the question from the API (else
+ *  "Proposal #id"), the deadline from chain. Without the API, a threshold of 1 with
+ *  GreaterOrEqual is a yes/no market (what the agent opens for kind 1). */
+export function proposalEventMeta(
+  m: Pick<RoundMarket, "key" | "marketId" | "expiry" | "threshold" | "comparator">,
+  info: ProposalInfo | null | undefined,
+  assets: Record<string, { symbol: string; decimals: number }> = {},
+): EventMeta {
+  const id = proposalIdOfKey(m.key);
+  const chainKind = m.threshold === 1n && m.comparator === COMPARATOR.GreaterOrEqual ? "event" : "price";
+  const kind = info?.kind ?? chainKind;
+  const asset = kind === "price" && info?.asset ? assets[info.asset] : undefined;
+  return {
+    key: m.key,
+    question: info?.question ?? `Proposal #${id}`,
+    expiry: m.expiry,
+    rehearsal: false,
+    marketId: m.marketId,
+    evidenceUrl: info?.evidenceUrl ?? null,
+    proposal: { id, kind, rule: info?.rule, source: info?.source, symbol: asset?.symbol, decimals: asset?.decimals },
+  };
+}
+
+/** Days a proposal feed is searched for its market: the agent opens it in the pass
+ *  that provisions the feed, so a feed with no market after this was never opened. */
+export const PROPOSAL_MARKET_SEARCH_SECS = 3 * 86_400;
+/** How far back proposal feeds are searched: a proposed market's deadline is at most
+ *  366 days after it opens, plus a day for settlement. */
+export const PROPOSAL_LOOKBACK_SECS = 367 * 86_400;
+
+/** A covered, contiguous block range [lo, hi]. */
+export interface Cover {
+  lo: bigint;
+  hi: bigint;
+}
+
+/** The next range to scan for proposal feeds, newest first: the blocks added since
+ *  the cover, a whole chunk at a time (oldest first, so the cover stays contiguous),
+ *  then back from its low end to `floor`. null when nothing is left to scan. */
+export function nextBackfill(cover: Cover | undefined, head: bigint, floor: bigint, chunk: bigint = LOG_CHUNK_BLOCKS): [bigint, bigint] | null {
+  if (head < floor) return null;
+  if (!cover) {
+    const lo = head - chunk + 1n;
+    return [lo > floor ? lo : floor, head];
+  }
+  // A gap under a chunk is left to the page's own scan of the recent blocks; the
+  // next visit (or the gap reaching a chunk) covers it here.
+  if (head - cover.hi >= chunk) return [cover.hi + 1n, cover.hi + chunk];
+  if (cover.lo > floor) {
+    const lo = cover.lo - chunk;
+    return [lo > floor ? lo : floor, cover.lo - 1n];
+  }
+  return null;
+}
+
+/** The cover after scanning [from, to]: grows only when the range touches it. */
+export function extendCover(cover: Cover | undefined, from: bigint, to: bigint): Cover | undefined {
+  if (to < from) return cover;
+  if (!cover) return { lo: from, hi: to };
+  if (from > cover.hi + 1n || to < cover.lo - 1n) return cover;
+  return { lo: from < cover.lo ? from : cover.lo, hi: to > cover.hi ? to : cover.hi };
+}
+
+/** A proposal feed found by the background scan, and how far its market was searched. */
+export interface ProposalFeedRecord {
+  feedId: Hex;
+  key: string;
+  block: bigint;
+  disputeWindow: number;
+  /** MarketCreated on this feed was searched through this block. */
+  marketTo: bigint;
+  marketId?: Hex;
+}
+
+/** The background scan's progress, kept in localStorage so a return visit reads only
+ *  the blocks added since (bigints as decimal strings). */
+export interface ProposalScanStore {
+  cover?: Cover;
+  feeds: Record<string, ProposalFeedRecord>;
+}
+
+export function serializeProposalStore(s: ProposalScanStore): string {
+  return JSON.stringify({
+    cover: s.cover ? { lo: s.cover.lo.toString(), hi: s.cover.hi.toString() } : undefined,
+    feeds: Object.values(s.feeds).map((f) => ({ ...f, block: f.block.toString(), marketTo: f.marketTo.toString() })),
+  });
+}
+
+const DEC_RE = /^\d{1,20}$/;
+const B32_RE = /^0x[0-9a-f]{64}$/;
+
+/** A stored scan, or an empty one when missing or malformed (then it scans afresh). */
+export function parseProposalStore(raw: string | null): ProposalScanStore {
+  const empty: ProposalScanStore = { feeds: {} };
+  if (!raw) return empty;
+  try {
+    const j = JSON.parse(raw) as { cover?: { lo?: unknown; hi?: unknown }; feeds?: unknown };
+    const out: ProposalScanStore = { feeds: {} };
+    const c = j.cover;
+    if (c !== undefined) {
+      if (typeof c.lo !== "string" || typeof c.hi !== "string" || !DEC_RE.test(c.lo) || !DEC_RE.test(c.hi) || BigInt(c.lo) > BigInt(c.hi)) return empty;
+      out.cover = { lo: BigInt(c.lo), hi: BigInt(c.hi) };
+    }
+    if (!Array.isArray(j.feeds)) return empty;
+    for (const f of j.feeds.slice(0, 1000) as Array<Record<string, unknown>>) {
+      if (!f || typeof f.feedId !== "string" || !B32_RE.test(f.feedId) || typeof f.key !== "string" || !isProposalKey(f.key)) return empty;
+      if (typeof f.block !== "string" || !DEC_RE.test(f.block) || typeof f.marketTo !== "string" || !DEC_RE.test(f.marketTo)) return empty;
+      if (typeof f.disputeWindow !== "number" || !Number.isFinite(f.disputeWindow)) return empty;
+      if (f.marketId !== undefined && (typeof f.marketId !== "string" || !B32_RE.test(f.marketId))) return empty;
+      out.feeds[f.feedId] = {
+        feedId: f.feedId as Hex,
+        key: f.key,
+        block: BigInt(f.block),
+        disputeWindow: f.disputeWindow,
+        marketTo: BigInt(f.marketTo),
+        marketId: f.marketId as Hex | undefined,
+      };
+    }
+    return out;
+  } catch {
+    return empty;
+  }
+}
+
+/** The sum of NanoLedger InternalTransfer amounts (the agent's forwarded creator share). */
+export function sumTransfers(logs: readonly { args: { amount?: bigint } }[]): bigint {
+  return logs.reduce((s, l) => s + (l.args.amount ?? 0n), 0n);
 }
 
 // ───────────────────────────── formatting ─────────────────────────────
