@@ -84,11 +84,11 @@
 }
 .badge { border-radius: 999px; padding: 1px 8px; background: var(--pp-accent); color: #fff; font-size: 12px; }
 .spacer { flex-grow: 1; }
-.who { color: var(--pp-label); font-size: 12px; line-height: 1.5; }
+.who { color: var(--pp-muted); font-size: 12px; line-height: 1.5; }
 .who .mono { color: var(--pp-ink); }
 .mono { font-family: var(--pp-mono); }
 /* The rail's foot on /admin: the wallet and the session's buttons. */
-.railFoot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; color: var(--pp-label); font-size: 12px; line-height: 1.5; }
+.railFoot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; color: var(--pp-muted); font-size: 12px; line-height: 1.5; }
 .linkButton {
   border: 0;
   padding: 0;
@@ -241,7 +241,7 @@
   }
   .brand { margin: 0 12px 0 0; }
   .who br { display: none; }
-  .railFoot { margin-top: 0; }
+  .railFoot { margin: 0 12px 0 0; }
   .main { padding: 24px; }
 }
 @media (max-width: 639px) {

@@ -1,5 +1,8 @@
-/* /admin (AdminApp): the section pages and their cards, inside AdminShell. The tokens and
-   the shared primitives (headings, fields, buttons, pills) are in admin.module.css. */
+/* /admin (AdminApp): the section pages and their cards, inside AdminShell. The tokens
+   (--pp-*) and the shared primitives (headings, fields, buttons, pills, callouts) are in
+   admin.module.css; this file only adds what the /admin sections need on top: cards,
+   tables, row lists, chips, the small buttons and the revoke dialog. Small text uses
+   --pp-muted (5:1 on the page and card backgrounds), not --pp-label. */
 
 .page { display: flex; min-width: 0; flex-direction: column; gap: 18px; }
 .card {
@@ -13,7 +16,205 @@
   background: var(--pp-field);
 }
 .cardHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+/* A button or link placed straight in a card keeps its own width. */
+.card > button,
+.card > a { align-self: flex-start; }
 
+/* ── text ── */
+.text { margin: 0; max-width: 82ch; color: var(--pp-body); font-size: 14px; line-height: 1.55; }
+.hint { margin: 0; color: var(--pp-muted); font-size: 14px; line-height: 1.5; }
+.ok { margin: 0; color: var(--pp-ok); font-size: 14px; font-weight: 500; line-height: 1.45; }
+.error { margin: 0; color: var(--pp-error); font-size: 13px; font-weight: 500; line-height: 1.45; overflow-wrap: anywhere; }
+.label { color: var(--pp-muted); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.card code,
+.dialog code {
+  border-radius: 5px;
+  padding: 1px 5px;
+  background: #f1ebdf;
+  color: var(--pp-ink);
+  font-family: var(--pp-mono);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.sub { display: block; margin-top: 3px; color: var(--pp-muted); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.privNote { display: block; max-width: 44ch; margin-top: 6px; color: var(--pp-muted); font-size: 13px; font-style: italic; line-height: 1.45; }
+
+/* ── fields ── */
+.form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+.form .wide { grid-column: 1 / -1; }
+.field { display: flex; min-width: 0; flex-direction: column; gap: 6px; color: var(--pp-body); font-size: 13px; font-weight: 500; }
+.field em { color: var(--pp-muted); font-size: 12px; font-style: normal; font-weight: 400; }
+.field em:empty { display: none; }
+.edit { display: grid; gap: 10px; min-width: 300px; margin-top: 12px; }
+.inline { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.inline > .field { flex: 1 1 220px; }
+.search { display: block; width: 260px; max-width: 100%; }
+.search input { height: 38px; font-size: 14px; }
+
+/* ── small buttons (rows, copy, dialogs) ── */
+.mini,
+.miniInk,
+.miniGo,
+.miniDanger {
+  height: 32px;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mini { border: 1px solid var(--pp-edge); background: #fff; color: var(--pp-ink); }
+.mini:hover { border-color: #c9bda6; }
+.miniInk { border: 1px solid var(--pp-ink); background: var(--pp-ink); color: var(--pp-bg); }
+.miniInk:hover { background: #3a332b; }
+.miniGo { border: 1px solid var(--pp-ok); background: var(--pp-ok); color: #fff; }
+.miniGo:hover { background: #185a3e; }
+.miniDanger { border: 1px solid #c9b8a0; background: transparent; color: var(--pp-error); }
+.miniDanger:hover { border-color: var(--pp-error); }
+.mini:disabled,
+.miniInk:disabled,
+.miniGo:disabled,
+.miniDanger:disabled { opacity: 0.55; cursor: not-allowed; }
+.danger {
+  height: 46px;
+  border: 0;
+  border-radius: 12px;
+  padding: 0 22px;
+  background: var(--pp-error);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.danger:hover { background: #8a3719; }
+.rowActions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rows .rowActions { display: flex; margin-top: 10px; }
+
+/* ── tables ── */
+.tableWrap { overflow-x: auto; border: 1px solid var(--pp-rule); border-radius: 12px; background: var(--pp-card); }
+.table { width: 100%; border-collapse: collapse; color: var(--pp-ink); font-size: 14px; }
+.table th {
+  border-bottom: 1px solid var(--pp-rule);
+  padding: 10px 14px;
+  color: var(--pp-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.table td { border-bottom: 1px solid var(--pp-rule); padding: 12px 14px; vertical-align: top; line-height: 1.45; }
+.table tr:last-child td { border-bottom: 0; }
+.table td > b { display: block; font-weight: 600; }
+
+/* ── row lists ── */
+.rows { margin: 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.5; }
+.rows > li { border-top: 1px solid var(--pp-rule); padding: 12px 0; overflow-wrap: anywhere; }
+.rows > li:first-child { border-top: 0; padding-top: 0; }
+.rows > li:last-child { padding-bottom: 0; }
+.rows > li > b { font-weight: 600; }
+.rows > li > span.sub { display: inline; margin: 0 0 0 6px; }
+.muted { opacity: 0.7; }
+.drafts { display: flex; flex-direction: column; gap: 12px; }
+.drafts .rows { border-top: 1px solid var(--pp-rule); padding-top: 12px; }
+.draftDetails { margin-top: 8px; border-radius: 10px; padding: 10px 14px; background: var(--pp-bg); color: var(--pp-body); font-size: 13px; }
+.draftDetails p { margin: 4px 0; }
+
+/* ── chips (the invite's chain status, a draft's step) ── */
+.chip {
+  display: inline-block;
+  border: 1px solid var(--pp-edge);
+  border-radius: 999px;
+  padding: 1px 10px;
+  background: #f1ebdf;
+  color: var(--pp-body);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.chip[data-kind="verified"] { border-color: #b9d3c3; background: #e7f0ea; color: #1b4a35; }
+.chip[data-kind="nominated"] { border-color: #e2cda9; background: #f6ecdb; color: #6b4414; }
+.chip[data-kind="unconfirmed"],
+.chip[data-kind="lapsed"] { border-color: #e6c7b8; background: #f6e8e1; color: #6e2e15; }
+
+/* ── batches, results, runs ── */
+.txs {
+  margin: 0;
+  border-radius: 12px;
+  padding: 12px 16px 12px 36px;
+  background: var(--pp-bg);
+  color: var(--pp-body);
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-x: auto;
+}
+.card .txs code { padding: 0; background: none; white-space: pre; }
+.result { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--pp-rule); padding-top: 14px; }
+.boxed { display: flex; flex-direction: column; gap: 8px; border: 1px dashed var(--pp-edge); border-radius: 12px; padding: 14px 16px; }
+.run { display: grid; gap: 2px; margin: 6px 0 0; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.copyline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.card .copyline code {
+  flex: 1 1 280px;
+  border: 1px solid var(--pp-edge);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  font-size: 13px;
+}
+.fileHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; color: var(--pp-body); font-size: 13px; font-weight: 600; }
+.dm {
+  margin: 0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--pp-bg);
+  color: var(--pp-body);
+  font-family: var(--pp-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── the revoke dialog ── */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(35, 31, 26, 0.45);
+}
+.dialog {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  max-width: 560px;
+  max-height: calc(100vh - 32px);
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  border: 1px solid var(--pp-rule);
+  border-radius: 16px;
+  padding: 24px;
+  background: var(--pp-field);
+  box-shadow: 0 20px 60px rgba(35, 31, 26, 0.25);
+}
+
+@media (max-width: 899px) {
+  .form { grid-template-columns: minmax(0, 1fr); }
+  /* Narrow screens scroll a table sideways inside its frame instead of squeezing its columns. */
+  .table { min-width: 640px; }
+}
 @media (max-width: 639px) {
   .card { padding: 18px 16px; }
+  .edit { min-width: 0; }
+  .dialog { padding: 20px 16px; }
 }
+.inline > button { height: 42px; }
+.table td:global(.tnum) { white-space: nowrap; }
+.table .rowActions { flex-wrap: nowrap; }
