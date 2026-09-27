@@ -6,6 +6,7 @@
  */
 import { keccak256, parseAbi, toBytes, type Address, type Hex } from "viem";
 import deployment from "./deployments/arc-mainnet.json";
+import roundsDeployment from "./deployments/arc-mainnet-rounds.json";
 import record from "../data/transparency-record.json";
 import { shortHex } from "./perennial-market";
 import { REGI_CONTRACT, REGI_DEXSCREENER_URL } from "./regi";
@@ -20,29 +21,48 @@ const B = deployment.builders as unknown as {
   roles: { adminSafe: Address; onboarder: Address; deployer: Address };
 };
 
-export type WalletKey = "safe" | "operator" | "onboarder" | "deployer";
+/** The common markets, from the rounds deployment file (filled by the launch): until it
+ *  names MarketsV4 and the agent, the dashboard shows none of them. */
+const R = roundsDeployment as { agent?: string | null; contracts?: Record<string, string | null> };
+const hexAddr = (v: unknown): Address | null => (typeof v === "string" && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as Address) : null);
+export const COMMON = {
+  agent: hexAddr(R.agent),
+  marketsV4: hexAddr(R.contracts?.MarketsV4),
+  registry: hexAddr(R.contracts?.Registry),
+  attestation: hexAddr(R.contracts?.Attestation),
+  // Not in the rounds file (yet): contracts/deployments/arc-mainnet-common-markets.json, verified on chain 2026-09-27.
+  dispute: "0xf62Cd073F6748F56a0233c43C2ce02640FAa75d8" as Address,
+};
+const COMMON_ON = Boolean(COMMON.agent && COMMON.marketsV4 && COMMON.registry && COMMON.attestation);
+
+export type WalletKey = "safe" | "operator" | "onboarder" | "roundsAgent" | "deployer";
 export interface WalletInfo { key: WalletKey; label: string; address: Address; isSafe: boolean; what: string; cannot: string }
 
 export const WALLETS: WalletInfo[] = [
   {
     key: "safe", label: "Admin Safe", address: B.roles.adminSafe, isSafe: true,
-    what: "Grants and removes every role, registers builders who ask for gas-free registration, revokes badges, and recovers builders who lost their key.",
+    what: "Grants and removes every role, registers builders who ask for gas-free registration, revokes badges, recovers builders who lost their key, and rules on challenged readings of the common markets.",
     cannot: "Act alone: every transaction needs 2 of its 3 owners to sign.",
   },
   {
     key: "operator", label: "Keeper operator", address: B.operator, isSafe: false,
     what: "Runs the builders keeper every 10 minutes: re-checks every project proof and marks a badge lapsed, or verified again, to match.",
-    cannot: "Issue or revoke badges, register builders, or grant roles.",
+    cannot: "Issue or revoke badges, register builders, or grant roles. It is not an agent of the common markets: it can't open or settle them.",
   },
   {
     key: "onboarder", label: "Onboarder", address: B.roles.onboarder, isSafe: false,
     what: "Onboards a verified builder: links it to the keeper and issues its Verified Builder Badge.",
     cannot: "Revoke badges, register builders, or grant roles. The Safe can remove its roles at any time.",
   },
+  ...(COMMON_ON ? [{
+    key: "roundsAgent" as const, label: "Rounds agent", address: COMMON.agent!, isSafe: false,
+    what: "Opens the 5-minute Up/Down rounds and the event markets, and posts each round's price reading (the median of Coinbase, Kraken and OKX), bonded on every feed it serves.",
+    cannot: "Move anyone's funds, change a contract, or rule on a dispute: any reading can be challenged, and the Safe rules on it.",
+  }] : []),
   {
     key: "deployer", label: "Deployer", address: B.roles.deployer, isSafe: false,
-    what: `Deployed the three contracts on ${B.deployedAt}.`,
-    cannot: "Anything: it gave up every role after the deploy.",
+    what: `Deployed the contracts (the builder registries on ${B.deployedAt}).`,
+    cannot: "Anything: it gave up every role after each deploy.",
   },
 ];
 
@@ -50,7 +70,9 @@ const byAddress = new Map(WALLETS.map((w) => [w.address.toLowerCase(), w]));
 /** A known wallet's name, else a short address. */
 export const holderLabel = (address: string) => byAddress.get(address.toLowerCase())?.label ?? shortHex(address);
 
-export type ContractKey = "registry" | "caretakers" | "badge" | "ledger" | "buyback" | "splitter";
+export type ContractKey =
+  | "registry" | "caretakers" | "badge" | "nominations" | "ledger" | "buyback" | "splitter"
+  | "oracleRegistry" | "attestation" | "dispute" | "marketsV4";
 export interface ContractInfo { key: ContractKey; name: string; address: Address; what: string; audit: string }
 
 export const CONTRACTS: ContractInfo[] = [
@@ -60,6 +82,8 @@ export const CONTRACTS: ContractInfo[] = [
     what: "Which keeper looks after each builder's milestones." },
   { key: "badge", name: "VerifiedBuilderBadge", address: B.VerifiedBuilderBadge, audit: "audited",
     what: "The soulbound Verified Builder Badge: one per builder, numbered in the order they were verified." },
+  { key: "nominations", name: "ProjectNominations", address: "0x6d87C64CD64e5c8b3204fCBFD28720b27C80F354", audit: "internally reviewed",
+    what: "The on-chain list of projects Registrai nominated, with a fingerprint of each one's investigated profile. Holds no funds." },
   // Deployed 2026-09-27 (block 22932186 for the buyback pair), ahead of the markets stack.
   { key: "ledger", name: "NanoLedger", address: "0x82CC64bc010Bc244E63654817202B5330f1Ac112", audit: "internally reviewed",
     what: "The shared USDC ledger: balances move as accounting and real USDC only crosses at deposit and withdraw. Nobody, the Safe included, can move or freeze a balance." },
@@ -67,6 +91,17 @@ export const CONTRACTS: ContractInfo[] = [
     what: "Spends every USDC it holds on REGI and burns it: rounds of 4 × $50, 10 minutes apart, anyone can press. No owner, no withdraw." },
   { key: "splitter", name: "RegiFeeSplitter", address: "0xd8Dc4Ca674de4571E33040EEb14D487D2Bc37Df7", audit: "internally reviewed",
     what: "The treasury address: 40% of income to the buyback (fixed), 60% recorded for the Safe to collect. The Safe can redirect the 40% only with 7 days' public notice." },
+  // The common markets (launched 2026-09-27: oracle from block 23010997, MarketsV4 from 23011086).
+  ...(COMMON_ON ? ([
+  { key: "marketsV4", name: "MarketsV4", address: COMMON.marketsV4!, audit: "internally reviewed",
+    what: "The common markets: 5-minute Up/Down rounds and event markets on the NanoLedger. Half of every 1% fee goes to the fee splitter. Settles on the first valid reading within an hour of expiry, else voids with refunds." },
+  { key: "oracleRegistry", name: "Oracle Registry", address: COMMON.registry!, audit: "internally reviewed",
+    what: "The price feeds and each agent's bond per feed (at least 2 USDC); a reading ruled wrong slashes the bond." },
+  { key: "attestation", name: "Attestation", address: COMMON.attestation!, audit: "internally reviewed",
+    what: "The agents' readings, each with a hash of its evidence, challengeable until final." },
+  { key: "dispute", name: "Dispute", address: COMMON.dispute, audit: "internally reviewed",
+    what: "Challenges of readings: anyone can stake to challenge, always accepted; the feed's resolver (the Safe) rules." },
+  ] as ContractInfo[]) : []),
 ];
 export const DEPLOY = { block: B.deployBlock, date: B.deployedAt };
 
@@ -84,6 +119,11 @@ export const ROLES: Record<ContractKey, { name: string; hash: Hex; what: string 
   ],
   buyback: [],
   splitter: [],
+  nominations: [role("DEFAULT_ADMIN_ROLE", "grants and removes roles"), role("NOMINATOR_ROLE", "nominates and un-nominates projects")],
+  marketsV4: [role("DEFAULT_ADMIN_ROLE", "grants and removes roles"), role("GOVERNOR_ROLE", "approves the agents, resolvers and market creators of new markets")],
+  oracleRegistry: [],
+  attestation: [],
+  dispute: [],
   badge: [
     role("DEFAULT_ADMIN_ROLE", "grants and removes roles"),
     role("ISSUER_ROLE", "issues a badge"),
@@ -158,6 +198,10 @@ export const EXPECTED_ROLES: Record<string, WalletKey[]> = {
   "badge:REVOKER_ROLE": ["safe"],
   "ledger:DEFAULT_ADMIN_ROLE": ["safe"],
   "ledger:GOVERNOR_ROLE": ["safe"],
+  "nominations:DEFAULT_ADMIN_ROLE": ["safe"],
+  "nominations:NOMINATOR_ROLE": ["safe", "onboarder"],
+  "marketsV4:DEFAULT_ADMIN_ROLE": ["safe"],
+  "marketsV4:GOVERNOR_ROLE": ["safe"],
 };
 
 const roleWords = (name: string) => name.replace(/_ROLE$/, "").replace(/_/g, " ").toLowerCase();

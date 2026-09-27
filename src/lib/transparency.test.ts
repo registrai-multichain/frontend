@@ -1,12 +1,14 @@
 import { describe, expect, test } from "vitest";
 import deployment from "./deployments/arc-mainnet.json";
-import { BUYBACK, CONTRACTS, EXPECTED_ROLES, FEE_SPLITS, RECORD, ROLES, WALLETS, compactNumber, holderLabel, parseDexPair, nativeToUsdc, percentOf, roleDiffs, supplySplit, sumBy, donutArcs, buybackView, type BuybackStatus, countdown, logWindows, parseBuybackStatus, agoText, LIVE_REFRESH_MS, nextScanRanges, BUYBACK_DISCLOSURE, inflowLabel } from "./transparency";
+import rounds from "./deployments/arc-mainnet-rounds.json";
+import { COMMON, BUYBACK, CONTRACTS, EXPECTED_ROLES, FEE_SPLITS, RECORD, ROLES, WALLETS, compactNumber, holderLabel, parseDexPair, nativeToUsdc, percentOf, roleDiffs, supplySplit, sumBy, donutArcs, buybackView, type BuybackStatus, countdown, logWindows, parseBuybackStatus, agoText, LIVE_REFRESH_MS, nextScanRanges, BUYBACK_DISCLOSURE, inflowLabel } from "./transparency";
 
 describe("transparency (app.registrai.cc/transparency)", () => {
   test("every wallet comes from the mainnet deployment file, with what it does and what it cannot", () => {
     const b = deployment.builders as unknown as { operator: string; roles: Record<string, string> };
+    const agent = (rounds as { agent?: string | null }).agent;
     expect(WALLETS.map((w) => w.address.toLowerCase())).toEqual(
-      [b.roles.adminSafe, b.operator, b.roles.onboarder, b.roles.deployer].map((a) => a.toLowerCase()),
+      [b.roles.adminSafe, b.operator, b.roles.onboarder, ...(COMMON.marketsV4 && agent ? [agent] : []), b.roles.deployer].map((a) => a.toLowerCase()),
     );
     for (const w of WALLETS) {
       expect(w.label.length).toBeGreaterThan(0);
@@ -273,5 +275,46 @@ describe("buyback minors", () => {
     expect(inflowLabel("0xfee926e8be2d1c6192213cf20f31d94dad1e80fb", L)).toBe("the Admin Safe");
     expect(inflowLabel(L.ledger, L)).toBe("the NanoLedger (a ledger payment swept in)");
     expect(inflowLabel("0x1234567890123456789012345678901234567890", L)).toBe("0x1234…7890");
+  });
+});
+
+describe("common markets and nominations on the dashboard", () => {
+  test("ProjectNominations is listed; the common-markets contracts appear exactly when the rounds file names them", () => {
+    const byKey = Object.fromEntries(CONTRACTS.map((c) => [c.key, c.address.toLowerCase()]));
+    expect(byKey.nominations).toBe("0x6d87c64cd64e5c8b3204fcbfd28720b27c80f354");
+    const r = rounds as { agent?: string | null; contracts: Record<string, string | null> };
+    if (r.agent && r.contracts.MarketsV4) {
+      expect(byKey).toMatchObject({
+        oracleRegistry: r.contracts.Registry!.toLowerCase(),
+        attestation: r.contracts.Attestation!.toLowerCase(),
+        dispute: "0xf62cd073f6748f56a0233c43c2ce02640faa75d8",
+        marketsV4: r.contracts.MarketsV4.toLowerCase(),
+      });
+    } else {
+      expect(byKey.marketsV4).toBeUndefined();
+    }
+  });
+
+  test("the Safe alone administers the common markets; the Safe and the onboarder nominate", () => {
+    expect(ROLES.marketsV4.map((r) => r.name)).toEqual(["DEFAULT_ADMIN_ROLE", "GOVERNOR_ROLE"]);
+    expect(EXPECTED_ROLES["marketsV4:DEFAULT_ADMIN_ROLE"]).toEqual(["safe"]);
+    expect(EXPECTED_ROLES["marketsV4:GOVERNOR_ROLE"]).toEqual(["safe"]);
+    expect(ROLES.nominations.map((r) => r.name)).toEqual(["DEFAULT_ADMIN_ROLE", "NOMINATOR_ROLE"]);
+    expect(EXPECTED_ROLES["nominations:NOMINATOR_ROLE"]).toEqual(["safe", "onboarder"]);
+    expect(ROLES.oracleRegistry).toEqual([]); // no admin: feeds and bonds are the agents' own
+    expect(ROLES.attestation).toEqual([]);
+    expect(ROLES.dispute).toEqual([]);
+  });
+
+  test("the rounds agent is a named wallet (once launched), and the keeper operator is told apart from it", () => {
+    const agent = WALLETS.find((w) => w.key === "roundsAgent");
+    const r = rounds as { agent?: string | null };
+    if (r.agent) {
+      expect(agent!.address.toLowerCase()).toBe(r.agent.toLowerCase());
+      expect(agent!.cannot).toMatch(/funds/);
+    } else {
+      expect(agent).toBeUndefined();
+    }
+    expect(WALLETS.find((w) => w.key === "operator")!.cannot).toMatch(/common markets/);
   });
 });
