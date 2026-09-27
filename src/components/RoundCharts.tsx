@@ -303,7 +303,7 @@ export function PriceChart({
   const area = line.length > 1 ? `${d}L${line[line.length - 1].x},${H}L${line[0].x},${H}Z` : "";
 
   const above = head !== undefined && startPrice !== undefined ? head > startPrice : undefined;
-  const tone = above === undefined ? "var(--accent)" : above ? "var(--up)" : "var(--down)";
+  const tone = above === undefined ? "var(--pu-accent, var(--accent))" : above ? "var(--pu-up, var(--up))" : "var(--pu-down, var(--down))";
   // Axis labels, minus any the live price tag would cover.
   const ticks = niceTicks(yLo, yHi, 3).filter((v) => Y(v) > 8 && Y(v) < H - 4 && (head === undefined || Math.abs(Y(v) - Y(head)) > 16));
   const minutes: number[] = [];
@@ -422,7 +422,7 @@ export function OddsChart({
   pts.push({ x: X(tNow), y: Y(head) });
   const d = stepPath(pts);
   const area = pts.length > 1 ? `${d}V${H}H${pts[0].x}Z` : "";
-  const tone = head >= 0.5 ? "var(--up)" : "var(--down)";
+  const tone = head >= 0.5 ? "var(--pu-up, var(--up))" : "var(--pu-down, var(--down))";
 
   return (
     <div ref={box} className="relative w-full select-none" style={{ height }}>

@@ -5,6 +5,7 @@ import { WalletButton } from "./WalletButton";
 import { PaperNav } from "./paper/PaperNav";
 import { Toasts } from "./paper/Toasts";
 import { BalancePill } from "./perennial/BalancePill";
+import { newsreader } from "./proposals/fonts";
 import { PERENNIAL, networkStatusLine } from "@/lib/perennial-network";
 import { APP_NAV, DASHBOARD_URL } from "@/lib/site-nav";
 
@@ -15,7 +16,7 @@ const WALLET_CHAIN = { id: PERENNIAL.chain.id, name: PERENNIAL.chain.name, short
  *  Perennial layer's (e.g. /rounds, live on mainnet before Perennial markets are). */
 export function PerennialShell({ children, status }: { children: ReactNode; status?: string }) {
   return (
-    <div className="paper-theme paper-type flex min-h-screen flex-col">
+    <div className={`paper-theme paper-type paper-ui ${newsreader.variable} flex min-h-screen flex-col`}>
       <header className="pa-topbar">
         <div className="pa-top">
           <Link href="/" className="pa-brand transition-opacity hover:opacity-80" aria-label="Registrai home">

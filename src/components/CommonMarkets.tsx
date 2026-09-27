@@ -965,7 +965,7 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
 
   return (
     <SessionCtx.Provider value={session}>
-    <div className="fade-up">
+    <div className="fade-up pu-bridge">
       {view.kind === "overview" ? (
         <Header now={now} roundEnd={roundEnd} showTimer={tab === "price"} />
       ) : (
@@ -977,13 +977,13 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
       <LedgerBar snap={snap} tx={tx} address={address} onChain={onChain} connect={connect} switchChain={() => switchChain(D.chainId)} />
 
       {stale && (
-        <p className="mb-4 border border-down bg-bg-elev px-4 py-3 text-[13px] text-down" role="status">
+        <p className="mb-4 rounded-xl border border-down bg-bg-elev px-4 py-3 text-[13px] text-down" role="status">
           The market data is {Math.round(clientNow - lastRead)} s old (the chain is not answering). Trading is paused until it
           refreshes.
         </p>
       )}
       {loadError && !snap && (
-        <p className="mb-6 rounded-[10px] border border-down bg-bg-elev px-4 py-3 text-[13px] text-down">
+        <p className="mb-6 rounded-xl border border-down bg-bg-elev px-4 py-3 text-[13px] text-down">
           Could not read the markets from {D.label}: {loadError} Retrying every 10 seconds.
         </p>
       )}
@@ -1094,7 +1094,7 @@ function Header({ now, roundEnd, showTimer }: { now: number; roundEnd: number; s
   return (
     <header className="mb-8 grid gap-6 border-b border-line pb-6 sm:grid-cols-[1fr_auto] sm:items-end">
       <div>
-        <h1 className="pa-h1">Common markets</h1>
+        <h1 className="pa-h1 pu-h">Common markets</h1>
         <p className="pa-lede">
           Quick price rounds and longer event questions, open to anyone and settled on chain in USDC.
         </p>
@@ -1106,13 +1106,13 @@ function Header({ now, roundEnd, showTimer }: { now: number; roundEnd: number; s
           <span>betting closes in</span>
         </div>
         <div
-          className={`tnum mt-1 text-right font-serif text-[56px] leading-none tracking-tightest ${closing ? "text-down" : "text-fg"}`}
+          className={`tnum pu-h mt-1 text-right text-[56px] leading-none ${closing ? "text-down" : "text-fg"}`}
           role="timer"
           aria-label="Time left to bet on the next round"
         >
           {now ? timeLeft(left) : "–:––"}
         </div>
-        <div className="mt-2 h-[3px] w-full overflow-hidden bg-line">
+        <div className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-line">
           <div
             className={`h-full transition-[width] duration-300 ease-linear ${closing ? "bg-down" : "bg-accent"}`}
             style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }}
@@ -1164,9 +1164,9 @@ function LedgerBar({
 
   if (!address) {
     return (
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-bg-elev px-4 py-3">
+      <div className="pu-card pu-card--compact mb-6 flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] text-fg-mute">Connect a wallet to trade. Prices and results are public.</p>
-        <button onClick={() => void connect()} className="pa-btn">
+        <button onClick={() => void connect()} className="pa-btn pu-btn pu-btn--primary">
           Connect wallet
         </button>
       </div>
@@ -1174,9 +1174,9 @@ function LedgerBar({
   }
   if (!onChain) {
     return (
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-bg-elev px-4 py-3">
+      <div className="pu-card pu-card--compact mb-6 flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] text-fg-mute">These markets run on {D.label}. Your wallet is on another network.</p>
-        <button onClick={() => void switchChain()} className="pa-btn">
+        <button onClick={() => void switchChain()} className="pa-btn pu-btn pu-btn--primary">
           Switch to {D.label}
         </button>
       </div>
@@ -1184,11 +1184,11 @@ function LedgerBar({
   }
   const busy = Boolean(tx.st.pending);
   return (
-    <div className="mb-6 rounded-xl border border-line bg-bg-elev px-4 py-3">
+    <div className="pu-card pu-card--compact mb-6">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <div>
           <div className="text-[13px] text-fg-dim">Trading balance</div>
-          <div className="tnum font-serif text-[22px] leading-tight">{snap?.ledgerBal !== undefined ? `${fmt(ledgerBal)} USDC` : "…"}</div>
+          <div className="tnum pu-h text-[22px] leading-tight">{snap?.ledgerBal !== undefined ? `${fmt(ledgerBal)} USDC` : "…"}</div>
         </div>
         <div className="text-[13px] text-fg-dim">
           Wallet <span className="tnum text-fg-mute">{fmt(walletBal)} USDC</span>
@@ -1202,15 +1202,15 @@ function LedgerBar({
             inputMode="decimal"
             placeholder="USDC"
             aria-label="Amount to deposit"
-            className="tnum w-[110px] border border-line bg-bg px-3 py-2 text-[14px] outline-none focus:border-accent"
+            className="pu-input tnum w-[110px] text-[14px] outline-none"
           />
-          <button onClick={deposit} disabled={busy} className="pa-btn">
+          <button onClick={deposit} disabled={busy} className="pa-btn pu-btn pu-btn--primary">
             {tx.st.pending === "depositing" ? "Depositing…" : "Deposit"}
           </button>
           <button
             onClick={withdraw}
             disabled={busy || ledgerBal === 0n}
-            className="border border-line px-3 text-[13px] text-fg-mute transition-colors hover:border-accent hover:text-fg disabled:opacity-40"
+            className="pu-btn pu-btn--quiet text-[13px] disabled:opacity-40"
           >
             {tx.st.pending === "withdrawing" ? "Withdrawing…" : "Withdraw all"}
           </button>
@@ -1263,7 +1263,7 @@ function SessionRow({ tx }: { tx: Tx }) {
           <button
             onClick={() => void ses.end()}
             disabled={busy}
-            className="border border-line px-3 py-1 text-[13px] text-fg-mute transition-colors hover:border-accent hover:text-fg disabled:opacity-50"
+            className="pa-chip disabled:opacity-50"
           >
             {tx.st.pending === "ending" ? "Ending…" : "End"}
           </button>
@@ -1409,11 +1409,11 @@ function AssetCard({
   return (
     <article
       onClick={openPage}
-      className="flex min-w-0 cursor-pointer flex-col rounded-xl border border-line bg-bg-elev p-4 transition-colors hover:border-line-strong"
+      className="pu-card flex min-w-0 cursor-pointer flex-col transition-colors"
     >
       <div className="flex items-baseline justify-between gap-3">
         <div className="flex min-w-0 items-baseline gap-2">
-          <h2 className="font-serif text-[24px] leading-none">
+          <h2 className="pu-h text-[24px] leading-none">
             <Link href={assetHref(asset)} className="hover:underline">
               {asset.symbol}
             </Link>
@@ -1421,7 +1421,7 @@ function AssetCard({
           <span className="truncate text-[13px] text-fg-dim">{asset.name}</span>
         </div>
         <div
-          className={`tnum font-serif text-[24px] leading-none tracking-tightest transition-colors duration-300 ${
+          className={`tnum pu-h text-[24px] leading-none transition-colors duration-300 ${
             live?.dir === "up" ? "text-up" : live?.dir === "down" ? "text-down" : "text-fg"
           }`}
         >
@@ -1515,7 +1515,7 @@ function AssetCard({
               {trading && (
                 <button
                   onClick={() => toggle(hold.yes > 0n ? "yes" : "no", "sell")}
-                  className={`mt-2 w-full border px-3 py-1.5 text-[13px] transition-colors ${isOpen && open?.mode === "sell" ? "border-accent text-accent" : "border-line text-fg-mute hover:border-accent hover:text-fg"}`}
+                  className={`pu-btn pu-btn--quiet mt-2 w-full text-[13px] ${isOpen && open?.mode === "sell" ? "is-active" : ""}`}
                 >
                   Cash out
                 </button>
@@ -1586,7 +1586,7 @@ function AssetPage({
     <article>
       <header className="mb-5 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-5">
         <div className="min-w-0">
-          <h1 className="font-serif text-[40px] leading-none tracking-tightest">
+          <h1 className="pu-h text-[40px] leading-none">
             {asset.symbol} <span className="text-[22px] text-fg-dim">Up or Down · 5 minutes</span>
           </h1>
           <p className="mt-2 text-[13px] text-fg-mute">
@@ -1610,7 +1610,7 @@ function AssetPage({
           </p>
         </div>
         <div
-          className={`tnum font-serif text-[40px] leading-none tracking-tightest transition-colors duration-300 ${
+          className={`tnum pu-h text-[40px] leading-none transition-colors duration-300 ${
             live?.dir === "up" ? "text-up" : live?.dir === "down" ? "text-down" : "text-fg"
           }`}
         >
@@ -1663,7 +1663,7 @@ function AssetPage({
         </div>
 
         <aside className="lg:sticky lg:top-4 lg:self-start">
-          <div className="rounded-xl border border-line bg-bg-elev p-4">
+          <div className="pu-card">
             {current && r.st ? (
               r.trading ? (
                 <>
@@ -1700,7 +1700,7 @@ function AssetPage({
                 {r.trading && (
                   <button
                     onClick={() => pick(r.hold!.yes > 0n ? "yes" : "no", "sell")}
-                    className={`mt-2 w-full border px-3 py-1.5 text-[13px] transition-colors ${trade?.mode === "sell" ? "border-accent text-accent" : "border-line text-fg-mute hover:border-accent hover:text-fg"}`}
+                    className={`pu-btn pu-btn--quiet mt-2 w-full text-[13px] ${trade?.mode === "sell" ? "is-active" : ""}`}
                   >
                     Cash out
                   </button>
@@ -1717,7 +1717,7 @@ function AssetPage({
 function RoundRules({ asset }: { asset: AssetMeta }) {
   return (
     <section className="mt-8" aria-labelledby="rules-h">
-      <h2 id="rules-h" className="mb-2 font-serif text-[22px] leading-none">
+      <h2 id="rules-h" className="pu-h mb-2 text-[24px] leading-none">
         Rules
       </h2>
       <ul className="list-disc space-y-1.5 pl-5 text-[14px] leading-relaxed text-fg-mute">
@@ -1747,10 +1747,10 @@ function PastRounds({ asset, rounds, snap, now }: { asset: AssetMeta; rounds: re
   if (!rounds.length) return null;
   return (
     <section className="mt-8" aria-labelledby="past-h">
-      <h2 id="past-h" className="mb-2 font-serif text-[22px] leading-none">
+      <h2 id="past-h" className="pu-h mb-2 text-[24px] leading-none">
         Latest rounds
       </h2>
-      <ul className="divide-y divide-line rounded-xl border border-line bg-bg-elev text-[14px]">
+      <ul className="divide-y divide-line rounded-2xl border border-line bg-bg-elev text-[14px]">
         {rounds.map((m) => {
           const s = statusFor(m, snap, now);
           const rd = snap?.readings[m.marketId];
@@ -1774,7 +1774,7 @@ function PastRounds({ asset, rounds, snap, now }: { asset: AssetMeta; rounds: re
 function EventRules() {
   return (
     <section className="mt-8" aria-labelledby="erules-h">
-      <h2 id="erules-h" className="mb-2 font-serif text-[22px] leading-none">
+      <h2 id="erules-h" className="pu-h mb-2 text-[24px] leading-none">
         Rules
       </h2>
       <ul className="list-disc space-y-1.5 pl-5 text-[14px] leading-relaxed text-fg-mute">
@@ -1797,7 +1797,7 @@ function Position({ hold, value, valueLabel = "Value now" }: { hold: Holding; va
   const r = value !== undefined ? pnl(value, hold.cost) : undefined;
   const tone = !r || r.diff === 0n ? "text-fg-mute" : r.diff > 0n ? "text-up" : "text-down";
   return (
-    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border border-line bg-bg px-3 py-2.5 text-[13px] sm:grid-cols-4">
+    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl border border-line bg-bg px-3 py-2.5 text-[13px] sm:grid-cols-4">
       <div>
         <div className="text-fg-dim">Your shares</div>
         <div className="tnum mt-0.5 text-[13px]">
@@ -1842,13 +1842,9 @@ function SideButton({ label, tone, active, onClick }: { label: string; tone: "up
     }
     last.current = label;
   }, [label]);
-  const on = tone === "up" ? "bg-up text-bg-elev border-up" : "bg-down text-bg-elev border-down";
-  const off =
-    tone === "up"
-      ? "border-[color-mix(in_srgb,var(--up)_45%,transparent)] bg-[color-mix(in_srgb,var(--up)_9%,transparent)] text-up hover:bg-[color-mix(in_srgb,var(--up)_18%,transparent)]"
-      : "border-[color-mix(in_srgb,var(--down)_45%,transparent)] bg-[color-mix(in_srgb,var(--down)_9%,transparent)] text-down hover:bg-[color-mix(in_srgb,var(--down)_18%,transparent)]";
+  // Paper UI: tinted outline, filled while pressed (aria-pressed).
   return (
-    <button ref={ref} onClick={onClick} aria-pressed={active} className={`tnum w-full border px-3 py-2.5 text-[14px] font-medium transition-colors ${active ? on : off}`}>
+    <button ref={ref} onClick={onClick} aria-pressed={active} className={`tnum pu-btn pu-btn--${tone} w-full text-[14px]`}>
       {label}
     </button>
   );
@@ -1953,9 +1949,9 @@ function TradeBox({
 
   const presets = open.mode === "buy" ? ["1", "5", "10"] : [];
   return (
-    <div className="mt-3 border border-line bg-bg p-3">
+    <div className="mt-3 rounded-xl border border-line bg-bg p-3">
       <div className="mb-3 flex flex-wrap items-center gap-2 text-[13px]">
-        <div className="inline-flex border border-line" role="group" aria-label="Buy or sell">
+        <div className="inline-flex overflow-hidden rounded-full border border-line" role="group" aria-label="Buy or sell">
           {(["buy", "sell"] as const).map((m) => (
             <button
               key={m}
@@ -1967,7 +1963,7 @@ function TradeBox({
             </button>
           ))}
         </div>
-        <div className="inline-flex border border-line" role="group" aria-label="Side">
+        <div className="inline-flex overflow-hidden rounded-full border border-line" role="group" aria-label="Side">
           {(["yes", "no"] as const).map((s) => (
             <button
               key={s}
@@ -1989,24 +1985,24 @@ function TradeBox({
       </div>
 
       <div className="flex items-stretch gap-2">
-        <div className="flex flex-1 items-center rounded-[10px] border border-line bg-bg-elev px-3 focus-within:border-line-strong">
+        <div className="pu-input flex flex-1 items-center">
           <input
             value={amt}
             onChange={(e) => setAmt(e.target.value.replace(/[^0-9.]/g, ""))}
             inputMode="decimal"
             placeholder="0.00"
             aria-label={open.mode === "buy" ? "USDC to spend" : `${label} shares to sell`}
-            className="tnum w-full bg-transparent py-2 font-serif text-[22px] outline-none"
+            className="tnum pu-h w-full bg-transparent py-2 text-[22px] outline-none"
           />
           <span className="text-[13px] text-fg-dim">{open.mode === "buy" ? "USDC" : "shares"}</span>
         </div>
         {presets.map((p) => (
-          <button key={p} onClick={() => setAmt(p)} className="tnum border border-line px-3 text-[13px] text-fg-mute hover:border-line-strong hover:text-fg">
+          <button key={p} onClick={() => setAmt(p)} className="tnum rounded-[10px] border border-line bg-bg-elev px-3 text-[13px] text-fg-mute hover:border-line-strong hover:text-fg">
             {p}
           </button>
         ))}
         {open.mode === "sell" && (
-          <button onClick={() => setAmt(formatUsdc(held, 6))} disabled={held === 0n} className="border border-line px-3 text-[13px] text-fg-mute hover:border-line-strong hover:text-fg disabled:opacity-40">
+          <button onClick={() => setAmt(formatUsdc(held, 6))} disabled={held === 0n} className="rounded-[10px] border border-line bg-bg-elev px-3 text-[13px] text-fg-mute hover:border-line-strong hover:text-fg disabled:opacity-40">
             All
           </button>
         )}
@@ -2051,7 +2047,7 @@ function TradeBox({
               key={String(s)}
               aria-pressed={slip === s}
               onClick={() => setSlip(s)}
-              className={`tnum border px-1.5 py-0.5 ${slip === s ? "border-accent text-accent" : "border-line hover:text-fg"}`}
+              className={`tnum rounded-full border px-2 py-0.5 ${slip === s ? "border-accent text-accent" : "border-line hover:text-fg"}`}
             >
               {Number(s) / 100}%
             </button>
@@ -2065,7 +2061,7 @@ function TradeBox({
         <button
           onClick={submit}
           disabled={busy || !canTrade}
-          className={`ml-auto px-5 py-2 text-[13px] text-bg-elev transition-opacity disabled:opacity-40 ${open.side === "yes" ? "bg-up" : "bg-down"}`}
+          className={`pu-btn is-active ml-auto text-[14px] disabled:opacity-40 ${open.side === "yes" ? "pu-btn--up" : "pu-btn--down"}`}
         >
           {tx.st.pending === open.mode && tx.st.scope === scope
             ? open.mode === "buy"
@@ -2114,11 +2110,11 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
   const eventOf = (key: string) => D.events.find((e) => e.key === key);
   return (
     <section className="mt-10" aria-labelledby="claims-h">
-      <h2 id="claims-h" className="mb-3 font-serif text-[24px] leading-none">
+      <h2 id="claims-h" className="pu-h mb-3 text-[24px] leading-none">
         Your claims
       </h2>
       {toSettle.length > 0 && (
-        <ul className="mb-3 overflow-hidden rounded-xl border border-accent bg-bg-elev" aria-label="Markets you can settle">
+        <ul className="mb-3 overflow-hidden rounded-2xl border border-accent bg-bg-elev" aria-label="Markets you can settle">
           {toSettle.map((m) => {
             const how = snap.settleable[m.marketId];
             const scope = `settle:${m.marketId}`;
@@ -2144,7 +2140,7 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
                         how === "resolve" ? "Resolved: redeem it below." : "Voided: redeem your refund below.",
                       )
                     }
-                    className="border border-accent px-4 py-2 text-[13px] text-accent transition-colors hover:bg-accent hover:text-bg disabled:opacity-50"
+                    className="pu-btn pu-btn--quiet is-active text-[13px] disabled:opacity-50"
                   >
                     {tx.st.pending === how && tx.st.scope === scope ? "Confirm in wallet…" : how === "resolve" ? "Resolve now" : "Void and refund"}
                   </button>
@@ -2158,17 +2154,17 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
       {orphan && (
         // A redeemed claim (or a resolved/voided market) leaves its list: keep its
         // confirmation - or error - on screen here instead of losing it with the row.
-        <div className="mb-3 rounded-xl border border-line bg-bg-elev px-4 py-1">
+        <div className="mb-3 rounded-2xl border border-line bg-bg-elev px-4 py-1">
           <TxLine tx={tx} scope={orphan} />
         </div>
       )}
       {claims.length === 0 ? (
-        <p className="rounded-xl border border-line bg-bg-elev px-4 py-3 text-[13px] text-fg-dim">
+        <p className="pu-card pu-card--compact text-[13px] text-fg-dim">
           Nothing to redeem. Winning shares (and void refunds) from markets you traded show up here once they settle, and
           pay into your trading balance.
         </p>
       ) : (
-        <ul className="overflow-hidden rounded-xl border border-line bg-bg-elev">
+        <ul className="overflow-hidden rounded-2xl border border-line bg-bg-elev">
           {claims.map(({ market: m, amount }) => {
             const a = assetOf(m.key);
             const ev = eventOf(m.key);
@@ -2197,7 +2193,7 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
                         Boolean(ses?.owner && ses.covers("redeem", 0n)),
                       )
                     }
-                    className="tnum pa-btn"
+                    className="tnum pa-btn pu-btn pu-btn--primary"
                   >
                     {tx.st.pending === "redeem" && tx.st.scope === scope ? "Redeeming…" : `Redeem ${fmt(amount)} USDC`}
                   </button>
@@ -2238,7 +2234,7 @@ function EventMarkets({
   });
   return (
     <section aria-labelledby="events-h">
-      <h2 id="events-h" className="font-serif text-[30px] leading-none tracking-tightest">
+      <h2 id="events-h" className="pu-h text-[30px] leading-none">
         Event markets
       </h2>
       <p className="mb-4 mt-2 max-w-[60ch] text-[13px] text-fg-mute">
@@ -2323,13 +2319,13 @@ function EventCard({
   return (
     <article
       onClick={page ? undefined : openPage}
-      className={`flex min-w-0 flex-col rounded-xl border border-line bg-bg-elev p-4 ${page ? "" : "cursor-pointer transition-colors hover:border-line-strong"}`}
+      className={`pu-card flex min-w-0 flex-col ${page ? "" : "cursor-pointer transition-colors"}`}
     >
       {ev.rehearsal && <div className="mb-2 text-[13px] text-accent">Testnet rehearsal of the settlement flow, short-dated.</div>}
       {page ? (
-        <h1 className="font-serif text-[32px] leading-tight tracking-tightest">{ev.question}</h1>
+        <h1 className="pu-h text-[32px] leading-tight">{ev.question}</h1>
       ) : (
-        <h3 className="font-serif text-[21px] leading-snug">
+        <h3 className="pu-h text-[21px] leading-snug">
           <Link href={eventHref(ev)} className="hover:underline">
             {ev.question}
           </Link>
@@ -2377,7 +2373,7 @@ function EventCard({
             <span className="text-up">Yes {yesPct.toFixed(0)}%</span>
             <span className="text-down">{(100 - yesPct).toFixed(0)}% No</span>
           </div>
-          <div className="flex h-2 w-full overflow-hidden bg-down">
+          <div className="flex h-2 w-full overflow-hidden rounded-full bg-down">
             <div className="h-full bg-up transition-[width] duration-500" style={{ width: `${yesPct}%` }} />
           </div>
 
@@ -2399,7 +2395,7 @@ function EventCard({
                 <>
                   <button
                     onClick={() => setOpen(isOpen && open?.mode === "sell" ? undefined : { id: market.marketId, side: hold.yes > 0n ? "yes" : "no", mode: "sell" })}
-                    className={`border px-3 py-1.5 text-[13px] transition-colors ${isOpen && open?.mode === "sell" ? "border-accent text-accent" : "border-line text-fg-mute hover:border-accent hover:text-fg"}`}
+                    className={`pu-btn pu-btn--quiet text-[13px] ${isOpen && open?.mode === "sell" ? "is-active" : ""}`}
                   >
                     Sell
                   </button>
@@ -2434,7 +2430,7 @@ function EventCard({
               <button
                 disabled={Boolean(tx.st.pending) || redeemable === 0n}
                 onClick={() => void tx.run(scope, "redeem", () => tx.send(C.MarketsV4, marketsV4Abi, "redeem", [market.marketId]), `Redeemed ${fmt(redeemable)} USDC.`)}
-                className="tnum pa-btn pa-btn--block"
+                className="tnum pa-btn pa-btn--block pu-btn pu-btn--primary"
               >
                 {redeemable === 0n ? "Nothing to redeem" : tx.st.pending === "redeem" && tx.st.scope === scope ? "Redeeming…" : `Redeem ${fmt(redeemable)} USDC`}
               </button>
