@@ -1,19 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import useSWR from "swr";
 import { useWallet } from "@/components/WalletProvider";
 import { newsreader } from "@/components/proposals/fonts";
 import { ADMIN_SERVICE, type AdminRole } from "@/lib/builders-admin";
 import { shortAddr } from "@/lib/format";
 import { humanizeError } from "@/lib/humanize-error";
+import { activeProvider } from "@/lib/wallets";
 import {
   LIVE_KINDS, MARKETS_V4, PROPOSAL_ASSETS, SEED, approvalMessage, approvalTypedData, duplicateOf, fromJsonApproval,
   fromJsonOutcome, normalizeQuestion, outcomeTypedData, toJsonApproval, toJsonOutcome, type Proposal, type ProposalAsset,
 } from "@/lib/market-proposals";
 import {
-  FILTERS, ageLabel, applyDraft, approvalText, draftOf, filterCounts, inFilter, isDirty, kindLabel, parseUtcMinute,
-  patchBody, proposalChecks, shortUtc, type Draft, type ProposalFilter,
+  FILTERS, ageLabel, applyDraft, approvalText, draftOf, filterCounts, filterOf, inFilter, isDirty, kindLabel,
+  outcomeProblems, parseUtcMinute, patchBody, proposalChecks, shortUtc, wrongChainMessage, type Draft, type ProposalFilter,
 } from "@/lib/proposals-admin";
 import { statusHref } from "@/lib/propose-form";
 import mainnetRounds from "@/lib/deployments/arc-mainnet-rounds.json";
@@ -48,6 +49,43 @@ type ApiState = { state: "checking" } | { state: "unavailable" } | { state: "rea
 type Done = (p: Proposal, notice?: string) => void;
 
 class SignedOut extends Error {}
+/** A refusal worded for the admin: shown as is (not through humanizeError). */
+class Refusal extends Error {}
+const CONNECT_FIRST = "Connect a wallet to sign.";
+/** The pane's error line: a refusal, else the wallet's own error (connect / switch failures). */
+const shownError = (error: string | null, walletError: string | undefined) =>
+  error === CONNECT_FIRST ? (walletError ?? CONNECT_FIRST) : (error ?? walletError ?? null);
+const asMessage = (e: unknown) => (e instanceof Refusal ? e.message : humanizeError(e, HUMAN));
+
+type Signer = { address: `0x${string}`; walletClient: NonNullable<ReturnType<typeof useWallet>["walletClient"]> };
+
+/**
+ * The wallet, ready to sign for `admin`: connected, the signed-in admin, and on Arc
+ * mainnet. WalletProvider's connect() and switchChain() never throw (they set its
+ * `error`), so both are checked after the fact; nothing is signed unless all hold.
+ * Returns null when a connect just succeeded (the admin clicks again to sign).
+ */
+function useSigner(admin: string) {
+  const { address, walletClient, connect, switchChain } = useWallet();
+  return useCallback(async (): Promise<Signer | null> => {
+    if (!address || !walletClient) {
+      await connect();
+      const accounts = ((await activeProvider()?.request({ method: "eth_accounts" }).catch(() => [])) ?? []) as string[];
+      if (!accounts.length) throw new Refusal(CONNECT_FIRST);
+      return null;
+    }
+    if (address.toLowerCase() !== admin.toLowerCase()) throw new Refusal(`Sign with the signed-in admin wallet ${shortAddr(admin)}.`);
+    const chainOf = () => walletClient.getChainId().catch(() => undefined);
+    let chainId = await chainOf();
+    if (wrongChainMessage(chainId)) {
+      await switchChain(ARC_MAINNET);
+      chainId = await chainOf();
+    }
+    const wrong = wrongChainMessage(chainId);
+    if (wrong) throw new Refusal(wrong);
+    return { address, walletClient };
+  }, [address, walletClient, connect, switchChain, admin]);
+}
 
 /** Same-origin JSON call (as AdminApp's): a JSON body (or none) and the parsed reply. */
 async function call<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<{ status: number; body: T }> {
@@ -117,9 +155,12 @@ export function ProposalsAdmin() {
   const shown = all.filter((p) => inFilter(p, filter)).sort(byNewest);
   const selected = shown.find((p) => p.id === selectedId) ?? shown[0] ?? null;
 
+  /** After an action the pane follows the proposal to the filter of its new status. */
   const done: Done = useCallback(
     (p, text) => {
       list.mutate((prev) => (prev ?? []).map((o) => (o.id === p.id ? p : o)), { revalidate: false });
+      setFilter(filterOf(p.status));
+      setSelectedId(p.id);
       if (text) setNotice(text);
     },
     [list],
@@ -282,20 +323,28 @@ function Detail({
 }: {
   p: Proposal; all: Proposal[]; now: number; admin: string; role: AdminRole; onDone: Done; onFailed: (e: unknown) => void;
 }) {
-  const { address, walletClient, connect, isConnecting, walletChainId, switchChain } = useWallet();
+  const { address, isConnecting, error: walletError } = useWallet();
+  const signer = useSigner(admin);
+  const deadlineErrId = useId();
   const [draft, setDraft] = useState<Draft>(() => draftOf(p));
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState<null | "save" | "approve" | "reject">(null);
   const [error, setError] = useState<string | null>(null);
+  // A connect that went through the wallet picker: drop the "connect" prompt once connected.
+  useEffect(() => {
+    if (address) setError((e) => (e === CONNECT_FIRST ? null : e));
+  }, [address]);
 
   const nowS = Math.floor(now / 1000);
   const locked = p.status === "approved" || p.status === "opened";
   const live = LIVE_KINDS.includes(p.kind);
   const canEdit = !locked && role === "admin";
+  /** The outcome form shows the wallet's error itself; the pane does not repeat it. */
+  const outcomeForm = locked && p.kind === "event" && role === "admin";
   const { proposal: view, deadlineError } = locked ? { proposal: p, deadlineError: null } : applyDraft(p, draft);
   const dirty = canEdit && isDirty(p, draft);
   const dup = duplicateOf(view, all, LIVE_QUESTIONS);
-  const checks = proposalChecks(view, { nowS, duplicate: dup, liveMatch: dup === "live market" ? liveMatchOf(view) : null, own: OWN });
+  const checks = locked ? [] : proposalChecks(view, { nowS, duplicate: dup, liveMatch: dup === "live market" ? liveMatchOf(view) : null, own: OWN });
 
   let preview: string | null = null;
   if (locked && p.approval) preview = approvalText(fromJsonApproval(p.approval.message), nowS);
@@ -317,7 +366,7 @@ function Detail({
       await f();
     } catch (e) {
       if (e instanceof SignedOut) onFailed(e);
-      else setError(humanizeError(e, HUMAN));
+      else setError(asMessage(e));
     } finally {
       setBusy(null);
     }
@@ -326,29 +375,28 @@ function Detail({
   /** PATCH the draft. The saved proposal (the API's reply) is what gets signed: the API
    *  compares the signed message with approvalMessage(stored proposal). */
   async function save(): Promise<Proposal> {
-    if (deadlineError) throw new Error(deadlineError);
+    if (deadlineError) throw new Refusal(deadlineError);
     const r = await call<{ proposal?: Proposal; error?: string }>(idPath(p.id), { method: "PATCH", body: patchBody(p, draft) });
-    if (r.status !== 200 || !r.body.proposal) throw new Error(r.body.error ?? `could not save (${r.status})`);
+    if (r.status !== 200 || !r.body.proposal) throw new Refusal(r.body.error ?? `Could not save (${r.status}).`);
     setDraft(draftOf(r.body.proposal));
     return r.body.proposal;
   }
 
   async function approve() {
-    if (!address || !walletClient) return connect();
     let saved: Proposal | null = null;
     await run("approve", async () => {
-      if (wrongWallet) throw new Error(`Sign with the signed-in admin wallet ${shortAddr(admin)}.`);
+      const w = await signer(); // connected, the admin, on Arc mainnet — before anything is saved
+      if (!w) return;
       try {
         saved = await save();
-        if (walletChainId !== ARC_MAINNET) await switchChain(ARC_MAINNET);
         const nonce = BigInt(Date.now()); // strictly increasing per admin; the API refuses a reuse
         const msg = approvalMessage(saved, nonce);
-        const signature = await walletClient.signTypedData({ account: address, ...approvalTypedData(msg) });
+        const signature = await w.walletClient.signTypedData({ account: w.address, ...approvalTypedData(msg) });
         const r = await call<{ proposal?: Proposal; error?: string }>(`${idPath(saved.id)}/approve`, {
           method: "POST",
           body: { message: toJsonApproval(msg), signature },
         });
-        if (r.status !== 200 || !r.body.proposal) throw new Error(r.body.error ?? `could not approve (${r.status})`);
+        if (r.status !== 200 || !r.body.proposal) throw new Refusal(r.body.error ?? `Could not approve (${r.status}).`);
         saved = null;
         onDone(r.body.proposal, `Approved ${p.id}: the agent opens it within a minute; its status page shows “Opened · market 0x…” with a link.`);
       } finally {
@@ -360,9 +408,9 @@ function Detail({
 
   async function reject() {
     await run("reject", async () => {
-      if (!reason.trim()) throw new Error("Give a reason: it is shown on the proposal’s status page.");
+      if (!reason.trim()) throw new Refusal("Give a reason: it is shown on the proposal’s status page.");
       const r = await call<{ proposal?: Proposal; error?: string }>(`${idPath(p.id)}/reject`, { method: "POST", body: { reason: reason.trim() } });
-      if (r.status !== 200 || !r.body.proposal) throw new Error(r.body.error ?? `could not reject (${r.status})`);
+      if (r.status !== 200 || !r.body.proposal) throw new Refusal(r.body.error ?? `Could not reject (${r.status}).`);
       onDone(r.body.proposal, `Rejected ${p.id}. The reason is on its status page.`);
     });
   }
@@ -470,16 +518,23 @@ function Detail({
                 <input className={s.input} type="url" value={draft.source} onChange={(e) => set("source")(e.target.value)} />
               </label>
             )}
-            <label className={s.field}>
-              Deadline (UTC) <span className={s.hint}>YYYY-MM-DD HH:MM, on a 5-minute mark</span>
-              <input
-                className={s.input}
-                value={draft.deadlineText}
-                aria-invalid={Boolean(deadlineError)}
-                onChange={(e) => set("deadlineText")(e.target.value)}
-              />
-              {deadlineError && <span className={s.error}>{deadlineError}</span>}
-            </label>
+            <div className={s.fieldBox}>
+              <label className={s.field}>
+                Deadline (UTC) <span className={s.hint}>YYYY-MM-DD HH:MM, on a 5-minute mark</span>
+                <input
+                  className={s.input}
+                  value={draft.deadlineText}
+                  aria-invalid={Boolean(deadlineError)}
+                  aria-describedby={deadlineError ? deadlineErrId : undefined}
+                  onChange={(e) => set("deadlineText")(e.target.value)}
+                />
+              </label>
+              {deadlineError && (
+                <p id={deadlineErrId} className={s.error}>
+                  {deadlineError}
+                </p>
+              )}
+            </div>
             <label className={`${s.field} ${s.wide}`}>
               Creator wallet <span className={s.hint}>(empty: the creator share goes to the treasury)</span>
               <input
@@ -494,16 +549,18 @@ function Detail({
         </details>
       )}
 
-      <div className={s.checks}>
-        <div className={s.boxTitle}>Checks</div>
-        <ul>
-          {checks.map((c) => (
-            <li key={c.text} className={c.ok ? undefined : s.bad}>
-              {c.ok ? "✓" : "✗"} {c.text}
-            </li>
-          ))}
-        </ul>
-      </div>
+      {!locked && (
+        <div className={s.checks}>
+          <div className={s.boxTitle}>Checks</div>
+          <ul>
+            {checks.map((c) => (
+              <li key={c.text} className={c.ok ? undefined : s.bad}>
+                {c.ok ? "✓" : "✗"} {c.text}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {preview && (
         <div className={s.sign}>
@@ -554,13 +611,13 @@ function Detail({
           )}
         </>
       )}
-      {error && (
+      {shownError(error, outcomeForm ? undefined : walletError) && (
         <p className={s.error} role="alert">
-          {error}
+          {shownError(error, outcomeForm ? undefined : walletError)}
         </p>
       )}
 
-      {locked && p.kind === "event" && role === "admin" && <RecordOutcome p={p} admin={admin} onDone={onDone} onFailed={onFailed} />}
+      {outcomeForm && <RecordOutcome p={p} admin={admin} onDone={onDone} onFailed={onFailed} />}
     </section>
   );
 }
@@ -575,43 +632,50 @@ function Tile({ label, value, mono }: { label: string; value: string; mono?: boo
 }
 
 function RecordOutcome({ p, admin, onDone, onFailed }: { p: Proposal; admin: string; onDone: Done; onFailed: (e: unknown) => void }) {
-  const { address, walletClient, connect, walletChainId, switchChain } = useWallet();
+  const { address, error: walletError } = useWallet();
+  const signer = useSigner(admin);
+  const ids = { evidence: useId(), since: useId(), wallet: useId() };
   const [yes, setYes] = useState<boolean | null>(null);
   const [evidence, setEvidence] = useState("");
   const [since, setSince] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A connect that went through the wallet picker: drop the "connect" prompt once connected.
+  useEffect(() => {
+    if (address) setError((e) => (e === CONNECT_FIRST ? null : e));
+  }, [address]);
   const recorded = p.outcome ? fromJsonOutcome(p.outcome.message) : null;
   const wrongWallet = Boolean(address && address.toLowerCase() !== admin.toLowerCase());
+  const problems = outcomeProblems({ value: yes, evidence, sinceText: since, deadline: p.deadline, nowS: Math.floor(Date.now() / 1000) });
+  const shown = (field: "evidence" | "since") => problems.find((x) => x.field === field && !x.blank) ?? null;
+  const missing = problems.filter((x) => x.blank);
+  const invalid = { evidence: shown("evidence"), since: shown("since") };
 
   async function sign() {
-    if (!address || !walletClient) return connect();
     setError(null);
-    const sinceS = parseUtcMinute(since);
-    if (yes === null) return setError("Pick Yes or No.");
-    if (!/^https:\/\/\S+$/.test(evidence.trim())) return setError("Give the evidence as a public https link.");
-    if (sinceS === null) return setError("Write when it happened as YYYY-MM-DD HH:MM (UTC).");
-    if (sinceS * 1000 > Date.now()) return setError("That time is in the future.");
-    if (wrongWallet) return setError(`Sign with the signed-in admin wallet ${shortAddr(admin)}.`);
     setBusy(true);
     try {
-      if (walletChainId !== ARC_MAINNET) await switchChain(ARC_MAINNET);
+      const w = await signer();
+      if (!w) return;
+      const sinceS = parseUtcMinute(since);
+      if (problems.length || yes === null || sinceS === null) throw new Refusal(problems[0]?.error ?? "Fill in the outcome first.");
       const msg = { proposalId: p.id, value: yes ? 1n : 0n, since: BigInt(sinceS), evidenceUrl: evidence.trim(), nonce: BigInt(Date.now()) };
-      const signature = await walletClient.signTypedData({ account: address, ...outcomeTypedData(msg) });
+      const signature = await w.walletClient.signTypedData({ account: w.address, ...outcomeTypedData(msg) });
       const r = await call<{ proposal?: Proposal; error?: string }>(`${idPath(p.id)}/outcome`, {
         method: "POST",
         body: { message: toJsonOutcome(msg), signature },
       });
-      if (r.status !== 200 || !r.body.proposal) throw new Error(r.body.error ?? `could not record the outcome (${r.status})`);
+      if (r.status !== 200 || !r.body.proposal) throw new Refusal(r.body.error ?? `Could not record the outcome (${r.status}).`);
       onDone(r.body.proposal, `Outcome recorded for ${p.id}: ${yes ? "Yes" : "No"}. The agent settles it after the deadline.`);
     } catch (e) {
       if (e instanceof SignedOut) onFailed(e);
-      else setError(humanizeError(e, HUMAN));
+      else setError(asMessage(e));
     } finally {
       setBusy(false);
     }
   }
 
+  const describe = (id: string, on: boolean) => [on ? id : null, wrongWallet ? ids.wallet : null].filter(Boolean).join(" ") || undefined;
   return (
     <div className={s.outcome}>
       <h3 className={s.h3}>Record outcome</h3>
@@ -634,23 +698,64 @@ function RecordOutcome({ p, admin, onDone, onFailed }: { p: Proposal; admin: str
         </label>
       </fieldset>
       <div className={s.two}>
-        <label className={s.field}>
-          Evidence URL
-          <input className={`${s.input} ${s.inputSm}`} type="url" value={evidence} placeholder="https://…" onChange={(e) => setEvidence(e.target.value)} />
-        </label>
-        <label className={s.field}>
-          Happened at (UTC)
-          <input className={`${s.input} ${s.inputSm}`} value={since} placeholder="2026-12-01 14:30" onChange={(e) => setSince(e.target.value)} />
-        </label>
+        <div className={s.fieldBox}>
+          <label className={s.field}>
+            Evidence URL
+            <input
+              className={`${s.input} ${s.inputSm}`}
+              type="url"
+              value={evidence}
+              placeholder="https://…"
+              aria-invalid={Boolean(invalid.evidence)}
+              aria-describedby={describe(ids.evidence, Boolean(invalid.evidence))}
+              onChange={(e) => setEvidence(e.target.value)}
+            />
+          </label>
+          {invalid.evidence && (
+            <p id={ids.evidence} className={s.error}>
+              {invalid.evidence.error}
+            </p>
+          )}
+        </div>
+        <div className={s.fieldBox}>
+          <label className={s.field}>
+            Happened at (UTC)
+            <input
+              className={`${s.input} ${s.inputSm}`}
+              value={since}
+              placeholder="2026-12-01 14:30"
+              aria-invalid={Boolean(invalid.since)}
+              aria-describedby={describe(ids.since, Boolean(invalid.since))}
+              onChange={(e) => setSince(e.target.value)}
+            />
+          </label>
+          {invalid.since && (
+            <p id={ids.since} className={s.error}>
+              {invalid.since.error}
+            </p>
+          )}
+        </div>
       </div>
       <div className={s.actions}>
-        <button type="button" className={s.quiet} onClick={sign} disabled={busy || wrongWallet}>
+        <button
+          type="button"
+          className={s.quiet}
+          onClick={sign}
+          disabled={busy || wrongWallet || Boolean(address && problems.length)}
+          aria-describedby={wrongWallet ? ids.wallet : undefined}
+        >
           {busy ? "Check your wallet…" : !address ? "Connect wallet to sign" : "Sign outcome"}
         </button>
+        {address && !wrongWallet && missing.length > 0 && <span className={s.note}>{missing.map((x) => x.error).join(" ")}</span>}
       </div>
-      {error && (
+      {wrongWallet && (
+        <p id={ids.wallet} className={s.error}>
+          Your wallet is {shortAddr(address!)}; switch it to the signed-in admin {shortAddr(admin)} to sign.
+        </p>
+      )}
+      {shownError(error, walletError) && (
         <p className={s.error} role="alert">
-          {error}
+          {shownError(error, walletError)}
         </p>
       )}
     </div>

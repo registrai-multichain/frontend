@@ -2,8 +2,8 @@ import { describe, expect, test } from "vitest";
 import { getAddress } from "viem";
 import { MARKETS_V4, TREASURY, approvalMessage, type Proposal } from "./market-proposals";
 import {
-  ageLabel, applyDraft, approvalText, draftOf, filterCounts, inFilter, isDirty, kindLabel, parseUtcMinute,
-  patchBody, proposalChecks, shortUtc,
+  ageLabel, applyDraft, approvalText, draftOf, filterCounts, filterOf, inFilter, isDirty, kindLabel, outcomeProblems,
+  parseUtcMinute, patchBody, proposalChecks, shortUtc, wrongChainMessage,
 } from "./proposals-admin";
 
 const NOW = 1_790_500_000; // Sep 21, 2026 (a fixed unix second)
@@ -130,5 +130,46 @@ describe("approvalText", () => {
     expect(t).toContain("  threshold  ≤ 300050 (3000.50 USD)");
     expect(t).toContain(`creatorPayee  ${TREASURY} (treasury)`);
     expect(t).toContain("nonce set when you sign");
+  });
+});
+
+describe("after an action", () => {
+  test("filterOf: the filter that lists a status", () => {
+    expect(filterOf("pending")).toBe("pending");
+    expect(filterOf("approved")).toBe("approved");
+    expect(filterOf("opened")).toBe("approved");
+    expect(filterOf("rejected")).toBe("rejected");
+    expect(filterOf("queued")).toBe("queued");
+  });
+  test("signing needs the wallet on Arc mainnet", () => {
+    expect(wrongChainMessage(5042)).toBeNull();
+    expect(wrongChainMessage(5042002)).toBe("Switch your wallet to Arc mainnet to sign.");
+    expect(wrongChainMessage(undefined)).toBe("Switch your wallet to Arc mainnet to sign.");
+  });
+});
+
+describe("outcomeProblems", () => {
+  const deadline = Date.UTC(2026, 11, 31, 23, 0) / 1000;
+  const nowS = Date.UTC(2027, 0, 2, 12, 0) / 1000;
+  const ok = { value: true, evidence: "https://www.circle.com/blog/x", sinceText: "2026-12-01 14:30", deadline, nowS };
+  test("a complete Yes before the deadline has no problem", () => {
+    expect(outcomeProblems(ok)).toEqual([]);
+    expect(outcomeProblems({ ...ok, sinceText: "2026-12-31 23:00" })).toEqual([]); // at the deadline is in time
+  });
+  test("blank fields block signing without shouting", () => {
+    const p = outcomeProblems({ ...ok, value: null, evidence: "", sinceText: "" });
+    expect(p.map((x) => [x.field, x.blank])).toEqual([["value", true], ["evidence", true], ["since", true]]);
+  });
+  test("the evidence must be an https link; the time must parse and be in the past", () => {
+    expect(outcomeProblems({ ...ok, evidence: "http://x.test" })).toEqual([{ field: "evidence", blank: false, error: "Give the evidence as a public https link." }]);
+    expect(outcomeProblems({ ...ok, sinceText: "Dec 1" })).toEqual([{ field: "since", blank: false, error: "Write when it happened as YYYY-MM-DD HH:MM (UTC)." }]);
+    expect(outcomeProblems({ ...ok, sinceText: "2027-01-03 00:00" })[0].error).toBe("That time is in the future.");
+  });
+  test("a Yes dated after the deadline is refused; a No is not", () => {
+    const late = { ...ok, sinceText: "2027-01-01 10:00" };
+    expect(outcomeProblems(late)).toEqual([
+      { field: "since", blank: false, error: "The event must have happened by the deadline; a Yes dated after it settles as No." },
+    ]);
+    expect(outcomeProblems({ ...late, value: false })).toEqual([]);
   });
 });

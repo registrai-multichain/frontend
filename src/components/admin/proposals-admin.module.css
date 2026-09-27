@@ -147,6 +147,7 @@
 .detailHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; }
 .h2 { margin: 0; font-family: var(--pp-display); font-size: 24px; font-weight: 500; }
 .small { font-size: 13px; }
+.fieldBox { display: flex; min-width: 0; flex-direction: column; gap: 6px; }
 .field { display: flex; min-width: 0; flex-direction: column; gap: 6px; color: var(--pp-body); font-size: 13px; font-weight: 500; }
 .hint { color: var(--pp-label); font-weight: 400; }
 .input,

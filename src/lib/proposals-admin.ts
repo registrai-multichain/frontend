@@ -7,7 +7,7 @@
 import { isAddress } from "viem";
 import {
   GRID_S, MAX_LEAD_S, MIN_LEAD_S, PROPOSAL_ASSETS, PROPOSAL_DOMAIN, SEED, TREASURY, validateProposal,
-  type ApprovalMessage, type Proposal, type ProposalAsset, type ProposalKind,
+  type ApprovalMessage, type Proposal, type ProposalAsset, type ProposalKind, type ProposalStatus,
 } from "./market-proposals";
 import { formatUtcDeadline, parseUtcDeadline } from "./propose-form";
 import { shortAddr } from "./format";
@@ -24,6 +24,16 @@ export const FILTERS: ReadonlyArray<{ id: ProposalFilter; label: string; count: 
 export function inFilter(p: Proposal, f: ProposalFilter): boolean {
   return f === "approved" ? p.status === "approved" || p.status === "opened" : p.status === f;
 }
+/** The filter that lists a proposal with this status (the pane follows it after an action). */
+export function filterOf(status: ProposalStatus): ProposalFilter {
+  return status === "opened" ? "approved" : status;
+}
+
+/** Signatures are for Arc mainnet (the typed-data domain's chainId): null when the wallet is on it. */
+export function wrongChainMessage(chainId: number | undefined): string | null {
+  return chainId === PROPOSAL_DOMAIN.chainId ? null : "Switch your wallet to Arc mainnet to sign.";
+}
+
 export function filterCounts(list: readonly Proposal[]): Record<ProposalFilter, number> {
   const out: Record<ProposalFilter, number> = { pending: 0, approved: 0, rejected: 0, queued: 0 };
   for (const p of list) for (const f of FILTERS) if (inFilter(p, f.id)) out[f.id]++;
@@ -210,4 +220,29 @@ export function approvalText(m: ApprovalMessage, nowS: number, opts: { nonceAtSi
     `  seed       ${seed}   creatorPayee  ${m.creatorPayee}${treasury}`,
     `  proposal   #${m.proposalId}  ${opts.nonceAtSigning ? "nonce set when you sign" : `nonce ${m.nonce}`}`,
   ].join("\n");
+}
+
+// ───────────────────────────── record outcome ─────────────────────────────
+
+export interface OutcomeProblem {
+  field: "value" | "evidence" | "since";
+  error: string;
+  /** The field is still empty: signing is blocked but nothing needs saying yet. */
+  blank: boolean;
+}
+
+/** What stops "Sign outcome", in form order. A Yes must be dated by the deadline:
+ *  the market asks whether it happened by then, so a later Yes settles as No. */
+export function outcomeProblems(f: { value: boolean | null; evidence: string; sinceText: string; deadline: number; nowS: number }): OutcomeProblem[] {
+  const out: OutcomeProblem[] = [];
+  if (f.value === null) out.push({ field: "value", blank: true, error: "Pick Yes or No." });
+  const evidence = f.evidence.trim();
+  if (!/^https:\/\/\S+$/.test(evidence)) out.push({ field: "evidence", blank: !evidence, error: "Give the evidence as a public https link." });
+  const since = parseUtcMinute(f.sinceText);
+  if (!f.sinceText.trim()) out.push({ field: "since", blank: true, error: "Write when it happened as YYYY-MM-DD HH:MM (UTC)." });
+  else if (since === null) out.push({ field: "since", blank: false, error: "Write when it happened as YYYY-MM-DD HH:MM (UTC)." });
+  else if (since > f.nowS) out.push({ field: "since", blank: false, error: "That time is in the future." });
+  else if (f.value === true && since > f.deadline)
+    out.push({ field: "since", blank: false, error: "The event must have happened by the deadline; a Yes dated after it settles as No." });
+  return out;
 }
