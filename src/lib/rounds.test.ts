@@ -6,6 +6,7 @@ import {
   ROUNDS,
   candleCloseAt,
   claimList,
+  roundsStatusLine,
   clockUtc,
   eventVisible,
   evidenceNote,
@@ -531,6 +532,16 @@ describe("formatting", () => {
     expect(parseCoinbaseTicker({ message: "NotFound" })).toBeUndefined();
     expect(parseCoinbaseTicker({ price: "0" })).toBeUndefined();
     expect(parseCoinbaseTicker(null)).toBeUndefined();
+  });
+});
+
+describe("footer status line", () => {
+  const d = { deployed: true, chainId: 5042, label: "Arc mainnet", testnet: false };
+  test("names the rounds network when it runs on the build's network, else leaves the shell's line", () => {
+    expect(roundsStatusLine(d, 5042)).toBe("Arc mainnet · live");
+    expect(roundsStatusLine({ ...d, chainId: 5042002, label: "Arc testnet", testnet: true }, 5042002)).toBe("Arc testnet · test USDC");
+    expect(roundsStatusLine({ ...d, deployed: false }, 5042)).toBeUndefined();
+    expect(roundsStatusLine(d, 5042002)).toBeUndefined();
   });
 });
 

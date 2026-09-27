@@ -136,6 +136,16 @@ export const ROUNDS: RoundsDeployment = loadDeployment(
     : testnetDeployment) as RoundsDeploymentJson,
 );
 
+/** The shell footer's network line for pages about the common markets (/rounds, its
+ *  market pages, /propose): "Arc mainnet · live" once the rounds stack runs on the
+ *  network this build serves, else undefined (the shell's own Perennial line). */
+export function roundsStatusLine(
+  r: Pick<RoundsDeployment, "deployed" | "chainId" | "label" | "testnet">,
+  perennialChainId: number,
+): string | undefined {
+  return r.deployed && r.chainId === perennialChainId ? `${r.label} · ${r.testnet ? "test USDC" : "live"}` : undefined;
+}
+
 /** Rounds shown per asset in the results strip. */
 export const RECENT_ROUNDS = 6;
 
