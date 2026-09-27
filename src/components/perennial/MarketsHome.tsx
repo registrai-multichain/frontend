@@ -95,7 +95,7 @@ export function MarketsHome({ data, tx, initialTab = "trending" }: { data: Peren
       {tab === "unclaimed" && (
         <p className="pa-muted mt-4 max-w-[62ch]">
           Markets about projects that haven&apos;t joined Registrai yet. Half of each fee is held for the team until they claim the
-          project; unclaimed after {expiryDaysText(wonder?.expiry ?? null)} it goes to the season pool.
+          project; unclaimed after {expiryDaysText(wonder?.expiry ?? null)}, 90% of it goes to the season pool and 10% to the treasury.
         </p>
       )}
 

@@ -108,11 +108,11 @@ export default function GuidePage() {
                   cancel a release to the wrong claimant within those 7 days). Claim through /verify: it registers the
         project under the exact spelling its escrow is kept under.
                 </li>
-                <li>Nobody claims it within <WonderExpiryText /> of the first fee: the escrow goes to the season pool, never to Registrai.</li>
+                <li>Nobody claims it within <WonderExpiryText /> of the first fee: 90% of the escrow goes to the season pool and 10% to the Registrai treasury.</li>
               </ol>
               <p>
                 Don&apos;t want your project listed? Email {CONTACT}: it is un-nominated (no new wonder markets; existing ones
-                run to settlement and their escrow goes to the season pool).
+                run to settlement and their escrow is swept the same way: 90% to the season pool, 10% to the treasury).
               </p>
             </details>
           )}

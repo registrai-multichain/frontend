@@ -2091,7 +2091,7 @@ function WonderSection({ invites }: { invites: AdminInvite[] }) {
     <Section title="Wonder markets">
       <p className="vf-note">
         Nominate an invited project to open wonder markets on it (the onboarder wallet or the Safe). Un-nominate when a
-        team opts out: no new wonder markets; existing ones settle and their escrow expires to the season pool. The
+        team opts out: no new wonder markets; existing ones settle and their escrow expires 90% to the season pool, 10% to the treasury. The
         keeper queues a release once the team&apos;s claim has held three checks; cancel a wrong one here within 7 days.
       </p>
       <div className="adm-inline">

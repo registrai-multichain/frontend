@@ -2,7 +2,7 @@
  * Wonder markets on the site (spec docs/superpowers/specs/2026-09-25-wonder-markets-design.md):
  * markets about a NOMINATED project that has not claimed a builder yet. Their builder fee
  * leg waits in WonderEscrow under keccak256(source) until the team claims; the keeper
- * releases it (7 days the Safe can cancel) or it expires to the season pool.
+ * releases it (7 days the Safe can cancel) or it expires (90% to the season pool, 10% to the treasury).
  *
  * Pure: ABIs, keys, labels, the release view and the Safe files. Chain reads live in
  * wonder-chain.ts. Everything is off (wonderContracts(d) === null) on a deployment
@@ -142,7 +142,7 @@ export function releaseView(
   }
   if (s.escrow <= 0n) return { state: "empty", line: null };
   if (s.firstCreditAt > 0 && nowSec >= s.firstCreditAt + expirySec) {
-    return { state: "expired", line: `${usd(s.escrow)} unclaimed since ${day(s.firstCreditAt)}: it goes to the season pool` };
+    return { state: "expired", line: `${usd(s.escrow)} unclaimed since ${day(s.firstCreditAt)}: it goes 90% to the season pool, 10% to the treasury` };
   }
   return { state: "waiting", line: waitingLine(s.escrow) };
 }
