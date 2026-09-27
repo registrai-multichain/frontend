@@ -45,6 +45,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   InsufficientShares: "You don't hold enough shares for that (or have nothing left to redeem or refund).",
   NoLPShares: "This address has no liquidity to claim in this market (already claimed, or never provided).",
   BadExpiry: "Expiry must be in the future.",
+  AgentInactive:
+    "Trading is closed on this market: its agent is no longer active on the feed, so it will void and refund every trader's net cost.",
+  AgentBondLocked:
+    "Trading is paused on this market: open challenges hold the agent's bond on this feed, so it can't post a reading right now. It resumes once the bond is topped up or the challenges are ruled on.",
+  AgentCannotChallenge: "An agent can't challenge its own readings.",
+  SessionSharesExceeded: "One-click can only sell shares it bought for you in this market. Sell the rest with your wallet.",
   // markets: who may create
   BuilderInactive:
     "That builder is not active on the registry: markets about it can't be opened, and its income and season rewards can't be paid until it is reactivated.",
