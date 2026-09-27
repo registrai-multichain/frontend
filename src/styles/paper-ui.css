@@ -62,6 +62,9 @@
 .paper-ui .pa-pill.pu-pill[data-tone="unclaimed"],
 .paper-ui .bld-card .pa-pill[data-tone="unclaimed"] { border-color: color-mix(in srgb, var(--unclaimed-fg) 35%, transparent); background: color-mix(in srgb, var(--unclaimed) 55%, transparent); color: var(--unclaimed-fg); }
 .paper-ui .bld-card .pa-pill[data-tone="onchain"] { border-color: var(--unclaimed-fg); background: var(--unclaimed-fg); color: var(--unclaimed); }
+/* On a builder card (grayscale kinds render at .82 opacity) the default and muted pills
+   use the body ink, which keeps 12 px text above AA; the tone rules below out-rank it. */
+.paper-ui .bld-card .pa-pill { color: var(--pu-body); }
 .paper-ui .wonder-label { border-color: var(--pu-edge); border-radius: 999px; color: var(--pu-muted); }
 
 /* Builder cards: the card's radius, padding and display face. Borders are left to the
@@ -72,7 +75,9 @@
 .paper-ui .bld-avatar { clip-path: none; border-radius: 12px; }
 
 /* Dialogs (open a market, the trading balance) and notices. */
-.paper-ui .pa-dialog { border-color: var(--pu-rule); border-radius: 16px; background: var(--pu-card); }
+.paper-ui .pa-dialog { border-color: var(--pu-rule); background: var(--pu-card); }
+/* Rounded only where it floats: below 640 px it is a full-screen sheet (paper.css). */
+@media (min-width: 640px) { .paper-ui .pa-dialog { border-radius: 16px; } }
 .paper-ui .pa-dialog .pa-h3 { font-family: var(--pu-display); letter-spacing: -0.02em; }
 .paper-ui .pu-bridge .pa-notice { border-radius: 12px; }
 
@@ -82,4 +87,20 @@
 .paper-ui .board,
 .paper-ui .atlas-unattributed,
 .paper-ui .atlas-globe-empty { overflow: hidden; border-radius: 16px; }
+/* ...so long addresses wrap instead of being cut at the rounded edge on a phone. */
+.paper-ui .atlas-panel,
+.paper-ui .board { overflow-wrap: anywhere; }
 .paper-ui .board-head h3 { font-family: var(--pu-display); font-size: 20px; font-weight: 400; letter-spacing: -0.01em; }
+
+/* An inline field inside a line of text (the ticket's slippage): the pu-input look
+   without the 44 px control height, at the w-16 its markup asks for (paper.css's
+   .pa-input width: 100% otherwise wins and breaks the line). */
+.paper-ui .pu-input.pu-input--inline { display: inline-block; width: 4rem; min-height: 0; padding: 2px 8px; border-radius: 8px; }
+
+/* paper.css zeroes .pa-grid's and .paper-type .bld-grid's margins, which also cancels
+   the mt-* the pages put on them (the grid then touches the tabs / the heading). Put
+   the intended spacing back inside the bridged pages; paper.css itself is protected. */
+.paper-ui .pu-bridge .pa-grid.mt-5 { margin-top: 1.25rem; }
+.paper-ui .pu-bridge .bld-grid.mt-6 { margin-top: 1.5rem; }
+.paper-ui .pu-bridge .bld-grid.mt-10 { margin-top: 2.5rem; }
+.paper-ui .pu-bridge .pa-stack > * + .pa-grid { margin-top: 12px; }

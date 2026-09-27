@@ -200,7 +200,7 @@ export function TradeTicket({ data, tx, market: m, initialSide = "Yes" }: { data
           <p className="pa-muted pa-small">
             Price may move up to {slip.ok ? slippage : "1"}% before it lands ·{" "}
             {editSlip ? (
-              <input className="pa-input inline-block w-16 py-0.5 text-right" value={slippage} onChange={(e) => setSlippage(e.target.value)} inputMode="decimal" aria-label="Slippage percent" />
+              <input className="pa-input pu-input pu-input--inline inline-block w-16 py-0.5 text-right" value={slippage} onChange={(e) => setSlippage(e.target.value)} inputMode="decimal" aria-label="Slippage percent" />
             ) : (
               <button type="button" className="pa-link" onClick={() => setEditSlip(true)}>change</button>
             )}
