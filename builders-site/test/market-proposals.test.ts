@@ -4,7 +4,7 @@ import { approvalMessage, approvalTypedData, outcomeTypedData, toJsonApproval, t
 import type { Env } from "../lib/env";
 import {
   handleAdminApprove, handleAdminList, handleAdminOutcome, handleAdminPatch, handleAdminReject,
-  handleApprovedFeed, handleStatus, handleSubmit,
+  handleApprovedFeed, handleOutcomesFeed, handlePreflight, handleStatus, handleSubmit,
 } from "../lib/market-proposals";
 import { MemoryKV } from "./memory-kv";
 
@@ -55,6 +55,34 @@ describe("public submit", () => {
     const { status } = (await r.json()) as { status: string };
     expect(status).toBe("queued");
   });
+  test("a filled honeypot (website2) is refused and nothing is stored", async () => {
+    const s = setup();
+    const r = await s.submit({ ...body, website2: "http://spam.example" });
+    expect(r.status).toBe(400);
+    expect([...s.kv.store.keys()].some((k) => k.startsWith("mp:"))).toBe(false);
+  });
+});
+
+describe("GET /api/market-proposals/<id>", () => {
+  test("an unknown id and a malformed id both 404, with CORS for the app", async () => {
+    const s = setup();
+    const unknown = await handleStatus(new Request("https://x"), s.env, "pabcdefghij");
+    expect(unknown.status).toBe(404);
+    expect(unknown.headers.get("access-control-allow-origin")).toBe(APP);
+    const malformed = await handleStatus(new Request("https://x"), s.env, "not-an-id");
+    expect(malformed.status).toBe(404);
+  });
+});
+
+describe("OPTIONS preflight", () => {
+  test("answers 204 with CORS for the app", () => {
+    const s = setup();
+    const r = handlePreflight(s.env);
+    expect(r.status).toBe(204);
+    expect(r.headers.get("access-control-allow-origin")).toBe(APP);
+    expect(r.headers.get("access-control-allow-methods")).toContain("POST");
+    expect(r.headers.get("access-control-allow-headers")).toBe("content-type");
+  });
 });
 
 describe("admin review", () => {
@@ -64,6 +92,11 @@ describe("admin review", () => {
   }
   async function current(s: ReturnType<typeof setup>, id: string) {
     return ((await (await handleStatus(new Request("https://x"), s.env, id)).json()) as { proposal: Proposal }).proposal;
+  }
+  async function approve(s: ReturnType<typeof setup>, id: string, nonce = 1n) {
+    const msg = approvalMessage(await current(s, id), nonce);
+    const signature = await ADMIN.signTypedData(approvalTypedData(msg));
+    return { msg, signature, res: await handleAdminApprove(s.adminReq(`/x`, "POST", { message: toJsonApproval(msg), signature }), s.env, id, ADMIN.address) };
   }
   test("approve needs the session admin's signature over exactly the current proposal", async () => {
     const s = setup();
@@ -80,19 +113,28 @@ describe("admin review", () => {
     const feed = (await (await handleApprovedFeed(new Request("https://x/api/market-proposals/approved"), s.env)).json()) as { approvals: { id: string }[] };
     expect(feed.approvals.map((a) => a.id)).toEqual([id]);
   });
-  test("an edit after approval clears the signature and returns it to pending (Review Focus 1)", async () => {
+  test("a malformed nonce ('x') is refused with 400, never a 500", async () => {
     const s = setup();
     const id = await pending(s);
     const p = await current(s, id);
-    const msg = approvalMessage(p, 1n);
-    const signature = await ADMIN.signTypedData(approvalTypedData(msg));
-    await handleAdminApprove(s.adminReq(`/x`, "POST", { message: toJsonApproval(msg), signature }), s.env, id, ADMIN.address);
-    const r = await handleAdminPatch(s.adminReq(`/x`, "PATCH", { question: "Will Circle announce native USDC on two new chains?" }), s.env, id, ADMIN.address, { now: T0 });
-    const { proposal } = (await r.json()) as { proposal: Proposal };
-    expect(proposal.status).toBe("pending");
-    expect(proposal.approval).toBeUndefined();
-    const feed = (await (await handleApprovedFeed(new Request("https://x"), s.env)).json()) as { approvals: unknown[] };
-    expect(feed.approvals).toEqual([]);
+    const badMessage = { ...toJsonApproval(approvalMessage(p, 1n)), nonce: "x" };
+    const res = await handleAdminApprove(s.adminReq(`/x`, "POST", { message: badMessage, signature: "0x00" }), s.env, id, ADMIN.address);
+    expect(res.status).toBe(400);
+  });
+  test("an approved (or opened) proposal can no longer be edited or rejected (R9): the agent may already be mid-open", async () => {
+    const s = setup();
+    const id = await pending(s);
+    await approve(s, id);
+    const before = (await (await handleApprovedFeed(new Request("https://x"), s.env)).json()) as { approvals: unknown[] };
+
+    const patchRes = await handleAdminPatch(s.adminReq(`/x`, "PATCH", { question: "Will Circle announce native USDC on two new chains?" }), s.env, id, ADMIN.address, { now: T0 });
+    expect(patchRes.status).toBe(409);
+    const rejectRes = await handleAdminReject(s.adminReq(`/x`, "POST", { reason: "changed mind" }), s.env, id);
+    expect(rejectRes.status).toBe(409);
+
+    const after = (await (await handleApprovedFeed(new Request("https://x"), s.env)).json()) as { approvals: { id: string }[] };
+    expect(after).toEqual(before);
+    expect(after.approvals[0].id).toBe(id);
   });
   test("a nonce not above the admin's last one is refused (replay)", async () => {
     const s = setup();
@@ -109,9 +151,18 @@ describe("admin review", () => {
   test("reject stores the reason; list filters by status", async () => {
     const s = setup();
     const id = await pending(s);
-    await handleAdminReject(s.adminReq(`/x`, "POST", { reason: "no single public source" }), s.env, id, ADMIN.address);
+    await handleAdminReject(s.adminReq(`/x`, "POST", { reason: "no single public source" }), s.env, id);
     const list = (await (await handleAdminList(s.adminReq(`/api/admin/market-proposals?status=rejected`, "GET"), s.env)).json()) as { proposals: Proposal[] };
     expect(list.proposals[0]).toMatchObject({ id, status: "rejected", reason: "no single public source" });
+  });
+  test("patching a rejected proposal back to pending clears the old rejection reason", async () => {
+    const s = setup();
+    const id = await pending(s);
+    await handleAdminReject(s.adminReq(`/x`, "POST", { reason: "no single public source" }), s.env, id);
+    const r = await handleAdminPatch(s.adminReq(`/x`, "PATCH", { question: "Will Circle announce native USDC on two new chains?" }), s.env, id, ADMIN.address, { now: T0 });
+    const { proposal } = (await r.json()) as { proposal: Proposal };
+    expect(proposal.status).toBe("pending");
+    expect(proposal.reason).toBeUndefined();
   });
   test("an outcome needs an approved/opened proposal and the admin's signature", async () => {
     const s = setup();
@@ -119,5 +170,25 @@ describe("admin review", () => {
     const out = { proposalId: id, value: 1n, since: BigInt(nowS), evidenceUrl: "https://www.circle.com/blog/x", nonce: 9n };
     const sig = await ADMIN.signTypedData(outcomeTypedData(out));
     expect((await handleAdminOutcome(s.adminReq(`/x`, "POST", { message: toJsonOutcome(out), signature: sig }), s.env, id, ADMIN.address)).status).toBe(409);
+  });
+  test("an outcome on an approved proposal succeeds and appears in the outcomes feed", async () => {
+    const s = setup();
+    const id = await pending(s);
+    expect((await approve(s, id)).res.status).toBe(200);
+    const out = { proposalId: id, value: 1n, since: BigInt(nowS), evidenceUrl: "https://www.circle.com/blog/x", nonce: 2n };
+    const sig = await ADMIN.signTypedData(outcomeTypedData(out));
+    const res = await handleAdminOutcome(s.adminReq(`/x`, "POST", { message: toJsonOutcome(out), signature: sig }), s.env, id, ADMIN.address);
+    expect(res.status).toBe(200);
+    const feed = (await (await handleOutcomesFeed(new Request("https://x"), s.env)).json()) as { outcomes: { id: string }[] };
+    expect(feed.outcomes.map((o) => o.id)).toEqual([id]);
+  });
+  test("an outcome signed by another wallet is refused", async () => {
+    const s = setup();
+    const id = await pending(s);
+    expect((await approve(s, id)).res.status).toBe(200);
+    const out = { proposalId: id, value: 1n, since: BigInt(nowS), evidenceUrl: "https://www.circle.com/blog/x", nonce: 2n };
+    const wrongSig = await OTHER.signTypedData(outcomeTypedData(out));
+    const res = await handleAdminOutcome(s.adminReq(`/x`, "POST", { message: toJsonOutcome(out), signature: wrongSig }), s.env, id, ADMIN.address);
+    expect(res.status).toBe(403);
   });
 });

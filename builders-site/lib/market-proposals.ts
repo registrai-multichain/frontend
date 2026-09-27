@@ -77,10 +77,11 @@ export async function handleSubmit(req: Request, env: Env, deps: { now?: number;
   return json({ id, status: p.status }, 201, h);
 }
 
-/** GET /api/market-proposals/<id> (public: no contact) */
+/** GET /api/market-proposals/<id> (public: no contact). CORS: app.registrai.cc's status page reads this cross-origin. */
 export async function handleStatus(_req: Request, env: Env, id: string): Promise<Response> {
   const p = await load(env, id);
-  return p ? json({ proposal: publicView(p) }, 200, { "cache-control": "public, max-age=15" }) : errorJson(404, "no such proposal");
+  const h = cors(env);
+  return p ? json({ proposal: publicView(p) }, 200, { ...h, "cache-control": "public, max-age=15" }) : json({ error: "no such proposal" }, 404, h);
 }
 
 async function listAll(env: Env): Promise<Proposal[]> {
@@ -123,11 +124,15 @@ export async function handleAdminList(req: Request, env: Env): Promise<Response>
 }
 
 const EDITABLE = ["question", "rule", "source", "deadline", "creatorPayee", "asset", "comparator", "price"] as const;
+/** An approved (or already-opened) proposal is immutable: the agent may be mid-open on it (R9). */
+const ALREADY_APPROVED = "already approved: the agent opens it within a minute";
+const isLocked = (p: Proposal) => p.status === "opened" || p.status === "approved";
+
 /** PATCH /api/admin/market-proposals/<id>: an edit voids any signature (it must be signed again). */
 export async function handleAdminPatch(req: Request, env: Env, id: string, _admin: string, deps: { now?: number } = {}): Promise<Response> {
   const p = await load(env, id);
   if (!p) return errorJson(404, "no such proposal");
-  if (p.status === "opened") return errorJson(409, "already opened: it can no longer change");
+  if (isLocked(p)) return errorJson(409, ALREADY_APPROVED);
   const patch = (await readJson(req)) as Record<string, unknown> | undefined;
   if (!patch || typeof patch !== "object") return errorJson(400, "expected a JSON object");
   const merged: Record<string, unknown> = { ...p };
@@ -137,15 +142,16 @@ export async function handleAdminPatch(req: Request, env: Env, id: string, _admi
   if (!v.ok) return errorJson(400, v.error, v.field ? { field: v.field } : {});
   const next: Proposal = { ...p, ...v.value, status: LIVE_KINDS.includes(v.value.kind) ? "pending" : "queued" };
   delete next.approval;
+  delete next.reason;
   await save(env, next);
   return json({ proposal: next });
 }
 
 /** POST /api/admin/market-proposals/<id>/reject {reason} */
-export async function handleAdminReject(req: Request, env: Env, id: string, _admin: string): Promise<Response> {
+export async function handleAdminReject(req: Request, env: Env, id: string): Promise<Response> {
   const p = await load(env, id);
   if (!p) return errorJson(404, "no such proposal");
-  if (p.status === "opened") return errorJson(409, "already opened");
+  if (isLocked(p)) return errorJson(409, ALREADY_APPROVED);
   const b = (await readJson(req)) as { reason?: unknown } | undefined;
   const reason = typeof b?.reason === "string" ? b.reason.trim().slice(0, 300) : "";
   if (!reason) return errorJson(400, "give a reason (it is shown on the proposal's status page)", { field: "reason" });
@@ -173,7 +179,12 @@ export async function handleAdminApprove(req: Request, env: Env, id: string, adm
   if (p.status !== "pending" && p.status !== "approved") return errorJson(409, `cannot approve a ${p.status} proposal`);
   const b = (await readJson(req)) as { message?: ApprovalMessageJson; signature?: string } | undefined;
   if (!b?.message || typeof b.signature !== "string") return errorJson(400, "message and signature required");
-  const expected = toJsonApproval(approvalMessage(p, BigInt(b.message.nonce)));
+  let expected: ApprovalMessageJson;
+  try {
+    expected = toJsonApproval(approvalMessage(p, BigInt(b.message.nonce)));
+  } catch {
+    return errorJson(400, "bad message");
+  }
   if (!same(expected, b.message)) return errorJson(400, "the signed message does not match this proposal (reload it)");
   let signer: string;
   try {
