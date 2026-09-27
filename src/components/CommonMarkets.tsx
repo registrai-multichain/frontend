@@ -1763,6 +1763,8 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
   const known = snap.markets.filter((m) => snap.redeemable[m.marketId] !== undefined);
   const claims = claimList(known, snap.redeemable);
   const toSettle = snap.markets.filter((m) => snap.settleable[m.marketId]);
+  const rows = new Set([...toSettle.map((m) => `settle:${m.marketId}`), ...claims.map((c) => `claim:${c.market.marketId}`)]);
+  const orphan = tx.st.scope && /^(claim|settle):/.test(tx.st.scope) && !rows.has(tx.st.scope) ? tx.st.scope : undefined;
   const assetOf = (key: string) => D.assets.find((a) => a.key === key);
   const eventOf = (key: string) => D.events.find((e) => e.key === key);
   return (
@@ -1807,6 +1809,13 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
             );
           })}
         </ul>
+      )}
+      {orphan && (
+        // A redeemed claim (or a resolved/voided market) leaves its list: keep its
+        // confirmation - or error - on screen here instead of losing it with the row.
+        <div className="mb-3 rounded-xl border border-line bg-bg-elev px-4 py-1">
+          <TxLine tx={tx} scope={orphan} />
+        </div>
       )}
       {claims.length === 0 ? (
         <p className="rounded-xl border border-line bg-bg-elev px-4 py-3 text-[13px] text-fg-dim">

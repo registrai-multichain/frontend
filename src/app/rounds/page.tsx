@@ -11,7 +11,7 @@ import { ROUNDS } from "@/lib/rounds";
 export default function RoundsPage() {
   const here = ROUNDS.deployed && ROUNDS.chainId === PERENNIAL.chain.id;
   return (
-    <PerennialShell>
+    <PerennialShell status={here ? `${ROUNDS.label} · ${ROUNDS.testnet ? "test USDC" : "live"}` : undefined}>
       {here ? (
         <CommonMarkets />
       ) : (
