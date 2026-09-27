@@ -1,31 +1,32 @@
 {
-  "network": "mainnet",
-  "chainId": 5042,
-  "note": "Perennial is NOT deployed on Arc mainnet yet. Fill these from the mainnet deployment record once it exists; while any is null the Perennial UI renders a not-deployed state and makes no contract calls.",
-  "deployBlock": null,
-  "operator": null,
-  "contracts": {
-    "NanoLedger": null,
-    "BuilderRegistry": null,
-    "CaretakerRegistry": null,
-    "MarketsPerennial": null,
-    "BuilderFund": null,
-    "SeasonPool": null,
-    "VerifiedBuilderBadge": null,
-    "WonderEscrow": null
-  },
-  "builders": {
-    "note": "Mainnet PHASE 1 (contracts/script/DeployBuilders.s.sol): BuilderRegistry + CaretakerRegistry + VerifiedBuilderBadge only. Fill from the deploy log. Once BuilderRegistry is set, /builders, /verify and the gallery sync run on Arc mainnet even while every market contract above is still null. operator = the keeper's OPERATOR (caretaker + badge STATUS); deployBlock = the block DeployBuilders ran in.",
-    "deployBlock": 22642042,
-    "operator": "0xe528487069a24DA29c0360e61378db07ECAE88c9",
-    "BuilderRegistry": "0xBB6F4B18776Fd20Bb53a1205375273373DD1E5bA",
-    "CaretakerRegistry": "0x64725935d90F0aa6f3c8642Bb9cACF44CAA46224",
-    "VerifiedBuilderBadge": "0xF229d2Ed13Cc35d46fa7676a579495E5C80CFEB2",
-    "roles": {
-      "adminSafe": "0xFeE926e8Be2D1C6192213cf20f31D94Dad1e80Fb",
-      "onboarder": "0x80e81588175558D565FFC1f63Fe0513a61316405",
-      "deployer": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e"
+    "network": "mainnet",
+    "chainId": 5042,
+    "note": "Perennial is NOT deployed on Arc mainnet yet. Fill these from the mainnet deployment record once it exists; while any is null the Perennial UI renders a not-deployed state and makes no contract calls.",
+    "deployBlock": null,
+    "operator": null,
+    "contracts": {
+        "NanoLedger": null,
+        "BuilderRegistry": null,
+        "CaretakerRegistry": null,
+        "MarketsPerennial": null,
+        "BuilderFund": null,
+        "SeasonPool": null,
+        "VerifiedBuilderBadge": null,
+        "WonderEscrow": null
     },
-    "deployedAt": "2026-09-25"
-  }
+    "builders": {
+        "note": "Mainnet PHASE 1 (contracts/script/DeployBuilders.s.sol): BuilderRegistry + CaretakerRegistry + VerifiedBuilderBadge only. Fill from the deploy log. Once BuilderRegistry is set, /builders, /verify and the gallery sync run on Arc mainnet even while every market contract above is still null. operator = the keeper's OPERATOR (caretaker + badge STATUS); deployBlock = the block DeployBuilders ran in.",
+        "deployBlock": 22642042,
+        "operator": "0xe528487069a24DA29c0360e61378db07ECAE88c9",
+        "BuilderRegistry": "0xBB6F4B18776Fd20Bb53a1205375273373DD1E5bA",
+        "CaretakerRegistry": "0x64725935d90F0aa6f3c8642Bb9cACF44CAA46224",
+        "VerifiedBuilderBadge": "0xF229d2Ed13Cc35d46fa7676a579495E5C80CFEB2",
+        "roles": {
+            "adminSafe": "0xFeE926e8Be2D1C6192213cf20f31D94Dad1e80Fb",
+            "onboarder": "0x80e81588175558D565FFC1f63Fe0513a61316405",
+            "deployer": "0x84C799941C6B69AbB296EC46a02E4e0772Ad2E5e"
+        },
+        "deployedAt": "2026-09-25",
+        "ProjectNominations": "0x6d87C64CD64e5c8b3204fCBFD28720b27C80F354"
+    }
 }
