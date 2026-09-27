@@ -69,13 +69,13 @@ export function MarketsHome({ data, tx, initialTab = "trending" }: { data: Peren
     <>
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="pa-h1">What will builders ship?</h1>
+          <h1 className="pa-h1 pu-h">What will builders ship?</h1>
           <p className="pa-lede">Bet on real milestones. Half of the 1% fee goes to the builder who shipped it.</p>
         </div>
         {tx.needsConnect ? (
-          <button type="button" className="pa-btn pa-btn--quiet" onClick={tx.connectOrSwitch}>Connect to open a market</button>
+          <button type="button" className="pa-btn pa-btn--quiet pu-btn pu-btn--quiet" onClick={tx.connectOrSwitch}>Connect to open a market</button>
         ) : (
-          <button type="button" className="pa-btn pa-btn--quiet" onClick={() => setCreate(tab === "unclaimed" && W ? "wonder" : "builder")}>+ Open a market</button>
+          <button type="button" className="pa-btn pa-btn--quiet pu-btn pu-btn--quiet" onClick={() => setCreate(tab === "unclaimed" && W ? "wonder" : "builder")}>+ Open a market</button>
         )}
       </header>
 
@@ -108,10 +108,10 @@ export function MarketsHome({ data, tx, initialTab = "trending" }: { data: Peren
           })}
         </ul>
       ) : (
-        <div className="pa-card mt-5 text-center">
+        <div className="pa-card pu-card pu-card--static mt-5 text-center">
           <p>{empty}</p>
           {ov && tab !== "ended" && !tx.needsConnect && (
-            <button type="button" className="pa-btn mt-3" onClick={() => setCreate(tab === "unclaimed" && W ? "wonder" : "builder")}>Open a market</button>
+            <button type="button" className="pa-btn pu-btn pu-btn--primary mt-3" onClick={() => setCreate(tab === "unclaimed" && W ? "wonder" : "builder")}>Open a market</button>
           )}
         </div>
       )}
@@ -120,10 +120,10 @@ export function MarketsHome({ data, tx, initialTab = "trending" }: { data: Peren
       {ov && ov.hiddenUnapproved > 0 && <p className="pa-muted pa-small mt-1">{ov.hiddenUnapproved} market(s) on unapproved feeds are hidden.</p>}
 
       <section className="pa-strip mt-10" aria-label="This epoch">
-        <div className="pa-card"><span className="pa-muted pa-small">Builder income held</span><b>{econ ? usdText(econ.outstanding) : "—"}</b></div>
-        <div className="pa-card"><span className="pa-muted pa-small">Season pool</span><b>{econ ? usdText(econ.unallocated) : "—"}</b></div>
-        <div className="pa-card"><span className="pa-muted pa-small">Epoch {econ ? econ.epoch.toString() : ""} ends in</span><b>{econ && data.chainNow ? durationText(econ.epochEndsAt - data.chainNow) : "—"}</b></div>
-        <div className="pa-card"><span className="pa-muted pa-small">Top builder this epoch</span><b>{top ? top.name : "—"}</b></div>
+        <div className="pa-card pu-card pu-card--static"><span className="pa-muted pa-small">Builder income held</span><b className="pu-h">{econ ? usdText(econ.outstanding) : "—"}</b></div>
+        <div className="pa-card pu-card pu-card--static"><span className="pa-muted pa-small">Season pool</span><b className="pu-h">{econ ? usdText(econ.unallocated) : "—"}</b></div>
+        <div className="pa-card pu-card pu-card--static"><span className="pa-muted pa-small">Epoch {econ ? econ.epoch.toString() : ""} ends in</span><b className="pu-h">{econ && data.chainNow ? durationText(econ.epochEndsAt - data.chainNow) : "—"}</b></div>
+        <div className="pa-card pu-card pu-card--static"><span className="pa-muted pa-small">Top builder this epoch</span><b className="pu-h">{top ? top.name : "—"}</b></div>
       </section>
 
       {create === "builder" && <CreateMarket data={data} tx={tx} onClose={() => setCreate(null)} />}

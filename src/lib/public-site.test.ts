@@ -37,7 +37,7 @@ describe("public registrai.cc", () => {
 
 describe("app.registrai.cc", () => {
   test("serves the markets app: its root opens Markets; the bridge and builder pages point to their own sites", () => {
-    expect([...APP_SITE_ROUTES].sort()).toEqual(["atlas", "perennial", "rounds"]);
+    expect([...APP_SITE_ROUTES].sort()).toEqual(["atlas", "perennial", "propose", "rounds"]);
     const r = appSiteRedirects();
     expect(r).toContain("/ /perennial/ 302");
     expect(r).toContain("/bridge https://registrai.cc/bridge/ 302");
@@ -45,7 +45,7 @@ describe("app.registrai.cc", () => {
     expect(r).toContain("/builders https://builder.registrai.cc/builders/ 302");
     expect(r).toContain("/transparency/* https://dashboard.registrai.cc/ 302");
     const sources = r.split("\n").filter((l) => l && !l.startsWith("#")).map((l) => l.split(" ")[0]);
-    for (const kept of ["/perennial", "/perennial/*", "/rounds", "/atlas", "/_next/*"]) expect(sources).not.toContain(kept);
+    for (const kept of ["/perennial", "/perennial/*", "/rounds", "/atlas", "/propose", "/propose/*", "/_next/*"]) expect(sources).not.toContain(kept);
   });
 });
 

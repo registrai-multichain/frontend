@@ -19,20 +19,20 @@ export function MarketCard({ data, m, waiting, anchorId }: { data: PerennialData
     waiting && waiting > 0n ? `${usdText(waiting)} waiting for the team` : null,
   ].filter(Boolean);
   return (
-    <li className="pa-card pa-mcard" id={anchorId}>
-      <span className="pa-pill self-start" data-tone={wonder ? "unclaimed" : undefined}>
+    <li className="pa-card pu-card pa-mcard" id={anchorId}>
+      <span className="pa-pill pu-pill self-start" data-tone={wonder ? "unclaimed" : undefined}>
         {wonder ? `Unclaimed · ${data.subjectFor(m)}` : `${data.subjectFor(m)}${metric ? ` · ${metric}` : ""}`}
       </span>
-      <Link href={href} className="pa-mcard-q">{data.questionFor(m)}</Link>
+      <Link href={href} className="pa-mcard-q pu-h">{data.questionFor(m)}</Link>
       <p className="pa-muted pa-small">{meta.join(" · ")}</p>
       <div className="pa-bar" role="img" aria-label={`${yp}% chance of Yes`}><i style={{ width: `${yp}%` }} /></div>
       {st.canTrade ? (
         <div className="pa-yn">
-          <Link href={`${href}&side=yes`} className="pa-btn pa-btn--yes"><span>Yes</span><span className="tnum">{yp}¢</span></Link>
-          <Link href={`${href}&side=no`} className="pa-btn pa-btn--no"><span>No</span><span className="tnum">{100 - yp}¢</span></Link>
+          <Link href={`${href}&side=yes`} className="pa-btn pa-btn--yes pu-btn pu-btn--up"><span>Yes</span><span className="tnum">{yp}¢</span></Link>
+          <Link href={`${href}&side=no`} className="pa-btn pa-btn--no pu-btn pu-btn--down"><span>No</span><span className="tnum">{100 - yp}¢</span></Link>
         </div>
       ) : (
-        <Link href={href} className="pa-btn pa-btn--quiet pa-btn--block">{statusShort(st.key)} · open</Link>
+        <Link href={href} className="pa-btn pa-btn--quiet pa-btn--block pu-btn pu-btn--quiet">{statusShort(st.key)} · open</Link>
       )}
     </li>
   );

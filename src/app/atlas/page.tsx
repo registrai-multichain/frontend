@@ -31,7 +31,7 @@ export const metadata: Metadata = {
 export default function AtlasPage() {
   return (
     <PerennialShell>
-      <article className="perennial-app-page">
+      <article className="perennial-app-page pu-bridge">
         <header className="perennial-app-header">
           <div>
             <div className="perennial-app-status">

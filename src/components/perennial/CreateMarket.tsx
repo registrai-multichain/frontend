@@ -116,7 +116,7 @@ export function CreateMarket({ data, tx, onClose }: { data: PerennialData; tx: P
         {activeBuilders.length > 0 && (
           <label className="block">
             <span className="pa-label">Builder</span>
-            <select className="pa-input" value={createBuilder?.builderId ?? ""} onChange={(e) => { setCBuilder(Number(e.target.value)); setCFeedPick(undefined); }}>
+            <select className="pa-input pu-input" value={createBuilder?.builderId ?? ""} onChange={(e) => { setCBuilder(Number(e.target.value)); setCFeedPick(undefined); }}>
               {activeBuilders.map((b) => <option key={b.builderId} value={b.builderId}>{b.name}</option>)}
             </select>
           </label>
@@ -124,19 +124,19 @@ export function CreateMarket({ data, tx, onClose }: { data: PerennialData; tx: P
         {cProjects.length > 1 && (
           <label className="block">
             <span className="pa-label">Project</span>
-            <select className="pa-input" value={cProject?.milestoneFeedId ?? ""} onChange={(e) => setCFeedPick(e.target.value as Hex)}>
+            <select className="pa-input pu-input" value={cProject?.milestoneFeedId ?? ""} onChange={(e) => setCFeedPick(e.target.value as Hex)}>
               {cProjects.map((p) => <option key={p.id} value={p.milestoneFeedId!}>{sourceLabel(p.source)}{p.status === "verified" ? "" : ` (${p.status})`}</option>)}
             </select>
           </label>
         )}
         <div className="grid grid-cols-2 gap-3">
-          <label className="block"><span className="pa-label">Runs for (days)</span><input className="pa-input" value={cDays} onChange={(e) => setCDays(e.target.value)} inputMode="numeric" /></label>
-          <label className="block"><span className="pa-label">Your liquidity (min {ov ? usdText(ov.minLiquidity) : "$5"})</span><input className="pa-input" value={cLiq} onChange={(e) => setCLiq(e.target.value)} inputMode="decimal" /></label>
+          <label className="block"><span className="pa-label">Runs for (days)</span><input className="pa-input pu-input" value={cDays} onChange={(e) => setCDays(e.target.value)} inputMode="numeric" /></label>
+          <label className="block"><span className="pa-label">Your liquidity (min {ov ? usdText(ov.minLiquidity) : "$5"})</span><input className="pa-input pu-input" value={cLiq} onChange={(e) => setCLiq(e.target.value)} inputMode="decimal" /></label>
         </div>
         {preview && (
-          <div className="pa-card">
+          <div className="pa-card pu-card pu-card--static">
             <p className="pa-small pa-muted">The question will be</p>
-            <p className="pa-h3 mt-1">{preview}</p>
+            <p className="pa-h3 pu-h mt-1">{preview}</p>
             {latest && <p className="pa-small pa-muted mt-1">It&apos;s at {latest.value.toString()} now{latest.finalized ? "" : " (not final yet)"}.</p>}
           </div>
         )}
@@ -146,7 +146,7 @@ export function CreateMarket({ data, tx, onClose }: { data: PerennialData; tx: P
           {ledgerBal > 0n ? ` You have ${usdText(ledgerBal)} to use.` : ""}
         </p>
         {blocker && <p className="text-down pa-small">{blocker}</p>}
-        <button type="button" className="pa-btn pa-btn--block" onClick={create} disabled={tx.busy || Boolean(blocker)}>
+        <button type="button" className="pa-btn pa-btn--block pu-btn pu-btn--primary" onClick={create} disabled={tx.busy || Boolean(blocker)}>
           {tx.pending === "create" ? "Opening…" : "Open market"}
         </button>
       </div>

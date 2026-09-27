@@ -1,7 +1,7 @@
 /**
  * What the PUBLIC registrai.cc serves: the landing and the USDC bridge. The
  * builder registry lives on builder.registrai.cc and the markets app (Markets,
- * Rounds, Builders, Atlas, How it works) on app.registrai.cc, built for mainnet;
+ * Rounds, Propose, Builders, Atlas, How it works) on app.registrai.cc, built for mainnet;
  * every other app route runs on testnet and redirects to the landing (the team uses the full app at testnet.registrai.cc, behind
  * Cloudflare Access). scripts/write-public-redirects.ts writes the Pages
  * `_redirects` from this at deploy time (registrai-web only, never the
@@ -21,7 +21,7 @@ export const PUBLIC_ROUTES = ["bridge"] as const;
 export const BUILDERS_SITE_ROUTES = ["builders", "verify", "admin", "guide", "suggest"] as const;
 
 /** App routes that move to the markets app, app.registrai.cc (same path; built for mainnet). */
-export const APP_SITE_ROUTES = ["atlas", "perennial", "rounds"] as const;
+export const APP_SITE_ROUTES = ["atlas", "perennial", "rounds", "propose"] as const;
 
 /** App routes served by the transparency dashboard, dashboard.registrai.cc (at its root; built for mainnet). */
 export const DASHBOARD_SITE_ROUTES = ["transparency"] as const;

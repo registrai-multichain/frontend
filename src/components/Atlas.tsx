@@ -127,12 +127,12 @@ export function Atlas() {
           />
           {view.emptyGlobe && !selected && (
             <div className="atlas-globe-empty">
-              <p className="pa-h3">The atlas fills in as builders verify</p>
+              <p className="pa-h3 pu-h">The atlas fills in as builders verify</p>
               <p className="pa-muted pa-small mt-1">
                 Each verified builder lights up their country
                 {season ? `. ${season.label} runs ${fmtDate(season.startedAt)} – ${fmtDate(season.endsAt)}` : ""}.
               </p>
-              <Link className="pa-btn mt-3" href="/verify">Verify your project</Link>
+              <Link className="pa-btn pu-btn pu-btn--primary mt-3" href="/verify">Verify your project</Link>
             </div>
           )}
         </div>
@@ -325,7 +325,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="atlas-stat">
       <dt className="caption text-fg-dim">{label}</dt>
-      <dd className="tnum">{value}</dd>
+      <dd className="tnum pu-h">{value}</dd>
     </div>
   );
 }

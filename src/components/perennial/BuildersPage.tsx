@@ -21,8 +21,8 @@ import { CHAIN, D, HUMAN, usePerennialTx } from "./usePerennialTx";
 export function BuildersPage() {
   if (!D.deployed) {
     return (
-      <div className="pa-card max-w-[62ch]">
-        <h1 className="pa-h2">Builders</h1>
+      <div className="pa-card pu-card pu-card--static max-w-[62ch]">
+        <h1 className="pa-h2 pu-h">Builders</h1>
         <p className="pa-muted mt-2">Markets aren&apos;t live on {D.label} yet. See every verified builder at <a className="pa-link" href="https://builder.registrai.cc">builder.registrai.cc</a>.</p>
       </div>
     );
@@ -67,26 +67,26 @@ function Live() {
 
   return (
     <>
-      <h1 className="pa-h1">Builders</h1>
+      <h1 className="pa-h1 pu-h">Builders</h1>
       <p className="pa-lede">Every builder these markets pay. Half of each trading fee on a market about a builder is their income, paid out after each epoch.</p>
 
       <section className="mt-6">
         {tx.needsConnect ? (
-          <div className="pa-card flex flex-wrap items-center justify-between gap-3">
+          <div className="pa-card pu-card pu-card--static flex flex-wrap items-center justify-between gap-3">
             <p>Are you a builder? Connect to see your income and collect it.</p>
-            <button type="button" className="pa-btn" onClick={tx.connectOrSwitch}>{tx.address ? `Switch to ${D.label}` : "Connect wallet"}</button>
+            <button type="button" className="pa-btn pu-btn pu-btn--primary" onClick={tx.connectOrSwitch}>{tx.address ? `Switch to ${D.label}` : "Connect wallet"}</button>
           </div>
         ) : !acct ? (
           <p className="pa-muted">{acctError ? `Couldn't read your builder status: ${humanizeError(acctError, HUMAN)}` : "Reading your builder status…"}</p>
         ) : !acct.registered || !myBuilder ? (
-          <div className="pa-card">
-            <h2 className="pa-h3">Claim your project</h2>
+          <div className="pa-card pu-card pu-card--static">
+            <h2 className="pa-h3 pu-h">Claim your project</h2>
             <p className="pa-muted mt-1">Sign a proof with this wallet, publish it in your repo or on your domain, then register. Once verified, half of every trading fee on markets about you is your income.</p>
-            <a className="pa-btn mt-3" href="https://builder.registrai.cc/verify/">Verify your project →</a>
+            <a className="pa-btn pu-btn pu-btn--primary mt-3" href="https://builder.registrai.cc/verify/">Verify your project →</a>
           </div>
         ) : (
           <div className="pa-stack">
-            <h2 className="pa-h2">You · {myBuilder.name}</h2>
+            <h2 className="pa-h2 pu-h">You · {myBuilder.name}</h2>
             <p className="pa-muted">
               Your income is half of the 1% fee on every market about you. After each epoch anyone can pay it out: a progressive tax goes to the
               season pool, 1% of the rest to Registrai, and the rest to your payout address. <Link className="pa-link" href="/perennial/economy/">How it works</Link>
@@ -99,7 +99,7 @@ function Live() {
       {focus && (
         <section className="mt-10 pa-stack" aria-label={focus.name}>
           <div className="flex items-center justify-between gap-3">
-            <h2 className="pa-h2">{focus.name}</h2>
+            <h2 className="pa-h2 pu-h">{focus.name}</h2>
             <button type="button" className="pa-link" onClick={() => router.replace("/perennial/builders/", { scroll: false })}>Close</button>
           </div>
           <BuilderBadgeSection builderId={focus.builderId} owner={focus.owner} name={focus.name} source={focus.source} snapshot={focus.badge} viewer={tx.address} />

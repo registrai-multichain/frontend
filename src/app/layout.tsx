@@ -4,6 +4,7 @@ import { Providers } from "@/components/Providers";
 import { REGISTRAI_X_HANDLE } from "@/lib/regi";
 import "./globals.css";
 import "./paper.css";
+import "../styles/paper-ui.css";
 
 const mono = JetBrains_Mono({
   subsets: ["latin"],

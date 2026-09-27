@@ -5,7 +5,7 @@ import { APP_NAV, DASHBOARD_URL } from "./site-nav";
 
 describe("the app and the dashboard are separate sites", () => {
   test("the app's navbar is the app only: no Transparency tab", () => {
-    expect(APP_NAV.map((n) => n.label)).toEqual(["Markets", "Rounds", "Builders", "Atlas", "How it works"]);
+    expect(APP_NAV.map((n) => n.label)).toEqual(["Markets", "Rounds", "Propose", "Builders", "Atlas", "How it works"]);
     expect(APP_NAV.some((n) => n.href.includes("transparency"))).toBe(false);
   });
 

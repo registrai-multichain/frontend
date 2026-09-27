@@ -14,7 +14,20 @@
  */
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { formatPrice } from "@/lib/rounds";
-import { niceTicks, resample, smoothPath, stepPath, trimSeries, type Pt } from "@/lib/rounds-chart";
+import {
+  BAND_LABEL_Y,
+  inPlayBand,
+  labelWidth,
+  niceTicks,
+  overlaps,
+  resample,
+  smoothPath,
+  stepPath,
+  textBox,
+  trimSeries,
+  type Box,
+  type Pt,
+} from "@/lib/rounds-chart";
 
 export type Tick = { t: number; p: number };
 export type PriceStream = {
@@ -303,12 +316,23 @@ export function PriceChart({
   const area = line.length > 1 ? `${d}L${line[line.length - 1].x},${H}L${line[0].x},${H}Z` : "";
 
   const above = head !== undefined && startPrice !== undefined ? head > startPrice : undefined;
-  const tone = above === undefined ? "var(--accent)" : above ? "var(--up)" : "var(--down)";
-  // Axis labels, minus any the live price tag would cover.
-  const ticks = niceTicks(yLo, yHi, 3).filter((v) => Y(v) > 8 && Y(v) < H - 4 && (head === undefined || Math.abs(Y(v) - Y(head)) > 16));
+  const tone = above === undefined ? "var(--pu-accent, var(--accent))" : above ? "var(--pu-up, var(--up))" : "var(--pu-down, var(--down))";
+  // The in-play band's labels keep clear of the price-to-beat caption and the live price tag.
+  const caption = startPrice !== undefined ? `price to beat ${formatPrice(startPrice, decimals)}` : undefined;
+  const avoid: Box[] = [];
+  if (caption !== undefined) avoid.push(textBox(4, Y(startPrice!) - 4, labelWidth(caption)));
+  if (head !== undefined) avoid.push({ x0: W + 2, y0: Y(head) - 9, x1: W + padR - 2, y1: Y(head) + 9 });
+  const band = roundStart !== undefined && roundEnd !== undefined ? inPlayBand(X(roundStart), X(roundEnd), W, width, avoid) : undefined;
+  // Axis labels, minus any the live price tag would cover or the "next round" label sits on.
+  const ticks = niceTicks(yLo, yHi, 3).filter(
+    (v) =>
+      Y(v) > 8 &&
+      Y(v) < H - 4 &&
+      (head === undefined || Math.abs(Y(v) - Y(head)) > 16) &&
+      !(band?.next && overlaps(textBox(W + 6, Y(v) + 4, labelWidth(formatPrice(v, decimals))), band.next.box)),
+  );
   const minutes: number[] = [];
   for (let t = Math.ceil(x0 / 120) * 120; t <= x1; t += 120) minutes.push(t);
-  const inPlay = roundStart !== undefined && roundEnd !== undefined;
 
   return (
     <div ref={box} className="relative w-full select-none" style={{ height }}>
@@ -324,17 +348,23 @@ export function PriceChart({
             </clipPath>
           </defs>
 
-          {/* the round in play */}
-          {inPlay && (
+          {/* the round in play, kept inside the chart */}
+          {band && (
             <g>
-              <rect x={X(roundStart!)} y={0} width={Math.max(0, X(roundEnd!) - X(roundStart!))} height={H} fill="var(--fg)" opacity="0.035" />
-              <line x1={X(roundEnd!)} x2={X(roundEnd!)} y1={0} y2={H} stroke="var(--line-strong)" strokeDasharray="2 3" />
-              <text x={X(roundStart!) + 4} y={13} className="fill-fg-dim" fontSize="12">
-                in play
-              </text>
-              <text x={X(roundEnd!) + 4} y={13} className="fill-fg-dim" fontSize="12">
-                next round
-              </text>
+              <rect x={band.x} y={0} width={band.w} height={H} fill="var(--fg)" opacity="0.035" clipPath={`url(#clip-${gid})`} />
+              {band.endX !== null && (
+                <line x1={band.endX} x2={band.endX} y1={0} y2={H} stroke="var(--line-strong)" strokeDasharray="2 3" />
+              )}
+              {band.inPlay && (
+                <text x={band.inPlay.x} y={BAND_LABEL_Y} textAnchor={band.inPlay.anchor} className="fill-fg-dim" fontSize="12">
+                  in play
+                </text>
+              )}
+              {band.next && (
+                <text x={band.next.x} y={BAND_LABEL_Y} textAnchor={band.next.anchor} className="fill-fg-dim" fontSize="12">
+                  next round
+                </text>
+              )}
             </g>
           )}
 
@@ -363,7 +393,7 @@ export function PriceChart({
             <g>
               <line x1={0} x2={W} y1={Y(startPrice)} y2={Y(startPrice)} stroke="var(--fg-mute)" strokeDasharray="4 4" strokeWidth="1" />
               <text x={4} y={Y(startPrice) - 4} className="tnum fill-fg-mute" fontSize="12">
-                price to beat {formatPrice(startPrice, decimals)}
+                {caption}
               </text>
             </g>
           )}
@@ -422,7 +452,7 @@ export function OddsChart({
   pts.push({ x: X(tNow), y: Y(head) });
   const d = stepPath(pts);
   const area = pts.length > 1 ? `${d}V${H}H${pts[0].x}Z` : "";
-  const tone = head >= 0.5 ? "var(--up)" : "var(--down)";
+  const tone = head >= 0.5 ? "var(--pu-up, var(--up))" : "var(--pu-down, var(--down))";
 
   return (
     <div ref={box} className="relative w-full select-none" style={{ height }}>

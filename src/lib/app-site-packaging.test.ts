@@ -26,3 +26,9 @@ test("dashboard.registrai.cc: built for mainnet, ships only the transparency pag
   expect(build).toContain("dashboardSiteRedirects()");
   expect(build).toMatch(/connect-src 'self' https:\/\/rpc\.mainnet\.arc\.io https:\/\/api\.dexscreener\.com;/);
 });
+
+test("the app site ships /propose and lets it reach the proposals API", () => {
+  const sh = readFileSync(resolve(FRONTEND, "scripts/build-app-site.sh"), "utf8");
+  expect(sh).toMatch(/for x in [^\n]*\bpropose\b/);
+  expect(sh).toContain("connect-src 'self' https://rpc.mainnet.arc.io https://rpc.testnet.arc.io https://api.exchange.coinbase.com wss://ws-feed.exchange.coinbase.com https://builder.registrai.cc");
+});

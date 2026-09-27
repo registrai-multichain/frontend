@@ -17,7 +17,7 @@
  * Markets on the legacy price feeds ("registrai-data:btc-usd": the strike is
  * the price at open, the round is [expiry − 5m, expiry]) still settle and show.
  */
-import type { Address, Hex } from "viem";
+import { keccak256, toBytes, type Address, type Hex } from "viem";
 import testnetDeployment from "./deployments/arc-testnet-rounds.json";
 import mainnetDeployment from "./deployments/arc-mainnet-rounds.json";
 import { selectPerennialNetwork } from "./perennial-network";
@@ -46,6 +46,23 @@ export interface EventMeta {
   marketId?: Hex | null;
   /** Where the team published the proof once the event happened. */
   evidenceUrl?: string | null;
+  /** A market opened from an approved proposal (discovered on chain, not in the deployment). */
+  proposal?: ProposalMeta;
+}
+
+/** What the page knows about a proposed market beyond the chain: the proposals API's
+ *  public record (question, rule, source), or only the proposal id when it is down. */
+export interface ProposalMeta {
+  id: string;
+  /** "event": yes/no on a curated feed; "price": median spot at the deadline. */
+  kind: "event" | "price";
+  rule?: string;
+  source?: string;
+  /** The proposals API's record matched the market on chain (its words are shown). */
+  verified: boolean;
+  /** Price markets: the asset's symbol and attested decimals (its threshold's units). */
+  symbol?: string;
+  decimals?: number;
 }
 
 export interface RoundsDeployment {
@@ -118,6 +135,16 @@ export const ROUNDS: RoundsDeployment = loadDeployment(
     ? mainnetDeployment
     : testnetDeployment) as RoundsDeploymentJson,
 );
+
+/** The shell footer's network line for pages about the common markets (/rounds, its
+ *  market pages, /propose): "Arc mainnet · live" once the rounds stack runs on the
+ *  network this build serves, else undefined (the shell's own Perennial line). */
+export function roundsStatusLine(
+  r: Pick<RoundsDeployment, "deployed" | "chainId" | "label" | "testnet">,
+  perennialChainId: number,
+): string | undefined {
+  return r.deployed && r.chainId === perennialChainId ? `${r.label} · ${r.testnet ? "test USDC" : "live"}` : undefined;
+}
 
 /** Rounds shown per asset in the results strip. */
 export const RECENT_ROUNDS = 6;
@@ -580,6 +607,385 @@ export function evidenceNote(value: bigint | undefined, evidenceUrl?: string | n
   if (value === undefined) return "Reading the feed…";
   if (value <= 0n) return "No evidence recorded yet.";
   return evidenceUrl ? "Recorded as happened. Evidence:" : "Recorded as happened. The evidence link is published with the reading.";
+}
+
+// ───────────────────────────── proposed markets ─────────────────────────────
+//
+// Markets opened from admin-approved proposals (spec §6). The rounds agent
+// provisions a feed "registrai-data:p-<proposalId>" and opens one market on it;
+// neither is in the deployment JSON, so both are discovered from chain. The
+// question comes from the public proposals API, falling back to "Proposal #id".
+
+const PROPOSAL_KEY = /^p-p[a-z2-7]{10}$/;
+
+/** A proposal feed's key: "p-" + a proposal id ("p" + 10 base32 characters). */
+export function isProposalKey(key: string): boolean {
+  return PROPOSAL_KEY.test(key);
+}
+
+/** "p-pabcdefghij" -> "pabcdefghij". */
+export function proposalIdOfKey(key: string): string {
+  return key.slice(2);
+}
+
+/** A bytes32 market id as the page's query parameter carries it. */
+export function isMarketId(s: string): s is Hex {
+  return /^0x[0-9a-fA-F]{64}$/.test(s);
+}
+
+/** A proposed market's page: one static route, the market id in the query. */
+export function proposedMarketHref(marketId: string): string {
+  return `/rounds/market/?id=${marketId.toLowerCase()}`;
+}
+
+/** The newest market on each proposal feed (a market is never re-opened on another
+ *  contract, but a feed can in principle carry more than one), open ones first by
+ *  deadline, then the finished ones newest deadline first. */
+export function proposedMarkets(markets: readonly RoundMarket[], now: number): RoundMarket[] {
+  const latest = new Map<string, RoundMarket>();
+  for (const m of markets) {
+    if (!isProposalKey(m.key)) continue;
+    const prev = latest.get(m.key);
+    if (!prev || m.blockNumber > prev.blockNumber) latest.set(m.key, m);
+  }
+  const open = (m: RoundMarket) => m.expiry > now;
+  return [...latest.values()].sort((a, b) =>
+    open(a) !== open(b) ? (open(a) ? -1 : 1) : open(a) ? a.expiry - b.expiry : b.expiry - a.expiry,
+  );
+}
+
+/** A proposal's public record from GET /api/market-proposals/<id>, narrowed to what
+ *  the market page shows. Untrusted input: anything malformed is dropped. */
+export interface ApprovalTerms {
+  threshold: bigint;
+  comparator: number;
+  expiry: number;
+  /** 1 = yes/no event, 2 = price at a deadline. */
+  kind: number;
+  question: string;
+  /** "" for a yes/no market. */
+  asset: string;
+  /** keccak256 of the rule as signed. */
+  ruleHash?: Hex;
+}
+
+export interface ProposalInfo {
+  question: string;
+  kind?: "event" | "price";
+  rule?: string;
+  source?: string;
+  asset?: string;
+  /** From the admin-signed outcome, when one is recorded (https only). */
+  evidenceUrl?: string;
+  /** The approval's creator payee; "" means the treasury. */
+  creatorPayee?: string;
+  /** What the admin signed (the approval message): checked against chain and against
+   *  the record's own words before any of them is shown. */
+  terms?: ApprovalTerms;
+}
+
+const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() && v.length <= max ? v.trim() : undefined);
+const httpsUrl = (v: unknown) => {
+  const s = text(v, 2048);
+  return s && /^https:\/\/\S+$/.test(s) ? s : undefined;
+};
+const intText = (v: unknown, re: RegExp) => (typeof v === "string" && re.test(v) ? v : typeof v === "number" && Number.isSafeInteger(v) ? String(v) : undefined);
+
+/** The API's record for proposal `id`, or null when it is malformed or is another
+ *  proposal's record. */
+export function parseProposalInfo(json: unknown, id: string): ProposalInfo | null {
+  const p = (json as { proposal?: unknown } | null)?.proposal as Record<string, unknown> | undefined;
+  if (!p || typeof p !== "object" || p.id !== id) return null;
+  const question = text(p.question, 300);
+  if (!question) return null;
+  const kind = p.kind === "event" || p.kind === "price" ? p.kind : undefined;
+  const outcome = (p.outcome as { message?: { evidenceUrl?: unknown } } | undefined)?.message;
+  const payee = typeof p.creatorPayee === "string" && /^0x[0-9a-fA-F]{40}$/.test(p.creatorPayee) ? p.creatorPayee : "";
+  const msg = (p.approval as { message?: Record<string, unknown> } | undefined)?.message;
+  const th = intText(msg?.threshold, /^-?\d{1,78}$/);
+  const cmp = intText(msg?.comparator, /^\d{1,3}$/);
+  const exp = intText(msg?.expiry, /^\d{1,20}$/);
+  const knd = intText(msg?.kind, /^\d{1,3}$/);
+  const sq = text(msg?.question, 1200);
+  const sa = typeof msg?.asset === "string" && msg.asset.length <= 16 ? msg.asset : undefined;
+  const rh = typeof msg?.ruleHash === "string" && /^0x[0-9a-fA-F]{64}$/.test(msg.ruleHash) ? (msg.ruleHash.toLowerCase() as Hex) : undefined;
+  const terms =
+    th !== undefined && cmp !== undefined && exp !== undefined && knd !== undefined && sq !== undefined && sa !== undefined
+      ? { threshold: BigInt(th), comparator: Number(cmp), expiry: Number(exp), kind: Number(knd), question: sq, asset: sa, ruleHash: rh }
+      : undefined;
+  return {
+    question,
+    kind,
+    rule: text(p.rule, 1000),
+    source: httpsUrl(p.source),
+    asset: text(p.asset, 16),
+    evidenceUrl: httpsUrl(outcome?.evidenceUrl),
+    creatorPayee: payee,
+    terms,
+  };
+}
+
+/** What a proposals API answer means for the page: a record to parse, a definitive
+ *  "no such proposal" (404, 410: kept), or anything else (a network error or timeout,
+ *  429, 5xx, any other 4xx: forgotten and asked again later). */
+export function proposalAnswer(status: number | "network"): "ok" | "missing" | "retry" {
+  if (status === "network") return "retry";
+  if (status >= 200 && status < 300) return "ok";
+  return status === 404 || status === 410 ? "missing" : "retry";
+}
+
+/** Backoff before asking again after `fails` transient failures: 10 s, doubling, at most 5 min. */
+export function proposalRetryMs(fails: number): number {
+  return Math.min(300_000, 10_000 * 2 ** Math.max(0, fails - 1));
+}
+
+type MarketTerms = Pick<RoundMarket, "threshold" | "comparator" | "expiry">;
+
+/** The API record describes THIS market: its signed approval's threshold, comparator
+ *  and expiry are the ones on chain, and the record's question and asset are the ones
+ *  signed. Anything else (a stale, edited or wrong record) must not put its words on
+ *  the market. */
+export function infoMatchesMarket(info: ProposalInfo | null | undefined, m: MarketTerms): info is ProposalInfo & { terms: ApprovalTerms } {
+  const t = info?.terms;
+  return Boolean(
+    t &&
+      t.threshold === m.threshold &&
+      t.comparator === m.comparator &&
+      t.expiry === m.expiry &&
+      (t.kind === 1 || t.kind === 2) &&
+      info!.question === t.question &&
+      (info!.asset ?? "") === t.asset,
+  );
+}
+
+/** The event-page description of a proposed market. When the proposals API's record
+ *  matches the market (infoMatchesMarket), the signed approval gives the kind, the
+ *  question and the asset, and the record its rule (only if it hashes to the signed
+ *  ruleHash), source and evidence. Otherwise the page says "Proposal #id", shows the raw
+ *  on-chain terms, and takes the kind from chain: a threshold of 1 with GreaterOrEqual
+ *  is a yes/no market (what the agent opens for kind 1), anything else a price market. */
+export function proposalEventMeta(
+  m: Pick<RoundMarket, "key" | "marketId" | "expiry" | "threshold" | "comparator">,
+  info: ProposalInfo | null | undefined,
+  assets: Record<string, { symbol: string; decimals: number }> = {},
+): EventMeta {
+  const id = proposalIdOfKey(m.key);
+  const ok = infoMatchesMarket(info, m) ? info : undefined;
+  const chainKind = m.threshold === 1n && m.comparator === COMPARATOR.GreaterOrEqual ? "event" : "price";
+  const kind = ok ? (ok.terms.kind === 2 ? "price" : "event") : chainKind;
+  const asset = kind === "price" && ok?.terms.asset ? assets[ok.terms.asset] : undefined;
+  const rule = ok?.rule && ok.terms.ruleHash && keccak256(toBytes(ok.rule)) === ok.terms.ruleHash ? ok.rule : undefined;
+  return {
+    key: m.key,
+    question: ok?.terms.question ?? `Proposal #${id}`,
+    expiry: m.expiry,
+    rehearsal: false,
+    marketId: m.marketId,
+    evidenceUrl: ok?.evidenceUrl ?? null,
+    proposal: { id, kind, verified: Boolean(ok), rule, source: ok?.source, symbol: asset?.symbol, decimals: asset?.decimals },
+  };
+}
+
+/** A proposal feed with no market this long after it was provisioned is, most likely,
+ *  one the agent never opened (the agent opens it in the pass that provisions the
+ *  feed): the first to go when the store is full. */
+export const PROPOSAL_MARKET_SEARCH_SECS = 3 * 86_400;
+/** How far back proposal feeds are searched: a proposed market's deadline is at most
+ *  366 days after it opens, plus a day for settlement. */
+export const PROPOSAL_LOOKBACK_SECS = 367 * 86_400;
+
+/** A covered, contiguous block range [lo, hi]. */
+export interface Cover {
+  lo: bigint;
+  hi: bigint;
+}
+
+/** The next range to scan for proposal feeds, newest first: the blocks added since
+ *  the cover, a whole chunk at a time (oldest first, so the cover stays contiguous),
+ *  then back from its low end to `floor`. null when nothing is left to scan. */
+export function nextBackfill(cover: Cover | undefined, head: bigint, floor: bigint, chunk: bigint = LOG_CHUNK_BLOCKS): [bigint, bigint] | null {
+  if (head < floor) return null;
+  if (!cover) {
+    const lo = head - chunk + 1n;
+    return [lo > floor ? lo : floor, head];
+  }
+  // A gap under a chunk is left to the page's own scan of the recent blocks; the
+  // next visit (or the gap reaching a chunk) covers it here.
+  if (head - cover.hi >= chunk) return [cover.hi + 1n, cover.hi + chunk];
+  if (cover.lo > floor) {
+    const lo = cover.lo - chunk;
+    return [lo > floor ? lo : floor, cover.lo - 1n];
+  }
+  return null;
+}
+
+/** The cover after scanning [from, to]: grows only when the range touches it. */
+export function extendCover(cover: Cover | undefined, from: bigint, to: bigint): Cover | undefined {
+  if (to < from) return cover;
+  if (!cover) return { lo: from, hi: to };
+  if (from > cover.hi + 1n || to < cover.lo - 1n) return cover;
+  return { lo: from < cover.lo ? from : cover.lo, hi: to > cover.hi ? to : cover.hi };
+}
+
+/** A proposal feed found by a scan, and its market once one is seen. Only ids and block
+ *  numbers are kept: the feed's key is re-read from the Registry on every visit, so an
+ *  edited record cannot relabel a feed. */
+export interface ProposalFeedRecord {
+  feedId: Hex;
+  block: bigint;
+  marketId?: Hex;
+  /** Block of the market's MarketCreated (the newest one wins). */
+  marketBlock?: bigint;
+}
+
+/** A MarketCreated(creator = agent) seen before its feed: a backward scan meets a
+ *  market before the (older) feed it is on. Kept until the feed turns up. */
+export interface OrphanMarket {
+  marketId: Hex;
+  block: bigint;
+}
+
+/** The scans' progress, kept in localStorage so a return visit reads only the blocks
+ *  added since (bigints as decimal strings). */
+export interface ProposalScanStore {
+  cover?: Cover;
+  feeds: Record<string, ProposalFeedRecord>;
+  /** feedId -> the newest market seen on a feed not known yet. */
+  orphans: Record<string, OrphanMarket>;
+}
+
+/** At most this many feed records (and as many orphans) are kept. */
+export const PROPOSAL_STORE_MAX = 2000;
+
+export function serializeProposalStore(s: ProposalScanStore): string {
+  return JSON.stringify({
+    cover: s.cover ? { lo: s.cover.lo.toString(), hi: s.cover.hi.toString() } : undefined,
+    feeds: Object.values(s.feeds).map((f) => ({
+      feedId: f.feedId, block: f.block.toString(), marketId: f.marketId, marketBlock: f.marketBlock?.toString(),
+    })),
+    orphans: Object.entries(s.orphans).map(([feedId, o]) => ({ feedId, marketId: o.marketId, block: o.block.toString() })),
+  });
+}
+
+const DEC_RE = /^\d{1,20}$/;
+const B32_RE = /^0x[0-9a-f]{64}$/;
+const optDec = (v: unknown) => v === undefined || (typeof v === "string" && DEC_RE.test(v));
+
+/** A stored scan, or an empty one when missing or malformed (then it scans afresh). */
+export function parseProposalStore(raw: string | null): ProposalScanStore {
+  const empty: ProposalScanStore = { feeds: {}, orphans: {} };
+  if (!raw) return empty;
+  try {
+    const j = JSON.parse(raw) as { cover?: { lo?: unknown; hi?: unknown }; feeds?: unknown; orphans?: unknown };
+    const out: ProposalScanStore = { feeds: {}, orphans: {} };
+    const c = j.cover;
+    if (c !== undefined) {
+      if (typeof c.lo !== "string" || typeof c.hi !== "string" || !DEC_RE.test(c.lo) || !DEC_RE.test(c.hi) || BigInt(c.lo) > BigInt(c.hi)) return empty;
+      out.cover = { lo: BigInt(c.lo), hi: BigInt(c.hi) };
+    }
+    if (!Array.isArray(j.feeds) || !Array.isArray(j.orphans ?? [])) return empty;
+    const recs: ProposalFeedRecord[] = [];
+    for (const f of j.feeds as Array<Record<string, unknown>>) {
+      if (!f || typeof f.feedId !== "string" || !B32_RE.test(f.feedId)) return empty;
+      if (typeof f.block !== "string" || !DEC_RE.test(f.block) || !optDec(f.marketBlock)) return empty;
+      if (f.marketId !== undefined && (typeof f.marketId !== "string" || !B32_RE.test(f.marketId))) return empty;
+      recs.push({
+        feedId: f.feedId as Hex, block: BigInt(f.block), marketId: f.marketId as Hex | undefined,
+        marketBlock: f.marketBlock === undefined ? undefined : BigInt(f.marketBlock as string),
+      });
+    }
+    const orphans: Array<[string, OrphanMarket]> = [];
+    for (const o of (j.orphans ?? []) as Array<Record<string, unknown>>) {
+      if (!o || typeof o.feedId !== "string" || !B32_RE.test(o.feedId) || typeof o.marketId !== "string" || !B32_RE.test(o.marketId)) return empty;
+      if (typeof o.block !== "string" || !DEC_RE.test(o.block)) return empty;
+      orphans.push([o.feedId, { marketId: o.marketId as Hex, block: BigInt(o.block) }]);
+    }
+    return pruneProposalStore({ cover: out.cover, feeds: Object.fromEntries(recs.map((f) => [f.feedId, f])), orphans: Object.fromEntries(orphans) }, 0n, 0n);
+  } catch {
+    return empty;
+  }
+}
+
+const byBlockDesc = <T extends { block: bigint }>(a: T, b: T) => (a.block > b.block ? -1 : a.block < b.block ? 1 : 0);
+
+/**
+ * The store without what can no longer show, and within its cap:
+ * - feeds (and orphans) older than the scan's floor go: a proposal's deadline is at
+ *   most a year after its feed, so past the floor its market, opened or not, is over;
+ * - a feed with no market yet stays otherwise: the agent may still open it (a retried
+ *   open, or one waiting on its float), and a later scan attaches it;
+ * - over PROPOSAL_STORE_MAX, feeds with no market provisioned before `staleBefore`
+ *   (past the time the agent opens a market) go first, oldest first, then the oldest
+ *   of the rest; orphans keep the newest.
+ */
+export function pruneProposalStore(s: ProposalScanStore, floor: bigint, staleBefore: bigint, max = PROPOSAL_STORE_MAX): ProposalScanStore {
+  const live = Object.values(s.feeds).filter((f) => f.block >= floor);
+  const stale = (f: ProposalFeedRecord) => !f.marketId && f.block < staleBefore;
+  const keep = [...live.filter((f) => !stale(f)).sort(byBlockDesc), ...live.filter(stale).sort(byBlockDesc)].slice(0, max);
+  const orphans = Object.entries(s.orphans)
+    .filter(([, o]) => o.block >= floor)
+    .sort((a, b) => byBlockDesc(a[1], b[1]))
+    .slice(0, max);
+  return { cover: s.cover, feeds: Object.fromEntries(keep.map((f) => [f.feedId, f])), orphans: Object.fromEntries(orphans) };
+}
+
+/**
+ * Fold one scanned block range into the store: its FeedCreated logs (the agent's
+ * proposal feeds) and its MarketCreated logs, fetched with creator = agent. A market
+ * on a stored feed is attached to it (the newest wins); one on a feed not known yet is
+ * kept as an orphan until its feed turns up in an older range (a backward scan meets
+ * the market first); one on a feed the page knows as something else (`otherFeed`: a
+ * round or a config event) is ignored. Returns the market ids newly attached.
+ */
+export function foldProposalRange(
+  store: ProposalScanStore,
+  feedLogs: readonly FeedCreatedLog[],
+  marketLogs: readonly MarketCreatedLog[],
+  agent: Address,
+  otherFeed: (feedId: string) => boolean,
+  prefix = ROUNDS.descriptionPrefix,
+): { store: ProposalScanStore; attached: Hex[] } {
+  const feeds = { ...store.feeds };
+  const orphans = { ...store.orphans };
+  const attached: Hex[] = [];
+  const attach = (feedId: string, marketId: Hex, block: bigint) => {
+    const f = feeds[feedId];
+    if (f.marketBlock !== undefined && f.marketBlock >= block && f.marketId) return;
+    feeds[feedId] = { ...f, marketId, marketBlock: block };
+    attached.push(marketId);
+  };
+  for (const lg of feedLogs) {
+    const { feedId, creator, description } = lg.args;
+    if (!feedId || !sameAddr(creator, agent)) continue;
+    const key = feedKeyFromDescription(description, prefix);
+    const id = feedId.toLowerCase();
+    if (!key || !isProposalKey(key)) {
+      delete orphans[id]; // a round or event feed: its markets are not proposals
+      continue;
+    }
+    if (feeds[id]) continue;
+    feeds[id] = { feedId: id as Hex, block: lg.blockNumber ?? 0n };
+  }
+  for (const lg of marketLogs) {
+    const a = lg.args;
+    if (!a.marketId || !a.feedId || !sameAddr(a.creator, agent) || !sameAddr(a.agent, agent)) continue;
+    const feedId = a.feedId.toLowerCase();
+    const marketId = a.marketId.toLowerCase() as Hex;
+    const block = lg.blockNumber ?? 0n;
+    if (feeds[feedId]) attach(feedId, marketId, block);
+    else if (!otherFeed(feedId) && (!orphans[feedId] || orphans[feedId].block < block)) orphans[feedId] = { marketId, block };
+  }
+  for (const [feedId, o] of Object.entries(orphans)) {
+    if (!feeds[feedId]) continue;
+    attach(feedId, o.marketId, o.block);
+    delete orphans[feedId];
+  }
+  return { store: { cover: store.cover, feeds, orphans }, attached };
+}
+
+/** The sum of NanoLedger InternalTransfer amounts (the agent's forwarded creator share). */
+export function sumTransfers(logs: readonly { args: { amount?: bigint } }[]): bigint {
+  return logs.reduce((s, l) => s + (l.args.amount ?? 0n), 0n);
 }
 
 // ───────────────────────────── formatting ─────────────────────────────

@@ -32,9 +32,13 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { useWallet } from "./WalletProvider";
 import { getWalletChain, transportFor, txUrl as txUrlFor, type WalletChain } from "@/lib/chains";
 import { activeProvider } from "@/lib/wallets";
-import { attestationAbi, marketsV4Abi, nanoLedgerAbi, usdcAbi } from "@/lib/abi";
+import { attestationAbi, marketsV4Abi, nanoLedgerAbi, registryAbi, usdcAbi } from "@/lib/abi";
+import { PROPOSAL_ASSETS } from "@/lib/market-proposals";
+import { PRICE_SOURCE, statusHref } from "@/lib/propose-form";
+import { PROPOSALS_API } from "@/lib/proposals-api";
 import { humanizeError } from "@/lib/humanize-error";
 import {
+  COMPARATOR,
   OUTCOME,
   PHASE,
   TRADE_DEADLINE_SECS,
@@ -48,6 +52,8 @@ import {
 } from "@/lib/perennial-market";
 import {
   BLOCK_SECS,
+  PROPOSAL_LOOKBACK_SECS,
+  PROPOSAL_MARKET_SEARCH_SECS,
   ROUNDS,
   ROUND_TRADE_WINDOW_SECS,
   candleCloseAt,
@@ -83,8 +89,27 @@ import {
   type RoundStatus,
   assetHref,
   eventHref,
+  extendCover,
+  feedKeyFromDescription,
+  foldProposalRange,
   formatChange,
+  isMarketId,
+  isProposalKey,
+  nextBackfill,
+  parseProposalInfo,
+  parseProposalStore,
+  proposalAnswer,
+  proposalRetryMs,
+  proposalEventMeta,
+  proposalIdOfKey,
+  proposedMarketHref,
+  proposedMarkets,
+  pruneProposalStore,
+  serializeProposalStore,
   type AssetRounds,
+  type ProposalInfo,
+  type ProposalMeta,
+  type ProposalScanStore,
 } from "@/lib/rounds";
 import { cashOutValue, pnl, poolPrices, replayPool, type Trade } from "@/lib/rounds-chart";
 import { OddsChart, PriceChart, usePriceStream, type PriceStream } from "./RoundCharts";
@@ -166,14 +191,51 @@ type Snapshot = {
   /** The wallet's markets that anyone may settle right now (the agent is late or down). */
   settleable: Record<string, "resolve" | "void">;
   eventReadings: Record<string, EventReading>;
-  /** Event key -> its market id (discovered, else the deploy seed). */
+  /** Event key -> its market id (discovered, else the deploy seed); proposal keys too. */
   eventMarkets: Record<string, Hex>;
+  /** Markets opened from approved proposals: the newest per proposal, open ones first. */
+  proposed: RoundMarket[];
+  /** The page's market (/rounds/market/?id=) is not a market of the agent's. */
+  focusMissing?: boolean;
   ledgerBal?: bigint;
   walletBal?: bigint;
   feeBps?: bigint;
 };
 
+/** A comparator as a sign, for raw on-chain terms. */
+const COMPARATOR_SIGN: Record<number, string> = { 0: ">", 1: "≥", 2: "<", 3: "≤" };
 const settled = (phase: number | undefined) => phase === PHASE.Resolved || phase === PHASE.Voided;
+const sameAddress = (a?: string, b?: string) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
+const ZERO_ID = `0x${"0".repeat(64)}`;
+/** Stored proposal feeds re-read per Multicall3 eth_call, and the calldata budget
+ *  that keeps each such chunk in one call (a getFeed call is ~100 bytes of it). */
+const VERIFY_CHUNK = 25;
+const VERIFY_BATCH_BYTES = 8_192;
+/** A feed the page knows as something other than a proposal (a round or config event feed). */
+const isOtherFeed = (book: FeedBook, feedId: string) => {
+  const f = book.byId[feedId];
+  return Boolean(f && !isProposalKey(f.key));
+};
+const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const blocksFor = (secs: number) => BigInt(Math.ceil(secs / BLOCK_SECS));
+
+// The background scan for proposal feeds (older than the page's two-hour window),
+// remembered per browser so a return visit reads only the blocks added since.
+const proposedKey = () => `registrai.rounds.proposed.v3.${D.chainId}.${C.MarketsV4.toLowerCase()}.${D.agent.toLowerCase()}`;
+function loadProposed(): ProposalScanStore {
+  try {
+    return parseProposalStore(localStorage.getItem(proposedKey()));
+  } catch {
+    return { feeds: {}, orphans: {} };
+  }
+}
+function saveProposed(s: ProposalScanStore) {
+  try {
+    localStorage.setItem(proposedKey(), serializeProposalStore(s));
+  } catch {
+    /* private mode: the next visit scans again */
+  }
+}
 
 // The markets this browser's wallet traded, remembered locally: the log scan only
 // looks back ~2 hours, and a position must not vanish from "Your claims" after that.
@@ -196,7 +258,10 @@ function saveMine(a: Address, ids: Set<string>) {
 
 // ───────────────────────────── data ─────────────────────────────
 
-function useRoundsData(client: PublicClient, address: Address | undefined) {
+/** `focus`: a market the page shows by id (/rounds/market/?id=), described from chain
+ *  whatever its age. `backfill`: search proposal feeds older than the recent window
+ *  (the overview, whose Events tab lists every proposed market). */
+function useRoundsData(client: PublicClient, address: Address | undefined, focus?: Hex, backfill = false) {
   const [snap, setSnap] = useState<Snapshot>();
   const [loadError, setLoadError] = useState<string>();
   const disc = useRef({
@@ -212,6 +277,12 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
     /** Trade logs per tracked market, and how far each was scanned. */
     trades: new Map<string, Map<string, Trade>>(),
     tradeCursor: new Map<string, bigint>(),
+    /** Market ids to describe from chain on the next refresh (the proposal scan's finds). */
+    describe: new Set<string>(),
+    /** Ids read from chain that are not the agent's markets: never asked again. */
+    notOurs: new Set<string>(),
+    /** The proposal scan's store, while the overview runs it (see the backfill below). */
+    pstore: undefined as ProposalScanStore | undefined,
   });
   const busy = useRef(false);
   const again = useRef(false);
@@ -235,7 +306,9 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
         const logs = await client.getLogs({
           address: C.MarketsV4,
           event: MARKET_CREATED,
-          args: { feedId: Object.keys(d.book.byId) as Hex[] },
+          // One indexed topic (the creator), never a list of feed ids: parseMarketLogs keeps
+          // only markets on the agent's known feeds.
+          args: { creator: D.agent },
           fromBlock: head > FIRST_PAINT_BLOCKS ? head - FIRST_PAINT_BLOCKS : 0n,
           toBlock: head,
         });
@@ -260,7 +333,7 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
         setSnap((prev) =>
           prev ?? {
             chainNow, readAt: Date.now() / 1000, head, markets, trades: {}, book: d.book, state: Object.fromEntries(rows),
-            readings: {}, holdings: {}, redeemable: {}, settleable: {}, eventReadings: {}, eventMarkets,
+            readings: {}, holdings: {}, redeemable: {}, settleable: {}, eventReadings: {}, eventMarkets, proposed: [],
           },
         );
       } catch {
@@ -288,31 +361,35 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
       //    window (first load) or since the last scan. Chunked ≤ 5000 blocks.
       const from = d.scannedTo < 0n ? scanStart(head, D.deployBlock) : d.scannedTo + 1n;
       if (from <= head) {
-        // Feeds and markets are scanned side by side (markets filtered to the
-        // feeds known so far); a feed first seen in this range gets its own
-        // market scan right after, so nothing on it is missed.
-        const marketsOn = (ids: Hex[], to: bigint) =>
-          scanLogs(
-            (a, b) => client.getLogs({ address: C.MarketsV4, event: MARKET_CREATED, args: { feedId: ids }, fromBlock: a, toBlock: b }),
-            from,
-            to,
-          );
-        const known = Object.keys(d.book.byId) as Hex[];
+        // Feeds and markets side by side. Markets are filtered by their creator (one
+        // indexed topic: a list of feed ids would grow with every feed the agent ever
+        // made, past what an RPC accepts); parseMarketLogs keeps the agent's markets on
+        // the agent's known feeds, the feeds of this range included.
         const [feeds, mk] = await Promise.all([
           scanLogs(
             (a, b) => client.getLogs({ address: C.Registry, event: FEED_CREATED, args: { creator: D.agent }, fromBlock: a, toBlock: b }),
             from,
             head,
           ),
-          marketsOn(known, head),
+          scanLogs(
+            (a, b) => client.getLogs({ address: C.MarketsV4, event: MARKET_CREATED, args: { creator: D.agent }, fromBlock: a, toBlock: b }),
+            from,
+            head,
+          ),
         ]);
-        d.book = mergeFeedLogs(d.book, feeds.logs as unknown as FeedCreatedLog[], D.agent);
-        const fresh = (Object.keys(d.book.byId) as Hex[]).filter((id) => !known.includes(id));
-        const extra = fresh.length ? await marketsOn(fresh, head) : { logs: [], scannedTo: head };
-        const logs = [...mk.logs, ...extra.logs] as unknown as MarketCreatedLog[];
-        for (const m of parseMarketLogs(logs, d.book, D.agent)) d.markets.set(m.marketId, m);
-        // Advance only over what every scan covered.
-        const covered = [feeds.scannedTo, mk.scannedTo, extra.scannedTo].reduce((x, y) => (y < x ? y : x));
+        const feedLogs = feeds.logs as unknown as FeedCreatedLog[];
+        const marketLogs = mk.logs as unknown as MarketCreatedLog[];
+        d.book = mergeFeedLogs(d.book, feedLogs, D.agent);
+        for (const m of parseMarketLogs(marketLogs, d.book, D.agent)) d.markets.set(m.marketId, m);
+        // The proposal scan's store (overview): record proposal feeds and their markets
+        // seen here too, so a later visit knows them without scanning these blocks again.
+        if (d.pstore) {
+          const r = foldProposalRange(d.pstore, feedLogs, marketLogs, D.agent, (f) => isOtherFeed(d.book, f));
+          d.pstore = r.store;
+          for (const id of r.attached) if (!d.markets.has(id)) d.describe.add(id);
+        }
+        // Advance only over what both scans covered.
+        const covered = feeds.scannedTo < mk.scannedTo ? feeds.scannedTo : mk.scannedTo;
         if (covered >= from) d.scannedTo = covered;
       }
 
@@ -335,27 +412,56 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
           if (r.scannedTo >= mFrom) d.mineScannedTo = r.scannedTo;
           saveMine(address, d.mine);
         }
-        // Markets remembered from earlier visits (older than the scan): describe
-        // them from the chain, on the agent's known feeds only.
-        const older = [...d.mine].filter((id) => !d.markets.has(id));
-        if (older.length) {
-          const rows = await Promise.all(
-            older.map((id) =>
-              (client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "getMarket", args: [id as Hex] }) as Promise<{
-                feedId: Hex; agent: Address; threshold: bigint; comparator: number; expiry: bigint;
-              }>).catch(() => undefined),
-            ),
-          );
-          older.forEach((id, i) => {
-            const m = rows[i];
-            const feed = m && d.book.byId[m.feedId.toLowerCase()];
-            if (!m || !feed || m.agent.toLowerCase() !== D.agent.toLowerCase()) return;
-            d.markets.set(id, {
-              marketId: id as Hex, feedId: feed.feedId, key: feed.asset, change: feed.change, agent: m.agent,
-              threshold: m.threshold, comparator: Number(m.comparator), expiry: Number(m.expiry), liquidity: 0n, blockNumber: 0n,
-            });
+      }
+
+      // 2b. Markets known only by id: the wallet's from earlier visits (older than
+      //     the scan), the page's own market, and the proposal scan's finds.
+      //     Described from chain; only the agent's own markets on its own feeds count.
+      const older = [
+        ...(address ? [...d.mine] : []),
+        ...(focus ? [focus] : []),
+        ...d.describe,
+      ].filter((id, i, all) => all.indexOf(id) === i && !d.markets.has(id) && !d.notOurs.has(id));
+      if (older.length) {
+        const rows = await Promise.all(
+          older.map((id) =>
+            (client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "getMarket", args: [id as Hex] }) as Promise<{
+              feedId: Hex; agent: Address; creator: Address; threshold: bigint; comparator: number; expiry: bigint;
+            }>).catch(() => undefined),
+          ),
+        );
+        // A feed outside the scanned window: its Registry record names creator and description.
+        const unknown = [...new Set(rows.flatMap((m) => (m && m.feedId !== ZERO_ID && !d.book.byId[m.feedId.toLowerCase()] ? [m.feedId.toLowerCase() as Hex] : [])))];
+        const feeds = await Promise.all(
+          unknown.map((f) =>
+            (client.readContract({ address: C.Registry, abi: registryAbi, functionName: "getFeed", args: [f] }) as Promise<{
+              creator: Address; description: string; disputeWindow: bigint; exists: boolean;
+            }>).catch(() => undefined),
+          ),
+        );
+        const feedFailed = new Set(unknown.filter((_, i) => !feeds[i]));
+        d.book = mergeFeedLogs(
+          d.book,
+          unknown.flatMap((f, i) => {
+            const r = feeds[i];
+            return r?.exists ? [{ args: { feedId: f, creator: r.creator, description: r.description, disputeWindow: r.disputeWindow }, blockNumber: 0n, logIndex: 0 }] : [];
+          }),
+          D.agent,
+        );
+        older.forEach((id, i) => {
+          const m = rows[i];
+          if (!m || feedFailed.has(m.feedId.toLowerCase() as Hex)) return; // not read: try again next refresh
+          const feed = d.book.byId[m.feedId.toLowerCase()];
+          d.describe.delete(id);
+          if (!feed || !sameAddress(m.agent, D.agent) || !sameAddress(m.creator, D.agent)) {
+            d.notOurs.add(id);
+            return;
+          }
+          d.markets.set(id, {
+            marketId: id as Hex, feedId: feed.feedId, key: feed.asset, change: feed.change, agent: m.agent,
+            threshold: m.threshold, comparator: Number(m.comparator), expiry: Number(m.expiry), liquidity: 0n, blockNumber: 0n,
           });
-        }
+        });
       }
 
       // 3. Which markets matter now.
@@ -368,6 +474,12 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
         const found = latestMarketFor(markets, e.key)?.marketId ?? (e.marketId ? (e.marketId.toLowerCase() as Hex) : undefined);
         if (found) eventMarkets[e.key] = found;
       }
+      // Proposed markets are event markets too: the newest per proposal feed, and on
+      // its own page the market the link names.
+      const proposed = proposedMarkets(markets, chainNow);
+      for (const m of proposed) eventMarkets[m.key] = m.marketId;
+      const focused = focus ? d.markets.get(focus) : undefined;
+      if (focused && isProposalKey(focused.key)) eventMarkets[focused.key] = focused.marketId;
       const current = Object.values(groups).flatMap((g) => [g.current?.marketId, g.inPlay?.marketId].filter((x): x is Hex => Boolean(x)));
       const recent = Object.values(groups).flatMap((g) => g.recent);
       const eventIds = Object.values(eventMarkets);
@@ -439,8 +551,9 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
         Promise.all(toRead.map(readMarket)),
         d.feeBps ?? (client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "TRADE_FEE_BPS" }) as Promise<bigint>),
         Promise.all(
-          D.events.map(async (e): Promise<[string, EventReading] | null> => {
-            const feed = d.book.byKey[e.key];
+          [...D.events.map((e) => e.key), ...Object.keys(eventMarkets).filter(isProposalKey)].map(async (key): Promise<[string, EventReading] | null> => {
+            // A proposal's reading is on its market's own feed.
+            const feed = isProposalKey(key) ? d.book.byId[d.markets.get(eventMarkets[key])?.feedId ?? ""] : d.book.byKey[key];
             if (!feed) return null;
             const [value, timestamp] = (await client.readContract({
               address: C.Attestation,
@@ -448,7 +561,7 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
               functionName: "latestValue",
               args: [feed.feedId, D.agent],
             })) as readonly [bigint, bigint, boolean];
-            return [e.key, { value, timestamp: Number(timestamp) }];
+            return [key, { value, timestamp: Number(timestamp) }];
           }),
         ),
         address ? (client.readContract({ address: C.NanoLedger, abi: nanoLedgerAbi, functionName: "balanceOf", args: [address] }) as Promise<bigint>) : undefined,
@@ -510,6 +623,8 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
         settleable,
         eventReadings: Object.fromEntries(eventReadings.filter((x): x is [string, EventReading] => x !== null)),
         eventMarkets,
+        proposed,
+        focusMissing: Boolean(focus && d.notOurs.has(focus)) || Boolean(focused && !isProposalKey(focused.key)),
         ledgerBal,
         walletBal,
         feeBps,
@@ -525,11 +640,118 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
         setTimeout(() => void refreshRef.current?.(), 0);
       }
     }
-  }, [client, address]);
+  }, [client, address, focus]);
   const refreshRef = useRef<() => Promise<void>>(undefined);
   useEffect(() => {
     refreshRef.current = refresh;
   }, [refresh]);
+
+  // Proposal feeds and markets older than the recent window. A proposed market trades
+  // for up to a year, far past the two-hour scan, and nothing on chain lists the
+  // agent's feeds, so this walks the chain back from the head in the background, one
+  // block range at a time: FeedCreated(creator = agent) and MarketCreated(creator =
+  // agent) over the same range (two paced eth_getLogs; the page's refresh interleaves
+  // with them). A market on a stored proposal feed is attached to it; one met before
+  // its (older) feed waits as an orphan until the feed turns up. Every range is read
+  // once per browser: the store keeps the progress, so a return visit reads only the
+  // blocks added since, and a market opened late (after its feed) is found there.
+  useEffect(() => {
+    if (!backfill) return;
+    let alive = true;
+    const d = disc.current;
+    d.pstore = loadProposed();
+
+    const describeNew = (ids: readonly Hex[]) => {
+      let any = false;
+      for (const id of ids) {
+        if (d.markets.has(id)) continue;
+        d.describe.add(id);
+        any = true;
+      }
+      if (any) void refreshRef.current?.();
+    };
+
+    // The stored records name feeds by id only: what each feed is (its creator and
+    // description, hence its key) is read from the Registry before it joins the book,
+    // VERIFY_CHUNK feeds per Multicall3 eth_call, one chunk per step of the loop below;
+    // a failed chunk stays pending and is read again on its own.
+    const unverified = new Set(Object.keys(d.pstore.feeds));
+    const verifyChunk = async () => {
+      const ids = [...unverified].filter((f) => d.pstore?.feeds[f]).slice(0, VERIFY_CHUNK) as Hex[];
+      if (!ids.length) {
+        unverified.clear();
+        return;
+      }
+      const rows = (await client.multicall({
+        contracts: ids.map((f) => ({ address: C.Registry, abi: registryAbi, functionName: "getFeed" as const, args: [f] as const })),
+        allowFailure: false,
+        multicallAddress: MULTICALL3,
+        batchSize: VERIFY_BATCH_BYTES,
+      })) as unknown as Array<{ creator: Address; description: string; disputeWindow: bigint; exists: boolean }>;
+      const store = d.pstore!;
+      const logs: FeedCreatedLog[] = [];
+      const markets: Hex[] = [];
+      ids.forEach((feedId, i) => {
+        unverified.delete(feedId);
+        const r = rows[i];
+        const rec = store.feeds[feedId];
+        if (!rec) return;
+        const key = r?.exists && sameAddress(r.creator, D.agent) ? feedKeyFromDescription(r.description) : null;
+        if (!key || !isProposalKey(key)) {
+          delete store.feeds[feedId];
+          return;
+        }
+        logs.push({ args: { feedId, creator: r.creator, description: r.description, disputeWindow: r.disputeWindow }, blockNumber: rec.block, logIndex: 0 });
+        if (rec.marketId) markets.push(rec.marketId);
+      });
+      d.book = mergeFeedLogs(d.book, logs, D.agent);
+      describeNew(markets);
+    };
+
+    void (async () => {
+      while (alive) {
+        if (document.hidden) {
+          await pause(2_000);
+          continue;
+        }
+        try {
+          if (unverified.size) {
+            await verifyChunk();
+            continue;
+          }
+          const head = await client.getBlockNumber();
+          const back = blocksFor(PROPOSAL_LOOKBACK_SECS);
+          const floor = head > back && head - back > D.deployBlock ? head - back : D.deployBlock;
+          const search = blocksFor(PROPOSAL_MARKET_SEARCH_SECS);
+          const staleBefore = head > search ? head - search : 0n;
+          // The next stretch, newest first, back to a year (plus a day) before the head
+          // and never before the deployment.
+          const range = nextBackfill(d.pstore!.cover, head, floor);
+          if (!range) {
+            d.pstore = pruneProposalStore(d.pstore!, floor, staleBefore);
+            saveProposed(d.pstore);
+            await pause(60_000); // all covered; the page's own scan follows new blocks
+            continue;
+          }
+          const [feedLogs, marketLogs] = (await Promise.all([
+            client.getLogs({ address: C.Registry, event: FEED_CREATED, args: { creator: D.agent }, fromBlock: range[0], toBlock: range[1] }),
+            client.getLogs({ address: C.MarketsV4, event: MARKET_CREATED, args: { creator: D.agent }, fromBlock: range[0], toBlock: range[1] }),
+          ])) as unknown as [FeedCreatedLog[], MarketCreatedLog[]];
+          d.book = mergeFeedLogs(d.book, feedLogs, D.agent);
+          const r = foldProposalRange(d.pstore!, feedLogs, marketLogs, D.agent, (f) => isOtherFeed(d.book, f));
+          d.pstore = pruneProposalStore({ ...r.store, cover: extendCover(r.store.cover, range[0], range[1]) }, floor, staleBefore);
+          saveProposed(d.pstore);
+          describeNew(r.attached);
+        } catch {
+          await pause(5_000); // the RPC is busy or down: try the same range again
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+      d.pstore = undefined;
+    };
+  }, [client, backfill]);
 
   return { snap, loadError, refresh };
 }
@@ -595,6 +817,62 @@ function useLivePools(client: PublicClient, ids: readonly Hex[], paused: boolean
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, key]);
   return pools;
+}
+
+/** Proposals' public records (the question, rule and source) from the proposals API.
+ *  A record, or a definitive "none" (404/410: the page says "Proposal #id"), is kept
+ *  for the page's lifetime; anything else (a network error or 10 s timeout, 429, 5xx,
+ *  another 4xx) is forgotten and asked again on a later refresh, with backoff
+ *  (proposalRetryMs). */
+const proposalInfoCache = new Map<string, Promise<ProposalInfo | null | "retry">>();
+const proposalFails = new Map<string, { fails: number; at: number }>();
+function fetchProposalInfo(id: string): Promise<ProposalInfo | null | "retry"> {
+  let p = proposalInfoCache.get(id);
+  if (!p) {
+    // A stalled request must end (and be retried): 10 s, then it counts as a network failure.
+    p = fetch(`${PROPOSALS_API}/${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(10_000) })
+      .then(async (r) => {
+        const a = proposalAnswer(r.status);
+        return a === "ok" ? parseProposalInfo(await r.json(), id) : a === "missing" ? null : ("retry" as const);
+      })
+      .catch(() => "retry" as const)
+      .then((res) => {
+        if (res === "retry") {
+          proposalInfoCache.delete(id);
+          const f = proposalFails.get(id)?.fails ?? 0;
+          proposalFails.set(id, { fails: f + 1, at: Date.now() + proposalRetryMs(f + 1) });
+        } else proposalFails.delete(id);
+        return res;
+      });
+    proposalInfoCache.set(id, p);
+  }
+  return p;
+}
+/** `tick` changes on every refresh of the page's data: ids that failed are retried then, once their backoff is over. */
+function useProposalInfo(ids: readonly string[], tick: number) {
+  const [got, setGot] = useState<Record<string, ProposalInfo | null>>({});
+  const key = ids.join(",");
+  useEffect(() => {
+    let alive = true;
+    for (const id of key ? key.split(",") : []) {
+      if (id in got) continue;
+      const f = proposalFails.get(id);
+      if (f && Date.now() < f.at && !proposalInfoCache.has(id)) continue;
+      void fetchProposalInfo(id).then((info) => {
+        if (alive && info !== "retry") setGot((prev) => (id in prev ? prev : { ...prev, [id]: info }));
+      });
+    }
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, tick]);
+  return got;
+}
+
+/** A proposed market's event description, with the API's record when it has come in. */
+function proposedMeta(m: RoundMarket, info: Record<string, ProposalInfo | null>): EventMeta {
+  return proposalEventMeta(m, info[proposalIdOfKey(m.key)], PROPOSAL_ASSETS);
 }
 
 /** The snapshot with the live lane's newer pool reads laid over it. */
@@ -845,8 +1123,13 @@ const SessionCtx = createContext<Session | undefined>(undefined);
 
 // ───────────────────────────── page ─────────────────────────────
 
-/** Which page: the overview grid, one asset's market page, or one event's page. */
-export type RoundsView = { kind: "overview" } | { kind: "asset"; key: string } | { kind: "event"; key: string };
+/** Which page: the overview grid, one asset's market page, one event's page, or a proposed market's page. */
+export type RoundsView =
+  | { kind: "overview" }
+  | { kind: "asset"; key: string }
+  | { kind: "event"; key: string }
+  /** A market opened from an approved proposal: /rounds/market/?id=<marketId>. */
+  | { kind: "proposed"; marketId: Hex };
 
 export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsView }) {
   const { address, walletChainId, connect, switchChain } = useWallet();
@@ -861,7 +1144,14 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
       }) as PublicClient,
     [],
   );
-  const { snap: fullSnap, loadError, refresh } = useRoundsData(client, address);
+  const focus = view.kind === "proposed" && isMarketId(view.marketId) ? (view.marketId.toLowerCase() as Hex) : undefined;
+  const { snap: fullSnap, loadError, refresh } = useRoundsData(client, address, focus, view.kind === "overview");
+  // The proposals' questions, for every proposed market the page knows of.
+  const proposalIds = useMemo(
+    () => [...new Set((fullSnap?.markets ?? []).filter((m) => isProposalKey(m.key)).map((m) => proposalIdOfKey(m.key)))].sort(),
+    [fullSnap?.markets],
+  );
+  const proposalInfo = useProposalInfo(proposalIds, fullSnap?.readAt ?? 0);
   const stream = usePriceStream(useMemo(() => D.assets.map((a) => a.product), []));
   const tx = useTx(client, refresh);
   // A wallet transaction in flight (not a one-click one, which uses no wallet).
@@ -962,10 +1252,14 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
   const canTrade = Boolean(address && onChain && !stale);
   const pageAsset = view.kind === "asset" ? D.assets.find((a) => a.key === view.key) : undefined;
   const pageEvent = view.kind === "event" ? D.events.find((e) => e.key === view.key) : undefined;
+  const focusMarket = focus ? fullSnap?.markets.find((m) => m.marketId === focus && isProposalKey(m.key)) : undefined;
+  const pageProposed = focusMarket ? proposedMeta(focusMarket, proposalInfo) : undefined;
+  // Until the first read says whether the id is one of the agent's markets.
+  const proposedLoading = view.kind === "proposed" && Boolean(focus) && !pageProposed && !fullSnap?.focusMissing;
 
   return (
     <SessionCtx.Provider value={session}>
-    <div className="fade-up">
+    <div className="fade-up pu-bridge">
       {view.kind === "overview" ? (
         <Header now={now} roundEnd={roundEnd} showTimer={tab === "price"} />
       ) : (
@@ -977,13 +1271,13 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
       <LedgerBar snap={snap} tx={tx} address={address} onChain={onChain} connect={connect} switchChain={() => switchChain(D.chainId)} />
 
       {stale && (
-        <p className="mb-4 border border-down bg-bg-elev px-4 py-3 text-[13px] text-down" role="status">
+        <p className="mb-4 rounded-xl border border-down bg-bg-elev px-4 py-3 text-[13px] text-down" role="status">
           The market data is {Math.round(clientNow - lastRead)} s old (the chain is not answering). Trading is paused until it
           refreshes.
         </p>
       )}
       {loadError && !snap && (
-        <p className="mb-6 rounded-[10px] border border-down bg-bg-elev px-4 py-3 text-[13px] text-down">
+        <p className="mb-6 rounded-xl border border-down bg-bg-elev px-4 py-3 text-[13px] text-down">
           Could not read the markets from {D.label}: {loadError} Retrying every 10 seconds.
         </p>
       )}
@@ -1010,9 +1304,22 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
           <EventRules />
         </div>
       )}
-      {view.kind !== "overview" && !pageAsset && !pageEvent && <p className="text-fg-mute">This market does not exist.</p>}
+      {pageProposed && (
+        <div className="max-w-[760px]">
+          <EventCard ev={pageProposed} snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={canTrade} address={address} page />
+          <EventRules proposal={pageProposed.proposal} />
+        </div>
+      )}
+      {proposedLoading && (
+        <div className="max-w-[760px]" aria-busy="true">
+          <div className="pu-card pu-card--static text-[13px] text-fg-mute">Reading the market from {D.label}…</div>
+        </div>
+      )}
+      {view.kind !== "overview" && !pageAsset && !pageEvent && !pageProposed && !proposedLoading && (
+        <p className="text-fg-mute">This market does not exist.</p>
+      )}
 
-      {address && <Claims snap={snap} tx={tx} now={now} />}
+      {address && <Claims snap={snap} tx={tx} now={now} info={proposalInfo} />}
 
       {view.kind === "overview" && (
       <>
@@ -1063,7 +1370,7 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
       )}
 
       {tab === "events" && (
-        <EventMarkets snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={canTrade} address={address} />
+        <EventMarkets snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={canTrade} address={address} info={proposalInfo} />
       )}
       </>
       )}
@@ -1094,7 +1401,7 @@ function Header({ now, roundEnd, showTimer }: { now: number; roundEnd: number; s
   return (
     <header className="mb-8 grid gap-6 border-b border-line pb-6 sm:grid-cols-[1fr_auto] sm:items-end">
       <div>
-        <h1 className="pa-h1">Common markets</h1>
+        <h1 className="pa-h1 pu-h">Common markets</h1>
         <p className="pa-lede">
           Quick price rounds and longer event questions, open to anyone and settled on chain in USDC.
         </p>
@@ -1106,13 +1413,13 @@ function Header({ now, roundEnd, showTimer }: { now: number; roundEnd: number; s
           <span>betting closes in</span>
         </div>
         <div
-          className={`tnum mt-1 text-right font-serif text-[56px] leading-none tracking-tightest ${closing ? "text-down" : "text-fg"}`}
+          className={`tnum pu-h mt-1 text-right text-[56px] leading-none ${closing ? "text-down" : "text-fg"}`}
           role="timer"
           aria-label="Time left to bet on the next round"
         >
           {now ? timeLeft(left) : "–:––"}
         </div>
-        <div className="mt-2 h-[3px] w-full overflow-hidden bg-line">
+        <div className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-line">
           <div
             className={`h-full transition-[width] duration-300 ease-linear ${closing ? "bg-down" : "bg-accent"}`}
             style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }}
@@ -1164,9 +1471,9 @@ function LedgerBar({
 
   if (!address) {
     return (
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-bg-elev px-4 py-3">
+      <div className="pu-card pu-card--compact pu-card--static mb-6 flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] text-fg-mute">Connect a wallet to trade. Prices and results are public.</p>
-        <button onClick={() => void connect()} className="pa-btn">
+        <button onClick={() => void connect()} className="pa-btn pu-btn pu-btn--primary">
           Connect wallet
         </button>
       </div>
@@ -1174,9 +1481,9 @@ function LedgerBar({
   }
   if (!onChain) {
     return (
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-bg-elev px-4 py-3">
+      <div className="pu-card pu-card--compact pu-card--static mb-6 flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] text-fg-mute">These markets run on {D.label}. Your wallet is on another network.</p>
-        <button onClick={() => void switchChain()} className="pa-btn">
+        <button onClick={() => void switchChain()} className="pa-btn pu-btn pu-btn--primary">
           Switch to {D.label}
         </button>
       </div>
@@ -1184,11 +1491,11 @@ function LedgerBar({
   }
   const busy = Boolean(tx.st.pending);
   return (
-    <div className="mb-6 rounded-xl border border-line bg-bg-elev px-4 py-3">
+    <div className="pu-card pu-card--compact pu-card--static mb-6">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <div>
           <div className="text-[13px] text-fg-dim">Trading balance</div>
-          <div className="tnum font-serif text-[22px] leading-tight">{snap?.ledgerBal !== undefined ? `${fmt(ledgerBal)} USDC` : "…"}</div>
+          <div className="tnum pu-h text-[22px] leading-tight">{snap?.ledgerBal !== undefined ? `${fmt(ledgerBal)} USDC` : "…"}</div>
         </div>
         <div className="text-[13px] text-fg-dim">
           Wallet <span className="tnum text-fg-mute">{fmt(walletBal)} USDC</span>
@@ -1202,15 +1509,15 @@ function LedgerBar({
             inputMode="decimal"
             placeholder="USDC"
             aria-label="Amount to deposit"
-            className="tnum w-[110px] border border-line bg-bg px-3 py-2 text-[14px] outline-none focus:border-accent"
+            className="pu-input tnum w-[110px] text-[14px] outline-none"
           />
-          <button onClick={deposit} disabled={busy} className="pa-btn">
+          <button onClick={deposit} disabled={busy} className="pa-btn pu-btn pu-btn--primary">
             {tx.st.pending === "depositing" ? "Depositing…" : "Deposit"}
           </button>
           <button
             onClick={withdraw}
             disabled={busy || ledgerBal === 0n}
-            className="border border-line px-3 text-[13px] text-fg-mute transition-colors hover:border-accent hover:text-fg disabled:opacity-40"
+            className="pu-btn pu-btn--quiet text-[13px] disabled:opacity-40"
           >
             {tx.st.pending === "withdrawing" ? "Withdrawing…" : "Withdraw all"}
           </button>
@@ -1263,7 +1570,7 @@ function SessionRow({ tx }: { tx: Tx }) {
           <button
             onClick={() => void ses.end()}
             disabled={busy}
-            className="border border-line px-3 py-1 text-[13px] text-fg-mute transition-colors hover:border-accent hover:text-fg disabled:opacity-50"
+            className="pa-chip disabled:opacity-50"
           >
             {tx.st.pending === "ending" ? "Ending…" : "End"}
           </button>
@@ -1409,11 +1716,11 @@ function AssetCard({
   return (
     <article
       onClick={openPage}
-      className="flex min-w-0 cursor-pointer flex-col rounded-xl border border-line bg-bg-elev p-4 transition-colors hover:border-line-strong"
+      className="pu-card flex min-w-0 cursor-pointer flex-col transition-colors"
     >
       <div className="flex items-baseline justify-between gap-3">
         <div className="flex min-w-0 items-baseline gap-2">
-          <h2 className="font-serif text-[24px] leading-none">
+          <h2 className="pu-h text-[24px] leading-none">
             <Link href={assetHref(asset)} className="hover:underline">
               {asset.symbol}
             </Link>
@@ -1421,7 +1728,7 @@ function AssetCard({
           <span className="truncate text-[13px] text-fg-dim">{asset.name}</span>
         </div>
         <div
-          className={`tnum font-serif text-[24px] leading-none tracking-tightest transition-colors duration-300 ${
+          className={`tnum pu-h text-[24px] leading-none transition-colors duration-300 ${
             live?.dir === "up" ? "text-up" : live?.dir === "down" ? "text-down" : "text-fg"
           }`}
         >
@@ -1515,7 +1822,7 @@ function AssetCard({
               {trading && (
                 <button
                   onClick={() => toggle(hold.yes > 0n ? "yes" : "no", "sell")}
-                  className={`mt-2 w-full border px-3 py-1.5 text-[13px] transition-colors ${isOpen && open?.mode === "sell" ? "border-accent text-accent" : "border-line text-fg-mute hover:border-accent hover:text-fg"}`}
+                  className={`pu-btn pu-btn--quiet mt-2 w-full text-[13px] ${isOpen && open?.mode === "sell" ? "is-active" : ""}`}
                 >
                   Cash out
                 </button>
@@ -1586,7 +1893,7 @@ function AssetPage({
     <article>
       <header className="mb-5 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-5">
         <div className="min-w-0">
-          <h1 className="font-serif text-[40px] leading-none tracking-tightest">
+          <h1 className="pu-h text-[40px] leading-none">
             {asset.symbol} <span className="text-[22px] text-fg-dim">Up or Down · 5 minutes</span>
           </h1>
           <p className="mt-2 text-[13px] text-fg-mute">
@@ -1610,7 +1917,7 @@ function AssetPage({
           </p>
         </div>
         <div
-          className={`tnum font-serif text-[40px] leading-none tracking-tightest transition-colors duration-300 ${
+          className={`tnum pu-h text-[40px] leading-none transition-colors duration-300 ${
             live?.dir === "up" ? "text-up" : live?.dir === "down" ? "text-down" : "text-fg"
           }`}
         >
@@ -1663,7 +1970,7 @@ function AssetPage({
         </div>
 
         <aside className="lg:sticky lg:top-4 lg:self-start">
-          <div className="rounded-xl border border-line bg-bg-elev p-4">
+          <div className="pu-card pu-card--static">
             {current && r.st ? (
               r.trading ? (
                 <>
@@ -1700,7 +2007,7 @@ function AssetPage({
                 {r.trading && (
                   <button
                     onClick={() => pick(r.hold!.yes > 0n ? "yes" : "no", "sell")}
-                    className={`mt-2 w-full border px-3 py-1.5 text-[13px] transition-colors ${trade?.mode === "sell" ? "border-accent text-accent" : "border-line text-fg-mute hover:border-accent hover:text-fg"}`}
+                    className={`pu-btn pu-btn--quiet mt-2 w-full text-[13px] ${trade?.mode === "sell" ? "is-active" : ""}`}
                   >
                     Cash out
                   </button>
@@ -1717,7 +2024,7 @@ function AssetPage({
 function RoundRules({ asset }: { asset: AssetMeta }) {
   return (
     <section className="mt-8" aria-labelledby="rules-h">
-      <h2 id="rules-h" className="mb-2 font-serif text-[22px] leading-none">
+      <h2 id="rules-h" className="pu-h mb-2 text-[24px] leading-none">
         Rules
       </h2>
       <ul className="list-disc space-y-1.5 pl-5 text-[14px] leading-relaxed text-fg-mute">
@@ -1747,10 +2054,10 @@ function PastRounds({ asset, rounds, snap, now }: { asset: AssetMeta; rounds: re
   if (!rounds.length) return null;
   return (
     <section className="mt-8" aria-labelledby="past-h">
-      <h2 id="past-h" className="mb-2 font-serif text-[22px] leading-none">
+      <h2 id="past-h" className="pu-h mb-2 text-[24px] leading-none">
         Latest rounds
       </h2>
-      <ul className="divide-y divide-line rounded-xl border border-line bg-bg-elev text-[14px]">
+      <ul className="divide-y divide-line rounded-2xl border border-line bg-bg-elev text-[14px]">
         {rounds.map((m) => {
           const s = statusFor(m, snap, now);
           const rd = snap?.readings[m.marketId];
@@ -1771,20 +2078,56 @@ function PastRounds({ asset, rounds, snap, now }: { asset: AssetMeta; rounds: re
   );
 }
 
-function EventRules() {
+/** An event market's rules; a proposed market adds its own rule, source and origin. */
+function EventRules({ proposal }: { proposal?: ProposalMeta }) {
+  const price = proposal?.kind === "price";
   return (
     <section className="mt-8" aria-labelledby="erules-h">
-      <h2 id="erules-h" className="mb-2 font-serif text-[22px] leading-none">
+      <h2 id="erules-h" className="pu-h mb-2 text-[24px] leading-none">
         Rules
       </h2>
       <ul className="list-disc space-y-1.5 pl-5 text-[14px] leading-relaxed text-fg-mute">
-        <li>The market settles on the curated feed&apos;s reading at the deadline: Yes if it says the event happened by then.</li>
-        <li>
-          The team records the outcome with evidence when it happens. Anyone can challenge a reading during its dispute
-          window; a challenged reading waits for the dispute resolver&apos;s ruling.
-        </li>
+        {price ? (
+          <>
+            <li>
+              The market settles on the agent&apos;s reading at the deadline: the {PRICE_SOURCE.charAt(0).toLowerCase() + PRICE_SOURCE.slice(1)}.
+              Yes if it meets the line above.
+            </li>
+            <li>
+              Anyone can challenge a reading during its dispute window; a challenged reading waits for the dispute
+              resolver&apos;s ruling.
+            </li>
+          </>
+        ) : (
+          <>
+            {proposal?.rule && <li>Resolves Yes if: {proposal.rule}</li>}
+            {proposal?.source && (
+              <li>
+                Where the answer comes from:{" "}
+                <a href={proposal.source} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">
+                  {proposal.source.replace(/^https:\/\//, "")} ↗
+                </a>
+              </li>
+            )}
+            <li>The market settles on the curated feed&apos;s reading at the deadline: Yes if it says the event happened by then.</li>
+            <li>
+              The team records the outcome with evidence when it happens. Anyone can challenge a reading during its dispute
+              window; a challenged reading waits for the dispute resolver&apos;s ruling.
+            </li>
+          </>
+        )}
         <li>If no valid reading lands in time the market voids and every trader gets their net cost back.</li>
         <li>Every buy and sell pays a 1% trading fee; nothing is charged at settlement.</li>
+        {proposal && (
+          <li>
+            Proposed by the community and approved by the team (
+            <Link href={statusHref(proposal.id)} className="text-accent hover:underline">
+              proposal {proposal.id}
+            </Link>
+            ). The creator share of its trading fees goes to the proposer&apos;s wallet, or to the Registrai treasury when
+            none was given.
+          </li>
+        )}
       </ul>
     </section>
   );
@@ -1797,7 +2140,7 @@ function Position({ hold, value, valueLabel = "Value now" }: { hold: Holding; va
   const r = value !== undefined ? pnl(value, hold.cost) : undefined;
   const tone = !r || r.diff === 0n ? "text-fg-mute" : r.diff > 0n ? "text-up" : "text-down";
   return (
-    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border border-line bg-bg px-3 py-2.5 text-[13px] sm:grid-cols-4">
+    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl border border-line bg-bg px-3 py-2.5 text-[13px] sm:grid-cols-4">
       <div>
         <div className="text-fg-dim">Your shares</div>
         <div className="tnum mt-0.5 text-[13px]">
@@ -1842,13 +2185,9 @@ function SideButton({ label, tone, active, onClick }: { label: string; tone: "up
     }
     last.current = label;
   }, [label]);
-  const on = tone === "up" ? "bg-up text-bg-elev border-up" : "bg-down text-bg-elev border-down";
-  const off =
-    tone === "up"
-      ? "border-[color-mix(in_srgb,var(--up)_45%,transparent)] bg-[color-mix(in_srgb,var(--up)_9%,transparent)] text-up hover:bg-[color-mix(in_srgb,var(--up)_18%,transparent)]"
-      : "border-[color-mix(in_srgb,var(--down)_45%,transparent)] bg-[color-mix(in_srgb,var(--down)_9%,transparent)] text-down hover:bg-[color-mix(in_srgb,var(--down)_18%,transparent)]";
+  // Paper UI: tinted outline, filled while pressed (aria-pressed).
   return (
-    <button ref={ref} onClick={onClick} aria-pressed={active} className={`tnum w-full border px-3 py-2.5 text-[14px] font-medium transition-colors ${active ? on : off}`}>
+    <button ref={ref} onClick={onClick} aria-pressed={active} className={`tnum pu-btn pu-btn--${tone} w-full text-[14px]`}>
       {label}
     </button>
   );
@@ -1953,9 +2292,9 @@ function TradeBox({
 
   const presets = open.mode === "buy" ? ["1", "5", "10"] : [];
   return (
-    <div className="mt-3 border border-line bg-bg p-3">
+    <div className="mt-3 rounded-xl border border-line bg-bg p-3">
       <div className="mb-3 flex flex-wrap items-center gap-2 text-[13px]">
-        <div className="inline-flex border border-line" role="group" aria-label="Buy or sell">
+        <div className="inline-flex overflow-hidden rounded-full border border-line" role="group" aria-label="Buy or sell">
           {(["buy", "sell"] as const).map((m) => (
             <button
               key={m}
@@ -1967,7 +2306,7 @@ function TradeBox({
             </button>
           ))}
         </div>
-        <div className="inline-flex border border-line" role="group" aria-label="Side">
+        <div className="inline-flex overflow-hidden rounded-full border border-line" role="group" aria-label="Side">
           {(["yes", "no"] as const).map((s) => (
             <button
               key={s}
@@ -1989,24 +2328,24 @@ function TradeBox({
       </div>
 
       <div className="flex items-stretch gap-2">
-        <div className="flex flex-1 items-center rounded-[10px] border border-line bg-bg-elev px-3 focus-within:border-line-strong">
+        <div className="pu-input flex flex-1 items-center">
           <input
             value={amt}
             onChange={(e) => setAmt(e.target.value.replace(/[^0-9.]/g, ""))}
             inputMode="decimal"
             placeholder="0.00"
             aria-label={open.mode === "buy" ? "USDC to spend" : `${label} shares to sell`}
-            className="tnum w-full bg-transparent py-2 font-serif text-[22px] outline-none"
+            className="tnum pu-h w-full bg-transparent py-2 text-[22px] outline-none"
           />
           <span className="text-[13px] text-fg-dim">{open.mode === "buy" ? "USDC" : "shares"}</span>
         </div>
         {presets.map((p) => (
-          <button key={p} onClick={() => setAmt(p)} className="tnum border border-line px-3 text-[13px] text-fg-mute hover:border-line-strong hover:text-fg">
+          <button key={p} onClick={() => setAmt(p)} className="tnum rounded-[10px] border border-line bg-bg-elev px-3 text-[13px] text-fg-mute hover:border-line-strong hover:text-fg">
             {p}
           </button>
         ))}
         {open.mode === "sell" && (
-          <button onClick={() => setAmt(formatUsdc(held, 6))} disabled={held === 0n} className="border border-line px-3 text-[13px] text-fg-mute hover:border-line-strong hover:text-fg disabled:opacity-40">
+          <button onClick={() => setAmt(formatUsdc(held, 6))} disabled={held === 0n} className="rounded-[10px] border border-line bg-bg-elev px-3 text-[13px] text-fg-mute hover:border-line-strong hover:text-fg disabled:opacity-40">
             All
           </button>
         )}
@@ -2051,7 +2390,7 @@ function TradeBox({
               key={String(s)}
               aria-pressed={slip === s}
               onClick={() => setSlip(s)}
-              className={`tnum border px-1.5 py-0.5 ${slip === s ? "border-accent text-accent" : "border-line hover:text-fg"}`}
+              className={`tnum rounded-full border px-2 py-0.5 ${slip === s ? "border-accent text-accent" : "border-line hover:text-fg"}`}
             >
               {Number(s) / 100}%
             </button>
@@ -2065,7 +2404,7 @@ function TradeBox({
         <button
           onClick={submit}
           disabled={busy || !canTrade}
-          className={`ml-auto px-5 py-2 text-[13px] text-bg-elev transition-opacity disabled:opacity-40 ${open.side === "yes" ? "bg-up" : "bg-down"}`}
+          className={`pu-btn is-active ml-auto text-[14px] disabled:opacity-40 ${open.side === "yes" ? "pu-btn--up" : "pu-btn--down"}`}
         >
           {tx.st.pending === open.mode && tx.st.scope === scope
             ? open.mode === "buy"
@@ -2102,7 +2441,7 @@ function statusFor(m: RoundMarket, snap: Snapshot | undefined, now: number): Rou
 
 // ───────────────────────────── claims ─────────────────────────────
 
-function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
+function Claims({ snap, tx, now, info }: { snap?: Snapshot; tx: Tx; now: number; info: Record<string, ProposalInfo | null> }) {
   const ses = useContext(SessionCtx);
   if (!snap) return null;
   const known = snap.markets.filter((m) => snap.redeemable[m.marketId] !== undefined);
@@ -2111,14 +2450,15 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
   const rows = new Set([...toSettle.map((m) => `settle:${m.marketId}`), ...claims.map((c) => `claim:${c.market.marketId}`)]);
   const orphan = tx.st.scope && /^(claim|settle):/.test(tx.st.scope) && !rows.has(tx.st.scope) ? tx.st.scope : undefined;
   const assetOf = (key: string) => D.assets.find((a) => a.key === key);
-  const eventOf = (key: string) => D.events.find((e) => e.key === key);
+  // A proposed market's question only when the API record matches it on chain.
+  const eventOf = (m: RoundMarket) => D.events.find((e) => e.key === m.key) ?? (isProposalKey(m.key) ? proposedMeta(m, info) : undefined);
   return (
     <section className="mt-10" aria-labelledby="claims-h">
-      <h2 id="claims-h" className="mb-3 font-serif text-[24px] leading-none">
+      <h2 id="claims-h" className="pu-h mb-3 text-[24px] leading-none">
         Your claims
       </h2>
       {toSettle.length > 0 && (
-        <ul className="mb-3 overflow-hidden rounded-xl border border-accent bg-bg-elev" aria-label="Markets you can settle">
+        <ul className="mb-3 overflow-hidden rounded-2xl border border-accent bg-bg-elev" aria-label="Markets you can settle">
           {toSettle.map((m) => {
             const how = snap.settleable[m.marketId];
             const scope = `settle:${m.marketId}`;
@@ -2127,7 +2467,7 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
               <li key={m.marketId} className="border-b border-line px-4 py-3 last:border-b-0">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="min-w-0 flex-1 text-[14px]">
-                    {a ? `${a.symbol} · ${roundLabel(roundWindow(m).start, roundWindow(m).end)}` : eventOf(m.key)?.question ?? m.key}
+                    {a ? `${a.symbol} · ${roundLabel(roundWindow(m).start, roundWindow(m).end)}` : eventOf(m)?.question ?? m.key}
                     <div className="text-[13px] text-fg-dim">
                       {how === "resolve"
                         ? "Its reading is final but the market is not resolved yet. Anyone may resolve it."
@@ -2144,7 +2484,7 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
                         how === "resolve" ? "Resolved: redeem it below." : "Voided: redeem your refund below.",
                       )
                     }
-                    className="border border-accent px-4 py-2 text-[13px] text-accent transition-colors hover:bg-accent hover:text-bg disabled:opacity-50"
+                    className="pu-btn pu-btn--quiet is-active text-[13px] disabled:opacity-50"
                   >
                     {tx.st.pending === how && tx.st.scope === scope ? "Confirm in wallet…" : how === "resolve" ? "Resolve now" : "Void and refund"}
                   </button>
@@ -2158,20 +2498,20 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
       {orphan && (
         // A redeemed claim (or a resolved/voided market) leaves its list: keep its
         // confirmation - or error - on screen here instead of losing it with the row.
-        <div className="mb-3 rounded-xl border border-line bg-bg-elev px-4 py-1">
+        <div className="mb-3 rounded-2xl border border-line bg-bg-elev px-4 py-1">
           <TxLine tx={tx} scope={orphan} />
         </div>
       )}
       {claims.length === 0 ? (
-        <p className="rounded-xl border border-line bg-bg-elev px-4 py-3 text-[13px] text-fg-dim">
+        <p className="pu-card pu-card--compact pu-card--static text-[13px] text-fg-dim">
           Nothing to redeem. Winning shares (and void refunds) from markets you traded show up here once they settle, and
           pay into your trading balance.
         </p>
       ) : (
-        <ul className="overflow-hidden rounded-xl border border-line bg-bg-elev">
+        <ul className="overflow-hidden rounded-2xl border border-line bg-bg-elev">
           {claims.map(({ market: m, amount }) => {
             const a = assetOf(m.key);
-            const ev = eventOf(m.key);
+            const ev = eventOf(m);
             const s = statusFor(m, snap, now);
             const scope = `claim:${m.marketId}`;
             return (
@@ -2197,7 +2537,7 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
                         Boolean(ses?.owner && ses.covers("redeem", 0n)),
                       )
                     }
-                    className="tnum pa-btn"
+                    className="tnum pa-btn pu-btn pu-btn--primary"
                   >
                     {tx.st.pending === "redeem" && tx.st.scope === scope ? "Redeeming…" : `Redeem ${fmt(amount)} USDC`}
                   </button>
@@ -2222,6 +2562,7 @@ function EventMarkets({
   tx,
   canTrade,
   address,
+  info,
 }: {
   snap?: Snapshot;
   now: number;
@@ -2230,24 +2571,39 @@ function EventMarkets({
   tx: Tx;
   canTrade: boolean;
   address?: Address;
+  info: Record<string, ProposalInfo | null>;
 }) {
-  const visible = D.events.filter((e) => {
-    const id = snap?.eventMarkets[e.key];
-    const st = id ? snap?.state[id] : undefined;
-    return eventVisible(e, st?.phase, e.expiry, now || e.expiry);
-  });
+  const visible = [
+    ...D.events.filter((e) => {
+      const id = snap?.eventMarkets[e.key];
+      const st = id ? snap?.state[id] : undefined;
+      return eventVisible(e, st?.phase, e.expiry, now || e.expiry);
+    }),
+    // Markets opened from approved proposals, found on chain.
+    ...(snap?.proposed ?? []).map((m) => proposedMeta(m, info)),
+  ];
   return (
     <section aria-labelledby="events-h">
-      <h2 id="events-h" className="font-serif text-[30px] leading-none tracking-tightest">
+      <h2 id="events-h" className="pu-h text-[30px] leading-none">
         Event markets
       </h2>
       <p className="mb-4 mt-2 max-w-[60ch] text-[13px] text-fg-mute">
-        Longer questions on a curated feed. The team records the outcome with evidence when it happens; the market
-        settles on the feed&apos;s reading at the deadline.
+        {visible.some((e) => e.proposal) ? (
+          <>
+            Longer questions, the team&apos;s and ones the community proposed. A yes/no market settles on its curated
+            feed&apos;s reading at the deadline, which the team records with evidence
+            {visible.some((e) => e.proposal?.kind === "price") ? "; a price market on the median price at the deadline" : ""}.
+          </>
+        ) : (
+          <>
+            Longer questions on a curated feed. The team records the outcome with evidence when it happens; the market
+            settles on the feed&apos;s reading at the deadline.
+          </>
+        )}
       </p>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((e) => (
-          <EventCard key={e.key} ev={e} snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={canTrade} address={address} />
+          <EventCard key={e.marketId && e.proposal ? e.marketId : e.key} ev={e} snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={canTrade} address={address} />
         ))}
       </div>
     </section>
@@ -2276,8 +2632,10 @@ function EventCard({
   /** On its own page: a larger title, no link to itself. */
   page?: boolean;
 }) {
-  const openPage = useCardLink(eventHref(ev));
-  const id = snap?.eventMarkets[ev.key];
+  const id = ev.proposal ? ev.marketId ?? undefined : snap?.eventMarkets[ev.key];
+  const href = ev.proposal && id ? proposedMarketHref(id) : eventHref(ev);
+  const openPage = useCardLink(href);
+  const price = ev.proposal?.kind === "price" ? ev.proposal : undefined;
   const st = id ? snap?.state[id] : undefined;
   const feed = snap?.book.byKey[ev.key];
   const market: RoundMarket | undefined =
@@ -2323,14 +2681,19 @@ function EventCard({
   return (
     <article
       onClick={page ? undefined : openPage}
-      className={`flex min-w-0 flex-col rounded-xl border border-line bg-bg-elev p-4 ${page ? "" : "cursor-pointer transition-colors hover:border-line-strong"}`}
+      className={`pu-card flex min-w-0 flex-col ${page ? "pu-card--static" : "cursor-pointer transition-colors"}`}
     >
       {ev.rehearsal && <div className="mb-2 text-[13px] text-accent">Testnet rehearsal of the settlement flow, short-dated.</div>}
+      {ev.proposal && (
+        <div className="mb-2">
+          <span className="pu-pill pu-pill--accent">Community proposal</span>
+        </div>
+      )}
       {page ? (
-        <h1 className="font-serif text-[32px] leading-tight tracking-tightest">{ev.question}</h1>
+        <h1 className="pu-h text-[32px] leading-tight">{ev.question}</h1>
       ) : (
-        <h3 className="font-serif text-[21px] leading-snug">
-          <Link href={eventHref(ev)} className="hover:underline">
+        <h3 className="pu-h text-[21px] leading-snug">
+          <Link href={href} className="hover:underline">
             {ev.question}
           </Link>
         </h3>
@@ -2343,6 +2706,48 @@ function EventCard({
             {now && now < expiry ? <span className="text-fg-dim"> · {timeLeft(expiry - now)} left</span> : null}
           </dd>
         </div>
+        {price && market && (
+          <div>
+            <dt>Yes if</dt>
+            <dd className="tnum text-[13px] text-fg-mute">
+              {price.symbol && price.decimals !== undefined ? (
+                <>
+                  {price.symbol} {market.comparator === COMPARATOR.LessOrEqual ? "at most" : "at least"}{" "}
+                  {formatScaled(market.threshold, price.decimals)} USD at the deadline
+                </>
+              ) : (
+                // Without a matching proposal record the asset and its decimals are unknown.
+                <>
+                  reading {COMPARATOR_SIGN[market.comparator] ?? "?"} {market.threshold.toString()}{" "}
+                  <span className="text-fg-dim">(raw on-chain value)</span>
+                </>
+              )}
+            </dd>
+          </div>
+        )}
+        {price ? (
+          <div>
+            <dt>Settlement price</dt>
+            <dd className="tnum text-[13px] text-fg-mute">
+              {!reading ? (
+                "…"
+              ) : reading.timestamp > 0 ? (
+                <>
+                  {price.decimals !== undefined ? (
+                    `${formatScaled(reading.value, price.decimals)} USD`
+                  ) : (
+                    <>
+                      {reading.value.toString()} <span className="text-fg-dim">(raw on-chain value)</span>
+                    </>
+                  )}
+                  <span className="text-fg-dim"> · read {utcStamp(reading.timestamp)}</span>
+                </>
+              ) : (
+                "Read at the deadline."
+              )}
+            </dd>
+          </div>
+        ) : (
         <div>
           <dt>Feed reading</dt>
           <dd className="tnum text-[13px] text-fg-mute">
@@ -2356,6 +2761,8 @@ function EventCard({
             )}
           </dd>
         </div>
+        )}
+        {!price && (
         <div>
           <dt>Evidence</dt>
           <dd className="text-[13px] text-fg-mute">
@@ -2367,6 +2774,7 @@ function EventCard({
             )}
           </dd>
         </div>
+        )}
       </dl>
 
       {!id && snap && <p className="mt-3 text-[13px] text-fg-dim">This market has not been opened yet.</p>}
@@ -2377,7 +2785,7 @@ function EventCard({
             <span className="text-up">Yes {yesPct.toFixed(0)}%</span>
             <span className="text-down">{(100 - yesPct).toFixed(0)}% No</span>
           </div>
-          <div className="flex h-2 w-full overflow-hidden bg-down">
+          <div className="flex h-2 w-full overflow-hidden rounded-full bg-down">
             <div className="h-full bg-up transition-[width] duration-500" style={{ width: `${yesPct}%` }} />
           </div>
 
@@ -2399,7 +2807,7 @@ function EventCard({
                 <>
                   <button
                     onClick={() => setOpen(isOpen && open?.mode === "sell" ? undefined : { id: market.marketId, side: hold.yes > 0n ? "yes" : "no", mode: "sell" })}
-                    className={`border px-3 py-1.5 text-[13px] transition-colors ${isOpen && open?.mode === "sell" ? "border-accent text-accent" : "border-line text-fg-mute hover:border-accent hover:text-fg"}`}
+                    className={`pu-btn pu-btn--quiet text-[13px] ${isOpen && open?.mode === "sell" ? "is-active" : ""}`}
                   >
                     Sell
                   </button>
@@ -2434,7 +2842,7 @@ function EventCard({
               <button
                 disabled={Boolean(tx.st.pending) || redeemable === 0n}
                 onClick={() => void tx.run(scope, "redeem", () => tx.send(C.MarketsV4, marketsV4Abi, "redeem", [market.marketId]), `Redeemed ${fmt(redeemable)} USDC.`)}
-                className="tnum pa-btn pa-btn--block"
+                className="tnum pa-btn pa-btn--block pu-btn pu-btn--primary"
               >
                 {redeemable === 0n ? "Nothing to redeem" : tx.st.pending === "redeem" && tx.st.scope === scope ? "Redeeming…" : `Redeem ${fmt(redeemable)} USDC`}
               </button>
