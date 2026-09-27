@@ -1164,7 +1164,7 @@ function LedgerBar({
 
   if (!address) {
     return (
-      <div className="pu-card pu-card--compact mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="pu-card pu-card--compact pu-card--static mb-6 flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] text-fg-mute">Connect a wallet to trade. Prices and results are public.</p>
         <button onClick={() => void connect()} className="pa-btn pu-btn pu-btn--primary">
           Connect wallet
@@ -1174,7 +1174,7 @@ function LedgerBar({
   }
   if (!onChain) {
     return (
-      <div className="pu-card pu-card--compact mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="pu-card pu-card--compact pu-card--static mb-6 flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] text-fg-mute">These markets run on {D.label}. Your wallet is on another network.</p>
         <button onClick={() => void switchChain()} className="pa-btn pu-btn pu-btn--primary">
           Switch to {D.label}
@@ -1184,7 +1184,7 @@ function LedgerBar({
   }
   const busy = Boolean(tx.st.pending);
   return (
-    <div className="pu-card pu-card--compact mb-6">
+    <div className="pu-card pu-card--compact pu-card--static mb-6">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <div>
           <div className="text-[13px] text-fg-dim">Trading balance</div>
@@ -1663,7 +1663,7 @@ function AssetPage({
         </div>
 
         <aside className="lg:sticky lg:top-4 lg:self-start">
-          <div className="pu-card">
+          <div className="pu-card pu-card--static">
             {current && r.st ? (
               r.trading ? (
                 <>
@@ -2159,7 +2159,7 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
         </div>
       )}
       {claims.length === 0 ? (
-        <p className="pu-card pu-card--compact text-[13px] text-fg-dim">
+        <p className="pu-card pu-card--compact pu-card--static text-[13px] text-fg-dim">
           Nothing to redeem. Winning shares (and void refunds) from markets you traded show up here once they settle, and
           pay into your trading balance.
         </p>
@@ -2319,7 +2319,7 @@ function EventCard({
   return (
     <article
       onClick={page ? undefined : openPage}
-      className={`pu-card flex min-w-0 flex-col ${page ? "" : "cursor-pointer transition-colors"}`}
+      className={`pu-card flex min-w-0 flex-col ${page ? "pu-card--static" : "cursor-pointer transition-colors"}`}
     >
       {ev.rehearsal && <div className="mb-2 text-[13px] text-accent">Testnet rehearsal of the settlement flow, short-dated.</div>}
       {page ? (

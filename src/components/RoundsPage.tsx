@@ -16,7 +16,7 @@ export function RoundsPage({ view = { kind: "overview" } }: { view?: RoundsView 
       {here ? (
         <CommonMarkets view={view} />
       ) : (
-        <div className="pa-card pu-card max-w-[62ch]">
+        <div className="pa-card pu-card pu-card--static max-w-[62ch]">
           <h1 className="pa-h2 pu-h">Rounds open on {PERENNIAL.label} soon</h1>
           <p className="pa-muted mt-2">
             Five-minute Up/Down rounds on BTC, ETH, SOL, ZEC and HYPE, and longer event questions, settled on chain in USDC.

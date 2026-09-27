@@ -1,7 +1,7 @@
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
+import { cssRules, protectedRules, scopedToPaperUi, serializeRules, splitSelectors } from "./css-rules";
 
 /**
  * The app's unified paper UI (src/styles/paper-ui.css) is a scoped layer: every
@@ -10,93 +10,99 @@ import { describe, expect, test } from "vitest";
  */
 
 const ROOT = resolve(__dirname, "../..");
-const LAYER = resolve(ROOT, "src/styles/paper-ui.css");
-/** The merge of feat/builder-atlas (Task 11 step 0): the shared tokens as they were before the layer. */
-const BASELINE = "abbe895be02c33490ae5cebf7108f46361bec11f";
+const read = (path: string) => readFileSync(resolve(ROOT, path), "utf8");
+const LAYER = "src/styles/paper-ui.css";
+/** The shared tokens and type as they were before the layer (generated from abbe895, the Task 11 step-0 merge). */
+const SNAPSHOT = "src/lib/__fixtures__/protected-css.txt";
+const PROTECTED = ["src/app/globals.css", "src/app/paper.css"];
 
 const TOKENS = [
   "--pu-page", "--pu-ink", "--pu-accent", "--pu-accent-hover", "--pu-rule", "--pu-edge", "--pu-card", "--pu-field",
   "--pu-lede", "--pu-label", "--pu-muted", "--pu-body", "--pu-pill-edge", "--pu-up", "--pu-down", "--pu-display", "--pu-sans",
 ];
 
-type Rule = { selector: string; body: string };
+const snapshotOf = (files: Record<string, string>) =>
+  Object.entries(files).map(([path, css]) => `## ${path}\n${serializeRules(protectedRules(css))}\n`).join("\n");
 
-/** Style rules (selector + declarations) of a stylesheet, descending into @media / @supports. */
-function rules(css: string): Rule[] {
-  const src = css.replace(/\/\*[\s\S]*?\*\//g, "");
-  const out: Rule[] = [];
-  let i = 0;
-  const walk = (end: number) => {
-    while (i < end) {
-      const open = src.indexOf("{", i);
-      if (open < 0 || open >= end) return;
-      const head = src.slice(i, open).trim();
-      // the matching brace
-      let depth = 1;
-      let j = open + 1;
-      while (j < src.length && depth > 0) {
-        if (src[j] === "{") depth++;
-        else if (src[j] === "}") depth--;
-        j++;
-      }
-      if (head.startsWith("@media") || head.startsWith("@supports")) {
-        i = open + 1;
-        walk(j - 1);
-      } else if (!head.startsWith("@")) {
-        out.push({ selector: head.replace(/\s+/g, " "), body: src.slice(open + 1, j - 1).replace(/\s+/g, " ").trim() });
-      }
-      i = j;
+/** Every selector of a stylesheet that is not scoped to .paper-ui. */
+const unscoped = (css: string) => cssRules(css).flatMap((r) => splitSelectors(r.selector)).filter((s) => !scopedToPaperUi(s));
+
+describe("css-rules", () => {
+  test("a statement at-rule in front of a block does not hide it", () => {
+    expect(cssRules("@tailwind base;\n@tailwind utilities;\n:root { --bg: red; }").map((r) => r.selector)).toEqual([":root"]);
+  });
+
+  test("grouping at-rules are descended into, opaque ones skipped, unknown ones refused", () => {
+    const r = cssRules("@layer base { :root { --a: 1 } } @media (x) { @supports (y) { .b { c: d } } } @keyframes k { from { e: f } }");
+    expect(r.map((x) => [x.context, x.selector])).toEqual([[["@layer base"], ":root"], [["@media (x)", "@supports (y)"], ".b"]]);
+    expect(() => cssRules("@starting-style { .a { b: c } }")).toThrow(/unknown block at-rule/);
+  });
+
+  test("scope: descendants and children only", () => {
+    for (const s of [".paper-ui", ".paper-ui .a", ".paper-ui > .a", ".paper-ui .a + .b", ".paper-ui:not(.x, .y) .a", ".paper-ui[data-x=\"a b\"] .c"]) {
+      expect(scopedToPaperUi(s), s).toBe(true);
     }
-  };
-  walk(src.length);
-  return out;
-}
-
-const selectors = (r: Rule) => r.selector.split(",").map((s) => s.trim());
-/** The rules that define the shared tokens and type: `:root`, `.paper-theme`, `.paper-type…`. */
-const sharedRules = (css: string) =>
-  rules(css).filter((r) => selectors(r).some((s) => s === ":root" || s.startsWith(".paper-theme") || s.startsWith(".paper-type")));
-
-function atBaseline(path: string): string {
-  return execFileSync("git", ["show", `${BASELINE}:${path}`], { cwd: ROOT, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
-}
+    for (const s of [":root", ".a", ".paper-uix .a", ".paper-ui-x", "html .paper-ui", ".paper-ui ~ *", ".paper-ui + x", ".paper-ui~.a", ".paper-ui.is-x + .a"]) {
+      expect(scopedToPaperUi(s), s).toBe(false);
+    }
+  });
+});
 
 describe("paper-ui layer", () => {
-  const css = readFileSync(LAYER, "utf8");
+  const css = read(LAYER);
 
-  test("every rule is scoped to .paper-ui", () => {
-    const all = rules(css);
-    expect(all.length).toBeGreaterThan(10);
-    for (const r of all) for (const s of selectors(r)) expect(s, r.selector).toMatch(/^\.paper-ui(?![\w-])/);
+  test("every rule is scoped to .paper-ui, at any nesting", () => {
+    expect(cssRules(css).length).toBeGreaterThan(10);
+    expect(unscoped(css)).toEqual([]);
+  });
+
+  test("the guard catches an unscoped rule, also inside @layer / @media, and sibling escapes", () => {
+    expect(unscoped(`${css}\n@layer x { .pu-card { color: red } }`)).toEqual([".pu-card"]);
+    expect(unscoped(`${css}\n@media (min-width: 1px) { :root { --bg: red } }`)).toEqual([":root"]);
+    expect(unscoped(`${css}\n.paper-ui ~ * { color: red }`)).toEqual([".paper-ui ~ *"]);
   });
 
   test("each token is defined exactly once, on .paper-ui itself", () => {
     const src = css.replace(/\/\*[\s\S]*?\*\//g, "");
     for (const t of TOKENS) expect(src.match(new RegExp(`${t}\\s*:`, "g"))?.length ?? 0, t).toBe(1);
-    const root = rules(css).find((r) => r.selector === ".paper-ui");
+    const root = cssRules(css).find((r) => r.selector === ".paper-ui" && r.context.length === 0);
     expect(root).toBeDefined();
     for (const t of TOKENS) expect(root!.body, t).toContain(`${t}:`);
   });
 
+  test("a static card keeps its resting border on hover", () => {
+    const r = cssRules(css).find((x) => x.selector === ".paper-ui .pu-card--static:hover");
+    expect(r?.body).toBe("border-color: var(--pu-rule);");
+    // after the brief's hover rule, so it wins at equal specificity
+    expect(css.indexOf(".pu-card--static:hover")).toBeGreaterThan(css.indexOf(".pu-card:hover"));
+  });
+
   test("it is imported once, after the shared paper styles", () => {
-    const layout = readFileSync(resolve(ROOT, "src/app/layout.tsx"), "utf8");
+    const layout = read("src/app/layout.tsx");
     expect(layout.match(/paper-ui\.css/g)?.length).toBe(1);
     expect(layout.indexOf("paper-ui.css")).toBeGreaterThan(layout.indexOf("./paper.css"));
   });
 
   test("the app shell's root carries .paper-ui", () => {
-    const shell = readFileSync(resolve(ROOT, "src/components/PerennialShell.tsx"), "utf8");
-    expect(shell).toMatch(/className=\{?[`"][^`"]*\bpaper-ui\b/);
+    expect(read("src/components/PerennialShell.tsx")).toMatch(/className=\{?[`"][^`"]*\bpaper-ui\b/);
   });
 });
 
 describe("the shared tokens and .paper-type stay as they were", () => {
-  for (const path of ["src/app/globals.css", "src/app/paper.css"]) {
-    test(`${path}: :root, .paper-theme and .paper-type rules unchanged`, () => {
-      const before = sharedRules(atBaseline(path));
-      const now = sharedRules(readFileSync(resolve(ROOT, path), "utf8"));
-      expect(before.length).toBeGreaterThan(0);
-      expect(now).toEqual(before);
-    });
-  }
+  const files = Object.fromEntries(PROTECTED.map((p) => [p, read(p)]));
+
+  test(":root, .paper-theme and .paper-type rules match the checked-in snapshot", () => {
+    const snap = read(SNAPSHOT);
+    expect(snap).toMatch(/^## src\/app\/globals\.css\n:root \{ --bg: /);
+    expect(snapshotOf(files)).toBe(snap);
+  });
+
+  test("the guard catches a changed token, and a :root added inside @layer", () => {
+    const snap = read(SNAPSHOT);
+    const g = files["src/app/globals.css"];
+    const bg = g.replace(/--bg:\s*#ebe1cc/, "--bg: red");
+    expect(bg).not.toBe(g);
+    expect(snapshotOf({ ...files, "src/app/globals.css": bg })).not.toBe(snap);
+    expect(snapshotOf({ ...files, "src/app/globals.css": `${g}\n@layer base{:root{--bg:red}}` })).not.toBe(snap);
+  });
 });

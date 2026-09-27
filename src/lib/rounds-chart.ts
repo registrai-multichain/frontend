@@ -220,8 +220,27 @@ export function trimSeries<T extends { t: number }>(s: readonly T[], now: number
 /** Approximate widths (px) of the in-play band's two 12 px labels. */
 export const IN_PLAY_LABEL_W = 42;
 export const NEXT_ROUND_LABEL_W = 62;
+/** The baseline (px from the chart's top) of the band's labels. */
+export const BAND_LABEL_Y = 13;
 
-type BandLabel = { x: number; anchor: "start" | "end" } | null;
+/** An axis-aligned box in chart pixels. */
+export type Box = { x0: number; y0: number; x1: number; y1: number };
+
+/** A generous width estimate (px) for a 12 px label: no measuring in the render path. */
+export const labelWidth = (text: string) => Math.ceil(text.length * 6.6);
+
+/** The box of a 12 px text label at (x, baseline). */
+export function textBox(x: number, baseline: number, width: number, anchor: "start" | "end" = "start"): Box {
+  const x0 = anchor === "start" ? x : x - width;
+  return { x0, y0: baseline - 10, x1: x0 + width, y1: baseline + 3 };
+}
+
+/** Whether two boxes overlap (touching edges do not). */
+export function overlaps(a: Box, b: Box): boolean {
+  return a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+}
+
+type BandLabel = { x: number; anchor: "start" | "end"; box: Box } | null;
 
 /**
  * Where the price chart draws the round in play, kept inside the chart. `start`
@@ -229,28 +248,31 @@ type BandLabel = { x: number; anchor: "start" | "end" } | null;
  * a round's start its end is minutes ahead of the axis); `plotW` is the plot's
  * width and `svgW` the whole chart's, right axis included. The band is clamped
  * to [0, plotW]; the end line and the "next round" label show only while the
- * round's end is on the plot; each label sits beside its edge where it fits,
- * else is right-aligned against it, else is left out.
+ * round's end is on the plot. "in play" sits at the band's left edge, else
+ * right-aligned at its right edge; "next round" right of the end line, else left
+ * of it. A label that would still leave its area or
+ * overlap one of `avoid` (the price-to-beat caption, the live price tag) is
+ * left out.
  */
 export function inPlayBand(
   start: number,
   end: number,
   plotW: number,
   svgW: number,
+  avoid: readonly Box[] = [],
 ): { x: number; w: number; endX: number | null; inPlay: BandLabel; next: BandLabel } {
   const clamp = (v: number) => Math.min(plotW, Math.max(0, v));
   const x = clamp(start);
   const w = Math.max(0, clamp(end) - x);
   const endX = end >= 0 && end <= plotW ? end : null;
-  let inPlay: BandLabel = null;
-  if (w > 0) {
-    if (x + 4 + IN_PLAY_LABEL_W <= plotW) inPlay = { x: x + 4, anchor: "start" };
-    else if (plotW - 4 - IN_PLAY_LABEL_W >= 0) inPlay = { x: plotW - 4, anchor: "end" };
-  }
-  let next: BandLabel = null;
-  if (endX !== null) {
-    if (endX + 4 + NEXT_ROUND_LABEL_W <= svgW) next = { x: endX + 4, anchor: "start" };
-    else if (endX - 4 - NEXT_ROUND_LABEL_W >= 0) next = { x: endX - 4, anchor: "end" };
-  }
+  const place = (candidates: Array<[number, "start" | "end"]>, width: number, maxX: number): BandLabel => {
+    for (const [cx, anchor] of candidates) {
+      const box = textBox(cx, BAND_LABEL_Y, width, anchor);
+      if (box.x0 >= 0 && box.x1 <= maxX && !avoid.some((a) => overlaps(box, a))) return { x: cx, anchor, box };
+    }
+    return null;
+  };
+  const inPlay = w > 0 ? place([[x + 4, "start"], [x + w - 4, "end"]], IN_PLAY_LABEL_W, plotW) : null;
+  const next = endX !== null ? place([[endX + 4, "start"], [endX - 4, "end"]], NEXT_ROUND_LABEL_W, svgW) : null;
   return { x, w, endX, inPlay, next };
 }

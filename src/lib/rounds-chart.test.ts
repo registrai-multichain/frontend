@@ -1,9 +1,13 @@
 import { describe, expect, test } from "vitest";
 import {
   applyTrade,
+  BAND_LABEL_Y,
   IN_PLAY_LABEL_W,
   NEXT_ROUND_LABEL_W,
   inPlayBand,
+  labelWidth,
+  overlaps,
+  textBox,
   cashOutValue,
   niceTicks,
   pnl,
@@ -157,7 +161,7 @@ describe("inPlayBand", () => {
   const SVG = 400;
 
   test("a round wholly on the plot draws as is, labels beside their edges", () => {
-    expect(inPlayBand(100, 250, W, SVG)).toEqual({
+    expect(inPlayBand(100, 250, W, SVG)).toMatchObject({
       x: 100, w: 150, endX: 250,
       inPlay: { x: 104, anchor: "start" },
       next: { x: 254, anchor: "start" },
@@ -171,7 +175,7 @@ describe("inPlayBand", () => {
     expect(b.endX).toBeNull();
     expect(b.next).toBeNull();
     // too little room right of the start: the label is right-aligned inside the plot
-    expect(b.inPlay).toEqual({ x: W - 4, anchor: "end" });
+    expect(b.inPlay).toMatchObject({ x: W - 4, anchor: "end" });
   });
 
   test("nothing ever reaches past the plot (band, in-play label) or the chart (next-round label)", () => {
@@ -200,5 +204,39 @@ describe("inPlayBand", () => {
 
   test("a round off the plot draws nothing", () => {
     expect(inPlayBand(-300, -100, W, SVG)).toMatchObject({ w: 0, endX: null, inPlay: null, next: null });
+  });
+
+  test("\"in play\" keeps off the price-to-beat caption: moved to the band's right edge, else left out", () => {
+    // a 390 px phone card (plot ~238 px), the price to beat near the top of the range
+    const plot = 238;
+    const svg = plot + 76;
+    const caption = textBox(4, 16, labelWidth("price to beat 84,732.87"));
+    const free = inPlayBand(120, 238, plot, svg);
+    expect(free.inPlay).toMatchObject({ x: 124, anchor: "start" });
+    expect(overlaps(caption, free.inPlay!.box)).toBe(true);
+    // wide band: right-aligned at its right edge, clear of the caption
+    const moved = inPlayBand(120, 238, plot, svg, [caption]);
+    expect(moved.inPlay).toMatchObject({ x: 234, anchor: "end" });
+    expect(overlaps(caption, moved.inPlay!.box)).toBe(false);
+    // band too short to get clear: left out
+    expect(inPlayBand(120, 170, plot, svg, [caption]).inPlay).toBeNull();
+    // caption lower down: the label stays at the band's start
+    expect(inPlayBand(120, 238, plot, svg, [textBox(4, 90, labelWidth("price to beat 84,732.87"))]).inPlay).toMatchObject({ x: 124 });
+  });
+
+  test("the next-round label keeps off the live price tag", () => {
+    const tagAtTop = { x0: W + 2, y0: 4, x1: SVG - 2, y1: 22 };
+    expect(inPlayBand(100, 320, W, SVG).next).toMatchObject({ x: 324, anchor: "start" });
+    // the tag covers the right side: it falls back to the left of the line, clear of the tag
+    const b = inPlayBand(100, 320, W, SVG, [tagAtTop]);
+    expect(b.next).toMatchObject({ x: 316, anchor: "end" });
+    expect(overlaps(b.next!.box, tagAtTop)).toBe(false);
+  });
+
+  test("label boxes", () => {
+    expect(textBox(10, BAND_LABEL_Y, 40)).toEqual({ x0: 10, y0: 3, x1: 50, y1: 16 });
+    expect(textBox(50, BAND_LABEL_Y, 40, "end")).toEqual({ x0: 10, y0: 3, x1: 50, y1: 16 });
+    expect(overlaps({ x0: 0, y0: 0, x1: 10, y1: 10 }, { x0: 10, y0: 0, x1: 20, y1: 10 })).toBe(false);
+    expect(overlaps({ x0: 0, y0: 0, x1: 10, y1: 10 }, { x0: 9, y0: 9, x1: 20, y1: 20 })).toBe(true);
   });
 });

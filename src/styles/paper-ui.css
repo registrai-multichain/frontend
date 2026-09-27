@@ -26,6 +26,8 @@
 
 /* ── states and variants the market pages need (Task 11a) ── */
 .paper-ui .pu-card--compact { padding: 14px 18px; }
+/* A card that is not a link or control keeps its border on hover, so it never reads as clickable. */
+.paper-ui .pu-card--static:hover { border-color: var(--pu-rule); }
 .paper-ui .pu-btn { cursor: pointer; transition: background-color .15s, color .15s, border-color .15s, opacity .15s; }
 .paper-ui .pu-btn:disabled { cursor: not-allowed; }
 .paper-ui .pu-btn--up:hover:not([aria-pressed="true"]):not(.is-active):not(:disabled) { background: color-mix(in srgb, var(--pu-up) 14%, var(--pu-card)); }
