@@ -181,9 +181,9 @@ export async function readSeasons(client: PublicClient, pool: Address, ids: bigi
 
 /** JSON-safe (every amount a decimal string) so it can live in live-data.json and localStorage. */
 export interface EconomyLedger {
-  /** builderId -> epoch -> income credited (IncomeCredited, summed). */
+  /** builderId -> epoch -> income credited (IncomeCredited + LateIncomeCredited, summed). */
   income: Record<string, Record<string, string>>;
-  /** builderId -> epoch -> the Claimed event. */
+  /** builderId -> epoch -> its Claimed events, summed (late income makes an epoch claimable again). */
   claims: Record<string, Record<string, { gross: string; tax: string; fee: string; net: string; payout: string }>>;
   /** builderId -> epoch -> gross swept to the season pool (FrozenSwept). */
   swept: Record<string, Record<string, string>>;
@@ -211,16 +211,21 @@ export function foldEconomyLogs(prev: EconomyLedger, events: readonly EconomyEve
   const l: EconomyLedger = structuredClone(prev);
   for (const { eventName, args: a } of events) {
     switch (eventName) {
-      case "IncomeCredited": {
+      case "IncomeCredited":
+      case "LateIncomeCredited": {
         const b = (l.income[s(a.builderId)] ??= {});
         b[s(a.epoch)] = add(b[s(a.epoch)], a.amount);
         break;
       }
-      case "Claimed":
-        (l.claims[s(a.builderId)] ??= {})[s(a.epoch)] = {
-          gross: s(a.gross), tax: s(a.tax), fee: s(a.fee), net: s(a.net), payout: String(a.payout).toLowerCase(),
+      case "Claimed": {
+        const b = (l.claims[s(a.builderId)] ??= {});
+        const was = b[s(a.epoch)];
+        b[s(a.epoch)] = {
+          gross: add(was?.gross, a.gross), tax: add(was?.tax, a.tax), fee: add(was?.fee, a.fee), net: add(was?.net, a.net),
+          payout: String(a.payout).toLowerCase(),
         };
         break;
+      }
       case "FrozenSwept":
         (l.swept[s(a.builderId)] ??= {})[s(a.epoch)] = s(a.gross);
         break;
@@ -261,9 +266,24 @@ export function seasonRewardsOf(l: EconomyLedger | null | undefined, builderId: 
     .sort((a, b) => Number(BigInt(a.seasonId) - BigInt(b.seasonId)));
 }
 
+/** Released wonder escrow credited to the ended epoch it was earned in (BuilderFund after the
+ *  2026-09-27 audit fixes; not in the generated ABI of the deployed builder stack yet). */
+const LATE_INCOME_EVENT = {
+  type: "event", name: "LateIncomeCredited", anonymous: false,
+  inputs: [
+    { name: "epoch", type: "uint256", indexed: true, internalType: "uint256" },
+    { name: "builderId", type: "uint256", indexed: true, internalType: "uint256" },
+    { name: "amount", type: "uint256", indexed: false, internalType: "uint256" },
+  ],
+} as const;
+
+/** The fund's events, late income included. */
+const FUND_EVENTS_ABI = [...(builderFundAbi as Abi), LATE_INCOME_EVENT] as Abi;
+
 /** The fund and pool events the ledger folds (one getLogs per chunk covers both contracts). */
 const LEDGER_EVENTS = [
   ...(builderFundAbi as Abi).filter((x) => x.type === "event" && ["IncomeCredited", "Claimed", "FrozenSwept", "ScheduleSet", "SeasonCredited"].includes(x.name)),
+  LATE_INCOME_EVENT,
   ...(seasonPoolAbi as Abi).filter((x) => x.type === "event" && ["Funded", "Synced", "SeasonPublished", "SeasonClaimed", "SeasonReclaimed"].includes(x.name)),
 ];
 
@@ -273,7 +293,7 @@ export function decodeEconomyLogs(logs: readonly Log[], fund: Address, pool: Add
   const sorted = [...logs].sort((a, b) => Number((a.blockNumber ?? 0n) - (b.blockNumber ?? 0n)) || (a.logIndex ?? 0) - (b.logIndex ?? 0));
   for (const lg of sorted) {
     const at = lg.address.toLowerCase();
-    const abi = at === fund.toLowerCase() ? builderFundAbi : at === pool.toLowerCase() ? seasonPoolAbi : null;
+    const abi = at === fund.toLowerCase() ? FUND_EVENTS_ABI : at === pool.toLowerCase() ? seasonPoolAbi : null;
     if (!abi) continue;
     try {
       const ev = decodeEventLog({ abi: abi as Abi, data: lg.data, topics: lg.topics });

@@ -66,6 +66,22 @@ describe("the event ledger", () => {
     expect(seasonRewardsOf(null, 7)).toEqual([]);
   });
 
+  // Perennial audit fixes (final review): released wonder escrow is LateIncomeCredited
+  // into an ended epoch, possibly one already claimed; its claim adds to the first.
+  test("late income counts as income, and a second claim of the same epoch adds up", () => {
+    const LATE = [{ type: "event", name: "LateIncomeCredited", inputs: [
+      { name: "epoch", type: "uint256", indexed: true }, { name: "builderId", type: "uint256", indexed: true },
+      { name: "amount", type: "uint256", indexed: false }] }] as const satisfies Abi;
+    const more = [
+      ...logs,
+      log(LATE as unknown as Abi, FUND, "LateIncomeCredited", { epoch: 0n, builderId: 7n, amount: 2n * U }, 50n),
+      F("Claimed", { epoch: 0n, builderId: 7n, gross: 2n * U, tax: 0n, fee: 20_000n, net: 1_980_000n, payout: PAYOUT }, 60n),
+    ];
+    const l = foldEconomyLogs(EMPTY_LEDGER, decodeEconomyLogs(more, FUND, POOL));
+    expect(l.income["7"]["0"]).toBe("10000000");
+    expect(l.claims["7"]["0"]).toEqual({ gross: "10000000", tax: "0", fee: "100000", net: "9900000", payout: PAYOUT.toLowerCase() });
+  });
+
   test("folding is incremental: two halves == all at once, and the input is not mutated", () => {
     const ev = decodeEconomyLogs(logs, FUND, POOL);
     const whole = foldEconomyLogs(EMPTY_LEDGER, ev);
