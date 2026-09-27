@@ -1,5 +1,6 @@
 import { defineChain, fallback, http, type Address, type Chain, type Transport } from "viem";
 import live from "./live-data.json";
+import { paceLogs } from "./rpc-pacing";
 
 // Circle's official Arc RPC endpoints — the ONLY endpoints the app reads from or
 // hands to a wallet. Project rule: no third-party RPC and no API keys in the
@@ -19,14 +20,15 @@ export function arcTransport(): Transport {
 export function transportFor(chain: WalletChain, opts: { batch?: boolean } = {}): Transport {
   return fallback(
     chain.rpcUrls.map((url) =>
-      http(url, {
+      // eth_getLogs is paced page-wide (rpc-pacing.ts): Arc allows ~4 a second per IP.
+      paceLogs(http(url, {
         // The Arc RPC rate-limits large JSON-RPC batches per IP (batches of 25 were
         // refused; <= 10 pass), and a 429 there also hits the user's wallet on the
         // same IP. Keep batches small; contract reads go through Multicall3 anyway.
         batch: opts.batch ? { batchSize: 8, wait: 20 } : false,
         retryCount: 4,
         retryDelay: 400,
-      }),
+      })),
     ),
   );
 }
