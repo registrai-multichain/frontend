@@ -3,15 +3,16 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { createPublicClient, getAbiItem, keccak256, parseAbiItem, toBytes, type Hex } from "viem";
+import { createPublicClient, getAbiItem, parseAbiItem, type Hex } from "viem";
 import { marketsV4Abi, nanoLedgerAbi } from "@/lib/abi";
 import { getWalletChain, transportFor, type WalletChain } from "@/lib/chains";
 import { shortAddr } from "@/lib/format";
 import { OPENING_DELAY_S, openingOverdue, type ApprovalMessageJson, type Proposal, type ProposalKind } from "@/lib/market-proposals";
+import { UnsignedSource } from "./UnsignedSource";
 import { verifiedApproval } from "@/lib/proposal-signature";
 import {
   PRICE_SOURCE, feesScanEnd, forwardPayee, forwardedShown, humanUtc, isTreasury, shareExact, shareText, mergeFeeProgress, mergeScanProgress, parseScanCache,
-  proposalFeedKey, proposalScanStart, scanForward, statusChip, sumCreatorFees, type ScanCache,
+  proposalFeedKey, proposalScanStart, scanForward, statusChip, statusWords, sumCreatorFees, type ApprovalCheck, type ScanCache,
 } from "@/lib/propose-form";
 import { PROPOSALS_API } from "@/lib/proposals-api";
 import {
@@ -231,7 +232,7 @@ export function ProposalStatus() {
       alive = false;
     };
   }, [proposal]);
-  const signature: Signature = !proposal || !(proposal.status === "approved" || proposal.status === "opened")
+  const signature: ApprovalCheck = !proposal || !(proposal.status === "approved" || proposal.status === "opened")
     ? { state: "unsigned" }
     : signed?.id !== proposal.id
       ? { state: "checking" }
@@ -294,31 +295,19 @@ function Notice({ title, busy, children }: { title: string; busy?: boolean; chil
   );
 }
 
-/** The approval's signature check (I4): "unsigned" for a proposal not approved yet (its
- *  words are the submission's own); "ok" / "bad" once checked. */
-type Signature = { state: "unsigned" } | { state: "checking" } | { state: "bad" } | { state: "ok"; message: ApprovalMessageJson };
-
 /** I3: approved over OPENING_DELAY_S ago and the chain, read to the head, has no market for it. */
 const isDelayed = (p: Proposal, chain: OnChain | null, nowS: number) => chain?.kind === "not-yet" && chain.complete && openingOverdue(p, nowS);
 
-function ProposalCard({ p, chain, checking, signature, nowS }: { p: Proposal; chain: OnChain | null; checking: boolean; signature: Signature; nowS: number }) {
+function ProposalCard({ p, chain, checking, signature, nowS }: { p: Proposal; chain: OnChain | null; checking: boolean; signature: ApprovalCheck; nowS: number }) {
   const opened = chain?.kind === "opened" ? chain : null;
   const chip = statusChip(p.status, Boolean(opened), isDelayed(p, chain, nowS));
   const isPrice = p.kind === "price";
-  // Where the agent actually forwards: the treasury for an empty, zero or own-contract payee.
-  const payee = forwardPayee(p);
-  // An approved proposal shows the signed question, the rule only when it hashes to the signed
-  // ruleHash, and its source only under a valid signature; otherwise "Proposal #id".
-  const words =
-    signature.state === "unsigned"
-      ? { question: p.question, rule: p.rule, source: p.source }
-      : signature.state === "ok"
-        ? {
-            question: signature.message.question,
-            rule: p.rule && keccak256(toBytes(p.rule)) === signature.message.ruleHash.toLowerCase() ? p.rule : undefined,
-            source: p.source,
-          }
-        : { question: `Proposal #${p.id}`, rule: undefined, source: undefined };
+  // An approved proposal shows the signed question, deadline and payee (where the agent
+  // forwards: the treasury for an empty, zero or own-contract payee), the rule only when it
+  // hashes to the signed ruleHash; unverified, "Proposal #id" and none of them. The source
+  // is never signed: plain text, labelled (R54 F1).
+  const words = statusWords(p, signature);
+  const payee = words.payee;
 
   return (
     <section className={`${s.panel} ${s.done}`} aria-labelledby="pp-question">
@@ -348,40 +337,40 @@ function ProposalCard({ p, chain, checking, signature, nowS }: { p: Proposal; ch
         )
       )}
       <dl className={s.facts}>
-        <div className={s.fact}>
-          <dt>Deadline</dt>
-          <dd>{humanUtc(p.deadline)}</dd>
-        </div>
+        {words.deadline !== null && (
+          <div className={s.fact}>
+            <dt>Deadline</dt>
+            <dd>{humanUtc(words.deadline)}</dd>
+          </div>
+        )}
         {!isPrice && words.source && (
           <div className={s.fact}>
             <dt>Where the answer comes from</dt>
             <dd>
-              {/^https:\/\//.test(words.source) ? (
-                <a href={words.source} target="_blank" rel="noreferrer noopener">{words.source.replace(/^https:\/\//, "")} ↗</a>
+              <UnsignedSource source={words.source} />
+            </dd>
+          </div>
+        )}
+        {payee !== null && (
+          <div className={s.fact}>
+            <dt>Creator share goes to</dt>
+            <dd>
+              {isTreasury(payee) ? (
+                "Registrai treasury"
               ) : (
-                words.source
+                <>
+                  <span className={s.mono} title={payee}>{shortAddr(payee)}</span>&#8217;s Registrai balance on {ROUNDS.label}
+                </>
               )}
             </dd>
           </div>
         )}
         <div className={s.fact}>
-          <dt>Creator share goes to</dt>
-          <dd>
-            {isTreasury(payee) ? (
-              "Registrai treasury"
-            ) : (
-              <>
-                <span className={s.mono} title={payee}>{shortAddr(payee)}</span>&#8217;s Registrai balance on {ROUNDS.label}
-              </>
-            )}
-          </dd>
-        </div>
-        <div className={s.fact}>
           <dt>Proposed</dt>
           <dd>{Number.isFinite(Date.parse(p.createdAt)) ? humanUtc(Math.floor(Date.parse(p.createdAt) / 1000)) : "—"}</dd>
         </div>
       </dl>
-      <StatusCallout p={p} chain={chain} checking={checking} nowS={nowS} />
+      <StatusCallout p={p} chain={chain} checking={checking} nowS={nowS} payee={payee} />
     </section>
   );
 }
@@ -391,9 +380,10 @@ function Share({ v }: { v: bigint }) {
   return <span title={shareExact(v)}>{shareText(v)}</span>;
 }
 
-function StatusCallout({ p, chain, checking, nowS }: { p: Proposal; chain: OnChain | null; checking: boolean; nowS: number }) {
-  const payee = forwardPayee(p);
-  const toTreasury = isTreasury(payee);
+/** `payee`: the verified approval's (null when it could not be verified: the forwarding
+ *  lines are left out). */
+function StatusCallout({ p, chain, checking, nowS, payee }: { p: Proposal; chain: OnChain | null; checking: boolean; nowS: number; payee: string | null }) {
+  const toTreasury = payee !== null && isTreasury(payee);
   if (chain?.kind === "opened") {
     const shown = forwardedShown(chain.forwarded, chain.creatorFees);
     return (
@@ -405,11 +395,13 @@ function StatusCallout({ p, chain, checking, nowS }: { p: Proposal; chain: OnCha
         <p>
           Creator share earned: {chain.creatorFees === null ? "could not be read just now" : <Share v={chain.creatorFees} />}
         </p>
-        <p>
-          Forwarded to {toTreasury ? "the Registrai treasury" : <span className={s.mono} title={payee}>{shortAddr(payee)}</span>} (up to this
-          market&#8217;s share): {chain.forwarded === null ? "could not be read just now" : shown === undefined ? "—" : <Share v={shown} />}
-        </p>
-        {toTreasury ? (
+        {payee !== null && (
+          <p>
+            Forwarded to {toTreasury ? "the Registrai treasury" : <span className={s.mono} title={payee}>{shortAddr(payee)}</span>} (up to this
+            market&#8217;s share): {chain.forwarded === null ? "could not be read just now" : shown === undefined ? "—" : <Share v={shown} />}
+          </p>
+        )}
+        {payee === null ? null : toTreasury ? (
           <p>Registrai&#8217;s agent forwards it to the Registrai treasury daily.</p>
         ) : (
           <p>

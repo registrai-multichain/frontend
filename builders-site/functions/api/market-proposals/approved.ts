@@ -10,6 +10,7 @@ export const onRequestGet: PagesFunction = async (ctx) => {
   const hit = cache ? await cache.match(key) : undefined;
   if (hit) return hit;
   const res = await handleApprovedFeed(ctx.request, ctx.env);
-  if (cache && res.ok) ctx.waitUntil(cache.put(key, res.clone()));
+  // Only a built feed is cached (a missing doc answers no-store until POST /rebuild).
+  if (cache && res.ok && (res.headers.get("cache-control") ?? "").startsWith("public")) ctx.waitUntil(cache.put(key, res.clone()));
   return res;
 };

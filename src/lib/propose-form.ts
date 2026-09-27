@@ -4,7 +4,10 @@
  * ./market-proposals; this file only turns form state into the API body and
  * derives what the status page shows.
  */
-import { GRID_S, PROPOSAL_ASSETS, TREASURY, validateProposal, type Proposal, type ProposalAsset, type ProposalKind, type ProposalStatus } from "./market-proposals";
+import {
+  GRID_S, PROPOSAL_ASSETS, TREASURY, validateProposal, type ApprovalMessageJson, type Proposal, type ProposalAsset, type ProposalKind, type ProposalStatus,
+} from "./market-proposals";
+import { keccak256, toBytes } from "viem";
 import { formatUsdc } from "./perennial-market";
 import { BLOCK_SECS, LOG_CHUNK_BLOCKS, ROUNDS, scanLogs } from "./rounds";
 
@@ -208,7 +211,7 @@ const ZERO_ADDR = /^0x0{40}$/;
  * the agent's forward_payee does). Lower-case.
  */
 export function forwardPayee(
-  p: Pick<Proposal, "creatorPayee" | "approval">,
+  p: { creatorPayee?: string; approval?: { message?: { creatorPayee?: unknown } } },
   own: { agent: string; ledger?: string | null; markets?: string | null } = { agent: ROUNDS.agent, ledger: ROUNDS.contracts.NanoLedger, markets: ROUNDS.contracts.MarketsV4 },
   treasury: string = TREASURY,
 ): string {
@@ -267,6 +270,47 @@ export function shareExact(v: bigint): string {
 export function forwardedShown(forwarded: bigint | null | undefined, earned: bigint | null | undefined): bigint | undefined {
   if (forwarded === null || forwarded === undefined || earned === null || earned === undefined) return undefined;
   return forwarded < earned ? forwarded : earned;
+}
+
+/** The status page's check of an approved proposal's signature (I4): "unsigned" for a
+ *  proposal with no approval to check (pending, rejected, queued: its words are the
+ *  submission's own); "checking"; "bad"; "ok" with the verified message. */
+export type ApprovalCheck = { state: "unsigned" } | { state: "checking" } | { state: "bad" } | { state: "ok"; message: ApprovalMessageJson };
+
+/** What the status page shows of a proposal (I4, R54 F1). */
+export interface StatusWords {
+  question: string;
+  /** Shown only when it hashes to the signed ruleHash (an approved proposal). */
+  rule?: string;
+  /** Never part of any signature: shown as plain, unlinked text, labelled so. */
+  source?: string;
+  /** The signed expiry for an approved proposal; null when it cannot be vouched for. */
+  deadline: number | null;
+  /** Where the agent forwards the creator share: the signed creatorPayee for an approved
+   *  proposal; null when it cannot be vouched for. */
+  payee: string | null;
+}
+
+/** An approved proposal's question, deadline and payee come from the VERIFIED approval
+ *  message, never from the record beside it (a KV write could change those); unverified
+ *  (or still checking), it is "Proposal #id" with nothing else. */
+export function statusWords(p: Proposal, check: ApprovalCheck): StatusWords {
+  switch (check.state) {
+    case "unsigned":
+      return { question: p.question, rule: p.rule || undefined, source: p.source || undefined, deadline: p.deadline, payee: forwardPayee({ creatorPayee: p.creatorPayee }) };
+    case "ok": {
+      const m = check.message;
+      return {
+        question: m.question,
+        rule: p.rule && keccak256(toBytes(p.rule)) === m.ruleHash.toLowerCase() ? p.rule : undefined,
+        source: p.source || undefined,
+        deadline: Number(m.expiry),
+        payee: forwardPayee({ approval: { message: m } }),
+      };
+    }
+    default:
+      return { question: `Proposal #${p.id}`, deadline: null, payee: null };
+  }
 }
 
 /** The payee is the treasury (compare forwardPayee's lower-case result). */

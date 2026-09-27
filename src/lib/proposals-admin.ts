@@ -234,11 +234,26 @@ export function nextNonce(nowMs: number, lastNonce: bigint): bigint {
 
 /** I1: when an outcome can still be recorded. The agent attests a yes/no proposal's
  *  outcome `attestAt` (the deadline + OUTCOME_GRACE_S), taking what reached it before;
- *  the form (and the API) close at `cutoff`, a few minutes earlier, so what is signed
- *  there does reach it. */
-export function outcomeWindow(deadline: number, nowS: number): { attestAt: number; cutoff: number; closed: boolean; pastDeadline: boolean } {
+ *  the form (and the API) close at `cutoff`, OUTCOME_PICKUP_S (10 min) earlier, so what
+ *  is signed there does reach it. `attested`: the attest time itself has passed. */
+export function outcomeWindow(
+  deadline: number,
+  nowS: number,
+): { attestAt: number; cutoff: number; closed: boolean; attested: boolean; pastDeadline: boolean } {
   const cutoff = outcomeCutoff(deadline);
-  return { attestAt: deadline + OUTCOME_GRACE_S, cutoff, closed: nowS > cutoff, pastDeadline: nowS > deadline };
+  const attestAt = deadline + OUTCOME_GRACE_S;
+  return { attestAt, cutoff, closed: nowS > cutoff, attested: nowS >= attestAt, pastDeadline: nowS > deadline };
+}
+
+/** The closed form's text: before the attest time it says the agent attests then (not
+ *  that it has), after it that it attested. */
+export function tooLateText(deadline: number, nowS: number, recorded: boolean): string {
+  const { attestAt, attested } = outcomeWindow(deadline, nowS);
+  const when = shortUtc(attestAt, nowS);
+  const what = recorded ? "the outcome recorded here" : "no outcome, so the market settles No";
+  return attested
+    ? `The agent attested this market’s outcome at ${when}, 30 minutes after the deadline, from what it had received by then (${what}). An outcome signed now would never be applied.`
+    : `The agent attests this market’s outcome at ${when}, 30 minutes after the deadline, from what it has received by then (${what}). An outcome signed now might not reach it in time, so the form is closed.`;
 }
 
 /** The notice after an outcome is recorded: when the agent attests it and when the market settles. */
@@ -261,7 +276,7 @@ export interface OutcomeProblem {
 export function outcomeProblems(f: { value: boolean | null; evidence: string; sinceText: string; deadline: number; nowS: number }): OutcomeProblem[] {
   const out: OutcomeProblem[] = [];
   if (outcomeWindow(f.deadline, f.nowS).closed)
-    out.push({ field: "window", blank: false, error: "Too late — use the dispute process: the agent has attested the outcome." });
+    out.push({ field: "window", blank: false, error: "Too late — use the dispute process: an outcome signed now might not reach the agent before it attests." });
   if (f.value === null) out.push({ field: "value", blank: true, error: "Pick Yes or No." });
   const evidence = f.evidence.trim();
   if (!/^https:\/\/\S+$/.test(evidence)) out.push({ field: "evidence", blank: !evidence, error: "Give the evidence as a public https link." });

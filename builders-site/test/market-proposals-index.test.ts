@@ -30,15 +30,21 @@ const idBytes = (c: number) => Uint8Array.from({ length: 10 }, (_, i) => Math.fl
 /** MemoryKV that counts operations. */
 class CountingKV extends MemoryKV {
   ops = { get: 0, put: 0, list: 0, delete: 0 };
+  putsByKey = new Map<string, number>();
+  /** When set, every get throws it (a KV 429, say). */
+  failGets: Error | null = null;
   reset() {
     this.ops = { get: 0, put: 0, list: 0, delete: 0 };
+    this.putsByKey.clear();
   }
   override async get(key: string) {
     this.ops.get++;
+    if (this.failGets) throw this.failGets;
     return super.get(key);
   }
   override async put(key: string, value: string, options?: { expirationTtl?: number; metadata?: unknown }) {
     this.ops.put++;
+    this.putsByKey.set(key, (this.putsByKey.get(key) ?? 0) + 1);
     return super.put(key, value, options);
   }
   override async list<M = unknown>(options?: { prefix?: string; cursor?: string; limit?: number }) {
@@ -201,14 +207,27 @@ describe("C1: migrating records written before the index", () => {
     return { s, ids };
   }
 
-  test("the first feed read rebuilds the docs (and metadata); later reads are one get", async () => {
+  test("R54 F2: a public feed read never rebuilds: a missing doc is an empty feed, not cached, one get", async () => {
     const { s, ids } = await legacyStore();
-    const want = await oldFeeds(s.kv);
-    expect(await (await handleApprovedFeed(new Request("https://x"), s.env)).text()).toBe(want.approved);
-    expect(s.kv.store.has(FEED_APPROVED) && s.kv.store.has(FEED_OUTCOMES)).toBe(true);
-    for (const id of ids) expect(s.kv.store.get(`mp:${id}`)?.metadata).toMatchObject({ id });
     s.kv.reset();
-    expect(await (await handleOutcomesFeed(new Request("https://x"), s.env)).text()).toBe(want.outcomes);
+    const a = await handleApprovedFeed(new Request("https://x"), s.env);
+    expect(s.kv.ops).toEqual({ get: 1, put: 0, list: 0, delete: 0 });
+    expect(await a.json()).toEqual({ approvals: [] });
+    expect(a.headers.get("cache-control")).toBe("no-store");
+    s.kv.reset();
+    const o = await handleOutcomesFeed(new Request("https://x"), s.env);
+    expect(s.kv.ops).toEqual({ get: 1, put: 0, list: 0, delete: 0 });
+    expect(await o.json()).toEqual({ outcomes: [] });
+    expect(o.headers.get("cache-control")).toBe("no-store");
+    expect(s.kv.store.has(FEED_APPROVED) || s.kv.store.has(FEED_OUTCOMES)).toBe(false);
+    // POST /rebuild builds them; then the feeds serve the old bytes, cached, one get each
+    await handleAdminRebuild(s.env);
+    for (const id of ids) expect(s.kv.store.get(`mp:${id}`)?.metadata).toMatchObject({ id });
+    const want = await oldFeeds(s.kv);
+    s.kv.reset();
+    const built = await handleOutcomesFeed(new Request("https://x"), s.env);
+    expect(await built.text()).toBe(want.outcomes);
+    expect(built.headers.get("cache-control")).toBe("public, max-age=30");
     expect(s.kv.ops).toEqual({ get: 1, put: 0, list: 0, delete: 0 });
   });
 
@@ -333,5 +352,76 @@ describe("M6 + I3: the admin's last nonce and approvedAt", () => {
     expect((await s.list()).proposals[0].approvedAt).toBe(new Date(T0 + 5_000).toISOString());
     await s.approve(id, 2n, T0 + 60_000);
     expect((await s.record(id)).approvedAt).toBe(new Date(T0 + 5_000).toISOString());
+  });
+});
+
+describe("R54 F5: one put per feed doc per request", () => {
+  test("approve and outcome with the docs missing rebuild and write each doc once", async () => {
+    const s = setup();
+    const a = await s.newId();
+    const b = await s.newId();
+    expect((await s.approve(a, 1n)).status).toBe(200);
+    s.kv.store.delete(FEED_APPROVED);
+    s.kv.store.delete(FEED_OUTCOMES);
+    s.kv.reset();
+    expect((await s.approve(b, 2n)).status).toBe(200);
+    expect(s.kv.putsByKey.get(FEED_APPROVED)).toBe(1);
+    expect(s.kv.putsByKey.get(FEED_OUTCOMES)).toBe(1);
+    const feed = (await (await handleApprovedFeed(new Request("https://x"), s.env)).json()) as { approvals: Array<{ id: string }> };
+    expect(feed.approvals.map((x) => x.id).sort()).toEqual([a, b].sort());
+    s.kv.store.delete(FEED_OUTCOMES);
+    s.kv.reset();
+    expect((await s.outcome(a, { nonce: 3n })).status).toBe(200);
+    expect(s.kv.putsByKey.get(FEED_APPROVED)).toBe(1);
+    expect(s.kv.putsByKey.get(FEED_OUTCOMES)).toBe(1);
+    s.kv.reset();
+    expect((await s.outcome(a, { nonce: 4n })).status).toBe(200);
+    expect(s.kv.putsByKey.get(FEED_APPROVED)).toBeUndefined(); // docs present: only the changed one
+    expect(s.kv.putsByKey.get(FEED_OUTCOMES)).toBe(1);
+  });
+  test("the admin list repairing several lost entries writes each doc once", async () => {
+    const s = setup();
+    const ids = [await s.newId(), await s.newId(), await s.newId()];
+    for (const [i, id] of ids.entries()) await s.approve(id, BigInt(i + 1));
+    await s.outcome(ids[0], { nonce: 10n });
+    await s.outcome(ids[1], { nonce: 11n });
+    await s.kv.put(FEED_APPROVED, "[]");
+    await s.kv.put(FEED_OUTCOMES, "[]");
+    s.kv.reset();
+    await s.list();
+    expect(s.kv.putsByKey.get(FEED_APPROVED)).toBe(1);
+    expect(s.kv.putsByKey.get(FEED_OUTCOMES)).toBe(1);
+    const feed = (await (await handleApprovedFeed(new Request("https://x"), s.env)).json()) as { approvals: Array<{ id: string }> };
+    expect(feed.approvals).toHaveLength(3);
+    const out = (await (await handleOutcomesFeed(new Request("https://x"), s.env)).json()) as { outcomes: Array<{ id: string }> };
+    expect(out.outcomes).toHaveLength(2);
+  });
+  test("POST /rebuild writes each doc once", async () => {
+    const s = setup();
+    for (let i = 0; i < 3; i++) await s.approve(await s.newId(), BigInt(i + 1));
+    s.kv.reset();
+    await handleAdminRebuild(s.env);
+    expect(s.kv.putsByKey.get(FEED_APPROVED)).toBe(1);
+    expect(s.kv.putsByKey.get(FEED_OUTCOMES)).toBe(1);
+  });
+});
+
+describe("R54 (M4): a thrown KV error is a JSON 500 with CORS on every public route", () => {
+  test("submit, status and both feeds", async () => {
+    const s = setup();
+    const id = await s.newId();
+    s.kv.failGets = new Error("KV GET failed: 429 Too Many Requests");
+    const answers = [
+      await s.submit(body, "9.9.9.9"),
+      await handleStatus(new Request("https://x"), s.env, id),
+      await handleApprovedFeed(new Request("https://x"), s.env),
+      await handleOutcomesFeed(new Request("https://x"), s.env),
+    ];
+    for (const r of answers) {
+      expect(r.status).toBe(500);
+      expect(r.headers.get("access-control-allow-origin")).toBe(APP);
+      expect(r.headers.get("cache-control")).toBe("no-store");
+      expect(((await r.json()) as { error: string }).error).toMatch(/try again/);
+    }
   });
 });

@@ -37,6 +37,7 @@ import { PROPOSAL_ASSETS } from "@/lib/market-proposals";
 import { PRICE_SOURCE, statusHref } from "@/lib/propose-form";
 import { PROPOSALS_API } from "@/lib/proposals-api";
 import { verifiedProposalInfo } from "@/lib/proposal-signature";
+import { UnsignedSource } from "@/components/proposals/UnsignedSource";
 import { humanizeError } from "@/lib/humanize-error";
 import {
   COMPARATOR,
@@ -2151,10 +2152,7 @@ function EventRules({ proposal }: { proposal?: ProposalMeta }) {
             {proposal?.rule && <li>Resolves Yes if: {proposal.rule}</li>}
             {proposal?.source && (
               <li>
-                Where the answer comes from:{" "}
-                <a href={proposal.source} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">
-                  {proposal.source.replace(/^https:\/\//, "")} ↗
-                </a>
+                Where the answer comes from: <UnsignedSource source={proposal.source} labelClassName="text-fg-mute" />
               </li>
             )}
             <li>The market settles on the curated feed&apos;s reading at the deadline: Yes if it says the event happened by then.</li>
@@ -2172,8 +2170,8 @@ function EventRules({ proposal }: { proposal?: ProposalMeta }) {
             <Link href={statusHref(proposal.id)} className="text-accent hover:underline">
               proposal {proposal.id}
             </Link>
-            ). The creator share of its trading fees goes to the proposer&apos;s wallet, or to the Registrai treasury when
-            none was given.
+            ). The creator share of its trading fees goes to the proposer&apos;s Registrai trading balance on Arc, or to the
+            Registrai treasury when none was given.
           </li>
         )}
       </ul>

@@ -15,7 +15,7 @@ import {
 } from "@/lib/market-proposals";
 import {
   FILTERS, ageLabel, applyDraft, approvalText, draftOf, filterCounts, filterOf, inFilter, isDirty, kindLabel, nextNonce,
-  outcomeProblems, outcomeRecordedText, outcomeWindow, parseUtcMinute, patchBody, proposalChecks, shortUtc, wrongChainMessage,
+  outcomeProblems, outcomeRecordedText, outcomeWindow, parseUtcMinute, tooLateText, patchBody, proposalChecks, shortUtc, wrongChainMessage,
   type Draft, type ProposalFilter,
 } from "@/lib/proposals-admin";
 import { statusHref } from "@/lib/propose-form";
@@ -769,9 +769,7 @@ function RecordOutcome({ p, admin, nonces, onDone, onFailed }: { p: Proposal; ad
         <h3 className={s.h3}>Record outcome</h3>
         {recordedLine}
         <p className={s.callout} data-tone="rejected">
-          <b>Too late — use the dispute process.</b> The agent attested this market&#8217;s outcome at {shortUtc(win.attestAt, nowS)}, 30
-          minutes after the deadline, from what it had received by then{recorded ? "" : " (no outcome: the market settles No)"}. An
-          outcome signed now would never be applied.
+          <b>Too late — use the dispute process.</b> {tooLateText(p.deadline, nowS, Boolean(recorded))}
         </p>
       </div>
     );

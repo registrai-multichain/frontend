@@ -1,10 +1,11 @@
+import { keccak256, toBytes } from "viem";
 import { describe, expect, test } from "vitest";
 import {
   EMPTY_FORM, PRICE_SOURCE, formatUtcDeadline, parseUtcDeadline, prepareSubmission, priceQuestion,
   feesScanEnd, mergeFeeProgress, mergeScanProgress, parseScanCache, proposalFeedDescription, proposalScanStart, scanForward,
-  statusChip, statusHref, sumCreatorFees, forwardPayee, forwardedShown, isTreasury, shareExact, shareText, type ProposeFormState, type ScanCache,
+  statusChip, statusHref, sumCreatorFees, forwardPayee, forwardedShown, isTreasury, shareExact, shareText, statusWords, type ProposeFormState, type ScanCache,
 } from "./propose-form";
-import { TREASURY } from "./market-proposals";
+import { TREASURY, type Proposal } from "./market-proposals";
 import { DEFAULT_PROPOSALS_API, proposalsApiBase } from "./proposals-api";
 
 const NOW = 1_790_500_000; // 2026-09-27
@@ -247,3 +248,35 @@ describe("status page share lines (R42)", () => {
   });
 });
 
+
+describe("statusWords (I4, R54 F1)", () => {
+  const signedPayee = "0x2222222222222222222222222222222222222222";
+  const recordPayee = "0x3333333333333333333333333333333333333333";
+  const RULE = "Official post on the blog.";
+  const p = {
+    id: "pabcdefghij", kind: "event", question: "Will X ship?", rule: RULE, source: "https://evil.example/phish", deadline: 1_900_000_000,
+    creatorPayee: recordPayee, createdAt: "2026-09-28T00:00:00.000Z", status: "approved",
+  } as Proposal;
+  const message = {
+    proposalId: "pabcdefghij", kind: 1, question: "Will X ship?", ruleHash: keccak256(toBytes(RULE)), asset: "", comparator: 1,
+    threshold: "1", expiry: "1800000000", seed: "5000000", creatorPayee: signedPayee as `0x${string}`, nonce: "1",
+  };
+  test("verified: the deadline and payee come from the signed message, not the record beside it", () => {
+    const w = statusWords(p, { state: "ok", message });
+    expect(w.deadline).toBe(1_800_000_000);
+    expect(w.payee).toBe(signedPayee);
+    expect(w.question).toBe("Will X ship?");
+    expect(w.rule).toBe(RULE);
+    // the source is carried as text only (UnsignedSource renders it, never as a link)
+    expect(w.source).toBe("https://evil.example/phish");
+  });
+  test("unverified or still checking: Proposal #id, no deadline, no payee, no rule, no source", () => {
+    for (const state of ["bad", "checking"] as const) {
+      expect(statusWords(p, { state })).toEqual({ question: "Proposal #pabcdefghij", deadline: null, payee: null });
+    }
+  });
+  test("not approved yet: the submission's own words", () => {
+    const w = statusWords({ ...p, status: "pending" }, { state: "unsigned" });
+    expect(w).toMatchObject({ question: "Will X ship?", deadline: 1_900_000_000, payee: recordPayee, rule: RULE });
+  });
+});

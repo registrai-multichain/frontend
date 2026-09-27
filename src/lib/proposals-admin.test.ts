@@ -3,7 +3,7 @@ import { getAddress } from "viem";
 import { MARKETS_V4, TREASURY, approvalMessage, type Proposal } from "./market-proposals";
 import {
   ageLabel, applyDraft, approvalText, draftOf, filterCounts, filterOf, inFilter, isDirty, kindLabel, nextNonce, outcomeProblems,
-  outcomeRecordedText, outcomeWindow, parseUtcMinute, patchBody, proposalChecks, shortUtc, wrongChainMessage,
+  outcomeRecordedText, outcomeWindow, parseUtcMinute, tooLateText, patchBody, proposalChecks, shortUtc, wrongChainMessage,
 } from "./proposals-admin";
 
 const NOW = 1_790_500_000; // Sep 21, 2026 (a fixed unix second)
@@ -150,8 +150,8 @@ describe("after an action", () => {
 
 describe("outcomeProblems", () => {
   const deadline = Date.UTC(2026, 11, 31, 23, 0) / 1000;
-  // inside the grace window: 20 minutes past the deadline (the form closes at +25)
-  const nowS = Date.UTC(2026, 11, 31, 23, 20) / 1000;
+  // inside the grace window: 15 minutes past the deadline (the form closes at +20)
+  const nowS = Date.UTC(2026, 11, 31, 23, 15) / 1000;
   const ok = { value: true, evidence: "https://www.circle.com/blog/x", sinceText: "2026-12-01 14:30", deadline, nowS };
   test("a complete Yes before the deadline has no problem", () => {
     expect(outcomeProblems(ok)).toEqual([]);
@@ -183,18 +183,31 @@ describe("outcomeProblems", () => {
     expect(outcomeProblems({ ...late, value: false })[0]).toMatchObject({ field: "since", blank: false });
     expect(outcomeProblems({ ...late, value: false, sinceText: "2026-12-31 23:00" })).toEqual([]);
   });
-  test("I1: the form closes 25 minutes after the deadline (the agent attests at +30): too late, use the dispute process", () => {
-    expect(outcomeProblems({ ...ok, nowS: deadline + 25 * 60 })).toEqual([]);
-    const closed = outcomeProblems({ ...ok, nowS: deadline + 25 * 60 + 1 });
-    expect(closed[0]).toEqual({ field: "window", blank: false, error: "Too late — use the dispute process: the agent has attested the outcome." });
+  test("I1 / R54: the form closes 20 minutes after the deadline (the agent attests at +30): too late, use the dispute process", () => {
+    expect(outcomeProblems({ ...ok, nowS: deadline + 20 * 60 })).toEqual([]);
+    const closed = outcomeProblems({ ...ok, nowS: deadline + 20 * 60 + 1 });
+    expect(closed[0]).toEqual({
+      field: "window", blank: false, error: "Too late — use the dispute process: an outcome signed now might not reach the agent before it attests.",
+    });
+    expect(closed[0].error).not.toMatch(/attested/);
   });
 });
 
 describe("outcomeWindow / outcomeRecordedText (I1)", () => {
   const deadline = Date.UTC(2026, 11, 31, 23, 0) / 1000;
-  test("the agent attests 30 minutes after the deadline; signing closes 5 minutes before that", () => {
-    expect(outcomeWindow(deadline, deadline - 60)).toEqual({ attestAt: deadline + 1800, cutoff: deadline + 1500, closed: false, pastDeadline: false });
-    expect(outcomeWindow(deadline, deadline + 1501)).toMatchObject({ closed: true, pastDeadline: true });
+  test("the agent attests 30 minutes after the deadline; signing closes 10 minutes before that (R54)", () => {
+    expect(outcomeWindow(deadline, deadline - 60)).toEqual({ attestAt: deadline + 1800, cutoff: deadline + 1200, closed: false, attested: false, pastDeadline: false });
+    expect(outcomeWindow(deadline, deadline + 1201)).toMatchObject({ closed: true, attested: false, pastDeadline: true });
+    expect(outcomeWindow(deadline, deadline + 1800)).toMatchObject({ closed: true, attested: true });
+  });
+  test("the closed form never says the agent attested before it has (R54)", () => {
+    const gap = tooLateText(deadline, deadline + 1500, false);
+    expect(gap).toMatch(/^The agent attests this market’s outcome at Dec 31, 23:30 UTC/);
+    expect(gap).not.toMatch(/attested/);
+    expect(gap).toMatch(/settles No/);
+    const after = tooLateText(deadline, deadline + 1800, true);
+    expect(after).toMatch(/^The agent attested this market’s outcome at Dec 31, 23:30 UTC/);
+    expect(after).toMatch(/the outcome recorded here/);
   });
   test("the success notice says when the agent attests and that the market settles after the 12-hour dispute window", () => {
     const t = outcomeRecordedText("pabcdefghij", true, deadline, deadline - 86_400);

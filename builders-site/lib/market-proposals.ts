@@ -10,8 +10,13 @@
  * - every `mp:<id>` carries its ProposalSummary as the key's metadata, so the admin
  *   list is one KV list per page (ADMIN_PAGE keys) and no per-key read;
  * - records written before the index existed (no metadata, no feed docs) are
- *   migrated by rebuildFeeds: on the first read that finds a feed doc missing, on
- *   POST /api/admin/market-proposals/rebuild, and per page by the admin list.
+ *   migrated by rebuildFeeds, on POST /api/admin/market-proposals/rebuild (run it once
+ *   after deploying) and by the admin paths that find a doc missing (approve, outcome,
+ *   the admin list, which also writes metadata to a page's legacy records). A public
+ *   feed call never rebuilds (R54 F2): a missing doc is served as an empty feed, uncached;
+ * - a request writes each feed doc at most once (R54 F5);
+ * - every public handler answers a thrown error (e.g. a KV 429) with a JSON 500 that
+ *   carries the CORS header (R54, M4).
  */
 import { getAddress, recoverTypedDataAddress, type Hex } from "viem";
 import {
@@ -42,6 +47,16 @@ function cors(env: Env): Record<string, string> {
   const o = (env.PROPOSALS_ALLOWED_ORIGIN ?? "").trim();
   return o ? { "access-control-allow-origin": o, vary: "origin" } : {};
 }
+/** R54 (M4): a public handler whose KV call throws still answers JSON with CORS, so the
+ *  app shows "try again" instead of a network error. */
+async function guarded(env: Env, f: () => Promise<Response>): Promise<Response> {
+  try {
+    return await f();
+  } catch {
+    return json({ error: "The proposals service could not answer just now: try again in a minute." }, 500, cors(env));
+  }
+}
+
 export function handlePreflight(env: Env): Response {
   return new Response(null, { status: 204, headers: { ...cors(env), "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type", "access-control-max-age": "600" } });
 }
@@ -73,7 +88,10 @@ function publicView(p: Proposal): Proposal {
 
 /** POST /api/market-proposals. Every answer, errors included, carries the CORS header,
  *  so the app's form can show the message instead of a network error (M4). */
-export async function handleSubmit(req: Request, env: Env, deps: { now?: number; rand?: (n: number) => Uint8Array } = {}): Promise<Response> {
+export function handleSubmit(req: Request, env: Env, deps: { now?: number; rand?: (n: number) => Uint8Array } = {}): Promise<Response> {
+  return guarded(env, () => submit(req, env, deps));
+}
+async function submit(req: Request, env: Env, deps: { now?: number; rand?: (n: number) => Uint8Array }): Promise<Response> {
   const h = cors(env);
   const fail = (status: number, error: string, extra: Record<string, unknown> = {}) => json({ error, ...extra }, status, h);
   const origin = req.headers.get("origin");
@@ -106,7 +124,10 @@ export async function handleSubmit(req: Request, env: Env, deps: { now?: number;
 }
 
 /** GET /api/market-proposals/<id> (public: no contact). CORS: app.registrai.cc's status page reads this cross-origin. */
-export async function handleStatus(_req: Request, env: Env, id: string): Promise<Response> {
+export function handleStatus(_req: Request, env: Env, id: string): Promise<Response> {
+  return guarded(env, () => status(env, id));
+}
+async function status(env: Env, id: string): Promise<Response> {
   const p = await load(env, id);
   const h = cors(env);
   return p ? json({ proposal: publicView(p) }, 200, { ...h, "cache-control": "public, max-age=15" }) : json({ error: "no such proposal" }, 404, h);
@@ -156,11 +177,11 @@ function summaryOf(name: string, meta: unknown): ProposalSummary | null {
 const inApproved = (s: ProposalSummary) => s.status === "approved" || s.status === "opened";
 
 /**
- * Rebuild both feed docs from the records (idempotent). One KV list per 1,000 keys;
+ * Both feeds as the records say (no feed doc written here). One KV list per 1,000 keys;
  * a record is read only when its metadata says it is in a feed, or it has no metadata
  * (a record from before the index: it is written back with its metadata).
  */
-export async function rebuildFeeds(kv: KV): Promise<Feeds & { migrated: number }> {
+async function collectFeeds(kv: KV): Promise<Feeds & { migrated: number }> {
   const feeds: Feeds = { approved: [], outcomes: [] };
   let migrated = 0;
   let cursor: string | undefined;
@@ -184,35 +205,64 @@ export async function rebuildFeeds(kv: KV): Promise<Feeds & { migrated: number }
   } while (cursor);
   feeds.approved.sort(newestFirst);
   feeds.outcomes.sort(newestFirst);
-  await kv.put(FEED_APPROVED, JSON.stringify(feeds.approved));
-  await kv.put(FEED_OUTCOMES, JSON.stringify(feeds.outcomes));
   return { ...feeds, migrated };
 }
 
-/** Put (or replace) one proposal's entry in a feed doc; a missing doc is rebuilt first. */
-async function upsertFeed<T extends { id: string; createdAt: string }>(kv: KV, key: string, entry: T): Promise<void> {
-  let list = await readFeed<T>(kv, key);
-  if (!list) {
-    const rebuilt = await rebuildFeeds(kv);
-    list = (key === FEED_APPROVED ? rebuilt.approved : rebuilt.outcomes) as unknown as T[];
-  }
-  const next = [...list.filter((e) => e.id !== entry.id), entry].sort(newestFirst);
-  await kv.put(key, JSON.stringify(next));
+/** Both feed docs, rebuilt from the records when either is missing (`rebuilt`: then both
+ *  must be written). Admin paths only. */
+async function loadFeeds(kv: KV): Promise<{ feeds: Feeds; rebuilt: boolean }> {
+  const [approved, outcomes] = await Promise.all([readFeed<ApprovedEntry>(kv, FEED_APPROVED), readFeed<OutcomeEntry>(kv, FEED_OUTCOMES)]);
+  if (approved && outcomes) return { feeds: { approved, outcomes }, rebuilt: false };
+  const c = await collectFeeds(kv);
+  return { feeds: { approved: c.approved, outcomes: c.outcomes }, rebuilt: true };
+}
+
+/** The feed with `entry` put in (replacing this proposal's), newest first. */
+const upsert = <T extends { id: string; createdAt: string }>(list: readonly T[], entry: T): T[] =>
+  [...list.filter((e) => e.id !== entry.id), entry].sort(newestFirst);
+
+/** One put per changed doc (R54 F5). */
+async function writeFeeds(kv: KV, feeds: Feeds, which: { approved: boolean; outcomes: boolean }): Promise<void> {
+  if (which.approved) await kv.put(FEED_APPROVED, JSON.stringify(feeds.approved));
+  if (which.outcomes) await kv.put(FEED_OUTCOMES, JSON.stringify(feeds.outcomes));
+}
+
+/** Rebuild both feed docs from the records (idempotent): one put per doc. */
+export async function rebuildFeeds(kv: KV): Promise<Feeds & { migrated: number }> {
+  const c = await collectFeeds(kv);
+  await writeFeeds(kv, c, { approved: true, outcomes: true });
+  return c;
+}
+
+/** Put one proposal's entry in a feed doc (a missing doc is rebuilt first); each doc is
+ *  written once. */
+async function putFeedEntry(kv: KV, entry: { approved?: ApprovedEntry; outcome?: OutcomeEntry }): Promise<void> {
+  const { feeds, rebuilt } = await loadFeeds(kv);
+  if (entry.approved) feeds.approved = upsert(feeds.approved, entry.approved);
+  if (entry.outcome) feeds.outcomes = upsert(feeds.outcomes, entry.outcome);
+  await writeFeeds(kv, feeds, { approved: rebuilt || Boolean(entry.approved), outcomes: rebuilt || Boolean(entry.outcome) });
 }
 
 const FEED_HEADERS = { "cache-control": "public, max-age=30" };
+/** A missing feed doc (before POST /rebuild has run): an empty feed, never cached. */
+const NOT_BUILT = { "cache-control": "no-store" };
 
 /** GET /api/market-proposals/approved: every approval, for the agent (the signature is the
  *  authority). One KV read; the same bytes as before the index: {approvals: [{id, approval, deadline}]}.
- *  The query string is ignored (the agent sends none). */
-export async function handleApprovedFeed(_req: Request, env: Env): Promise<Response> {
-  const list = (await readFeed<ApprovedEntry>(env.INVITES, FEED_APPROVED)) ?? (await rebuildFeeds(env.INVITES)).approved;
-  return json({ approvals: list.map((e) => ({ id: e.id, approval: e.approval, deadline: e.deadline })) }, 200, FEED_HEADERS);
+ *  The query string is ignored (the agent sends none). A missing doc is an empty feed
+ *  (no-store): the public path never lists KV (R54 F2). */
+export function handleApprovedFeed(_req: Request, env: Env): Promise<Response> {
+  return guarded(env, async () => {
+    const list = await readFeed<ApprovedEntry>(env.INVITES, FEED_APPROVED);
+    return json({ approvals: (list ?? []).map((e) => ({ id: e.id, approval: e.approval, deadline: e.deadline })) }, 200, list ? FEED_HEADERS : NOT_BUILT);
+  });
 }
 /** GET /api/market-proposals/outcomes: {outcomes: [{id, outcome}]}, one KV read. */
-export async function handleOutcomesFeed(_req: Request, env: Env): Promise<Response> {
-  const list = (await readFeed<OutcomeEntry>(env.INVITES, FEED_OUTCOMES)) ?? (await rebuildFeeds(env.INVITES)).outcomes;
-  return json({ outcomes: list.map((e) => ({ id: e.id, outcome: e.outcome })) }, 200, FEED_HEADERS);
+export function handleOutcomesFeed(_req: Request, env: Env): Promise<Response> {
+  return guarded(env, async () => {
+    const list = await readFeed<OutcomeEntry>(env.INVITES, FEED_OUTCOMES);
+    return json({ outcomes: (list ?? []).map((e) => ({ id: e.id, outcome: e.outcome })) }, 200, list ? FEED_HEADERS : NOT_BUILT);
+  });
 }
 
 /** The edge cache key of a feed: its path alone (a `?x=` cannot make it miss). */
@@ -261,22 +311,26 @@ export async function handleAdminList(req: Request, env: Env, admin: string): Pr
 }
 
 async function repairFeeds(kv: KV, page: readonly ProposalSummary[], legacy: readonly Proposal[]): Promise<void> {
-  const [approved, outcomes] = await Promise.all([readFeed<ApprovedEntry>(kv, FEED_APPROVED), readFeed<OutcomeEntry>(kv, FEED_OUTCOMES)]);
-  if (!approved || !outcomes) {
-    await rebuildFeeds(kv);
-    return;
-  }
-  const haveA = new Set(approved.map((e) => e.id));
-  const haveO = new Map(outcomes.map((e) => [e.id, String(e.outcome?.message?.nonce ?? "")]));
+  const { feeds, rebuilt } = await loadFeeds(kv);
+  const haveA = new Set(feeds.approved.map((e) => e.id));
+  const haveO = new Map(feeds.outcomes.map((e) => [e.id, String(e.outcome?.message?.nonce ?? "")]));
   const known = new Map(legacy.map((p) => [p.id, p]));
   const stale = page.filter((s) => (inApproved(s) && !haveA.has(s.id)) || (s.outcome && haveO.get(s.id) !== s.outcome.nonce));
+  const dirty = { approved: rebuilt, outcomes: rebuilt };
   for (const s of stale) {
     const p = known.get(s.id) ?? parseRecord(await kv.get(KEY(s.id)));
     const a = p && approvedEntry(p);
     const o = p && outcomeEntry(p);
-    if (a && !haveA.has(a.id)) await upsertFeed(kv, FEED_APPROVED, a);
-    if (o && haveO.get(o.id) !== String(o.outcome.message.nonce)) await upsertFeed(kv, FEED_OUTCOMES, o);
+    if (a && !haveA.has(a.id)) {
+      feeds.approved = upsert(feeds.approved, a);
+      dirty.approved = true;
+    }
+    if (o && haveO.get(o.id) !== String(o.outcome.message.nonce)) {
+      feeds.outcomes = upsert(feeds.outcomes, o);
+      dirty.outcomes = true;
+    }
   }
+  await writeFeeds(kv, feeds, dirty);
 }
 
 /** POST /api/admin/market-proposals/rebuild: rebuild both feed docs and write metadata to
@@ -372,7 +426,7 @@ export async function handleAdminApprove(req: Request, env: Env, id: string, adm
     approval: { message: b.message, signature: b.signature as Hex, signer: getAddress(signer) },
   };
   await save(env.INVITES, next);
-  await upsertFeed(env.INVITES, FEED_APPROVED, approvedEntry(next)!);
+  await putFeedEntry(env.INVITES, { approved: approvedEntry(next)! });
   return json({ proposal: next });
 }
 
@@ -392,7 +446,8 @@ export async function handleAdminOutcome(req: Request, env: Env, id: string, adm
   if (p.status !== "opened" && p.status !== "approved") return errorJson(409, "only an approved or opened market takes an outcome");
   if (p.kind !== "event") return errorJson(409, "only a yes/no event takes an outcome: a price market settles on the median price");
   const nowS = Math.floor((deps.now ?? Date.now()) / 1000);
-  if (nowS > outcomeCutoff(p.deadline)) return errorJson(409, "too late — use the dispute process: the agent has attested (or is attesting) the outcome");
+  if (nowS > outcomeCutoff(p.deadline))
+    return errorJson(409, "too late — use the dispute process: the agent attests the outcome 30 minutes after the deadline, and one recorded now might not reach it in time");
   const b = (await readJson(req)) as { message?: OutcomeMessageJson; signature?: string } | undefined;
   const m = b?.message;
   if (!m || typeof m !== "object" || typeof b?.signature !== "string" || m.proposalId !== id) return errorJson(400, "message and signature for this proposal required");
@@ -414,6 +469,6 @@ export async function handleAdminOutcome(req: Request, env: Env, id: string, adm
   if (!(await takeNonce(env, admin, BigInt(m.nonce)))) return errorJson(409, "nonce already used");
   const next: Proposal = { ...p, outcome: { message: m, signature: b.signature as Hex, signer: getAddress(signer) } };
   await save(env.INVITES, next);
-  await upsertFeed(env.INVITES, FEED_OUTCOMES, outcomeEntry(next)!);
+  await putFeedEntry(env.INVITES, { outcome: outcomeEntry(next)! });
   return json({ proposal: next });
 }

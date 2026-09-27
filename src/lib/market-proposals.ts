@@ -74,11 +74,12 @@ export const PROPOSAL_APPROVERS: readonly `0x${string}`[] = ["0xb7eCf980a4732B75
 /**
  * A yes/no proposal's outcome: the agent attests it OUTCOME_GRACE_S after the deadline
  * (keeper OUTCOME_GRACE_SECS), taking a signed outcome dated by the deadline that reached
- * it before then. The admin form and the API close OUTCOME_PICKUP_S earlier, the time the
- * agent may need to see a new outcome (the feed's 30 s cache, KV propagation, its 60 s poll).
+ * it before then. The admin form and the API close OUTCOME_PICKUP_S earlier (R54: 10 min,
+ * so at deadline + 20 min), a margin over the time the agent may need to see a new outcome
+ * (the feed's 30 s cache, KV propagation, its 60 s poll).
  */
 export const OUTCOME_GRACE_S = 1800;
-export const OUTCOME_PICKUP_S = 300;
+export const OUTCOME_PICKUP_S = 600;
 /** The last second an outcome is taken for a proposal with this deadline. */
 export const outcomeCutoff = (deadline: number) => deadline + OUTCOME_GRACE_S - OUTCOME_PICKUP_S;
 /** The rounds agent's dispute window on a yes/no proposal feed (keeper EVENT_DISPUTE_WINDOW). */
