@@ -105,6 +105,11 @@ export function validateProposal(body: unknown, nowS: number): V {
     if (comparator !== 1 && comparator !== 3) return bad("comparator", "Pick at least or at most.");
     const price = str(b.price);
     if (!/^\d{1,9}(\.\d{1,8})?$/.test(price) || Number(price) <= 0) return bad("price", "Give a positive price, e.g. 3000 or 0.52.");
+    const assetConfig = PROPOSAL_ASSETS[asset];
+    const priceParts = price.split(".");
+    if (priceParts.length === 2 && priceParts[1].length > assetConfig.decimals) {
+      return bad("price", `Use at most ${assetConfig.decimals} decimals for ${assetConfig.symbol}.`);
+    }
     Object.assign(value, { asset, comparator, price });
   }
   return { ok: true, value };
@@ -128,6 +133,7 @@ export function thresholdOf(p: Pick<ProposalInput, "kind" | "asset" | "price">):
 }
 
 export function approvalMessage(p: Proposal, nonce: bigint): ApprovalMessage {
+  if (!LIVE_KINDS.includes(p.kind)) throw new Error(`cannot approve a ${p.kind} proposal (phase 2)`);
   return {
     proposalId: p.id,
     kind: p.kind === "price" ? KIND_CODE.price : KIND_CODE.event,

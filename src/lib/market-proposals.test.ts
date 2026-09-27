@@ -28,6 +28,12 @@ describe("validateProposal", () => {
     expect(validateProposal({ ...price, asset: "eth-usd", comparator: 1, price: "-1" }, NOW)).toMatchObject({ ok: false, field: "price" });
     expect(validateProposal({ ...price, asset: "eth-usd", comparator: 3, price: "3000.5" }, NOW).ok).toBe(true);
   });
+  test("price fractional digits must match the asset's decimals", () => {
+    const price = { kind: "price", question: "Will ETH be at least $3,000?", rule: "", source: "", deadline: base.deadline };
+    expect(validateProposal({ ...price, asset: "eth-usd", comparator: 1, price: "3000.567" }, NOW)).toMatchObject({ ok: false, field: "price" });
+    expect(validateProposal({ ...price, asset: "sol-usd", comparator: 1, price: "0.123" }, NOW).ok).toBe(true);
+    expect(validateProposal({ ...price, asset: "eth-usd", comparator: 3, price: "3000.5" }, NOW).ok).toBe(true);
+  });
   test("an event needs a public https source; the creator payee must be an address or empty", () => {
     expect(validateProposal({ ...base, source: "ftp://x" }, NOW)).toMatchObject({ ok: false, field: "source" });
     expect(validateProposal({ ...base, creatorPayee: "0x123" }, NOW)).toMatchObject({ ok: false, field: "creatorPayee" });
@@ -82,5 +88,8 @@ describe("EIP-712", () => {
     const td = outcomeTypedData({ proposalId: p.id, value: 1n, since: 1_790_600_000n, evidenceUrl: "https://x.test/a", nonce: 3n });
     const sig = await admin.signTypedData(td);
     expect((await recoverTypedDataAddress({ ...td, signature: sig })).toLowerCase()).toBe(admin.address.toLowerCase());
+  });
+  test("approvalMessage throws when called on a phase-2 kind", () => {
+    expect(() => approvalMessage({ ...p, kind: "wonder" } as Proposal, 1n)).toThrow("cannot approve a wonder proposal (phase 2)");
   });
 });
