@@ -1,9 +1,12 @@
 import { describe, expect, test } from "vitest";
+import { privateKeyToAccount } from "viem/accounts";
+import { suggestionMessage, validateSuggestion } from "../../src/lib/suggestions";
 import type { Env } from "../lib/env";
 import {
   SUGGEST_MAX_BODY,
   SUGGEST_RATE_LIMIT,
   SUGGEST_TTL_S,
+  SUGGEST_WALLET_DAILY,
   handleAdminSuggestions,
   handleSuggest,
   listSuggestions,
@@ -13,20 +16,45 @@ import { MemoryKV } from "./memory-kv";
 const ORIGIN = "https://builder.registrai.cc";
 const T0 = Date.parse("2026-09-27T12:00:00.000Z");
 const acme = { name: "Acme Tool", website: "https://acme.dev", x: "@acmetool", github: "acme/tool" };
+// Anvil's well-known test keys (never funded anywhere real).
+const KEYS = [
+  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+  "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+  "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
+  "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
+  "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a",
+  "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
+] as const;
+const W = KEYS.map((k) => privateKeyToAccount(k));
 
-function setup() {
+type Opts = { ip?: string; origin?: string; type?: string; wallet?: number; signer?: number; issuedAt?: string; tamper?: Record<string, string>; unsigned?: boolean };
+
+function setup(o: { nonces?: Record<string, number>; nonceError?: boolean } = {}) {
   let now = T0;
   const kv = new MemoryKV(() => now);
   const env: Env = { INVITES: kv, SITE_ORIGIN: ORIGIN, NONCE_SECRET: "test-secret" };
-  const post = async (body: unknown, o: { ip?: string; origin?: string; type?: string } = {}) => {
+  const getNonce = async (addr: string) => {
+    if (o.nonceError) throw new Error("rpc down");
+    return o.nonces?.[addr.toLowerCase()] ?? 7;
+  };
+  const post = async (body: Record<string, unknown>, p: Opts = {}) => {
+    const wallet = W[p.wallet ?? 0];
+    const issuedAt = p.issuedAt ?? new Date(now).toISOString();
+    let payload: Record<string, unknown> = { ...body };
+    if (!p.unsigned) {
+      const v = validateSuggestion(body);
+      const msg = v.ok ? suggestionMessage(v.value, issuedAt) : "invalid";
+      const signature = await W[p.signer ?? p.wallet ?? 0].signMessage({ message: msg });
+      payload = { ...body, ...(p.tamper ?? {}), wallet: wallet.address, signature, issuedAt };
+    }
     const res = await handleSuggest(
       new Request(`${ORIGIN}/api/suggestions`, {
         method: "POST",
-        headers: { "content-type": o.type ?? "application/json", origin: o.origin ?? ORIGIN, "cf-connecting-ip": o.ip ?? "203.0.113.1" },
-        body: typeof body === "string" ? body : JSON.stringify(body),
+        headers: { "content-type": p.type ?? "application/json", origin: p.origin ?? ORIGIN, "cf-connecting-ip": p.ip ?? "203.0.113.1" },
+        body: JSON.stringify(payload),
       }),
       env,
-      { now },
+      { now, getNonce },
     );
     return { status: res.status, body: (await res.json()) as Record<string, unknown> };
   };
@@ -38,7 +66,7 @@ function setup() {
 }
 
 describe("POST /api/suggestions", () => {
-  test("a valid suggestion is stored under the project's key, with one suggester", async () => {
+  test("a valid, wallet-signed suggestion is stored under the project's key, with that wallet", async () => {
     const { post, kv } = setup();
     const r = await post(acme);
     expect(r.status).toBe(200);
@@ -52,20 +80,58 @@ describe("POST /api/suggestions", () => {
       github: "github:acme/tool",
       x: "@acmetool",
       count: 1,
+      wallets: [W[0].address.toLowerCase()],
       firstAt: new Date(T0).toISOString(),
       lastAt: new Date(T0).toISOString(),
     });
     expect(stored.expiresAt).toBe(T0 + SUGGEST_TTL_S * 1000);
-    // the visitor is stored only as a keyed hash, never the IP
     expect(stored.value).not.toContain("203.0.113.1");
   });
 
-  test("an invalid suggestion is refused with the field to fix, and nothing is stored", async () => {
+  test("an unsigned suggestion is refused", async () => {
     const { post, kv } = setup();
-    const r = await post({ name: "Acme", website: "https://acme.dev" });
+    const r = await post(acme, { unsigned: true });
+    expect(r.status).toBe(401);
+    expect(String(r.body.error)).toMatch(/sign/i);
+    expect([...kv.store.keys()].some((k) => k.startsWith("suggest:"))).toBe(false);
+  });
+
+  test("a signature by another wallet is refused", async () => {
+    const { post } = setup();
+    expect((await post(acme, { wallet: 0, signer: 1 })).status).toBe(401);
+  });
+
+  test("a suggestion changed after signing is refused", async () => {
+    const { post } = setup();
+    expect((await post(acme, { tamper: { x: "@impostor" } })).status).toBe(401);
+    expect((await post(acme, { tamper: { website: "https://evil.example" } })).status).toBe(401);
+  });
+
+  test("a signature older than 10 minutes, or from the future, is refused", async () => {
+    const { post } = setup();
+    expect((await post(acme, { issuedAt: new Date(T0 - 11 * 60_000).toISOString() })).status).toBe(401);
+    expect((await post(acme, { issuedAt: new Date(T0 + 11 * 60_000).toISOString() })).status).toBe(401);
+    expect((await post(acme, { issuedAt: "not a date" })).status).toBe(401);
+  });
+
+  test("a wallet that has never sent a transaction on Arc mainnet is refused", async () => {
+    const { post, kv } = setup({ nonces: { [W[0].address.toLowerCase()]: 0 } });
+    const r = await post(acme);
+    expect(r.status).toBe(403);
+    expect(String(r.body.error)).toMatch(/Arc/);
+    expect([...kv.store.keys()].some((k) => k.startsWith("suggest:"))).toBe(false);
+  });
+
+  test("when the chain cannot be read, the suggestion is refused with a retry message, not stored", async () => {
+    const { post } = setup({ nonceError: true });
+    expect((await post(acme)).status).toBe(503);
+  });
+
+  test("an invalid suggestion is refused with the field to fix, before any signature check", async () => {
+    const { post } = setup();
+    const r = await post({ name: "Acme", website: "https://acme.dev" }, { unsigned: true });
     expect(r.status).toBe(400);
     expect(r.body).toMatchObject({ field: "x" });
-    expect([...kv.store.keys()].filter((k) => k.startsWith("suggest:"))).toEqual([]);
   });
 
   test("CSRF: cross-origin or non-JSON posts are refused", async () => {
@@ -79,19 +145,19 @@ describe("POST /api/suggestions", () => {
     expect((await post({ ...acme, why: "a".repeat(SUGGEST_MAX_BODY) })).status).toBe(413);
   });
 
-  test("more people suggesting a project raise its count; the same visitor does not", async () => {
+  test("the count is of distinct wallets: one wallet from many IPs counts once", async () => {
     const { post, advance } = setup();
-    await post(acme, { ip: "203.0.113.1" });
+    await post(acme, { wallet: 0, ip: "203.0.113.1" });
     advance(60_000);
-    expect((await post(acme, { ip: "203.0.113.1" })).body).toMatchObject({ count: 1 });
-    expect((await post(acme, { ip: "203.0.113.2" })).body).toMatchObject({ count: 2 });
-    expect((await post({ ...acme, github: "https://github.com/Acme/Tool" }, { ip: "203.0.113.3" })).body).toMatchObject({ count: 3 });
+    expect((await post(acme, { wallet: 0, ip: "203.0.113.2" })).body).toMatchObject({ count: 1 });
+    expect((await post(acme, { wallet: 1, ip: "203.0.113.2" })).body).toMatchObject({ count: 2 });
+    expect((await post({ ...acme, github: "https://github.com/Acme/Tool" }, { wallet: 2, ip: "203.0.113.3" })).body).toMatchObject({ count: 3 });
   });
 
   test("the first suggestion's details stand; a later one only fills what was missing", async () => {
     const { post, kv } = setup();
-    await post({ name: "Acme Tool", website: "https://acme.dev", x: "@acmetool" }, { ip: "203.0.113.1" });
-    await post({ name: "SCAM", website: "https://acme.dev", x: "@impostor", social: "https://t.me/acme", by: "@bob" }, { ip: "203.0.113.2" });
+    await post({ name: "Acme Tool", website: "https://acme.dev", x: "@acmetool" }, { wallet: 0 });
+    await post({ name: "SCAM", website: "https://acme.dev", x: "@impostor", social: "https://t.me/acme", by: "@bob" }, { wallet: 1, ip: "203.0.113.2" });
     const rec = JSON.parse(kv.store.get("suggest:domain:acme.dev")!.value);
     expect(rec).toMatchObject({ name: "Acme Tool", x: "@acmetool", social: "https://t.me/acme", by: ["@bob"], count: 2 });
   });
@@ -105,28 +171,40 @@ describe("POST /api/suggestions", () => {
     expect(kv.store.has("suggest:github:acme/tool")).toBe(false);
   });
 
-  test(`one visitor can send at most ${SUGGEST_RATE_LIMIT} suggestions an hour`, async () => {
+  test(`one wallet can send at most ${SUGGEST_WALLET_DAILY} suggestions a day, from any IP`, async () => {
+    const { post, advance } = setup();
+    for (let i = 0; i < SUGGEST_WALLET_DAILY; i++) {
+      expect((await post({ ...acme, github: undefined, website: `https://p${i}.dev` }, { ip: `203.0.113.${10 + i}` })).status).toBe(200);
+    }
+    expect((await post({ ...acme, github: undefined, website: "https://one-more.dev" }, { ip: "203.0.113.99" })).status).toBe(429);
+    expect((await post({ ...acme, github: undefined, website: "https://other-wallet.dev" }, { wallet: 1, ip: "203.0.113.98" })).status).toBe(200);
+    advance(24 * 3600_000 + 1);
+    expect((await post({ ...acme, github: undefined, website: "https://next-day.dev" }, { ip: "203.0.113.97" })).status).toBe(200);
+  });
+
+  test(`one IP can send at most ${SUGGEST_RATE_LIMIT} suggestions an hour, whatever the wallets`, async () => {
     const { post, advance } = setup();
     for (let i = 0; i < SUGGEST_RATE_LIMIT; i++) {
-      expect((await post({ ...acme, github: undefined, website: `https://p${i}.dev` })).status).toBe(200);
+      expect((await post({ ...acme, github: undefined, website: `https://p${i}.dev` }, { wallet: i })).status).toBe(200);
     }
-    expect((await post({ ...acme, github: undefined, website: "https://one-more.dev" })).status).toBe(429);
-    expect((await post({ ...acme, github: undefined, website: "https://other-visitor.dev" }, { ip: "203.0.113.9" })).status).toBe(200);
+    expect((await post({ ...acme, github: undefined, website: "https://one-more.dev" }, { wallet: 5 })).status).toBe(429);
+    expect((await post({ ...acme, github: undefined, website: "https://other-ip.dev" }, { wallet: 5, ip: "203.0.113.9" })).status).toBe(200);
     advance(3600_000 + 1);
-    expect((await post({ ...acme, github: undefined, website: "https://later.dev" })).status).toBe(200);
+    expect((await post({ ...acme, github: undefined, website: "https://later.dev" }, { wallet: 5 })).status).toBe(200);
   });
 });
 
 describe("/api/admin/suggestions", () => {
-  test("GET lists every suggestion, most suggested first; the visitor hashes stay private", async () => {
+  test("GET lists every suggestion, most suggested first, with the suggesting wallets; the IP hashes stay private", async () => {
     const { post, admin, env } = setup();
-    await post({ name: "Once", website: "https://once.dev", x: "@once" }, { ip: "203.0.113.1" });
-    await post(acme, { ip: "203.0.113.1" });
-    await post(acme, { ip: "203.0.113.2" });
+    await post({ name: "Once", website: "https://once.dev", x: "@once" }, { wallet: 0 });
+    await post(acme, { wallet: 0 });
+    await post(acme, { wallet: 1, ip: "203.0.113.2" });
     const r = await admin("GET");
     expect(r.status).toBe(200);
     const list = r.body.suggestions as Record<string, unknown>[];
     expect(list.map((s) => s.source)).toEqual(["github:acme/tool", "domain:once.dev"]);
+    expect(list[0].wallets).toEqual([W[0].address.toLowerCase(), W[1].address.toLowerCase()]);
     expect(list[0]).not.toHaveProperty("voters");
     expect(await listSuggestions(env.INVITES)).toHaveLength(2);
   });

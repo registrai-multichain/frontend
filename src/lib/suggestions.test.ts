@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { SUGGEST_LIMITS, suggestionInvite, validateSuggestion } from "./suggestions";
+import { SUGGEST_LIMITS, suggestionInvite, suggestionMessage, validateSuggestion } from "./suggestions";
 
 const base = { name: "Acme Tool", website: "https://acme.dev", x: "@acmetool" };
 
@@ -92,5 +92,36 @@ describe("suggestionInvite", () => {
 
   test("without an X account the invite has none", () => {
     expect(suggestionInvite({ ...rec, x: undefined })).not.toHaveProperty("x");
+  });
+});
+
+describe("suggestionMessage", () => {
+  const v = { source: "github:acme/tool", name: "Acme Tool", website: "https://acme.dev", github: "github:acme/tool", x: "@acmetool" };
+
+  test("is a readable message naming the project, its links and the time, on its own lines", () => {
+    const m = suggestionMessage(v, "2026-09-27T12:00:00.000Z");
+    expect(m).toBe(
+      [
+        "Registrai: suggest a project",
+        "Project: Acme Tool",
+        "Key: github:acme/tool",
+        "Website: https://acme.dev",
+        "X: @acmetool",
+        "Other link: -",
+        "GitHub: github:acme/tool",
+        "Issued: 2026-09-27T12:00:00.000Z",
+      ].join("\n"),
+    );
+  });
+
+  test("any change to the suggestion or the time changes the message", () => {
+    const a = suggestionMessage(v, "2026-09-27T12:00:00.000Z");
+    expect(suggestionMessage({ ...v, x: "@other" }, "2026-09-27T12:00:00.000Z")).not.toBe(a);
+    expect(suggestionMessage(v, "2026-09-27T12:00:01.000Z")).not.toBe(a);
+  });
+
+  test("a newline in the name cannot forge an extra line", () => {
+    const m = suggestionMessage({ ...v, name: "Acme\nIssued: 1999" }, "2026-09-27T12:00:00.000Z");
+    expect(m.split("\n").filter((l) => l.startsWith("Issued:"))).toHaveLength(1);
   });
 });

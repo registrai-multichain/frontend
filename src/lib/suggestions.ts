@@ -35,7 +35,9 @@ export interface Suggestion {
 export interface AdminSuggestion extends Omit<Suggestion, "by"> {
   /** Suggesters' own X handles, first come. */
   by: string[];
-  /** Distinct visitors who suggested it. */
+  /** The wallets that signed a suggestion of it (lowercase), first come. */
+  wallets: string[];
+  /** Distinct wallets that suggested it. */
   count: number;
   firstAt: string;
   lastAt: string;
@@ -161,4 +163,29 @@ export function suggestionInvite(s: {
   const out: { source: string; name: string; x?: string; note: string } = { source: s.source, name: s.name, note };
   if (s.x) out.x = s.x;
   return out;
+}
+
+/** One line of a signed message: whitespace (newlines included) collapses, so no
+ *  field can forge another line. */
+const line = (v: string | undefined) => (v ? v.replace(/\s+/g, " ").trim() : "-");
+
+/**
+ * The exact text a suggester signs (EIP-191 personal_sign): the validated suggestion
+ * and when it was issued. The form and POST /api/suggestions build it with this one
+ * function, so the server recomputes and checks the very same text.
+ */
+export function suggestionMessage(
+  s: Pick<Suggestion, "source" | "name" | "website" | "github" | "x" | "social">,
+  issuedAt: string,
+): string {
+  return [
+    "Registrai: suggest a project",
+    `Project: ${line(s.name)}`,
+    `Key: ${line(s.source)}`,
+    `Website: ${line(s.website)}`,
+    `X: ${line(s.x)}`,
+    `Other link: ${line(s.social)}`,
+    `GitHub: ${line(s.github)}`,
+    `Issued: ${line(issuedAt)}`,
+  ].join("\n");
 }

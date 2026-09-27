@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 /** builder.registrai.cc/suggest: the public way into the invite list (src/lib/suggestions.ts). */
 export default function SuggestPage() {
   return (
-    <BuildersShell>
+    <BuildersShell wallet>
       <article className="perennial-app-page">
         <header className="mb-6">
           <h1 className="pa-h1">Suggest a project</h1>
@@ -51,6 +51,13 @@ export default function SuggestPage() {
               <p>
                 It&apos;s how we check the project is real and who runs it, and how we reach the team. No X account? Give another public
                 link: Farcaster, Telegram or Discord.
+              </p>
+            </details>
+            <details className="vf-faq">
+              <summary>Why sign with a wallet?</summary>
+              <p>
+                It keeps spam out and credits you. Signing is free (no gas, no transaction). The wallet needs at least one past
+                transaction on Arc mainnet, and each wallet can suggest 3 projects a day.
               </p>
             </details>
             <details className="vf-faq">

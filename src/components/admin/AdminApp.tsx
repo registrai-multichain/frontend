@@ -593,6 +593,18 @@ function SuggestionsSection({ onInvited, onSignedOut }: { onInvited: () => void;
               </div>
               {s.why && <div className="adm-sub">“{s.why}”</div>}
               {s.by.length > 0 && <div className="adm-sub">by {s.by.join(", ")}</div>}
+              {s.wallets?.length > 0 && (
+                <div className="adm-sub">
+                  signed by{" "}
+                  {s.wallets.slice(0, 5).map((w, i) => (
+                    <span key={w}>
+                      {i > 0 && ", "}
+                      <a href={`${BUILDERS.explorer.url.replace(/\/$/, "")}/address/${w}`} target="_blank" rel="noreferrer noopener">{shortAddr(w)}</a>
+                    </span>
+                  ))}
+                  {s.wallets.length > 5 && ` +${s.wallets.length - 5}`}
+                </div>
+              )}
               {view.inviteForm && (
                 <span className="flex gap-2">
                   <button type="button" className="vf-mini" disabled={busy !== null} onClick={() => invite(s)}>

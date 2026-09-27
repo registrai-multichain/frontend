@@ -1,11 +1,14 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { SUGGEST_LIMITS, validateSuggestion, type SuggestionField } from "@/lib/suggestions";
+import type { Address } from "viem";
+import { useWallet } from "@/components/WalletProvider";
+import { humanizeError } from "@/lib/humanize-error";
+import { SUGGEST_LIMITS, suggestionMessage, validateSuggestion, type SuggestionField } from "@/lib/suggestions";
 import { sourceLabel } from "@/lib/verified-builders";
 
 type State =
-  | { kind: "idle" | "sending" }
+  | { kind: "idle" | "signing" | "sending" }
   | { kind: "done"; source: string; count?: number; invited?: boolean }
   | { kind: "error"; message: string; field?: SuggestionField }
   | { kind: "unavailable" };
@@ -17,6 +20,7 @@ const EMPTY = { name: "", website: "", github: "", x: "", social: "", why: "", b
  * It lands in /admin; nothing is published or put on chain from here.
  */
 export function SuggestForm() {
+  const { address, connect, walletClient } = useWallet();
   const [f, setF] = useState(EMPTY);
   const [state, setState] = useState<State>({ kind: "idle" });
   const set = (k: keyof typeof EMPTY) => (e: { target: { value: string } }) => setF((p) => ({ ...p, [k]: e.target.value }));
@@ -26,13 +30,26 @@ export function SuggestForm() {
     e.preventDefault();
     const local = validateSuggestion(f);
     if (!local.ok) return setState({ kind: "error", message: local.error, field: local.field });
+    if (!address || !walletClient) {
+      await connect().catch(() => {});
+      return setState({ kind: "error", message: "Connect a wallet, then press the button again to sign." });
+    }
+    // Sign exactly what the server will check (free: a signature, not a transaction).
+    setState({ kind: "signing" });
+    const issuedAt = new Date().toISOString();
+    let signature: string;
+    try {
+      signature = await walletClient.signMessage({ account: address as Address, message: suggestionMessage(local.value, issuedAt) });
+    } catch (err) {
+      return setState({ kind: "error", message: humanizeError(err, { testnet: false, networkName: "Arc" }) });
+    }
     setState({ kind: "sending" });
     try {
       const res = await fetch("/api/suggestions", {
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify(f),
+        body: JSON.stringify({ ...f, wallet: address, signature, issuedAt }),
       });
       if (!(res.headers.get("content-type") ?? "").includes("application/json")) return setState({ kind: "unavailable" });
       const body = (await res.json().catch(() => ({}))) as { ok?: boolean; source?: string; count?: number; invited?: boolean; error?: string; field?: SuggestionField };
@@ -106,9 +123,12 @@ export function SuggestForm() {
       </label>
       {field("by", "Your X handle", { placeholder: "@you", optional: true, hint: "So we can thank you." })}
       <div>
-        <button type="submit" className="vf-primary" disabled={state.kind === "sending"}>
-          {state.kind === "sending" ? "sending…" : "Suggest this project"}
+        <button type="submit" className="vf-primary" disabled={state.kind === "sending" || state.kind === "signing"}>
+          {state.kind === "signing" ? "sign in your wallet…" : state.kind === "sending" ? "sending…" : address ? "Sign and suggest" : "Connect wallet to suggest"}
         </button>
+        <p className="vf-hint">
+          You sign the suggestion with your wallet: free, no transaction. The wallet must have used Arc mainnet at least once.
+        </p>
       </div>
       {state.kind === "error" && !state.field && <p className="vf-error">{state.message}</p>}
     </form>
