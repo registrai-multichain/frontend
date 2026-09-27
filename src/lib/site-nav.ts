@@ -4,6 +4,7 @@ import type { NavItem } from "@/components/paper/PaperNav";
 export const APP_NAV: NavItem[] = [
   { href: "/perennial/", label: "Markets", also: ["/perennial/wonder/"] },
   { href: "/rounds/", label: "Rounds" },
+  { href: "/propose/", label: "Propose", also: ["/propose/status/"] },
   { href: "/perennial/builders/", label: "Builders" },
   { href: "/atlas/", label: "Atlas" },
   { href: "/perennial/economy/", label: "How it works" },

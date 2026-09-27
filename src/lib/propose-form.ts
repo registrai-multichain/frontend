@@ -1,0 +1,158 @@
+/**
+ * Pure logic of the public "Propose a market" form and the proposal status page
+ * (src/components/proposals). The shared model and validation live in
+ * ./market-proposals; this file only turns form state into the API body and
+ * derives what the status page shows.
+ */
+import { GRID_S, PROPOSAL_ASSETS, validateProposal, type ProposalAsset, type ProposalKind, type ProposalStatus } from "./market-proposals";
+import { BLOCK_SECS, LOG_CHUNK_BLOCKS, ROUNDS, scanLogs } from "./rounds";
+
+/** The fixed settlement source of a price-at-a-deadline market (not an input). */
+export const PRICE_SOURCE = "Median of Coinbase, Kraken and OKX, the 1-minute close at the deadline";
+
+export interface ProposeFormState {
+  kind: ProposalKind;
+  /** Event and phase-2 kinds. */
+  question: string;
+  rule: string;
+  source: string;
+  /** "YYYY-MM-DD HH:MM", read as UTC. */
+  deadlineText: string;
+  why: string;
+  creatorPayee: string;
+  contact: string;
+  /** Price kind. */
+  asset: ProposalAsset;
+  comparator: 1 | 3;
+  price: string;
+  /** The proposer's edit of the auto-filled price question; null = use the sentence. */
+  priceQuestionEdit: string | null;
+  /** Honeypot: a person never sees or fills it. */
+  website2: string;
+}
+
+export const EMPTY_FORM: ProposeFormState = {
+  kind: "event", question: "", rule: "", source: "", deadlineText: "", why: "", creatorPayee: "", contact: "",
+  asset: "btc-usd", comparator: 1, price: "", priceQuestionEdit: null, website2: "",
+};
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "2026-12-31 23:00" (also with a T or several spaces) as UTC unix seconds,
+ *  rounded DOWN to the 5-minute grid; null when it is not a real date and time. */
+export function parseUtcDeadline(text: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:\s+|T)(\d{2}):(\d{2})$/.exec(text.trim());
+  if (!m) return null;
+  const [y, mo, d, h, mi] = m.slice(1).map(Number);
+  if (mo < 1 || mo > 12 || d < 1 || h > 23 || mi > 59) return null;
+  const ms = Date.UTC(y, mo - 1, d, h, mi);
+  if (new Date(ms).getUTCDate() !== d) return null; // Feb 30 rolls over
+  const s = ms / 1000;
+  return s - (s % GRID_S);
+}
+
+export function formatUtcDeadline(s: number): string {
+  const t = new Date(s * 1000);
+  return `${t.getUTCFullYear()}-${pad2(t.getUTCMonth() + 1)}-${pad2(t.getUTCDate())} ${pad2(t.getUTCHours())}:${pad2(t.getUTCMinutes())}`;
+}
+
+/** "Dec 31, 2026 at 23:00 UTC" */
+export function humanUtc(s: number): string {
+  const t = new Date(s * 1000);
+  return `${MONTHS[t.getUTCMonth()]} ${t.getUTCDate()}, ${t.getUTCFullYear()} at ${pad2(t.getUTCHours())}:${pad2(t.getUTCMinutes())} UTC`;
+}
+
+const groupPrice = (price: string) => {
+  const [int, frac] = price.split(".");
+  return `${int.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}${frac !== undefined ? `.${frac}` : ""}`;
+};
+
+/** "Will BTC be at least $100,000 on Dec 31, 2026 at 23:00 UTC?"; "" until price and deadline are given. */
+export function priceQuestion(p: { asset: ProposalAsset; comparator: 1 | 3; price: string; deadline: number | null }): string {
+  const price = p.price.trim();
+  if (p.deadline === null || !/^\d+(\.\d+)?$/.test(price)) return "";
+  const sym = PROPOSAL_ASSETS[p.asset].symbol;
+  return `Will ${sym} be ${p.comparator === 3 ? "at most" : "at least"} $${groupPrice(price)} on ${humanUtc(p.deadline)}?`;
+}
+
+export type Submission = { ok: true; body: Record<string, unknown> } | { ok: false; error: string; field?: string };
+
+/** Form state -> the POST body, checked with the same validation the API runs.
+ *  The first problem reported is the first one in the form's visual order. */
+export function prepareSubmission(f: ProposeFormState, nowS: number): Submission {
+  const deadline = parseUtcDeadline(f.deadlineText);
+  const deadlineError: Submission = { ok: false, field: "deadline", error: "Write the deadline as YYYY-MM-DD HH:MM, in UTC." };
+  const common = { deadline: deadline ?? 0, why: f.why, creatorPayee: f.creatorPayee, contact: f.contact, website2: f.website2 };
+  let body: Record<string, unknown>;
+  if (f.kind === "price") {
+    // shown first: asset, comparator, price, deadline; the question is built from them
+    if (!/^\d+(\.\d+)?$/.test(f.price.trim())) return { ok: false, field: "price", error: "Give a positive price, e.g. 3000 or 0.52." };
+    if (deadline === null) return deadlineError;
+    const sentence = priceQuestion({ asset: f.asset, comparator: f.comparator, price: f.price, deadline });
+    body = {
+      kind: "price", question: f.priceQuestionEdit ?? sentence, rule: sentence, source: PRICE_SOURCE,
+      asset: f.asset, comparator: f.comparator, price: f.price.trim(), ...common,
+    };
+  } else {
+    body = { kind: f.kind, question: f.question, rule: f.rule, source: f.source.trim(), ...common };
+  }
+  const v = validateProposal(body, nowS);
+  if (v.ok) return { ok: true, body };
+  return v.field === "deadline" && deadline === null ? deadlineError : { ok: false, error: v.error, field: v.field };
+}
+
+export const statusHref = (id: string) => `/propose/status/?id=${encodeURIComponent(id)}`;
+
+export type ChipTone = "pending" | "approved" | "opened" | "rejected" | "queued";
+/** The status chip; `openedOnChain`: the agent's market for it was found on chain
+ *  (the API never learns that a market was opened). */
+export function statusChip(status: ProposalStatus, openedOnChain: boolean): { label: string; tone: ChipTone } {
+  if (openedOnChain || status === "opened") return { label: "Opened", tone: "opened" };
+  switch (status) {
+    case "approved": return { label: "Approved — opening shortly", tone: "approved" };
+    case "rejected": return { label: "Not approved", tone: "rejected" };
+    case "queued": return { label: "Phase 2 queue", tone: "queued" };
+    default: return { label: "Pending review", tone: "pending" };
+  }
+}
+
+/** The rounds agent's feed for a proposal: "registrai-data:p-<id>" (key "p-<id>"). */
+export const proposalFeedKey = (id: string) => `p-${id}`;
+export const proposalFeedDescription = (id: string, prefix = ROUNDS.descriptionPrefix) => `${prefix}${proposalFeedKey(id)}`;
+
+export function sumCreatorFees(logs: readonly { args: { creatorFee?: bigint } }[]): bigint {
+  return logs.reduce((s, l) => s + (l.args.creatorFee ?? 0n), 0n);
+}
+
+/** First block to scan for the proposal's feed: a little before it was made (the
+ *  feed comes after approval), never before the rounds deployment. */
+export function proposalScanStart(head: bigint, headTs: number, createdAtS: number, deployBlock: bigint, marginBlocks = 1_200n): bigint {
+  const back = BigInt(Math.max(0, Math.ceil((headTs - createdAtS) / BLOCK_SECS))) + marginBlocks;
+  const from = head > back ? head - back : 0n;
+  return from > deployBlock ? from : deployBlock;
+}
+
+/** scanLogs over [from, to] one window at a time, stopping after the first window
+ *  where `found(logs so far)` holds (a proposal's feed and market sit close
+ *  together, usually long before the head). A failed chunk ends it incomplete. */
+export async function scanForward<T>(
+  fetchRange: (from: bigint, to: bigint) => Promise<readonly T[]>,
+  from: bigint,
+  to: bigint,
+  found: (logs: readonly T[]) => boolean,
+  window = 100_000n,
+  chunk: bigint = LOG_CHUNK_BLOCKS,
+): Promise<{ logs: T[]; scannedTo: bigint; complete: boolean }> {
+  const logs: T[] = [];
+  let scannedTo = from - 1n;
+  for (let start = from; start <= to; start += window) {
+    const end = start + window - 1n < to ? start + window - 1n : to;
+    const r = await scanLogs(fetchRange, start, end, chunk);
+    logs.push(...r.logs);
+    if (r.scannedTo >= start) scannedTo = r.scannedTo;
+    if (!r.complete) return { logs, scannedTo, complete: false };
+    if (found(logs)) break;
+  }
+  return { logs, scannedTo, complete: true };
+}
