@@ -24,6 +24,14 @@ const TOKENS = [
 const snapshotOf = (files: Record<string, string>) =>
   Object.entries(files).map(([path, css]) => `## ${path}\n${serializeRules(protectedRules(css))}\n`).join("\n");
 
+/** The last compound of a selector (its subject) names .bld-card or .pa-card. */
+const onCardItself = (sel: string) => /\.(?:bld-card|pa-card)(?![\w-])/.test(sel.split(/\s*[\s>+~]\s*/).filter(Boolean).pop() ?? "");
+/** Selectors in `css` that set a border on a card itself. */
+const cardBorders = (css: string) =>
+  cssRules(css).flatMap((r) =>
+    /(?:^|[;\s])border(?:-(?:color|style|width))?\s*:/.test(r.body) ? splitSelectors(r.selector).filter(onCardItself) : [],
+  );
+
 /** Every selector of a stylesheet that is not scoped to .paper-ui. */
 const unscoped = (css: string) => cssRules(css).flatMap((r) => splitSelectors(r.selector)).filter((s) => !scopedToPaperUi(s));
 
@@ -85,6 +93,34 @@ describe("paper-ui layer", () => {
 
   test("the app shell's root carries .paper-ui", () => {
     expect(read("src/components/PerennialShell.tsx")).toMatch(/className=\{?[`"][^`"]*\bpaper-ui\b/);
+  });
+
+  test("the Perennial, wonder, builders and atlas pages opt into the token bridge", () => {
+    for (const page of ["src/app/perennial/page.tsx", "src/app/perennial/wonder/page.tsx", "src/app/perennial/builders/page.tsx", "src/app/atlas/page.tsx"]) {
+      expect(read(page), page).toMatch(/className="[^"]*\bpu-bridge\b/);
+    }
+  });
+
+  test("builder cards keep their kind borders: no layer rule sets a border on a card itself", () => {
+    // BuilderCardView is shared with the builders gallery; its kinds (verified, onboarding,
+    // the dashed on-chain nomination, highlight) are told apart by their borders, which live
+    // on .bld-card / .pa-card. Any selector whose subject compound names either class counts.
+    expect(cssRules(css).some((r) => splitSelectors(r.selector).some(onCardItself))).toBe(true);
+    expect(cardBorders(css)).toEqual([]);
+  });
+
+  test("the card-border guard catches kind selectors and .pa-card", () => {
+    expect(cardBorders(`${css}\n.paper-ui .bld-card[data-kind="verified"] { border-color: red; }`)).toEqual(['.paper-ui .bld-card[data-kind="verified"]']);
+    expect(cardBorders(`${css}\n.paper-ui .pu-bridge .pa-card { border: 0; }`)).toEqual([".paper-ui .pu-bridge .pa-card"]);
+    expect(cardBorders(`${css}\n.paper-ui .bld-card:hover { border-width: 3px; }`)).toEqual([".paper-ui .bld-card:hover"]);
+    // a descendant of a card is not the card
+    expect(cardBorders(`${css}\n.paper-ui .bld-card .pa-pill { border-color: red; }`)).toEqual([]);
+  });
+
+  test("a dialog is only rounded where it floats (a full-screen sheet below 640 px)", () => {
+    const radius = cssRules(css).filter((r) => splitSelectors(r.selector).includes(".paper-ui .pa-dialog") && /border-radius/.test(r.body));
+    expect(radius.length).toBeGreaterThan(0);
+    for (const r of radius) expect(r.context, r.body).toEqual(["@media (min-width: 640px)"]);
   });
 });
 

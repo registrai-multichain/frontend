@@ -14,8 +14,8 @@ import { D, usePerennialTx } from "./usePerennialTx";
 export function PerennialApp({ initialTab }: { initialTab?: MarketTab }) {
   if (!D.deployed) {
     return (
-      <div className="pa-card max-w-[62ch]">
-        <h1 className="pa-h2">Markets open on {D.label} soon</h1>
+      <div className="pa-card pu-card pu-card--static max-w-[62ch]">
+        <h1 className="pa-h2 pu-h">Markets open on {D.label} soon</h1>
         <p className="pa-muted mt-2">
           Bet on what builders ship: every market is a real milestone, and half of each trading fee goes to the builder who
           shipped it. Meanwhile, meet the builders at <a className="pa-link" href="https://builder.registrai.cc">builder.registrai.cc</a>{" "}
@@ -49,7 +49,7 @@ function Live({ initialTab }: { initialTab?: MarketTab }) {
     const m = marketId ? data.markets.find((x) => x.id.toLowerCase() === marketId) : undefined;
     if (m) return <MarketPage data={data} tx={tx} market={m} initialSide={parseSide(params?.get("side"))} />;
     return (
-      <div className="pa-card max-w-[62ch]">
+      <div className="pa-card pu-card pu-card--static max-w-[62ch]">
         <p>
           {!marketId
             ? "That link doesn't point to a market."

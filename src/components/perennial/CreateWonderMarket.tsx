@@ -111,16 +111,16 @@ export function CreateWonderMarket({ data, onClose }: { data: PerennialData; onC
       <div className="pa-stack">
         <label className="block">
           <span className="pa-label">Nominated project</span>
-          <input className="pa-input" value={raw} onChange={(e) => setRaw(e.target.value)} placeholder="github:owner/repo" spellCheck={false} autoCapitalize="off" />
+          <input className="pa-input pu-input" value={raw} onChange={(e) => setRaw(e.target.value)} placeholder="github:owner/repo" spellCheck={false} autoCapitalize="off" />
         </label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
             <span className="pa-label">Runs for (days)</span>
-            <input className="pa-input" value={days} onChange={(e) => setDays(e.target.value)} inputMode="numeric" />
+            <input className="pa-input pu-input" value={days} onChange={(e) => setDays(e.target.value)} inputMode="numeric" />
           </label>
           <label className="block">
             <span className="pa-label">Your liquidity (USDC)</span>
-            <input className="pa-input" value={liq} onChange={(e) => setLiq(e.target.value)} inputMode="decimal" />
+            <input className="pa-input pu-input" value={liq} onChange={(e) => setLiq(e.target.value)} inputMode="decimal" />
           </label>
         </div>
         <p className="pa-small pa-muted">
@@ -128,7 +128,7 @@ export function CreateWonderMarket({ data, onClose }: { data: PerennialData; onC
           team&apos;s share of the fees is held for it. Markets close on the hour.
         </p>
         {error && <p className="text-down pa-small">{error}</p>}
-        <button type="button" className="pa-btn pa-btn--block" onClick={create} disabled={busy || !raw.trim()}>
+        <button type="button" className="pa-btn pa-btn--block pu-btn pu-btn--primary" onClick={create} disabled={busy || !raw.trim()}>
           {busy ? "Opening…" : "Open market"}
         </button>
       </div>
