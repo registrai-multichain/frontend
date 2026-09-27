@@ -86,8 +86,8 @@ const book = mergeFeedLogs(
 describe("deployment", () => {
   test("carries the addresses, agent, assets and events", () => {
     expect(ROUNDS.chainId).toBe(5042002);
-    expect(ROUNDS.contracts.MarketsV4).toBe("0xf98Be8dA6AB0262B6dA5Dc0D090aAB331A961cB9");
-    expect(ROUNDS.deployBlock).toBe(64119042n);
+    expect(ROUNDS.contracts.MarketsV4).toBe("0xddf0814e6C95E1A0585c16dbb012c611ae23A220");
+    expect(ROUNDS.deployBlock).toBe(64184905n);
     expect(ROUNDS.agent).toBe(AGENT);
     expect(ROUNDS.assets.map((a) => a.symbol)).toEqual(["BTC", "ETH", "SOL", "ZEC", "HYPE"]);
     expect(ROUNDS.assets.map((a) => a.decimals)).toEqual([2, 2, 3, 2, 3]);
@@ -124,6 +124,9 @@ describe("feed discovery (FeedCreated logs)", () => {
     expect(b.byId[FEED_CH]).toMatchObject({ key: "btc-usd:5m-7", asset: "btc-usd", change: true });
     const [m] = parseMarketLogs([marketLog(9, FEED_CH, 1_790_367_300, { threshold: 0n })], b, AGENT);
     expect(m).toMatchObject({ key: "btc-usd", change: true, threshold: 0n });
+    // only the exact round shape shows (threshold 0, GreaterThan)
+    expect(parseMarketLogs([marketLog(10, FEED_CH, 1_790_367_300, { threshold: 5n })], b, AGENT)).toEqual([]);
+    expect(parseMarketLogs([marketLog(11, FEED_CH, 1_790_367_300, { threshold: 0n, comparator: COMPARATOR.GreaterOrEqual })], b, AGENT)).toEqual([]);
   });
 
   test("maps the agent's feeds by key and id, with their challenge windows", () => {

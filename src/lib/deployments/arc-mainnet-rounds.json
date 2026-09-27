@@ -1,0 +1,67 @@
+{
+  "network": "mainnet",
+  "chainId": 5042,
+  "rpc": "https://rpc.mainnet.arc.io",
+  "explorer": "https://explorer.arc.io",
+  "note": "Registrai's common markets on Arc MAINNET. Fill from the mainnet deployment record (contracts/deployments/arc-mainnet-common-markets.json) after DeployOracle -> DeployNanoLedger -> DeployNanoStack -> HandoffCommonMarkets. While contracts.MarketsV4 or agent is null, /rounds renders a not-deployed state and makes no contract calls. feeds: the rounds agent's feeds once it has provisioned them (keeper state).",
+  "deployBlock": null,
+  "roundSecs": 300,
+  "settlementWindow": 3600,
+  "contracts": {
+    "MarketsV4": null,
+    "Registry": null,
+    "Attestation": null,
+    "NanoLedger": null,
+    "USDC": "0x3600000000000000000000000000000000000000"
+  },
+  "agent": null,
+  "descriptionPrefix": "registrai-data:",
+  "assets": [
+    {
+      "key": "btc-usd",
+      "symbol": "BTC",
+      "name": "Bitcoin",
+      "product": "BTC-USD",
+      "decimals": 2
+    },
+    {
+      "key": "eth-usd",
+      "symbol": "ETH",
+      "name": "Ether",
+      "product": "ETH-USD",
+      "decimals": 2
+    },
+    {
+      "key": "sol-usd",
+      "symbol": "SOL",
+      "name": "Solana",
+      "product": "SOL-USD",
+      "decimals": 3
+    },
+    {
+      "key": "zec-usd",
+      "symbol": "ZEC",
+      "name": "Zcash",
+      "product": "ZEC-USD",
+      "decimals": 2
+    },
+    {
+      "key": "hype-usd",
+      "symbol": "HYPE",
+      "name": "Hyperliquid",
+      "product": "HYPE-USD",
+      "decimals": 3
+    }
+  ],
+  "events": [
+    {
+      "key": "arc-token-tradable",
+      "question": "Will the Arc token be publicly tradable before Dec 31, 2026 (23:00 UTC)?",
+      "expiry": 1798758000,
+      "rehearsal": false,
+      "marketId": null,
+      "evidenceUrl": null
+    }
+  ],
+  "feeds": {}
+}

@@ -9,7 +9,7 @@ import { ROUNDS } from "@/lib/rounds";
 /** /rounds: the 5-minute common markets, in the same paper frame as the rest of Perennial.
  *  They run only where the rounds deployment lives; any other network gets an honest "soon". */
 export default function RoundsPage() {
-  const here = ROUNDS.chainId === PERENNIAL.chain.id;
+  const here = ROUNDS.deployed && ROUNDS.chainId === PERENNIAL.chain.id;
   return (
     <PerennialShell>
       {here ? (

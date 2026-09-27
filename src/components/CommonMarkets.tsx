@@ -102,7 +102,7 @@ import {
 const D = ROUNDS;
 const C = D.contracts;
 const CHAIN = getWalletChain(D.chainId) as WalletChain;
-const HUMAN = { testnet: true, networkName: "Arc testnet" };
+const HUMAN = { testnet: ROUNDS.testnet, networkName: ROUNDS.label };
 const txUrl = (h: string) => txUrlFor(CHAIN, h);
 
 const FEED_CREATED = parseAbiItem(
@@ -122,6 +122,8 @@ const SLIPPAGES = [50n, 100n, 200n] as const; // bps
 /** First paint scans only this many recent blocks (~11 min on Arc): enough for
  *  the round taking bets and the one in play. */
 const FIRST_PAINT_BLOCKS = 1_200n;
+/** Trading pauses when the newest chain read is older than this. */
+const STALE_SECS = 20;
 /** Multicall3 at its canonical address (deployed on Arc testnet and mainnet). */
 const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11" as Address;
 const fmt = (v: bigint, dp = 2) => formatUsdc(v, dp);
@@ -131,6 +133,7 @@ type MarketState = {
   phase: number;
   yesWon: boolean;
   threshold: bigint;
+  comparator: number;
   expiry: number;
   yesReserve: bigint;
   noReserve: bigint;
@@ -154,6 +157,8 @@ type Snapshot = {
   readings: Record<string, Reading>;
   holdings: Record<string, Holding>;
   redeemable: Record<string, bigint>;
+  /** The wallet's markets that anyone may settle right now (the agent is late or down). */
+  settleable: Record<string, "resolve" | "void">;
   eventReadings: Record<string, EventReading>;
   /** Event key -> its market id (discovered, else the deploy seed). */
   eventMarkets: Record<string, Hex>;
@@ -163,6 +168,25 @@ type Snapshot = {
 };
 
 const settled = (phase: number | undefined) => phase === PHASE.Resolved || phase === PHASE.Voided;
+
+// The markets this browser's wallet traded, remembered locally: the log scan only
+// looks back ~2 hours, and a position must not vanish from "Your claims" after that.
+const mineKey = (a: Address) => `registrai.rounds.mine.${D.chainId}.${a.toLowerCase()}`;
+function loadMine(a: Address): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(mineKey(a)) || "[]") as unknown;
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && /^0x[0-9a-f]{64}$/.test(x)).slice(-300) : [];
+  } catch {
+    return [];
+  }
+}
+function saveMine(a: Address, ids: Set<string>) {
+  try {
+    localStorage.setItem(mineKey(a), JSON.stringify([...ids].slice(-300)));
+  } catch {
+    /* private mode: the 2-hour scan still covers recent trades */
+  }
+}
 
 // ───────────────────────────── data ─────────────────────────────
 
@@ -184,6 +208,7 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
     tradeCursor: new Map<string, bigint>(),
   });
   const busy = useRef(false);
+  const again = useRef(false);
 
   // First paint: before the full read (two hours of logs, readings, holdings,
   // claims: several round trips), show the rounds people can act on now. One
@@ -215,12 +240,12 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
           want.map(async (m): Promise<[string, MarketState]> => {
             const [mk, yp, np] = await Promise.all([
               client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "getMarket", args: [m.marketId] }) as Promise<{
-                threshold: bigint; expiry: bigint; yesReserve: bigint; noReserve: bigint; phase: number; yesWon: boolean;
+                threshold: bigint; comparator: number; expiry: bigint; yesReserve: bigint; noReserve: bigint; phase: number; yesWon: boolean;
               }>,
               client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "priceOf", args: [m.marketId, OUTCOME.Yes] }) as Promise<bigint>,
               client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "priceOf", args: [m.marketId, OUTCOME.No] }) as Promise<bigint>,
             ]);
-            return [m.marketId, { phase: Number(mk.phase), yesWon: mk.yesWon, threshold: mk.threshold, expiry: Number(mk.expiry), yesReserve: mk.yesReserve, noReserve: mk.noReserve, yesPrice: yp, noPrice: np }];
+            return [m.marketId, { phase: Number(mk.phase), yesWon: mk.yesWon, threshold: mk.threshold, comparator: Number(mk.comparator), expiry: Number(mk.expiry), yesReserve: mk.yesReserve, noReserve: mk.noReserve, yesPrice: yp, noPrice: np }];
           }),
         );
         if (!alive) return;
@@ -229,7 +254,7 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
         setSnap((prev) =>
           prev ?? {
             chainNow, readAt: Date.now() / 1000, head, markets, trades: {}, book: d.book, state: Object.fromEntries(rows),
-            readings: {}, holdings: {}, redeemable: {}, eventReadings: {}, eventMarkets,
+            readings: {}, holdings: {}, redeemable: {}, settleable: {}, eventReadings: {}, eventMarkets,
           },
         );
       } catch {
@@ -242,7 +267,10 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
   }, [client]);
 
   const refresh = useCallback(async () => {
-    if (busy.current) return;
+    if (busy.current) {
+      again.current = true; // e.g. right after a trade: run once more when this one ends
+      return;
+    }
     busy.current = true;
     const d = disc.current;
     try {
@@ -285,7 +313,7 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
       // 2. The connected wallet's markets (Bought logs) — the only ones that can
       //    hold a claim, so redeemable is read for those alone.
       if (d.mineFor !== address) {
-        d.mine = new Set();
+        d.mine = new Set(address ? loadMine(address) : []);
         d.mineFor = address;
         d.mineScannedTo = -1n;
       }
@@ -299,6 +327,28 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
           );
           for (const lg of r.logs) if (lg.args.marketId) d.mine.add(lg.args.marketId.toLowerCase());
           if (r.scannedTo >= mFrom) d.mineScannedTo = r.scannedTo;
+          saveMine(address, d.mine);
+        }
+        // Markets remembered from earlier visits (older than the scan): describe
+        // them from the chain, on the agent's known feeds only.
+        const older = [...d.mine].filter((id) => !d.markets.has(id));
+        if (older.length) {
+          const rows = await Promise.all(
+            older.map((id) =>
+              (client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "getMarket", args: [id as Hex] }) as Promise<{
+                feedId: Hex; agent: Address; threshold: bigint; comparator: number; expiry: bigint;
+              }>).catch(() => undefined),
+            ),
+          );
+          older.forEach((id, i) => {
+            const m = rows[i];
+            const feed = m && d.book.byId[m.feedId.toLowerCase()];
+            if (!m || !feed || m.agent.toLowerCase() !== D.agent.toLowerCase()) return;
+            d.markets.set(id, {
+              marketId: id as Hex, feedId: feed.feedId, key: feed.asset, change: feed.change, agent: m.agent,
+              threshold: m.threshold, comparator: Number(m.comparator), expiry: Number(m.expiry), liquidity: 0n, blockNumber: 0n,
+            });
+          });
         }
       }
 
@@ -354,12 +404,12 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
       const readMarket = async (id: string): Promise<[string, MarketState]> => {
         const [m, yp, np] = await Promise.all([
           client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "getMarket", args: [id as Hex] }) as Promise<{
-            threshold: bigint; expiry: bigint; yesReserve: bigint; noReserve: bigint; phase: number; yesWon: boolean;
+            threshold: bigint; comparator: number; expiry: bigint; yesReserve: bigint; noReserve: bigint; phase: number; yesWon: boolean;
           }>,
           client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "priceOf", args: [id as Hex, OUTCOME.Yes] }) as Promise<bigint>,
           client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "priceOf", args: [id as Hex, OUTCOME.No] }) as Promise<bigint>,
         ]);
-        return [id, { phase: Number(m.phase), yesWon: m.yesWon, threshold: m.threshold, expiry: Number(m.expiry), yesReserve: m.yesReserve, noReserve: m.noReserve, yesPrice: yp, noPrice: np }];
+        return [id, { phase: Number(m.phase), yesWon: m.yesWon, threshold: m.threshold, comparator: Number(m.comparator), expiry: Number(m.expiry), yesReserve: m.yesReserve, noReserve: m.noReserve, yesPrice: yp, noPrice: np }];
       };
       const readingFor = async (m: RoundMarket): Promise<[string, Reading]> => {
         const [found, value, timestamp, finalized] = (await client.readContract({
@@ -412,7 +462,11 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
       );
       const holdIds = address ? [...new Set([...current, ...eventIds, ...mine.filter((id) => !settled(state[id]?.phase))])] : [];
       const claimIds = address ? [...new Set([...mine, ...eventIds])].filter((id) => settled(state[id]?.phase)) : [];
-      const [readings, holdings, redeemable] = await Promise.all([
+      // The wallet's past-expiry markets still unsettled: can anyone settle them now?
+      const unsettledMine = address
+        ? mine.filter((id) => !settled(state[id]?.phase) && (d.markets.get(id)?.expiry ?? Infinity) <= chainNow)
+        : [];
+      const [readings, holdings, redeemable, settleStates] = await Promise.all([
         Promise.all(pendingRounds.map(readingFor)),
         Promise.all(holdIds.map(holdingFor)),
         Promise.all(
@@ -421,7 +475,20 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
             (await client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "redeemable", args: [id as Hex, address!] })) as bigint,
           ]),
         ),
+        Promise.all(
+          unsettledMine.map(async (id): Promise<[string, number]> => {
+            try {
+              const [st] = (await client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "settlementState", args: [id as Hex] })) as readonly [number, bigint];
+              return [id, Number(st)];
+            } catch {
+              return [id, -1];
+            }
+          }),
+        ),
       ]);
+      // SettlementPolicy: 2 = Resolvable, 3 = Voidable
+      const settleable: Record<string, "resolve" | "void"> = {};
+      for (const [id, st] of settleStates) if (st === 2 || st === 3) settleable[id] = st === 2 ? "resolve" : "void";
 
       setSnap({
         chainNow,
@@ -434,6 +501,7 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
         readings: Object.fromEntries(readings),
         holdings: Object.fromEntries(holdings),
         redeemable: Object.fromEntries(redeemable),
+        settleable,
         eventReadings: Object.fromEntries(eventReadings.filter((x): x is [string, EventReading] => x !== null)),
         eventMarkets,
         ledgerBal,
@@ -446,8 +514,16 @@ function useRoundsData(client: PublicClient, address: Address | undefined) {
       setLoadError(humanizeError(e, HUMAN));
     } finally {
       busy.current = false;
+      if (again.current) {
+        again.current = false;
+        setTimeout(() => void refreshRef.current?.(), 0);
+      }
     }
   }, [client, address]);
+  const refreshRef = useRef<() => Promise<void>>(undefined);
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
 
   return { snap, loadError, refresh };
 }
@@ -583,7 +659,7 @@ function useTx(client: PublicClient, refresh: () => Promise<void>) {
   const run = useCallback(
     async (scope: string, label: string, steps: () => Promise<Hex>, doneText: string, oneClick = false) => {
       if (!wallet || !address) {
-        setSt({ pending: "", scope, error: "Connect a wallet on Arc testnet first." });
+        setSt({ pending: "", scope, error: `Connect a wallet on ${D.label} first.` });
         return false;
       }
       setSt({ pending: label, scope, oneClick });
@@ -721,34 +797,41 @@ function useSession(client: PublicClient, address: Address | undefined, tx: Tx) 
       "session",
       "ending",
       () => tx.send(C.MarketsV4, marketsV4Abi, "revokeSession", [local.delegate]),
-      "One-click betting is off; its leftover gas went back to your wallet.",
+      "One-click betting is off.",
     );
-    if (!ok || !wallet) return;
+    if (!ok) return;
+    // Send the key's leftover gas back; the session is revoked either way, so the
+    // key is forgotten even if this fails (it then keeps a few cents).
     try {
-      const [bal, gasPrice] = await Promise.all([client.getBalance({ address: local.delegate }), client.getGasPrice()]);
-      const fee = 21_000n * gasPrice * 2n;
-      if (bal > fee) await wallet.sendTransaction({ to: address, value: bal - fee, gas: 21_000n, chain: CHAIN.viemChain, account: wallet.account });
+      if (wallet) {
+        const [bal, gasPrice] = await Promise.all([client.getBalance({ address: local.delegate }), client.getGasPrice()]);
+        const fee = 21_000n * gasPrice * 2n;
+        if (bal > fee) await wallet.sendTransaction({ to: address, value: bal - fee, gas: 21_000n, chain: CHAIN.viemChain, account: wallet.account });
+      }
     } catch {
-      /* the key keeps a few cents; renewing reuses it */
-      return;
+      /* a few cents stay on the retired key */
     }
     clearSession(D.chainId, address);
     setLocal(undefined);
     setChain(undefined);
   }, [address, local, wallet, client, tx]);
 
-  /** Did this session key buy into `marketId` for the owner (so it may sell there)? */
-  const soldHere = useCallback(
-    async (marketId: Hex) =>
-      Boolean(
-        address &&
-          local &&
-          ((await client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "sessionMarket", args: [address, local.delegate, marketId] })) as boolean),
-      ),
+  /** Shares of `outcome` in `marketId` this session key bought for the owner and
+   *  may therefore sell (the contract caps a delegate's sells to exactly these). */
+  const sellable = useCallback(
+    async (marketId: Hex, outcome: number): Promise<bigint> =>
+      address && local
+        ? ((await client.readContract({
+            address: C.MarketsV4,
+            abi: marketsV4Abi,
+            functionName: "sessionShares",
+            args: [address, local.delegate, marketId, outcome],
+          })) as bigint)
+        : 0n,
     [client, address, local],
   );
 
-  return { status, chain, allowance, covers, send, enable, end, soldHere, owner: address };
+  return { status, chain, allowance, covers, send, enable, end, sellable, owner: address };
 }
 
 type Session = ReturnType<typeof useSession>;
@@ -841,6 +924,10 @@ export function CommonMarkets() {
   }, [groups, fullSnap]);
   const livePools = useLivePools(client, liveIds, Boolean(tx.st.pending) && !tx.st.oneClick);
   const snap = useMemo(() => withLivePools(fullSnap, livePools), [fullSnap, livePools]);
+  // No trading on stale numbers: the newest chain read (full or live pool) is
+  // older than STALE_SECS, e.g. the RPC is rate-limiting or down.
+  const lastRead = Math.max(fullSnap?.readAt ?? 0, ...Object.values(livePools).map((p) => p.at));
+  const stale = Boolean(fullSnap) && clientNow > 0 && clientNow - lastRead > STALE_SECS;
 
   // Betting on the next round closes at the next boundary.
   const roundEnd = now ? nextBoundary(now) : 0;
@@ -870,9 +957,15 @@ export function CommonMarkets() {
 
       <LedgerBar snap={snap} tx={tx} address={address} onChain={onChain} connect={connect} switchChain={() => switchChain(D.chainId)} />
 
+      {stale && (
+        <p className="mb-4 border border-down bg-bg-elev px-4 py-3 text-[13px] text-down" role="status">
+          The market data is {Math.round(clientNow - lastRead)} s old (the chain is not answering). Trading is paused until it
+          refreshes.
+        </p>
+      )}
       {loadError && !snap && (
         <p className="mb-6 rounded-[10px] border border-down bg-bg-elev px-4 py-3 text-[13px] text-down">
-          Could not read the markets from Arc testnet: {loadError} Retrying every 5 seconds.
+          Could not read the markets from {D.label}: {loadError} Retrying every 10 seconds.
         </p>
       )}
 
@@ -909,7 +1002,7 @@ export function CommonMarkets() {
             open={open}
             setOpen={setOpen}
             tx={tx}
-            canTrade={Boolean(address && onChain)}
+            canTrade={Boolean(address && onChain && !stale)}
           />
         ))}
       </section>
@@ -925,20 +1018,20 @@ export function CommonMarkets() {
       )}
 
       {tab === "events" && (
-        <EventMarkets snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={Boolean(address && onChain)} address={address} />
+        <EventMarkets snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={Boolean(address && onChain && !stale)} address={address} />
       )}
 
       <p className="mt-12 border-t border-line pt-4 text-[13px] leading-relaxed text-fg-dim">
         Markets read live from{" "}
         <a className="text-fg-mute underline" href={`${D.explorer}/address/${C.MarketsV4}`} target="_blank" rel="noreferrer">
-          MarketsV4 on Arc testnet
+          MarketsV4 on {D.label}
         </a>
         . Rounds are opened and settled by Registrai&apos;s agent{" "}
         <a className="text-fg-mute underline" href={`${D.explorer}/address/${D.agent}`} target="_blank" rel="noreferrer">
           {D.agent.slice(0, 6)}…{D.agent.slice(-4)}
         </a>
         , which seeds each pool with 5 USDC. Every buy and sell pays a {snap?.feeBps !== undefined ? `${Number(snap.feeBps) / 100}%` : "1%"}{" "}
-        trading fee; nothing is charged at settlement. Testnet USDC only.
+        trading fee; nothing is charged at settlement.{D.testnet ? " Testnet USDC only." : ""}
       </p>
     </div>
     </SessionCtx.Provider>
@@ -1035,9 +1128,9 @@ function LedgerBar({
   if (!onChain) {
     return (
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-bg-elev px-4 py-3">
-        <p className="text-[13px] text-fg-mute">These markets run on Arc testnet. Your wallet is on another network.</p>
+        <p className="text-[13px] text-fg-mute">These markets run on {D.label}. Your wallet is on another network.</p>
         <button onClick={() => void switchChain()} className="pa-btn">
-          Switch to Arc testnet
+          Switch to {D.label}
         </button>
       </div>
     );
@@ -1457,46 +1550,58 @@ function TradeBox({
   const busy = Boolean(tx.st.pending);
   const fail = (error: string) => tx.setSt({ pending: "", scope, error });
   const ses = useContext(SessionCtx);
-  const oneClick = Boolean(ses?.owner && value !== undefined && ses.covers(open.mode, value));
+  // (a sell goes one-click only for shares the session bought: checked on submit)
+  const oneClick = Boolean(open.mode === "buy" && ses?.owner && value !== undefined && ses.covers("buy", value));
+  const impact = buyQ ? buyQ.priceImpact : 0;
 
   async function submit() {
-    if (!canTrade) return fail("Connect a wallet on Arc testnet first.");
+    if (!canTrade) return fail(`Connect a wallet on ${D.label} first.`);
     if (!parsed) return fail(open.mode === "buy" ? "Enter an amount in USDC." : "Enter how many shares to sell.");
     if (!parsed.ok) return fail(parsed.error);
     const v = parsed.value;
     if (open.mode === "buy" && v > ledgerBal) return fail("That is more than your trading balance. Deposit first (above).");
     if (open.mode === "sell" && v > held) return fail(`You hold ${fmt(held)} ${label} shares.`);
+    if (floor === undefined) return fail("No quote yet: wait a moment for the pool to load.");
+    // The floor the user saw is the floor sent: the trade never fills below the
+    // "Minimum accepted" on screen (one-click has no wallet step to catch a move).
+    const shownFloor = floor;
+    // Decide the path BEFORE sending, so the status line tells the truth: a sell
+    // goes one-click only for shares this session key bought.
+    let viaSession = false;
+    try {
+      viaSession = Boolean(
+        ses?.owner &&
+          ses.covers(open.mode, v) &&
+          (open.mode === "buy" || (await ses.sellable(market.marketId, outcome)) >= v),
+      );
+    } catch {
+      viaSession = false;
+    }
     const verb = open.mode === "buy" ? `Bought ${label}` : `Sold ${label}`;
     const ok = await tx.run(
       scope,
       open.mode,
       async () => {
-        // The contract's own quote at click time sets the floor; the page's
-        // mirror is only the preview.
         const client = tx.client;
         const block = await client.getBlock({ blockTag: "latest" });
         if (block.timestamp >= BigInt(market.expiry)) throw new Error("Trading on this round has closed.");
         const deadline = roundTradeDeadline(block.timestamp, BigInt(market.expiry), windowSecs);
+        const fn = open.mode === "buy" ? "quoteBuy" : "quoteSell";
+        const [out] = (await client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: fn, args: [market.marketId, outcome, v] })) as readonly [bigint, bigint];
+        if (out === 0n) throw new Error(open.mode === "buy" ? "That amount is too small to buy any shares." : "That is too few shares to sell.");
+        if (out < shownFloor) {
+          throw new Error(`The price moved since the quote: you would now get ${fmt(out, 4)}, below the minimum you saw (${fmt(shownFloor, 4)}). Check the new quote and try again.`);
+        }
         if (open.mode === "buy") {
-          const [out] = (await client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "quoteBuy", args: [market.marketId, outcome, v] })) as readonly [bigint, bigint];
-          if (out === 0n) throw new Error("That amount is too small to buy any shares.");
-          if (ses?.owner && ses.covers("buy", v)) {
-            return ses.send("buyFor", [ses.owner, market.marketId, outcome, v, minOutWithSlippage(out, slip), deadline]);
-          }
+          if (viaSession) return ses!.send("buyFor", [ses!.owner!, market.marketId, outcome, v, shownFloor, deadline]);
           await tx.ensureSpender(v);
-          return tx.send(C.MarketsV4, marketsV4Abi, "buy", [market.marketId, outcome, v, minOutWithSlippage(out, slip), deadline]);
+          return tx.send(C.MarketsV4, marketsV4Abi, "buy", [market.marketId, outcome, v, shownFloor, deadline]);
         }
-        const [out] = (await client.readContract({ address: C.MarketsV4, abi: marketsV4Abi, functionName: "quoteSell", args: [market.marketId, outcome, v] })) as readonly [bigint, bigint];
-        if (out === 0n) throw new Error("That is too few shares to sell.");
-        // One-click sells only where the session key bought for you (the contract
-        // keeps a delegate out of positions it did not build); else the wallet.
-        if (ses?.owner && ses.covers("sell", v) && (await ses.soldHere(market.marketId))) {
-          return ses.send("sellFor", [ses.owner, market.marketId, outcome, v, minOutWithSlippage(out, slip), deadline]);
-        }
-        return tx.send(C.MarketsV4, marketsV4Abi, "sell", [market.marketId, outcome, v, minOutWithSlippage(out, slip), deadline]);
+        if (viaSession) return ses!.send("sellFor", [ses!.owner!, market.marketId, outcome, v, shownFloor, deadline]);
+        return tx.send(C.MarketsV4, marketsV4Abi, "sell", [market.marketId, outcome, v, shownFloor, deadline]);
       },
       `${verb}.`,
-      oneClick,
+      viaSession,
     );
     if (ok) setAmt("");
   }
@@ -1570,9 +1675,9 @@ function TradeBox({
           </dd>
         </div>
         <div>
-          <dt>{open.mode === "buy" ? `Pays if ${label}` : "Avg price"}</dt>
+          <dt>Avg price</dt>
           <dd className="tnum text-[13px] text-fg">
-            {buyQ ? `${fmt(buyQ.sharesOut, 2)} USDC` : sellQ ? `${(sellQ.avgPrice * 100).toFixed(1)}¢` : "—"}
+            {buyQ ? `${(buyQ.avgPrice * 100).toFixed(1)}¢ · pays ${fmt(buyQ.sharesOut, 2)} if ${label}` : sellQ ? `${(sellQ.avgPrice * 100).toFixed(1)}¢` : "—"}
           </dd>
         </div>
         <div>
@@ -1586,6 +1691,12 @@ function TradeBox({
           </dd>
         </div>
       </dl>
+      {buyQ && impact > 0.05 && (
+        <p className="mt-2 text-[13px] text-down" role="note">
+          Large for this pool: you pay {(buyQ.avgPrice * 100).toFixed(1)}¢ a share on average against {(buyQ.priceBefore * 100).toFixed(0)}¢ now
+          (+{(impact * 100).toFixed(0)}%). A smaller amount gets a better price.
+        </p>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <div className="inline-flex items-center gap-1 text-[13px] text-fg-dim" role="group" aria-label="Slippage tolerance">
@@ -1616,9 +1727,10 @@ function TradeBox({
               ? "Buying…"
               : "Selling…"
             : `${oneClick ? "⚡ " : ""}${open.mode === "buy" ? `Buy ${label}${value ? ` for ${fmt(value)} USDC` : ""}` : `Sell ${label}`}`}
+          {oneClick && <span className="sr-only"> (one-click: sends immediately, no wallet confirmation)</span>}
         </button>
       </div>
-      {!canTrade && <p className="mt-2 text-[13px] text-fg-dim">Connect a wallet on Arc testnet to trade.</p>}
+      {!canTrade && <p className="mt-2 text-[13px] text-fg-dim">Connect a wallet on {D.label} to trade.</p>}
       <TxLine tx={tx} scope={scope} />
     </div>
   );
@@ -1650,6 +1762,7 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
   if (!snap) return null;
   const known = snap.markets.filter((m) => snap.redeemable[m.marketId] !== undefined);
   const claims = claimList(known, snap.redeemable);
+  const toSettle = snap.markets.filter((m) => snap.settleable[m.marketId]);
   const assetOf = (key: string) => D.assets.find((a) => a.key === key);
   const eventOf = (key: string) => D.events.find((e) => e.key === key);
   return (
@@ -1657,10 +1770,48 @@ function Claims({ snap, tx, now }: { snap?: Snapshot; tx: Tx; now: number }) {
       <h2 id="claims-h" className="mb-3 font-serif text-[24px] leading-none">
         Your claims
       </h2>
+      {toSettle.length > 0 && (
+        <ul className="mb-3 overflow-hidden rounded-xl border border-accent bg-bg-elev" aria-label="Markets you can settle">
+          {toSettle.map((m) => {
+            const how = snap.settleable[m.marketId];
+            const scope = `settle:${m.marketId}`;
+            const a = assetOf(m.key);
+            return (
+              <li key={m.marketId} className="border-b border-line px-4 py-3 last:border-b-0">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="min-w-0 flex-1 text-[14px]">
+                    {a ? `${a.symbol} · ${roundLabel(roundWindow(m).start, roundWindow(m).end)}` : eventOf(m.key)?.question ?? m.key}
+                    <div className="text-[13px] text-fg-dim">
+                      {how === "resolve"
+                        ? "Its reading is final but the market is not resolved yet. Anyone may resolve it."
+                        : "No reading landed in time: it voids and every trader gets their net cost back. Anyone may void it."}
+                    </div>
+                  </div>
+                  <button
+                    disabled={Boolean(tx.st.pending)}
+                    onClick={() =>
+                      void tx.run(
+                        scope,
+                        how,
+                        () => tx.send(C.MarketsV4, marketsV4Abi, how === "resolve" ? "resolve" : "voidMarket", [m.marketId]),
+                        how === "resolve" ? "Resolved: redeem it below." : "Voided: redeem your refund below.",
+                      )
+                    }
+                    className="border border-accent px-4 py-2 text-[13px] text-accent transition-colors hover:bg-accent hover:text-bg disabled:opacity-50"
+                  >
+                    {tx.st.pending === how && tx.st.scope === scope ? "Confirm in wallet…" : how === "resolve" ? "Resolve now" : "Void and refund"}
+                  </button>
+                </div>
+                <TxLine tx={tx} scope={scope} />
+              </li>
+            );
+          })}
+        </ul>
+      )}
       {claims.length === 0 ? (
         <p className="rounded-xl border border-line bg-bg-elev px-4 py-3 text-[13px] text-fg-dim">
-          Nothing to redeem. Winning shares from settled rounds you traded in the last two hours show up here, and pay
-          into your trading balance.
+          Nothing to redeem. Winning shares (and void refunds) from markets you traded show up here once they settle, and
+          pay into your trading balance.
         </p>
       ) : (
         <ul className="overflow-hidden rounded-xl border border-line bg-bg-elev">
@@ -1780,7 +1931,7 @@ function EventCard({
           change: false,
           agent: D.agent,
           threshold: st.threshold,
-          comparator: 1,
+          comparator: st.comparator,
           expiry: st.expiry,
           liquidity: 0n,
           blockNumber: 0n,

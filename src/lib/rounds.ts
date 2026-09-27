@@ -18,7 +18,9 @@
  * the price at open, the round is [expiry − 5m, expiry]) still settle and show.
  */
 import type { Address, Hex } from "viem";
-import deployment from "./deployments/arc-testnet-rounds.json";
+import testnetDeployment from "./deployments/arc-testnet-rounds.json";
+import mainnetDeployment from "./deployments/arc-mainnet-rounds.json";
+import { selectPerennialNetwork } from "./perennial-network";
 import { COMPARATOR, PHASE } from "./perennial-market";
 
 // ───────────────────────────── deployment ─────────────────────────────
@@ -47,6 +49,11 @@ export interface EventMeta {
 }
 
 export interface RoundsDeployment {
+  /** False while the network's MarketsV4 / agent are not filled in: no reads. */
+  deployed: boolean;
+  testnet: boolean;
+  /** "Arc testnet" / "Arc mainnet", for copy. */
+  label: string;
   chainId: number;
   rpc: string;
   explorer: string;
@@ -63,24 +70,54 @@ export interface RoundsDeployment {
   feeds: Record<string, { feedId: Hex; disputeWindow: number }>;
 }
 
-export function loadDeployment(raw: typeof deployment): RoundsDeployment {
+/** The raw JSON shape (testnet and mainnet share it; mainnet has nulls until deployed). */
+export interface RoundsDeploymentJson {
+  network?: string;
+  chainId: number;
+  rpc: string;
+  explorer: string;
+  deployBlock: number | null;
+  roundSecs: number;
+  settlementWindow: number;
+  contracts: Record<string, string | null>;
+  agent: string | null;
+  descriptionPrefix: string;
+  assets: AssetMeta[];
+  events: Array<Omit<EventMeta, "marketId"> & { marketId?: string | null }>;
+  feeds: Record<string, { feedId: string; disputeWindow: number }>;
+}
+
+export function loadDeployment(raw: RoundsDeploymentJson): RoundsDeployment {
+  const testnet = raw.chainId !== 5042;
+  const deployed = Boolean(raw.contracts.MarketsV4 && raw.agent && raw.deployBlock);
   return {
+    deployed,
+    testnet,
+    label: testnet ? "Arc testnet" : "Arc mainnet",
     chainId: raw.chainId,
     rpc: raw.rpc,
     explorer: raw.explorer,
-    deployBlock: BigInt(raw.deployBlock),
+    deployBlock: BigInt(raw.deployBlock ?? 0),
     roundSecs: raw.roundSecs,
     settlementWindow: raw.settlementWindow,
     contracts: raw.contracts as RoundsDeployment["contracts"],
-    agent: raw.agent as Address,
+    agent: (raw.agent ?? "0x0000000000000000000000000000000000000000") as Address,
     descriptionPrefix: raw.descriptionPrefix,
     assets: raw.assets,
-    events: raw.events.map((e) => ({ ...e, marketId: (e.marketId ?? null) as Hex | null })),
+    // a testnet rehearsal event never shows on mainnet
+    events: raw.events
+      .filter((e) => testnet || !e.rehearsal)
+      .map((e) => ({ ...e, marketId: (e.marketId ?? null) as Hex | null })),
     feeds: raw.feeds as RoundsDeployment["feeds"],
   };
 }
 
-export const ROUNDS: RoundsDeployment = loadDeployment(deployment);
+/** Chosen at BUILD time, like Perennial (NEXT_PUBLIC_PERENNIAL_NETWORK). */
+export const ROUNDS: RoundsDeployment = loadDeployment(
+  (selectPerennialNetwork(process.env.NEXT_PUBLIC_PERENNIAL_NETWORK) === "mainnet"
+    ? mainnetDeployment
+    : testnetDeployment) as RoundsDeploymentJson,
+);
 
 /** Rounds shown per asset in the results strip. */
 export const RECENT_ROUNDS = 6;
@@ -237,6 +274,10 @@ export function parseMarketLogs(logs: readonly MarketCreatedLog[], book: FeedBoo
     if (!sameAddr(a.agent, agent) || !sameAddr(a.creator, agent)) continue;
     const feed = book.byId[a.feedId.toLowerCase()];
     if (!feed) continue;
+    // A round market is exactly "change > 0" (threshold 0, GreaterThan): the
+    // page's Up = Yes wording assumes it. Anything else on a change feed is not
+    // a round we show (a keeper bug would otherwise mislabel it).
+    if (feed.change && (a.threshold !== 0n || Number(a.comparator ?? COMPARATOR.GreaterThan) !== COMPARATOR.GreaterThan)) continue;
     const id = a.marketId.toLowerCase() as Hex;
     if (seen.has(id)) continue;
     seen.add(id);
