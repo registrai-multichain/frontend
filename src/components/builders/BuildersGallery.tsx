@@ -49,6 +49,7 @@ import { sourceLabel } from "@/lib/verified-builders";
 import { BuilderEconomyFacts } from "@/components/builders/BuilderEconomyFacts";
 import { nextBadgeImage } from "@/lib/verify-invite";
 import { Avatar, BuilderCardView } from "./BuilderCardView";
+import { NOMINATIONS, readNominations, type Nomination, type NominationsReader } from "@/lib/nominations";
 
 const REG = BUILDERS.contracts.BuilderRegistry;
 const BADGE = BUILDERS.contracts.VerifiedBuilderBadge;
@@ -160,15 +161,39 @@ function ProjectChips({ chips }: { chips: ProjectChip[] }) {
 }
 
 /** What a card and the detail view both say about a builder's state. */
-function StatusNote({ e }: { e: GalleryEntry }) {
+function StatusNote({ e, onChain }: { e: GalleryEntry; onChain?: boolean }) {
   const b = e.builder;
   if (e.kind === "nominated") return <p className="bld-note">Proof checked. We add it within a day.</p>;
   if ((e.kind === "lapsed" || e.kind === "unconfirmed") && b) return <p className="bld-note">{greyReason(b)}</p>;
+  if (e.kind === "invited" && onChain && NOMINATIONS) {
+    return (
+      <p className="bld-note">
+        Invited: not claimed yet ·{" "}
+        <a className="pa-link" href={`${BUILDERS.explorer.url.replace(/\/$/, "")}/address/${NOMINATIONS}`} target="_blank" rel="noreferrer">
+          on-chain nomination ↗
+        </a>
+      </p>
+    );
+  }
   if (e.kind === "invited") return <p className="bld-note">Invited: not claimed yet.</p>;
   return null;
 }
 
-function BuilderCard({ e, highlighted, waiting, nominated = false }: { e: GalleryEntry; highlighted: boolean; waiting?: bigint; nominated?: boolean }) {
+/** The projects nominated on chain (ProjectNominations), by source; empty until it is deployed or on RPC failure. */
+function useProjectNominations(): Map<string, Nomination> {
+  const { data } = useSWR(
+    NOMINATIONS ? ["builders-nominations", BUILDERS.chainId, NOMINATIONS] : null,
+    async () => {
+      const client = createPublicClient({ chain: BUILDERS.chain.viemChain, transport: transportFor(BUILDERS.chain, { batch: true }) }) as PublicClient;
+      return readNominations(client as unknown as NominationsReader, NOMINATIONS!);
+    },
+    { revalidateOnFocus: false, shouldRetryOnError: false, dedupingInterval: 60_000 },
+  );
+  return data ?? EMPTY_NOMINATIONS;
+}
+const EMPTY_NOMINATIONS = new Map<string, Nomination>();
+
+function BuilderCard({ e, highlighted, waiting, nominated = false, onChain = false }: { e: GalleryEntry; highlighted: boolean; waiting?: bigint; nominated?: boolean; onChain?: boolean }) {
   const b = e.builder;
   const proof = !b && e.source ? proofHref(e.source) : null;
   const projects = b ? b.projects.filter((p) => p.active).length : 0;
@@ -193,7 +218,7 @@ function BuilderCard({ e, highlighted, waiting, nominated = false }: { e: Galler
       highlighted={highlighted}
       note={
         <>
-          <StatusNote e={e} />
+          <StatusNote e={e} onChain={onChain} />
           {waitingText && <p className="wonder-waiting">{waitingText}</p>}
         </>
       }
@@ -360,6 +385,7 @@ function BuilderDetail({ e, onClose }: { e: GalleryEntry; onClose: () => void })
 export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot: GallerySnapshot | null; nominees: Nominee[] }) {
   const builders = useLiveBuilders(snapshot);
   const nominees = useNominees(fileNominees);
+  const onChainNominations = useProjectNominations();
   const entries = useMemo(() => mergeGallery(builders, nominees), [builders, nominees]);
   const invitedSources = useMemo(() => entries.filter((e) => e.kind === "invited" && e.source).map((e) => e.source!), [entries]);
   const wonder = useWonderStatus(invitedSources);
@@ -464,7 +490,7 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
           ) : (
             <ul className="bld-grid">
               {shown.map((e) => (
-                <BuilderCard key={e.key} e={e} highlighted={Boolean(target && e.builder?.id === target)} waiting={e.source ? waitingAmount(wonder.status[e.source], Math.floor(Date.now() / 1000), wonder.expiry) ?? undefined : undefined} nominated={Boolean(e.source && wonder.status[e.source]?.nominated)} />
+                <BuilderCard key={e.key} e={e} highlighted={Boolean(target && e.builder?.id === target)} waiting={e.source ? waitingAmount(wonder.status[e.source], Math.floor(Date.now() / 1000), wonder.expiry) ?? undefined : undefined} nominated={Boolean(e.source && wonder.status[e.source]?.nominated)} onChain={Boolean(e.source && onChainNominations.get(e.source)?.active)} />
               ))}
             </ul>
           )}

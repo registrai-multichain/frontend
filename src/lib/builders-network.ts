@@ -55,6 +55,8 @@ export interface BuildersSource {
   BuilderRegistry?: string | null;
   CaretakerRegistry?: string | null;
   VerifiedBuilderBadge?: string | null;
+  /** The on-chain list of nominated projects (contracts/src/perennial/ProjectNominations.sol). */
+  ProjectNominations?: string | null;
   operator?: string | null;
   deployBlock?: number | null;
 }

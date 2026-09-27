@@ -52,7 +52,9 @@ import {
 } from "@/lib/builders-onboarder";
 import { activeProvider } from "@/lib/wallets";
 import { gaslessCandidates, gaslessState, type GaslessRequest } from "@/lib/gasless-registrations";
-import { planOnboarding, safeBatchJson } from "@/lib/onboard-batch";
+import { planOnboarding, safeBatchJson, singleTxSafeFile } from "@/lib/onboard-batch";
+import { NOMINATIONS, nominationTx, nominationsAbi, profileHash, readNominations, type Nomination, type NominationsReader } from "@/lib/nominations";
+import { projectPath, type ProjectProfile } from "@/lib/projects";
 import { sendBuildersTx } from "@/components/verify/sendTx";
 import { buildersClient } from "@/components/verify/useMyBuilder";
 import { useWonderContext, WonderStatusProvider } from "@/components/wonder/WonderBits";
@@ -398,6 +400,8 @@ function Dashboard({
         {view.recovery && <RecoverySection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />}
 
         {view.projects && <ProjectsSection builders={chain.data ?? null} chainNote={chainNote} nameOf={nameOf} />}
+
+        {view.directOnboard && NOMINATIONS && <NominationsSection invites={invites.data ?? []} />}
 
         {view.wonder && WONDER_ON_BUILDERS && <WonderSection invites={invites.data ?? []} />}
       </div>
@@ -1753,6 +1757,107 @@ function ProjectsSection({
             </tbody>
           </table>
         </div>
+      )}
+    </Section>
+  );
+}
+
+// ───────────────────────────── on-chain nominations ─────────────────────────────
+
+/** ProjectNominations: anchor an invited project on chain as nominated (the gallery's backup). */
+function NominationsSection({ invites }: { invites: AdminInvite[] }) {
+  const view = useContext(ViewCtx);
+  const contract = NOMINATIONS!;
+  const { address, walletChainId, switchChain } = useWallet();
+  const [input, setInput] = useState("");
+  const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
+  const [busy, setBusy] = useState(false);
+  const invited = useMemo(() => new Set(invites.map((i) => i.source)), [invites]);
+  const list = useSWR(
+    ["admin-nominations", contract],
+    () => readNominations(buildersClient() as unknown as NominationsReader, contract),
+    { revalidateOnFocus: false },
+  );
+
+  /** The anchored hash: the stored profile's, else 0x0 (a later save + re-nominate anchors it). */
+  async function hashFor(source: string): Promise<Hex> {
+    const r = await call<{ profile?: ProjectProfile }>(projectPath(source));
+    return r.status === 200 && r.body.profile ? profileHash(r.body.profile) : profileHash(null);
+  }
+
+  async function send(source: string, on: boolean) {
+    if (!address) return setMsg({ error: "Connect the onboarder wallet (or download the Safe file)." });
+    if (busy) return;
+    setBusy(true);
+    setMsg({});
+    try {
+      if (walletChainId !== BUILDERS.chainId) await switchChain(BUILDERS.chainId);
+      const args = on ? [source, await hashFor(source)] : [source];
+      const hash = await sendBuildersTx({ account: address as Address, address: contract, abi: nominationsAbi as Abi, functionName: on ? "nominate" : "unnominate", args });
+      await buildersClient().waitForTransactionReceipt({ hash });
+      setMsg({ ok: `${on ? "Nominated" : "Un-nominated"} ${source} on chain.` });
+      await list.mutate();
+    } catch (e) {
+      setMsg({ error: humanizeError(e, HUMAN) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function act(on: boolean, how: "wallet" | "safe") {
+    const r = nominateInput(input, invited, on);
+    if (!r.ok) return setMsg({ error: r.error });
+    if (how === "safe") {
+      const tx = nominationTx(contract, r.source, on, on ? await hashFor(r.source) : undefined);
+      download(safeFileName(`${on ? "nominate" : "unnominate"}-${r.source.replace(/[^a-z0-9]+/g, "-")}`, Date.now()),
+        singleTxSafeFile(tx, { chainId: BUILDERS.chainId, createdAt: Date.now(), name: `Registrai: ${on ? "nominate" : "un-nominate"} ${r.source}` }));
+      return setMsg({ ok: "Safe file downloaded." });
+    }
+    void send(r.source, on);
+  }
+
+  const rows = [...(list.data ?? new Map<string, Nomination>()).entries()];
+  return (
+    <Section title="Nominate on chain">
+      <p className="vf-note">
+        Anchor an invited project as <b>nominated</b> on {BUILDERS.label} (ProjectNominations): the onboarder wallet or the Safe.
+        It records the project and a fingerprint of its saved profile; the gallery links to it. No funds, no markets yet.
+      </p>
+      <div className="adm-inline">
+        <label className="vf-field">
+          <span>Invited project</span>
+          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="github:owner/repo or domain" spellCheck={false} autoCapitalize="off" list="adm-invited-sources" />
+          <em />
+        </label>
+        <datalist id="adm-invited-sources">
+          {[...invited].map((src) => (
+            <option key={src} value={src} />
+          ))}
+        </datalist>
+        <button type="button" className="vf-primary" onClick={() => void act(true, "wallet")} disabled={busy || !input.trim()}>{busy ? "Sending…" : "Nominate"}</button>
+        <button type="button" onClick={() => void act(false, "wallet")} disabled={busy || !input.trim()}>Un-nominate</button>
+        {view.safeFiles && <button type="button" onClick={() => void act(true, "safe")} disabled={!input.trim()}>Safe file: nominate</button>}
+      </div>
+      {msg.ok && <p className="vf-ok">{msg.ok}</p>}
+      {msg.error && <p className="vf-error">{msg.error}</p>}
+      {list.error ? (
+        <p className="vf-error">Could not read the nominations: {humanizeError(list.error, HUMAN)}</p>
+      ) : !list.data ? (
+        <p className="vf-hint">Reading nominations…</p>
+      ) : rows.length === 0 ? (
+        <p className="vf-hint">No project nominated on chain yet.</p>
+      ) : (
+        <ul className="adm-list">
+          {rows.map(([src, n]) => (
+            <li key={src}>
+              <b>{sourceLabel(src)}</b>{" "}
+              <span className="adm-sub">
+                {n.active ? "nominated" : "withdrawn"} · {new Date(n.at * 1000).toISOString().slice(0, 10)} by {shortAddr(n.by)}
+                {n.profileHash !== profileHash(null) ? " · profile anchored" : " · no profile anchored"}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </Section>
   );
