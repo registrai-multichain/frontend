@@ -1,13 +1,13 @@
 {
     "network": "testnet",
     "chainId": 5042002,
-    "note": "Perennial extras for Arc testnet. Contract addresses come from live-data.json (synced from contracts/deployments/arc-testnet.json). operator = keeper/config.arc.json operator_addr (the caretaker's bonded milestone agent); deployBlock = contracts/deployments/arc-testnet.json perennial.deployBlock (v6 stack, 2026-09-25; switched 2026-09-26). verifiedBuilderBadge = contracts/deployments/arc-testnet.json perennial.verifiedBuilderBadge.address (used until a sync writes contracts.VerifiedBuilderBadge). builderFund / seasonPool = contracts/deployments/arc-testnet.json perennial BuilderFund / SeasonPool (v6; used until a sync writes contracts.BuilderFund / contracts.SeasonPool). wonderEscrow = the v6 WonderEscrow (MarketsPerennial.ESCROW()).",
-    "deployBlock": 63992119,
+    "note": "Perennial extras for Arc testnet. Contract addresses come from live-data.json (synced from contracts/deployments/arc-testnet.json). operator = keeper/config.arc.json operator_addr (the caretaker's bonded milestone agent); deployBlock = contracts/deployments/arc-testnet.json perennial.deployBlock (v7 audit-fixed stack, 2026-09-27; v6 before). verifiedBuilderBadge = contracts/deployments/arc-testnet.json perennial.verifiedBuilderBadge.address (used until a sync writes contracts.VerifiedBuilderBadge). builderFund / seasonPool = contracts/deployments/arc-testnet.json perennial BuilderFund / SeasonPool (v7; used until a sync writes contracts.BuilderFund / contracts.SeasonPool). wonderEscrow = the v7 WonderEscrow (MarketsPerennial.ESCROW()).",
+    "deployBlock": 64320432,
     "operator": "0xf26db19bc8DC33c9A72399128CF5cfB5dDC76263",
     "verifiedBuilderBadge": "0xBF7FF680e0Ee7472E244cf2550EE016939cb6335",
-    "builderFund": "0xA210565Aa9ABc61808a1Ff3a9cE562105074EA67",
-    "seasonPool": "0xffeDbd5967a1a5b46cf26554B6D62687faB801be",
-    "wonderEscrow": "0x78813F2FDBe804F3073632e7D8c4adDaEcdF9c2A",
+    "builderFund": "0xEAE38F0fD3ab5742B801Fc3a62DFcc75B524273c",
+    "seasonPool": "0x15662D2864F3B74105eD826aCCe40550a99F6A54",
+    "wonderEscrow": "0x351BB192455775053Ba99d1D0E5A8cd79DA03055",
     "builders": {
         "note": "The builder registries on Arc testnet, used by /builders and /verify while the mainnet builders block is unset.",
         "deployBlock": 63826822,
