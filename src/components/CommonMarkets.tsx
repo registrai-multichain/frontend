@@ -16,7 +16,9 @@
  * approvals, never unlimited). Live prices are Coinbase's public ticker, shown
  * for reference only: a round settles on the agent's on-chain reading.
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   createPublicClient,
   createWalletClient,
@@ -79,6 +81,10 @@ import {
   type Reading,
   type RoundMarket,
   type RoundStatus,
+  assetHref,
+  eventHref,
+  formatChange,
+  type AssetRounds,
 } from "@/lib/rounds";
 import { cashOutValue, pnl, poolPrices, replayPool, type Trade } from "@/lib/rounds-chart";
 import { OddsChart, PriceChart, usePriceStream, type PriceStream } from "./RoundCharts";
@@ -839,7 +845,10 @@ const SessionCtx = createContext<Session | undefined>(undefined);
 
 // ───────────────────────────── page ─────────────────────────────
 
-export function CommonMarkets() {
+/** Which page: the overview grid, one asset's market page, or one event's page. */
+export type RoundsView = { kind: "overview" } | { kind: "asset"; key: string } | { kind: "event"; key: string };
+
+export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsView }) {
   const { address, walletChainId, connect, switchChain } = useWallet();
   const client = useMemo(
     () =>
@@ -950,10 +959,20 @@ export function CommonMarkets() {
     window.history.replaceState(null, "", t === "events" ? "#events" : window.location.pathname + window.location.search);
   };
 
+  const canTrade = Boolean(address && onChain && !stale);
+  const pageAsset = view.kind === "asset" ? D.assets.find((a) => a.key === view.key) : undefined;
+  const pageEvent = view.kind === "event" ? D.events.find((e) => e.key === view.key) : undefined;
+
   return (
     <SessionCtx.Provider value={session}>
     <div className="fade-up">
-      <Header now={now} roundEnd={roundEnd} showTimer={tab === "price"} />
+      {view.kind === "overview" ? (
+        <Header now={now} roundEnd={roundEnd} showTimer={tab === "price"} />
+      ) : (
+        <Link href="/rounds/" className="mb-4 inline-block text-[13px] text-fg-dim hover:text-fg">
+          ← All markets
+        </Link>
+      )}
 
       <LedgerBar snap={snap} tx={tx} address={address} onChain={onChain} connect={connect} switchChain={() => switchChain(D.chainId)} />
 
@@ -969,8 +988,34 @@ export function CommonMarkets() {
         </p>
       )}
 
+      {pageAsset && (
+        <AssetPage
+          asset={pageAsset}
+          snap={snap}
+          groups={groups?.[pageAsset.key]}
+          startPrice={groups?.[pageAsset.key]?.inPlay ? startPrices[`${pageAsset.product}@${groups[pageAsset.key].inPlay!.expiry}`] : undefined}
+          live={stream.last[pageAsset.product]}
+          stream={stream}
+          skew={skew}
+          now={now}
+          open={open}
+          setOpen={setOpen}
+          tx={tx}
+          canTrade={canTrade}
+        />
+      )}
+      {pageEvent && (
+        <div className="max-w-[760px]">
+          <EventCard ev={pageEvent} snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={canTrade} address={address} page />
+          <EventRules />
+        </div>
+      )}
+      {view.kind !== "overview" && !pageAsset && !pageEvent && <p className="text-fg-mute">This market does not exist.</p>}
+
       {address && <Claims snap={snap} tx={tx} now={now} />}
 
+      {view.kind === "overview" && (
+      <>
       <nav className="pa-tabs mb-5" aria-label="Market categories">
         {ROUNDS_TABS.map((t) => (
           <button key={t.key} type="button" className="pa-tab" aria-pressed={tab === t.key} onClick={() => pickTab(t.key)}>
@@ -1002,7 +1047,7 @@ export function CommonMarkets() {
             open={open}
             setOpen={setOpen}
             tx={tx}
-            canTrade={Boolean(address && onChain && !stale)}
+            canTrade={canTrade}
           />
         ))}
       </section>
@@ -1018,7 +1063,9 @@ export function CommonMarkets() {
       )}
 
       {tab === "events" && (
-        <EventMarkets snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={Boolean(address && onChain && !stale)} address={address} />
+        <EventMarkets snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={canTrade} address={address} />
+      )}
+      </>
       )}
 
       <p className="mt-12 border-t border-line pt-4 text-[13px] leading-relaxed text-fg-dim">
@@ -1254,6 +1301,64 @@ function TxLine({ tx, scope }: { tx: Tx; scope: string }) {
 
 type OpenTrade = { id: string; side: "yes" | "no"; mode: "buy" | "sell" } | undefined;
 
+/** Everything a card or a market page shows about an asset's rounds, from the
+ *  snapshot, the live price and the clock. */
+function useAssetRound({
+  asset,
+  snap,
+  current,
+  inPlay,
+  startPrice,
+  live,
+  now,
+  open,
+}: {
+  asset: AssetMeta;
+  snap?: Snapshot;
+  current?: RoundMarket;
+  inPlay?: RoundMarket;
+  startPrice?: number;
+  live?: { price: number; dir: "up" | "down" | "flat" };
+  now: number;
+  open: OpenTrade;
+}) {
+  const st = current ? snap?.state[current.marketId] : undefined;
+  const liveScaled = live ? toScaled(live.price, asset.decimals) : undefined;
+  // A legacy price round compares the live price with its strike; the round in
+  // play compares it with the price the round started at.
+  const legacy = current && !current.change ? current : undefined;
+  const ref = legacy ? legacy.threshold : inPlay?.change && startPrice !== undefined ? toScaled(startPrice, asset.decimals) : undefined;
+  const delta = liveScaled !== undefined && ref !== undefined ? strikeDelta(liveScaled, ref) : undefined;
+  const playLeft = inPlay && now ? roundWindow(inPlay).end - now : 0;
+  const playHold = inPlay ? snap?.holdings[inPlay.marketId] : undefined;
+  const upPct = st ? impliedPct(st.yesPrice) : 50;
+  const left = current && now ? current.expiry - now : 0;
+  const trading = Boolean(current && st && st.phase === PHASE.Trading && left > 0);
+  const hold = current ? snap?.holdings[current.marketId] : undefined;
+  const isOpen = Boolean(current && open?.id === current.marketId);
+  const odds = useMemo(() => {
+    if (!current || !snap || !st) return undefined;
+    const at = (block: bigint) => snap.chainNow - Number(snap.head - block) * BLOCK_SECS;
+    const pts = replayPool(current.liquidity, current.blockNumber, snap.trades[current.marketId] ?? []).map((q) => ({ t: at(q.block), up: q.up }));
+    pts.push({ t: snap.chainNow, up: impliedPct(st.yesPrice) / 100 }); // the live pool
+    return { pts, open: at(current.blockNumber) };
+  }, [current, snap, st]);
+  const played = inPlay?.change ? roundWindow(inPlay) : undefined;
+  const upPrice = st ? cents(st.yesPrice) : "—";
+  const downPrice = st ? cents(st.noPrice) : "—";
+  return { st, delta, playLeft, playHold, upPct, left, trading, hold, isOpen, odds, played, upPrice, downPrice };
+}
+
+/** A click on the card itself (not on its buttons, inputs or links) opens the
+ *  market's page; the Up/Down buttons stay quick bets on the card. */
+function useCardLink(href: string) {
+  const router = useRouter();
+  return (e: MouseEvent<HTMLElement>) => {
+    if ((e.target as HTMLElement).closest("button, a, input, label, select, textarea, [role=group]")) return;
+    router.push(href);
+  };
+}
+
 function AssetCard({
   asset,
   snap,
@@ -1287,39 +1392,32 @@ function AssetCard({
   tx: Tx;
   canTrade: boolean;
 }) {
-  const st = current ? snap?.state[current.marketId] : undefined;
-  const liveScaled = live ? toScaled(live.price, asset.decimals) : undefined;
-  // A legacy price round compares the live price with its strike; the round in
-  // play compares it with the price the round started at.
-  const legacy = current && !current.change ? current : undefined;
-  const ref = legacy ? legacy.threshold : inPlay?.change && startPrice !== undefined ? toScaled(startPrice, asset.decimals) : undefined;
-  const delta = liveScaled !== undefined && ref !== undefined ? strikeDelta(liveScaled, ref) : undefined;
-  const playLeft = inPlay && now ? roundWindow(inPlay).end - now : 0;
-  const playHold = inPlay ? snap?.holdings[inPlay.marketId] : undefined;
-  const upPct = st ? impliedPct(st.yesPrice) : 50;
-  const left = current && now ? current.expiry - now : 0;
-  const trading = Boolean(current && st && st.phase === PHASE.Trading && left > 0);
-  const hold = current ? snap?.holdings[current.marketId] : undefined;
-  const isOpen = current && open?.id === current.marketId;
-  const odds = useMemo(() => {
-    if (!current || !snap || !st) return undefined;
-    const at = (block: bigint) => snap.chainNow - Number(snap.head - block) * BLOCK_SECS;
-    const pts = replayPool(current.liquidity, current.blockNumber, snap.trades[current.marketId] ?? []).map((q) => ({ t: at(q.block), up: q.up }));
-    pts.push({ t: snap.chainNow, up: impliedPct(st.yesPrice) / 100 }); // the live pool
-    return { pts, open: at(current.blockNumber) };
-  }, [current, snap, st]);
-  const played = inPlay?.change ? roundWindow(inPlay) : undefined;
-
-  const upPrice = st ? cents(st.yesPrice) : "—";
-  const downPrice = st ? cents(st.noPrice) : "—";
+  const { st, delta, playLeft, playHold, upPct, left, trading, hold, isOpen, odds, played, upPrice, downPrice } = useAssetRound({
+    asset,
+    snap,
+    current,
+    inPlay,
+    startPrice,
+    live,
+    now,
+    open,
+  });
   const toggle = (side: "yes" | "no", mode: "buy" | "sell") =>
     current && setOpen(isOpen && open?.mode === mode && open.side === side ? undefined : { id: current.marketId, side, mode });
+  const openPage = useCardLink(assetHref(asset));
 
   return (
-    <article className="flex min-w-0 flex-col rounded-xl border border-line bg-bg-elev p-4">
+    <article
+      onClick={openPage}
+      className="flex min-w-0 cursor-pointer flex-col rounded-xl border border-line bg-bg-elev p-4 transition-colors hover:border-line-strong"
+    >
       <div className="flex items-baseline justify-between gap-3">
         <div className="flex min-w-0 items-baseline gap-2">
-          <h2 className="font-serif text-[24px] leading-none">{asset.symbol}</h2>
+          <h2 className="font-serif text-[24px] leading-none">
+            <Link href={assetHref(asset)} className="hover:underline">
+              {asset.symbol}
+            </Link>
+          </h2>
           <span className="truncate text-[13px] text-fg-dim">{asset.name}</span>
         </div>
         <div
@@ -1442,6 +1540,253 @@ function AssetCard({
         </div>
       )}
     </article>
+  );
+}
+
+// ───────────────────────────── asset market page ─────────────────────────────
+
+/** One asset's market page (/rounds/<symbol>/): its current round, big; the trade
+ *  panel is always open while betting runs; the rules; the latest results. */
+function AssetPage({
+  asset,
+  snap,
+  groups,
+  startPrice,
+  live,
+  stream,
+  skew,
+  now,
+  open,
+  setOpen,
+  tx,
+  canTrade,
+}: {
+  asset: AssetMeta;
+  snap?: Snapshot;
+  groups?: AssetRounds;
+  startPrice?: number;
+  live?: { price: number; dir: "up" | "down" | "flat" };
+  stream: PriceStream;
+  skew: number;
+  now: number;
+  open: OpenTrade;
+  setOpen: (o: OpenTrade) => void;
+  tx: Tx;
+  canTrade: boolean;
+}) {
+  const current = groups?.current;
+  const inPlay = groups?.inPlay;
+  const r = useAssetRound({ asset, snap, current, inPlay, startPrice, live, now, open });
+  // The trade panel is open by default here: Up, buy, unless the visitor chose otherwise.
+  const trade: OpenTrade = current ? (r.isOpen ? open : { id: current.marketId, side: "yes", mode: "buy" }) : undefined;
+  const pick = (side: "yes" | "no", mode: "buy" | "sell") => current && setOpen({ id: current.marketId, side, mode });
+  const running = Boolean(groups && (current || inPlay || groups.recent.length));
+
+  return (
+    <article>
+      <header className="mb-5 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-5">
+        <div className="min-w-0">
+          <h1 className="font-serif text-[40px] leading-none tracking-tightest">
+            {asset.symbol} <span className="text-[22px] text-fg-dim">Up or Down · 5 minutes</span>
+          </h1>
+          <p className="mt-2 text-[13px] text-fg-mute">
+            {current ? (
+              <>
+                Next round {roundLabel(roundWindow(current).start, roundWindow(current).end)}
+                {r.trading && (
+                  <>
+                    {" "}
+                    · betting closes in <span className={`tnum ${r.left <= 30 ? "text-down" : "text-fg"}`}>{timeLeft(r.left)}</span>
+                  </>
+                )}
+              </>
+            ) : snap && now && !running ? (
+              <>No {asset.symbol} rounds running yet · live price only</>
+            ) : snap && now ? (
+              <>Next round opens {clockUtc(nextBoundary(now))} UTC</>
+            ) : (
+              "Reading the rounds…"
+            )}
+          </p>
+        </div>
+        <div
+          className={`tnum font-serif text-[40px] leading-none tracking-tightest transition-colors duration-300 ${
+            live?.dir === "up" ? "text-up" : live?.dir === "down" ? "text-down" : "text-fg"
+          }`}
+        >
+          {live ? formatPrice(live.price, asset.decimals) : "—"}
+        </div>
+      </header>
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="min-w-0">
+          <PriceChart
+            series={stream.series[asset.product]}
+            decimals={asset.decimals}
+            skew={skew}
+            height={320}
+            startPrice={r.played ? startPrice : undefined}
+            roundStart={r.played?.start}
+            roundEnd={r.played?.end}
+          />
+          {r.played && (
+            <div className="mt-2 flex items-baseline justify-between gap-3 text-[14px] text-fg-dim">
+              <span>
+                Round {roundLabel(r.played.start, r.played.end)} in play · ends <span className="tnum text-fg-mute">{timeLeft(r.playLeft)}</span>
+              </span>
+              {r.delta && (
+                <span className={`tnum ${r.delta.dir === "above" ? "text-up" : "text-down"}`}>
+                  {r.delta.dir === "above" ? "▲ Up" : "▼ Down"} {formatScaled(r.delta.diff < 0n ? -r.delta.diff : r.delta.diff, asset.decimals)}
+                </span>
+              )}
+            </div>
+          )}
+          {r.played && r.playHold && (r.playHold.yes > 0n || r.playHold.no > 0n) && (
+            <Position
+              hold={r.playHold}
+              value={r.delta ? (r.delta.dir === "above" ? r.playHold.yes : r.playHold.no) : undefined}
+              valueLabel="Pays if it ends now"
+            />
+          )}
+
+          {r.odds && current?.change && (
+            <section className="mt-6" aria-label="Pool odds">
+              <div className="mb-1 text-[13px] text-fg-dim">
+                <span className={r.upPct >= 50 ? "text-up" : "text-down"}>{r.upPct.toFixed(0)}% Up</span> · pool odds for the next round
+              </div>
+              <OddsChart points={r.odds.pts} open={r.odds.open} close={current.expiry} skew={skew} height={110} />
+            </section>
+          )}
+
+          <RoundRules asset={asset} />
+          <PastRounds asset={asset} rounds={groups?.recent ?? []} snap={snap} now={now} />
+        </div>
+
+        <aside className="lg:sticky lg:top-4 lg:self-start">
+          <div className="rounded-xl border border-line bg-bg-elev p-4">
+            {current && r.st ? (
+              r.trading ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <SideButton label={`Up ${r.upPrice}`} tone="up" active={trade?.mode === "buy" && trade.side === "yes"} onClick={() => pick("yes", "buy")} />
+                    <SideButton label={`Down ${r.downPrice}`} tone="down" active={trade?.mode === "buy" && trade.side === "no"} onClick={() => pick("no", "buy")} />
+                  </div>
+                  <TradeBox
+                    market={current}
+                    st={r.st}
+                    hold={r.hold ?? { yes: 0n, no: 0n, cost: 0n }}
+                    ledgerBal={snap?.ledgerBal ?? 0n}
+                    feeBps={snap?.feeBps}
+                    labels={["Up", "Down"]}
+                    open={trade!}
+                    setOpen={setOpen}
+                    tx={tx}
+                    canTrade={canTrade}
+                    windowSecs={ROUND_TRADE_WINDOW_SECS}
+                  />
+                </>
+              ) : (
+                <p className="text-[13px] text-fg-dim">Betting closed at {clockUtc(current.expiry)} UTC. The next round opens shortly.</p>
+              )
+            ) : (
+              <p className="text-[13px] text-fg-dim">No round is taking bets right now.</p>
+            )}
+            {current && r.st && r.hold && (r.hold.yes > 0n || r.hold.no > 0n) && (
+              <>
+                <Position
+                  hold={r.hold}
+                  value={r.trading && snap?.feeBps !== undefined ? cashOutValue({ yes: r.st.yesReserve, no: r.st.noReserve }, r.hold, snap.feeBps) : undefined}
+                />
+                {r.trading && (
+                  <button
+                    onClick={() => pick(r.hold!.yes > 0n ? "yes" : "no", "sell")}
+                    className={`mt-2 w-full border px-3 py-1.5 text-[13px] transition-colors ${trade?.mode === "sell" ? "border-accent text-accent" : "border-line text-fg-mute hover:border-accent hover:text-fg"}`}
+                  >
+                    Cash out
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </aside>
+      </div>
+    </article>
+  );
+}
+
+function RoundRules({ asset }: { asset: AssetMeta }) {
+  return (
+    <section className="mt-8" aria-labelledby="rules-h">
+      <h2 id="rules-h" className="mb-2 font-serif text-[22px] leading-none">
+        Rules
+      </h2>
+      <ul className="list-disc space-y-1.5 pl-5 text-[14px] leading-relaxed text-fg-mute">
+        <li>
+          Each round is five minutes. You bet on the NEXT round; betting closes the moment it starts, so nobody trades on
+          a move already on the chart. Until then you can buy, sell and cash out.
+        </li>
+        <li>
+          <b className="font-medium text-fg">Up</b> wins if {asset.symbol}&apos;s price change over the round is above zero;
+          no change is Down. The change is the median of Coinbase, Kraken and OKX, each the 1-minute close at the round&apos;s
+          end minus the one at its start, so no single exchange decides a round.
+        </li>
+        <li>
+          The agent posts the change on chain after the round ends. Anyone can challenge it for 10 minutes; a challenged
+          reading waits for the dispute resolver&apos;s ruling. Then the round resolves and winning shares pay 1 USDC each.
+        </li>
+        <li>
+          If no valid reading lands within an hour of the round&apos;s start, the round voids and every trader gets their
+          net cost back. Every buy and sell pays a 1% trading fee; nothing is charged at settlement.
+        </li>
+      </ul>
+    </section>
+  );
+}
+
+function PastRounds({ asset, rounds, snap, now }: { asset: AssetMeta; rounds: readonly RoundMarket[]; snap?: Snapshot; now: number }) {
+  if (!rounds.length) return null;
+  return (
+    <section className="mt-8" aria-labelledby="past-h">
+      <h2 id="past-h" className="mb-2 font-serif text-[22px] leading-none">
+        Latest rounds
+      </h2>
+      <ul className="divide-y divide-line rounded-xl border border-line bg-bg-elev text-[14px]">
+        {rounds.map((m) => {
+          const s = statusFor(m, snap, now);
+          const rd = snap?.readings[m.marketId];
+          const w = roundWindow(m);
+          const tone = s?.key === "resolved-up" ? "text-up" : s?.key === "resolved-down" ? "text-down" : "text-fg-mute";
+          return (
+            <li key={m.marketId} className="flex items-baseline justify-between gap-3 px-4 py-2.5">
+              <span className="tnum text-fg-mute">{roundLabel(w.start, w.end)}</span>
+              <span className="tnum text-fg-dim">{rd?.found ? formatChange(rd.value, asset.decimals) : ""}</span>
+              <span className={tone} title={s?.detail}>
+                {s?.label ?? "…"}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function EventRules() {
+  return (
+    <section className="mt-8" aria-labelledby="erules-h">
+      <h2 id="erules-h" className="mb-2 font-serif text-[22px] leading-none">
+        Rules
+      </h2>
+      <ul className="list-disc space-y-1.5 pl-5 text-[14px] leading-relaxed text-fg-mute">
+        <li>The market settles on the curated feed&apos;s reading at the deadline: Yes if it says the event happened by then.</li>
+        <li>
+          The team records the outcome with evidence when it happens. Anyone can challenge a reading during its dispute
+          window; a challenged reading waits for the dispute resolver&apos;s ruling.
+        </li>
+        <li>If no valid reading lands in time the market voids and every trader gets their net cost back.</li>
+        <li>Every buy and sell pays a 1% trading fee; nothing is charged at settlement.</li>
+      </ul>
+    </section>
   );
 }
 
@@ -1918,6 +2263,7 @@ function EventCard({
   tx,
   canTrade,
   address,
+  page = false,
 }: {
   ev: EventMeta;
   snap?: Snapshot;
@@ -1927,7 +2273,10 @@ function EventCard({
   tx: Tx;
   canTrade: boolean;
   address?: Address;
+  /** On its own page: a larger title, no link to itself. */
+  page?: boolean;
 }) {
+  const openPage = useCardLink(eventHref(ev));
   const id = snap?.eventMarkets[ev.key];
   const st = id ? snap?.state[id] : undefined;
   const feed = snap?.book.byKey[ev.key];
@@ -1972,9 +2321,20 @@ function EventCard({
             : undefined;
 
   return (
-    <article className="flex min-w-0 flex-col rounded-xl border border-line bg-bg-elev p-4">
+    <article
+      onClick={page ? undefined : openPage}
+      className={`flex min-w-0 flex-col rounded-xl border border-line bg-bg-elev p-4 ${page ? "" : "cursor-pointer transition-colors hover:border-line-strong"}`}
+    >
       {ev.rehearsal && <div className="mb-2 text-[13px] text-accent">Testnet rehearsal of the settlement flow, short-dated.</div>}
-      <h3 className="font-serif text-[21px] leading-snug">{ev.question}</h3>
+      {page ? (
+        <h1 className="font-serif text-[32px] leading-tight tracking-tightest">{ev.question}</h1>
+      ) : (
+        <h3 className="font-serif text-[21px] leading-snug">
+          <Link href={eventHref(ev)} className="hover:underline">
+            {ev.question}
+          </Link>
+        </h3>
+      )}
       <dl className="mt-3 grid gap-y-2 text-[13px] text-fg-dim">
         <div>
           <dt>Deadline</dt>

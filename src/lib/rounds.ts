@@ -121,6 +121,28 @@ export const ROUNDS: RoundsDeployment = loadDeployment(
 
 /** Rounds shown per asset in the results strip. */
 export const RECENT_ROUNDS = 6;
+
+// ───────────────────────────── market pages ─────────────────────────────
+
+/** An asset's market page is /rounds/<slug>/ (e.g. "btc"): one page per asset that
+ *  always shows its current round (rounds roll every few minutes). */
+export function assetSlug(a: Pick<AssetMeta, "symbol">): string {
+  return a.symbol.toLowerCase();
+}
+
+export function assetHref(a: Pick<AssetMeta, "symbol">): string {
+  return `/rounds/${assetSlug(a)}/`;
+}
+
+export function assetBySlug(slug: string, assets: readonly AssetMeta[] = ROUNDS.assets): AssetMeta | undefined {
+  const s = slug.toLowerCase();
+  return assets.find((a) => assetSlug(a) === s);
+}
+
+/** An event market's page: /rounds/event/<key>/. */
+export function eventHref(e: Pick<EventMeta, "key">): string {
+  return `/rounds/event/${e.key}/`;
+}
 /** Arc testnet makes a block about every 0.5 s. */
 export const BLOCK_SECS = 0.5;
 /** How far back the page scans for rounds: ~2 hours of blocks. */
