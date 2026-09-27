@@ -108,6 +108,12 @@
 .stateTitle { margin: 0 0 8px; font-family: var(--pp-display); font-size: 24px; font-weight: 500; }
 
 .grid { display: grid; grid-template-columns: 440px minmax(0, 1fr); gap: 20px; align-items: start; }
+/* Side by side, the detail pane runs to the foot of the page as in the mockup (its grid
+   is flex-grow: 1 and the pane stretches); the list keeps its own height. */
+@media (min-width: 900px) {
+  .grid { flex-grow: 1; }
+  .grid > .detail { align-self: stretch; }
+}
 
 /* ── list ── */
 .list { display: flex; min-width: 0; flex-direction: column; gap: 10px; }
