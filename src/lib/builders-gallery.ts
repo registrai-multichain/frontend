@@ -313,7 +313,7 @@ export type DisplayKind = "verified" | "nominated" | "lapsed" | "unconfirmed" | 
 
 export const DISPLAY: Record<DisplayKind, { label: string; tone: "color" | "grayscale" }> = {
   verified: { label: "Verified", tone: "color" },
-  nominated: { label: "Nominated", tone: "color" },
+  nominated: { label: "Onboarding", tone: "color" },
   lapsed: { label: "Lapsed", tone: "grayscale" },
   unconfirmed: { label: "Unconfirmed", tone: "grayscale" },
   invited: { label: "Invited", tone: "grayscale" },
@@ -353,15 +353,15 @@ export const labelOf = (k: DisplayKind) => DISPLAY[k].label;
 /**
  * Pure: how a gallery card looks. An invited project nominated on chain
  * (ProjectNominations) is on the record: in colour, with its own kind and a solid
- * "Nominated on chain" pill, where a plain invite is grey. (The "Nominated" kind is
- * a different thing: a claimed builder awaiting onboarding.)
+ * "Nominated" pill, where a plain invite is grey. (The internal "nominated" kind is
+ * a different thing: a claimed builder awaiting onboarding, labelled "Onboarding".)
  */
 export function cardLook(kind: DisplayKind, nominatedOnChain: boolean): {
   kind: DisplayKind | "invited-onchain";
   grey: boolean;
   pill: { text: string; tone: "ok" | "unclaimed" | "muted" | "onchain" };
 } {
-  if (kind === "invited" && nominatedOnChain) return { kind: "invited-onchain", grey: false, pill: { text: "Nominated on chain", tone: "onchain" } };
+  if (kind === "invited" && nominatedOnChain) return { kind: "invited-onchain", grey: false, pill: { text: "Nominated", tone: "onchain" } };
   return {
     kind,
     grey: toneOf(kind) === "grayscale",
@@ -636,8 +636,17 @@ export function mergeGallery(builders: GalleryBuilder[], nominees: Nominee[]): G
 
 // ───────────────────────────── filters, counts ─────────────────────────────
 
-export type GalleryFilter = "all" | DisplayKind;
-export const FILTERS: GalleryFilter[] = ["all", "verified", "nominated", "unconfirmed", "lapsed", "invited"];
+/** "onchain": invited projects nominated on chain (ProjectNominations), labelled "Nominated". */
+export type GalleryFilter = "all" | DisplayKind | "onchain";
+export const FILTERS: GalleryFilter[] = ["all", "verified", "nominated", "onchain", "invited", "unconfirmed", "lapsed"];
+
+export function filterLabel(f: GalleryFilter): string {
+  return f === "all" ? "All" : f === "onchain" ? "Nominated" : labelOf(f);
+}
+
+const NO_SOURCES: ReadonlySet<string> = new Set();
+/** Pure: an invited entry nominated on chain. */
+const isOnChain = (e: GalleryEntry, onChain: ReadonlySet<string>) => e.kind === "invited" && Boolean(e.source && onChain.has(e.source));
 
 /** Pure: a `?filter=`-style value, else "all". */
 export function parseFilter(raw: string | null | undefined): GalleryFilter {
@@ -655,10 +664,14 @@ function haystack(e: GalleryEntry): string {
 }
 
 /** Pure: entries matching the chip and every word of the query (case-insensitive). */
-export function filterGallery(entries: GalleryEntry[], filter: GalleryFilter, query: string): GalleryEntry[] {
+export function filterGallery(entries: GalleryEntry[], filter: GalleryFilter, query: string, onChain: ReadonlySet<string> = NO_SOURCES): GalleryEntry[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   return entries.filter((e) => {
-    if (filter !== "all" && e.kind !== filter) return false;
+    if (filter === "onchain") {
+      if (!isOnChain(e, onChain)) return false;
+    } else if (filter === "invited") {
+      if (e.kind !== "invited" || isOnChain(e, onChain)) return false;
+    } else if (filter !== "all" && e.kind !== filter) return false;
     if (!words.length) return true;
     const h = haystack(e);
     return words.every((w) => h.includes(w));
@@ -669,6 +682,8 @@ export interface GalleryCounts {
   all: number;
   verified: number;
   nominated: number;
+  /** Invited projects nominated on chain (not counted in `invited`). */
+  onchain: number;
   lapsed: number;
   /** Shown grey; never in the header stats. */
   unconfirmed: number;
@@ -677,11 +692,12 @@ export interface GalleryCounts {
   countries: number;
 }
 
-export function galleryCounts(entries: GalleryEntry[]): GalleryCounts {
-  const c: GalleryCounts = { all: entries.length, verified: 0, nominated: 0, lapsed: 0, unconfirmed: 0, invited: 0, countries: 0 };
+export function galleryCounts(entries: GalleryEntry[], onChain: ReadonlySet<string> = NO_SOURCES): GalleryCounts {
+  const c: GalleryCounts = { all: entries.length, verified: 0, nominated: 0, onchain: 0, lapsed: 0, unconfirmed: 0, invited: 0, countries: 0 };
   const countries = new Set<string>();
   for (const e of entries) {
-    c[e.kind]++;
+    if (isOnChain(e, onChain)) c.onchain++;
+    else c[e.kind]++;
     if ((e.kind === "verified" || e.kind === "nominated") && e.builder?.country) countries.add(e.builder.country);
   }
   c.countries = countries.size;

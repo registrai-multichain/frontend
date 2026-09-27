@@ -17,6 +17,7 @@ import {
   checkLiveProofs,
   claimHref,
   filterGallery,
+  filterLabel,
   galleryCounts,
   showGalleryStats,
   greyReason,
@@ -243,7 +244,7 @@ function BuilderCard({ e, highlighted, waiting, nominated = false, onChain = fal
   );
 }
 
-const PROJECT_STATUS_LABEL = { verified: "Verified", nominated: "Nominated", lapsed: "Lapsed", unconfirmed: "Unconfirmed" } as const;
+const PROJECT_STATUS_LABEL = { verified: "Verified", nominated: "Onboarding", lapsed: "Lapsed", unconfirmed: "Unconfirmed" } as const;
 
 /** Every project of a builder (removed ones too): source, proof, status. */
 function ProjectList({ b }: { b: GalleryBuilder }) {
@@ -391,11 +392,12 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
   const entries = useMemo(() => mergeGallery(builders, nominees), [builders, nominees]);
   const invitedSources = useMemo(() => entries.filter((e) => e.kind === "invited" && e.source).map((e) => e.source!), [entries]);
   const wonder = useWonderStatus(invitedSources);
-  const counts = useMemo(() => galleryCounts(entries), [entries]);
+  const onChainSources = useMemo(() => new Set([...onChainNominations].filter(([, n]) => n.active).map(([s]) => s)), [onChainNominations]);
+  const counts = useMemo(() => galleryCounts(entries, onChainSources), [entries, onChainSources]);
 
   const [filter, setFilter] = useState<GalleryFilter>("all");
   const [query, setQuery] = useState("");
-  const shown = useMemo(() => filterGallery(entries, filter, query), [entries, filter, query]);
+  const shown = useMemo(() => filterGallery(entries, filter, query, onChainSources), [entries, filter, query, onChainSources]);
 
   // ?builder=<id>: the detail view of that builder (the card stays highlighted underneath).
   const router = useRouter();
@@ -422,7 +424,7 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
         {showGalleryStats(counts) ? (
           <p className="pa-lede">
             Every project here claimed its place with a signed proof. {counts.verified} verified, {counts.nominated} waiting for
-            onboarding, {counts.invited} invited{counts.countries ? `, from ${counts.countries} ${counts.countries === 1 ? "country" : "countries"}` : ""}.
+            onboarding, {counts.onchain} nominated, {counts.invited} invited{counts.countries ? `, from ${counts.countries} ${counts.countries === 1 ? "country" : "countries"}` : ""}.
           </p>
         ) : (
           <p className="pa-lede">
@@ -457,7 +459,7 @@ export function BuildersGallery({ snapshot, nominees: fileNominees }: { snapshot
             <nav className="pa-tabs" aria-label="Filter builders">
               {FILTERS.filter((f) => f !== "unconfirmed" || counts.unconfirmed > 0).map((f) => (
                 <button key={f} type="button" className="pa-tab" aria-pressed={filter === f} data-kind={f} onClick={() => setFilter(f)}>
-                  {f === "all" ? "All" : labelOf(f)} <span className="tnum opacity-70">{chipCount(f)}</span>
+                  {filterLabel(f)} <span className="tnum opacity-70">{chipCount(f)}</span>
                 </button>
               ))}
             </nav>

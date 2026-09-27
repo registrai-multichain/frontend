@@ -78,7 +78,7 @@ export default function GuidePage() {
                 you&rdquo; and the Registrai Safe does it for free.
               </li>
               <li>
-                <b>Nominated.</b> Your card appears in the gallery as Nominated. Nothing else is needed from you: Registrai
+                <b>Onboarding.</b> Your card appears in the gallery as Onboarding. Nothing else is needed from you: Registrai
                 reviews the claim and onboards your builder in its next batch.
               </li>
               <li>
