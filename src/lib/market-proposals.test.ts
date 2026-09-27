@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { privateKeyToAccount } from "viem/accounts";
 import { recoverTypedDataAddress } from "viem";
 import {
+  OPENING_DELAY_S, approvedAtS, openingOverdue,
   PROPOSAL_DOMAIN, SEED, TREASURY, approvalMessage, approvalTypedData, duplicateOf, newProposalId,
   normalizeQuestion, outcomeTypedData, validateProposal, type Proposal,
 } from "./market-proposals";
@@ -100,5 +101,23 @@ describe("duplicateOf", () => {
     expect(duplicateOf(mk("pa", "Will the Arc token trade publicly?"), [], ["will the arc token trade publicly"])).toBe("live market");
     expect(duplicateOf(mk("pa", "Will X happen?!"), [mk("pb", "will x happen")], [])).toBe("pb");
     expect(duplicateOf(mk("pa", "Will X happen?"), [mk("pa", "Will X happen?")], [])).toBeNull();
+  });
+});
+
+describe("I3: approvedAt and opening delayed", () => {
+  const nowS = 1_790_000_000;
+  const at = (s: number) => new Date(s * 1000).toISOString();
+  test("approvedAt, else the approval's millisecond nonce, else unknown", () => {
+    expect(approvedAtS({ approvedAt: at(nowS - 60) }, nowS)).toBe(nowS - 60);
+    expect(approvedAtS({ approval: { message: { nonce: String((nowS - 120) * 1000) } } }, nowS)).toBe(nowS - 120);
+    expect(approvedAtS({ approval: { message: { nonce: "7" } } }, nowS)).toBeNull(); // a small nonce is not a time
+    expect(approvedAtS({}, nowS)).toBeNull();
+  });
+  test("overdue only when approved more than 15 minutes ago", () => {
+    expect(OPENING_DELAY_S).toBe(900);
+    expect(openingOverdue({ status: "approved", approvedAt: at(nowS - 900) }, nowS)).toBe(false);
+    expect(openingOverdue({ status: "approved", approvedAt: at(nowS - 901) }, nowS)).toBe(true);
+    expect(openingOverdue({ status: "pending", approvedAt: at(nowS - 5000) }, nowS)).toBe(false);
+    expect(openingOverdue({ status: "approved" }, nowS)).toBe(false);
   });
 });
