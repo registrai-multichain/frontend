@@ -5,7 +5,7 @@ import useSWR from "swr";
 import type { Address } from "viem";
 import { builderRegistryAbi, marketsPerennialAbi, nanoLedgerAbi, usdcAbi } from "@/lib/abi";
 import { readHolderSettlement } from "@/lib/market-fees-chain";
-import { projectForFeed, readOverview, type BuilderRow, type ChainMarket, type Overview } from "@/lib/perennial-chain";
+import { overviewRefreshMs, projectForFeed, readOverview, type BuilderRow, type ChainMarket, type Overview } from "@/lib/perennial-chain";
 import { marketStatus, type MarketStatus } from "@/lib/perennial-market";
 import { marketQuestion, metricNoun } from "@/lib/plain-words";
 import { sourceLabel } from "@/lib/verified-builders";
@@ -25,6 +25,9 @@ export type Account = { ledgerBal: bigint; walletBal: bigint; registered: boolea
 export const EMPTY_POS: Position = { yes: 0n, no: 0n, lp: 0n };
 export const same = (a?: string | null, b?: string | null) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
 const SWR_OPTS = { refreshInterval: 30_000, dedupingInterval: 10_000, revalidateOnFocus: false } as const;
+// The overview refreshes fast while market discovery is partial (a few chunks per pass),
+// so a first-time visitor sees markets within seconds instead of after a full scan.
+const OVERVIEW_OPTS = { refreshInterval: overviewRefreshMs, dedupingInterval: 1_500, revalidateOnFocus: false } as const;
 
 export function usePerennialData(address?: Address) {
   const publicClient = perennialClient();
@@ -39,7 +42,7 @@ export function usePerennialData(address?: Address) {
     return () => window.clearInterval(t);
   }, []);
 
-  const { data: ov, error: ovError, isValidating: ovValidating } = useSWR<Overview>(["perennial-overview", D.chain.id, mp], () => readOverview(publicClient, D), SWR_OPTS);
+  const { data: ov, error: ovError, isValidating: ovValidating } = useSWR<Overview>(["perennial-overview", D.chain.id, mp], () => readOverview(publicClient, D), OVERVIEW_OPTS);
   const markets = useMemo(() => ov?.markets ?? [], [ov]);
   const builders = useMemo(() => ov?.builders ?? [], [ov]);
   const marketIdsKey = markets.map((m) => m.id).join(",");

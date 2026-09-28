@@ -11,7 +11,7 @@
  * is recorded, with the registries + badge only, so it needs no market contract.
  *   BUILDERS_RPC=https://…   override that network's (official) endpoint for a run
  */
-import { createPublicClient, http, defineChain, type Address, type Hex } from "viem";
+import { createPublicClient, http, defineChain, parseAbiItem, type Address, type Hex } from "viem";
 import { writeFileSync, readFileSync } from "node:fs";
 import { EMPTY_PNL, foldTrades, SEASON_ONE_START, seasonWindows } from "../src/lib/seasons";
 import type { PnlState, Season, Trade } from "../src/lib/seasons";
@@ -267,6 +267,12 @@ const attestedEvent = {
     { name: "finalizedAt", type: "uint256", indexed: false },
   ],
 } as const;
+
+/** Wonder markets (MarketsPerennial with a WonderEscrow): recorded in the atlas with
+ *  their own cursor so the pages seed them (perennial-chain.ts seedFromSnapshot). */
+const wonderCreatedEvent = parseAbiItem(
+  "event WonderMarketCreated(bytes32 indexed marketId, bytes32 indexed sourceKey, address indexed creator, string source, bytes32 feedId, address agent, int256 threshold, uint8 comparator, uint256 expiry)",
+);
 
 const marketCreatedEvent = {
   type: "event",
@@ -683,6 +689,8 @@ async function main(): Promise<void> {
     | undefined;
   let atlasCursor: {
     lastScannedBlock: string;
+    wonderMarkets?: Record<string, string>;
+    wonderLastScannedBlock?: string;
     volumeByBuilderId: Record<string, string>;
     marketToBuilder: Record<string, number>;
     /** Resumable trader P&L fold — see seasons.ts. */
@@ -778,6 +786,9 @@ async function main(): Promise<void> {
     // a market created long before the cursor.
     type AtlasCursor = {
       lastScannedBlock: string;
+      /** Wonder market id (lowercase) -> its source, and the block that scan covers. */
+      wonderMarkets?: Record<string, string>;
+      wonderLastScannedBlock?: string;
       volumeByBuilderId: Record<string, string>;
       marketToBuilder: Record<string, number>;
       /** Which chain and contract this cursor describes. */
@@ -825,6 +836,15 @@ async function main(): Promise<void> {
     // Bought/Sold carry only marketId, so build marketId -> builderId from
     // MarketCreated first, then attribute each trade's notional to a builder.
     const created = await getLogsFor(perennialAddr, marketCreatedEvent, scanFrom);
+    // Wonder markets: their own cursor (a cursor from before this field rescans from
+    // the deploy block once). The pages seed ids + sources from it.
+    const wonderFrom = cursor?.wonderLastScannedBlock ? BigInt(cursor.wonderLastScannedBlock) + 1n : anchor;
+    const wonderMarkets: Record<string, string> = { ...(cursor?.wonderMarkets ?? {}) };
+    for (const lg of await getLogsFor(perennialAddr, wonderCreatedEvent, wonderFrom)) {
+      const a = (lg as unknown as { args?: { marketId?: string; source?: string } }).args;
+      if (a?.marketId && typeof a.source === "string") wonderMarkets[a.marketId.toLowerCase()] = a.source;
+    }
+    console.log(`  wonder markets: ${Object.keys(wonderMarkets).length} (from block ${wonderFrom})`);
     const marketToBuilder = new Map<string, number>(
       Object.entries(cursor?.marketToBuilder ?? {}),
     );
@@ -1127,6 +1147,8 @@ async function main(): Promise<void> {
       seasonsVersion: SEASONS_CURSOR_VERSION,
       chainId: DEPLOYMENT.chainId,
       markets: perennialAddr,
+      wonderMarkets,
+      wonderLastScannedBlock: latestBlock.toString(),
     };
     // Market ids come from the cached map, so this loop is bounded by market
     // count and never by block range — no log scan, no Arc range ceiling.

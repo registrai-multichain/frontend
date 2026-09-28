@@ -81,17 +81,60 @@ export function rememberMarket(d: PerennialDeployment, id: Hex) {
   writeCache(d, c);
 }
 
-/** Market ids the build-time snapshot already knows, and the block it covers. */
-function snapshotSeed(d: PerennialDeployment): { ids: string[]; scannedTo: bigint } {
-  const mp = (d.contracts.MarketsPerennial ?? "").toLowerCase();
-  const atlas = (live as { atlas?: { markets?: string; lastScannedBlock?: string; marketToBuilder?: Record<string, number> } }).atlas;
-  if (!SNAPSHOT_MATCHES_NETWORK || !atlas || (atlas.markets ?? "").toLowerCase() !== mp) {
-    return { ids: [], scannedTo: 0n };
-  }
+/** Chunks (5,000 blocks each) each scan reads per discovery pass: a first paint in a
+ *  few seconds through the page-wide getLogs pacing; while `partial`, the pages
+ *  refresh quickly and the browser cursor carries the scan on (launch-day UX, 2026-09-28). */
+export const DISCOVERY_CHUNKS_PER_PASS = 8;
+
+/** How often the overview refreshes: every 2 s while discovery is still partial (the
+ *  next pass continues the scan), every 30 s once it has caught up with head. */
+export function overviewRefreshMs(ov: { discovery?: { partial?: boolean } } | undefined): number {
+  return ov?.discovery?.partial ? 2_000 : 30_000;
+}
+
+type SnapshotAtlas = {
+  markets?: string;
+  lastScannedBlock?: string;
+  marketToBuilder?: Record<string, number>;
+  /** Wonder market id -> its project source (WonderMarketCreated), and the block that scan covers. */
+  wonderMarkets?: Record<string, string>;
+  wonderLastScannedBlock?: string;
+};
+
+/** Pure: the market ids and scan cursors a build-time snapshot gives this deployment
+ *  (nothing when the snapshot is for another network or MarketsPerennial). */
+export function seedFromSnapshot(
+  atlas: SnapshotAtlas | undefined,
+  perennialMarkets: readonly { marketId: string }[],
+  marketsPerennial: string,
+  matchesNetwork: boolean,
+): { ids: string[]; scannedTo: bigint; wonder: Record<string, string>; wonderScannedTo: bigint } {
+  const none = { ids: [], scannedTo: 0n, wonder: {}, wonderScannedTo: 0n };
+  if (!matchesNetwork || !atlas || (atlas.markets ?? "").toLowerCase() !== marketsPerennial.toLowerCase()) return none;
   const ids = new Set<string>();
-  for (const m of (live as { perennialMarkets?: { marketId: string }[] }).perennialMarkets ?? []) ids.add(m.marketId.toLowerCase());
+  for (const m of perennialMarkets) ids.add(m.marketId.toLowerCase());
   for (const id of Object.keys(atlas.marketToBuilder ?? {})) ids.add(id.toLowerCase());
-  return { ids: [...ids], scannedTo: BigInt(atlas.lastScannedBlock ?? "0") };
+  const wonder: Record<string, string> = {};
+  for (const [id, src] of Object.entries(atlas.wonderMarkets ?? {})) {
+    ids.add(id.toLowerCase());
+    wonder[id.toLowerCase()] = src;
+  }
+  return {
+    ids: [...ids],
+    scannedTo: BigInt(atlas.lastScannedBlock ?? "0"),
+    wonder,
+    wonderScannedTo: BigInt(atlas.wonderLastScannedBlock ?? "0"),
+  };
+}
+
+/** Market ids the build-time snapshot already knows, and the blocks it covers. */
+function snapshotSeed(d: PerennialDeployment) {
+  return seedFromSnapshot(
+    (live as { atlas?: SnapshotAtlas }).atlas,
+    (live as { perennialMarkets?: { marketId: string }[] }).perennialMarkets ?? [],
+    d.contracts.MarketsPerennial ?? "",
+    SNAPSHOT_MATCHES_NETWORK,
+  );
 }
 
 async function pool<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
@@ -128,14 +171,14 @@ export async function discoverMarkets(
   client: PublicClient,
   d: PerennialDeployment,
   head: bigint,
-  budgetChunks = 60,
+  budgetChunks = DISCOVERY_CHUNKS_PER_PASS,
 ): Promise<Discovery> {
   const mp = d.contracts.MarketsPerennial!;
   const seed = snapshotSeed(d);
   const cache = typeof window !== "undefined" ? readCache(d) : undefined;
   const ids = new Set<string>([...seed.ids, ...(cache?.ids ?? [])]);
   const wonderOn = wonderContracts(d) !== null;
-  const wonderSources: Record<string, string> = { ...(cache?.wonder ?? {}) };
+  const wonderSources: Record<string, string> = { ...seed.wonder, ...(cache?.wonder ?? {}) };
   let from = seed.scannedTo;
   const cached = cache ? BigInt(cache.scannedTo) : 0n;
   if (cached > from) from = cached;
@@ -160,9 +203,13 @@ export async function discoverMarkets(
       scannedTo = pair[j][1];
     }
   }
-  // Wonder markets: their own scan from the deploy block (the build-time snapshot's
-  // seed only holds MarketCreated ids, so its cursor would skip older wonder markets).
-  let wonderScannedTo = cache?.wonderScannedTo ? BigInt(cache.wonderScannedTo) : d.deployBlock ? d.deployBlock - 1n : from;
+  // Wonder markets: their own scan, from the furthest of this browser's cursor and
+  // the snapshot's wonder cursor (a snapshot from before the wonder cursor existed
+  // has none: then from the deploy block). It runs even when the builder scan
+  // stopped on an RPC error, so each pass advances both.
+  const cachedWonder = cache?.wonderScannedTo ? BigInt(cache.wonderScannedTo) : 0n;
+  let wonderScannedTo = cachedWonder > seed.wonderScannedTo ? cachedWonder : seed.wonderScannedTo;
+  if (wonderScannedTo === 0n) wonderScannedTo = d.deployBlock ? d.deployBlock - 1n : from;
   let wonderPartial = false;
   if (wonderOn) {
     const wchunks = blockChunks(wonderScannedTo + 1n, head).slice(0, budgetChunks);
