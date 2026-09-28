@@ -4,17 +4,18 @@
   "rpc": "https://rpc.mainnet.arc.io",
   "explorer": "https://explorer.arc.io",
   "note": "Registrai's common markets on Arc MAINNET. Fill from the mainnet deployment record (contracts/deployments/arc-mainnet-common-markets.json) after DeployOracle -> DeployNanoLedger -> DeployNanoStack -> HandoffCommonMarkets. While contracts.MarketsV4 or agent is null, /rounds renders a not-deployed state and makes no contract calls. feeds: the rounds agent's feeds once it has provisioned them (keeper state).",
-  "deployBlock": null,
+  "deployBlock": 23011086,
   "roundSecs": 300,
   "settlementWindow": 3600,
   "contracts": {
-    "MarketsV4": null,
-    "Registry": null,
-    "Attestation": null,
-    "NanoLedger": null,
-    "USDC": "0x3600000000000000000000000000000000000000"
+    "MarketsV4": "0xBdC4b03bF67b4eF70195b1862303aCe61F0D77cE",
+    "Registry": "0x52Bb229697C552D8B8e01298525093572420a7eb",
+    "Attestation": "0x86Df667E1cd560e39600827C4f4709B939F55d2B",
+    "NanoLedger": "0x82CC64bc010Bc244E63654817202B5330f1Ac112",
+    "USDC": "0x3600000000000000000000000000000000000000",
+    "Dispute": "0xf62Cd073F6748F56a0233c43C2ce02640FAa75d8"
   },
-  "agent": null,
+  "agent": "0x422700c9C549e055672FA670f4f0076C43C4eE36",
   "descriptionPrefix": "registrai-data:",
   "assets": [
     {
@@ -23,34 +24,6 @@
       "name": "Bitcoin",
       "product": "BTC-USD",
       "decimals": 2
-    },
-    {
-      "key": "eth-usd",
-      "symbol": "ETH",
-      "name": "Ether",
-      "product": "ETH-USD",
-      "decimals": 2
-    },
-    {
-      "key": "sol-usd",
-      "symbol": "SOL",
-      "name": "Solana",
-      "product": "SOL-USD",
-      "decimals": 3
-    },
-    {
-      "key": "zec-usd",
-      "symbol": "ZEC",
-      "name": "Zcash",
-      "product": "ZEC-USD",
-      "decimals": 2
-    },
-    {
-      "key": "hype-usd",
-      "symbol": "HYPE",
-      "name": "Hyperliquid",
-      "product": "HYPE-USD",
-      "decimals": 3
     }
   ],
   "events": [
@@ -59,9 +32,74 @@
       "question": "Will the Arc token be publicly tradable before Dec 31, 2026 (23:00 UTC)?",
       "expiry": 1798758000,
       "rehearsal": false,
-      "marketId": null,
+      "marketId": "0xf4c13ac5c5ebd18a04b9584f3542ff1d0691e46b4b8a71b05d06a032b7e5388a",
       "evidenceUrl": null
     }
   ],
-  "feeds": {}
+  "feeds": {
+    "arc-token-tradable": {
+      "feedId": "0x3c6f1790ce0a9777e4db2ea243870d0bdf274e8feef4060ef09d02bd8ee762cc",
+      "disputeWindow": 43200
+    },
+    "btc-usd:5m-0": {
+      "feedId": "0xbdd3a64612063eeee3a084bb14b771f00e42ba476427b72b8970e0121eaf9968",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-1": {
+      "feedId": "0x8893cffd37381fa2789ac68a9a33737a156e72786067cc3d14e1c8495eb7db19",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-10": {
+      "feedId": "0x50a966bfa7d9ad8bbdc299237fab469d78afa4ae548a1e57399418fae3b54e38",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-11": {
+      "feedId": "0xfb8f6aba6575df438fbb1575bf5ad1e3aa4361a2717d04cb6820b6a50bd9df2a",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-12": {
+      "feedId": "0xda6da303e0dcb7896c0ee696d18414836c253404bf2e03245d8b1344ce974d3b",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-13": {
+      "feedId": "0xdad61482a35a4144cae6a505e40c3b3dc5609cd61add527878bb93b2b6d5c402",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-14": {
+      "feedId": "0x3998086ecb22e40d8482690eefef58391fb3f715426953212764c13ebdeae441",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-2": {
+      "feedId": "0xb40029e96b355c2fa962bf6d7788eb6d017a5dcabdc72d4d9a67288124e495dd",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-3": {
+      "feedId": "0xe808b1791903fc4a0e6a6da1ad6f458a27ba1c07944a4b683b7a6a8ba66b997e",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-4": {
+      "feedId": "0x843a53e59ebc73d35876528110985e06baa2452424bdefb840f3fe567175f3e1",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-5": {
+      "feedId": "0x06e63564650161b1cf7fa48bfc873c4e5bb53a40cb031211cb50fb105b221201",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-6": {
+      "feedId": "0x20f365e80ff02effac777b5da06281513ae8d917999a5c5a4bfcde8cd7b8c8e3",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-7": {
+      "feedId": "0x515887a7f096c4d30ab5c65ad5eba45ddb2299fa04f14fbc39b6f9761dec1583",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-8": {
+      "feedId": "0x0e70a9d19f223130d08c4d397f6389954724857056fd4f0e4527be14498415f4",
+      "disputeWindow": 600
+    },
+    "btc-usd:5m-9": {
+      "feedId": "0xc6bc0bb11be00e8801209f76ffd47c665dbecc5518d6968726dd3cbaaa99c4a5",
+      "disputeWindow": 600
+    }
+  }
 }
