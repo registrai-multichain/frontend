@@ -32,3 +32,8 @@ test("the app site ships /propose and lets it reach the proposals API", () => {
   expect(sh).toMatch(/for x in [^\n]*\bpropose\b/);
   expect(sh).toContain("connect-src 'self' https://rpc.mainnet.arc.io https://rpc.testnet.arc.io https://api.exchange.coinbase.com wss://ws-feed.exchange.coinbase.com https://builder.registrai.cc");
 });
+
+test("the app site lets the Builders page load site icons from the builders site's icon API", () => {
+  const sh = readFileSync(resolve(FRONTEND, "scripts/build-app-site.sh"), "utf8");
+  expect(sh).toContain("img-src 'self' data: blob: https://avatars.githubusercontent.com https://builder.registrai.cc;");
+});
