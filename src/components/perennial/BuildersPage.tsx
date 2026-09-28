@@ -13,21 +13,51 @@ import { PERENNIAL_WRITES_ENABLED } from "@/lib/perennial";
 import { usdText } from "@/lib/plain-words";
 import { rowAvatar } from "@/lib/perennial-view";
 import { sourceLabel } from "@/lib/verified-builders";
+import type { VerifiedCard } from "@/lib/builders-gallery";
 import { parseBuilderParam } from "@/lib/verified-builder-badge";
 import { MarketCard } from "./MarketCard";
 import { same, usePerennialData } from "./usePerennialData";
 import { CHAIN, D, HUMAN, usePerennialTx } from "./usePerennialTx";
 
-export function BuildersPage() {
-  if (!D.deployed) {
-    return (
-      <div className="pa-card pu-card pu-card--static max-w-[62ch]">
-        <h1 className="pa-h2 pu-h">Builders</h1>
-        <p className="pa-muted mt-2">Markets aren&apos;t live on {D.label} yet. See every verified builder at <a className="pa-link" href="https://builder.registrai.cc">builder.registrai.cc</a>.</p>
-      </div>
-    );
-  }
+const BUILDER_SITE = "https://builder.registrai.cc";
+
+export function BuildersPage({ verified = [] }: { verified?: VerifiedCard[] }) {
+  if (!D.deployed) return <BeforeLaunch verified={verified} />;
   return <Suspense fallback={<p className="pa-muted">Reading builders…</p>}><Live /></Suspense>;
+}
+
+/** Before Perennial is deployed on this network: the verified builders its markets will pay. */
+function BeforeLaunch({ verified }: { verified: VerifiedCard[] }) {
+  return (
+    <>
+      <h1 className="pa-h1 pu-h">Builders</h1>
+      <p className="pa-lede">
+        The verified builders Perennial markets will pay. Markets aren&apos;t live on {D.label} yet; once they open, half of each trading fee on a
+        market about a builder is their income.
+      </p>
+      <ul className="bld-grid mt-10">
+        {verified.map((b) => (
+          <BuilderCardView
+            key={b.id}
+            nameText={b.name}
+            name={<a href={`${BUILDER_SITE}/builders/?builder=${b.id}`} className="hover:text-accent">{b.name}</a>}
+            avatar={b.avatar && b.avatar.startsWith("/") ? `${BUILDER_SITE}${b.avatar}` : b.avatar}
+            tone="ok"
+            pill={{ text: "✓ Verified", tone: "ok" }}
+            sub={b.source ? sourceLabel(b.source) : undefined}
+            facts={[
+              { label: "Projects", value: <span className="tnum">{b.projects}</span> },
+              { label: "Open markets", value: "At launch" },
+            ]}
+          />
+        ))}
+      </ul>
+      <p className="pa-muted mt-6">
+        {verified.length ? "Building on Arc? " : "No verified builders yet. "}
+        <a className="pa-link" href={`${BUILDER_SITE}/verify/`}>Verify your project →</a> · <a className="pa-link" href={BUILDER_SITE}>Every builder</a>
+      </p>
+    </>
+  );
 }
 
 function Live() {

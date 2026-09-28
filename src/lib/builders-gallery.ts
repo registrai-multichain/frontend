@@ -1060,3 +1060,30 @@ export async function browserProofCheck(b: { owner: string; source: string }, o:
   if (r.state === "unchecked") return { state: "unchecked" };
   return { state: "invalid" };
 }
+
+/** A verified builder as a plain card: for pages that list them before any market opens. */
+export interface VerifiedCard {
+  id: number;
+  name: string;
+  /** Relative (the builders site's icon API) for a domain, absolute for GitHub; null = the initial. */
+  avatar: string | null;
+  /** The lead project's canonical source, or null. */
+  source: string | null;
+  /** Active projects. */
+  projects: number;
+}
+
+/** Pure: the snapshot's builders shown as Verified (displayKind), in id order. */
+export function verifiedCards(snapshot: Pick<GallerySnapshot, "builders"> | null): VerifiedCard[] {
+  if (!snapshot) return [];
+  return snapshot.builders
+    .filter((b) => displayKind(b) === "verified")
+    .sort((a, b) => a.id - b.id)
+    .map((b) => ({
+      id: b.id,
+      name: builderName(b, [], b.onboarded === true),
+      avatar: builderAvatarUrl(b),
+      source: leadProject(b)?.source ?? null,
+      projects: b.projects.filter((p) => p.active).length,
+    }));
+}

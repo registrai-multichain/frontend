@@ -4,6 +4,7 @@ import vectors from "./__fixtures__/verified-builder-vectors.json";
 import nomineesFile from "../data/nominees.json";
 import {
   DISPLAY,
+  verifiedCards,
   FILTERS,
   browserProofCheck,
   buildGallerySnapshot,
@@ -899,5 +900,25 @@ describe("cardLook: a project that went dark keeps its card, stamped", () => {
   });
   test("not gone dark: unchanged", () => {
     expect(cardLook("invited", true, false)).toEqual(cardLook("invited", true));
+  });
+});
+
+describe("verifiedCards: the verified builders, for pages that list them before markets open", () => {
+  test("keeps only builders shown as Verified, in id order, with name, avatar and lead source", () => {
+    const rows = [
+      row(3, { source: "domain:b.app", profileURI: "Bee" }),
+      row(1, { source: "github:acme/one" }),
+      row(2, { status: "lapsed" }),
+      row(4, { status: "pending", onboarded: false }),
+    ];
+    const out = verifiedCards({ builders: rows } as never);
+    expect(out.map((c) => c.id)).toEqual([1, 3]);
+    expect(out[0]).toMatchObject({ id: 1, name: "acme/one", source: "github:acme/one", projects: 1 });
+    expect(out[0].avatar).toContain("githubusercontent.com/acme");
+    expect(out[1]).toMatchObject({ id: 3, name: "Bee", source: "domain:b.app" });
+  });
+
+  test("no snapshot, no cards", () => {
+    expect(verifiedCards(null)).toEqual([]);
   });
 });
