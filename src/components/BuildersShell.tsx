@@ -16,7 +16,7 @@ const NAV: NavItem[] = [
 ];
 
 /**
- * The builder side's frame (/builders, /verify, /guide, /admin): the paper look,
+ * The builder side's frame (/builders, /verify, /guide, /suggest): the paper look,
  * pinned to the BUILDERS network and saying nothing about markets (mainnet phase 1
  * has only the builder registries).
  */

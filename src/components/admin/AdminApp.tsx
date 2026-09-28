@@ -61,6 +61,13 @@ import { buildersClient } from "@/components/verify/useMyBuilder";
 import { useWonderContext, WonderStatusProvider } from "@/components/wonder/WonderBits";
 import { releaseView, usd, waitingAmount, WONDER_ON_BUILDERS, wonderMarketsAbi } from "@/lib/wonder";
 import { cancelReleaseSafeFile, nominateInput, nominateSafeFile } from "@/lib/wonder-admin";
+import {
+  ADMIN_SECTIONS, adminNav, adminSections, sectionFromHash, sectionLede, signedOutSections, type AdminSection, type AdminSectionId,
+} from "@/lib/admin-sections";
+import { AdminShell } from "./AdminShell";
+import { ADMIN_DEPLOYMENT } from "./deployment";
+import a from "./admin.module.css";
+import cx from "./admin-app.module.css";
 
 const REG = BUILDERS.contracts.BuilderRegistry;
 const CARE = BUILDERS.contracts.CaretakerRegistry;
@@ -75,6 +82,116 @@ type ApiState = { state: "checking" } | { state: "unavailable" } | { state: "rea
 
 /** What the signed-in role may see and do (adminView); read by the rows and sections below. */
 const ViewCtx = createContext<AdminView>(adminView("admin"));
+
+
+/** The section on screen (from the URL hash) and the rail's pending counts, reported by each section. */
+const ActiveCtx = createContext<AdminSectionId | null>(null);
+type Report = (id: AdminSectionId, n: number | null | undefined) => void;
+const CountCtx = createContext<Report>(() => undefined);
+
+/** A section's pending count for its rail badge (0 and unknown: no badge). */
+function useRailCount(id: AdminSectionId, n: number | null | undefined) {
+  const report = useContext(CountCtx);
+  useEffect(() => report(id, n), [report, id, n]);
+}
+
+/** Work in progress (`what` within section `id`) marks the section's rail item "working" while it runs hidden. */
+type BusyReport = (key: string, on: boolean) => void;
+const BusyCtx = createContext<BusyReport>(() => undefined);
+function useRailBusy(id: AdminSectionId, what: string, on: boolean) {
+  const report = useContext(BusyCtx);
+  useEffect(() => {
+    report(`${id}/${what}`, on);
+    return () => report(`${id}/${what}`, false);
+  }, [report, id, what, on]);
+}
+
+/**
+ * The URL hash, kept in step with the address bar. The first value is read at mount
+ * (the dashboard only mounts in the browser, after the session check), so a deep link
+ * such as #badges opens there without showing Invites first. `changed` counts the
+ * hash changes since, so the page can move focus to the new section.
+ */
+function useHash(): { hash: string; changed: number } {
+  const [state, setState] = useState(() => ({ hash: typeof window === "undefined" ? "" : window.location.hash, changed: 0 }));
+  useEffect(() => {
+    const on = () => {
+      setState((s) => ({ hash: window.location.hash, changed: s.changed + 1 }));
+      window.scrollTo(0, 0);
+    };
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
+  return state;
+}
+
+/**
+ * One rail section: its heading and lede, then its cards. Every section stays mounted
+ * (hidden when another is on screen), so its reads, polling, forms in progress and
+ * wallet prompts carry on exactly as when the page showed them all at once.
+ */
+function AdminPage({ id, aside, children }: { id: AdminSectionId; aside?: ReactNode; children: ReactNode }) {
+  const active = useContext(ActiveCtx);
+  const view = useContext(ViewCtx);
+  const s = ADMIN_SECTIONS.find((x) => x.id === id)!;
+  return (
+    <div className={cx.page} hidden={active !== id} data-section={id}>
+      <div className={a.head}>
+        <div>
+          {/* tabIndex -1: focus moves here when the rail (the hash) changes the section. */}
+          <h1 className={a.h1} tabIndex={-1}>
+            {s.title}
+          </h1>
+          <p className={a.sub}>{sectionLede(s, view)}</p>
+        </div>
+        {aside}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** The rail's foot: the connected wallet (connect, switch network, disconnect), as the old header's wallet button. */
+function RailWallet() {
+  const { address, isConnecting, walletChainId, connect, disconnect, switchChain, error } = useWallet();
+  // The wallet's own error (a refused connect or network switch), as the old header button showed it.
+  const errorLine = error ? (
+    <p className={a.railError} role="alert">
+      {error}
+    </p>
+  ) : null;
+  if (!address) {
+    return (
+      <>
+        <div className={a.railFoot}>
+          <span>No wallet connected</span>
+          <button type="button" className={a.linkButton} onClick={connect} disabled={isConnecting}>
+            {isConnecting ? "Connecting…" : "Connect wallet"}
+          </button>
+        </div>
+        {errorLine}
+      </>
+    );
+  }
+  return (
+    <>
+      <div className={a.railFoot}>
+        <span>
+          Wallet <span className={a.mono}>{shortAddr(address).toLowerCase()}</span>
+        </span>
+        {walletChainId !== BUILDERS.chainId && (
+          <button type="button" className={a.linkButton} onClick={() => switchChain(BUILDERS.chainId)} title={error}>
+            Switch to {BUILDERS.chain.name}
+          </button>
+        )}
+        <button type="button" className={a.linkButton} onClick={disconnect} title={`${BUILDERS.chain.name} · disconnect`}>
+          Disconnect
+        </button>
+      </div>
+      {errorLine}
+    </>
+  );
+}
 
 class SignedOut extends Error {}
 
@@ -111,7 +228,7 @@ function CopyButton({ text, label = "copy" }: { text: string; label?: string }) 
   return (
     <button
       type="button"
-      className="vf-mini"
+      className={cx.mini}
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(text);
@@ -127,13 +244,16 @@ function CopyButton({ text, label = "copy" }: { text: string; label?: string }) 
   );
 }
 
-function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
+/** A card inside a section page, with an optional heading (and something beside it). */
+function Section({ title, aside, children }: { title?: string; aside?: ReactNode; children: ReactNode }) {
   return (
-    <section className="adm-section">
-      <header className="adm-section-head">
-        <h2>{title}</h2>
-        {aside}
-      </header>
+    <section className={cx.card}>
+      {(title || aside) && (
+        <header className={cx.cardHead}>
+          {title && <h2 className={a.h2}>{title}</h2>}
+          {aside}
+        </header>
+      )}
       {children}
     </section>
   );
@@ -194,41 +314,39 @@ export function AdminApp({ revocationCheckpoint = null }: { revocationCheckpoint
     };
   }, []);
 
+  if (api.state === "ready" && api.address) {
+    return (
+      <Dashboard
+        admin={api.address}
+        role={api.role ?? "admin"}
+        revocationCheckpoint={revocationCheckpoint}
+        onSignedOut={() => setApi({ state: "ready", address: null, role: null })}
+      />
+    );
+  }
   return (
-    <>
-      <header className="perennial-app-header">
+    <AdminShell nav={adminNav(signedOutSections(ADMIN_DEPLOYMENT, adminView("onboarder")), "")} active={null} who={null} foot={<RailWallet />}>
+      <div className={a.head}>
         <div>
-          <div className="perennial-app-status">
-            <i /> {BUILDERS.label} · admin
-          </div>
-          <h1>Builders admin</h1>
-          <p>
-            Invites, the onboarding queue, badge actions, recoveries and projects. What only the Safe may do (revokes,
-            recoveries, project switches) is a Safe batch file. This page sends two kinds of transaction itself:
+          <h1 className={a.h1}>{api.state === "ready" ? "Sign in" : "Builders admin"}</h1>
+          <p className={a.sub}>
+            Invites, the onboarding queue, badge actions, recoveries and projects on {BUILDERS.label}. What only the Safe may
+            do (revokes, recoveries, project switches) is a Safe batch file. This page sends two kinds of transaction itself:
             onboarding, from an onboarder wallet the Safe gave its two roles, and finishing a recovery (anyone may).
           </p>
         </div>
-      </header>
-
-      {api.state === "checking" && <p className="vf-hint">Checking the admin API…</p>}
+      </div>
+      {api.state === "checking" && <p className={a.state}>Checking the admin API…</p>}
       {api.state === "unavailable" && (
-        <div className="bld-empty">
-          <p>Admin runs on builder.registrai.cc.</p>
-          <a className="vf-link" href={`${BUILDERS_SITE}/admin/`}>
-            Open {BUILDERS_SITE.replace("https://", "")}/admin →
-          </a>
+        <div className={a.stateBox}>
+          <h2 className={a.stateTitle}>Admin runs on builder.registrai.cc</h2>
+          <p className={a.state}>
+            <a href={`${BUILDERS_SITE}/admin/`}>Open {BUILDERS_SITE.replace("https://", "")}/admin →</a>
+          </p>
         </div>
       )}
-      {api.state === "ready" && !api.address && <SignIn onSignedIn={(address, role) => setApi({ state: "ready", address, role })} />}
-      {api.state === "ready" && api.address && (
-        <Dashboard
-          admin={api.address}
-          role={api.role ?? "admin"}
-          revocationCheckpoint={revocationCheckpoint}
-          onSignedOut={() => setApi({ state: "ready", address: null, role: null })}
-        />
-      )}
-    </>
+      {api.state === "ready" && <SignIn onSignedIn={(address, role) => setApi({ state: "ready", address, role })} />}
+    </AdminShell>
   );
 }
 
@@ -257,21 +375,23 @@ function SignIn({ onSignedIn }: { onSignedIn: (address: string, role: AdminRole)
   }
 
   return (
-    <Section title="Sign in">
-      <p className="vf-note">
+    <Section>
+      <p className={cx.text}>
         Sign a one-time message with an admin wallet. It is not a transaction and costs nothing; the session lasts 12
         hours.
       </p>
-      {!address ? (
-        <button type="button" className="vf-primary" onClick={connect} disabled={isConnecting}>
-          {isConnecting ? "connecting…" : "Connect wallet"}
-        </button>
-      ) : (
-        <button type="button" className="vf-primary" onClick={signIn} disabled={busy || !walletClient}>
-          {busy ? "check your wallet…" : `Sign in as ${shortAddr(address)}`}
-        </button>
-      )}
-      {(error || walletError) && <p className="vf-error">{error ?? walletError}</p>}
+      <div className={a.actions}>
+        {!address ? (
+          <button type="button" className={a.primary} onClick={connect} disabled={isConnecting}>
+            {isConnecting ? "connecting…" : "Connect wallet"}
+          </button>
+        ) : (
+          <button type="button" className={a.primary} onClick={signIn} disabled={busy || !walletClient}>
+            {busy ? "check your wallet…" : `Sign in as ${shortAddr(address)}`}
+          </button>
+        )}
+      </div>
+      {(error || walletError) && <p className={cx.error}>{error ?? walletError}</p>}
     </Section>
   );
 }
@@ -293,7 +413,8 @@ async function readChain(): Promise<GalleryBuilder[]> {
   });
 }
 
-function Dashboard({
+/** The signed-in admin (exported for the role tests). */
+export function Dashboard({
   admin,
   role,
   revocationCheckpoint,
@@ -353,39 +474,68 @@ function Dashboard({
 
   const wonderSources = WONDER_ON_BUILDERS ? (invites.data ?? []).map((i) => i.source) : [];
   const view = adminView(role);
+  const sections: AdminSection[] = useMemo(() => adminSections(adminView(role), ADMIN_DEPLOYMENT), [role]);
+  const { hash, changed } = useHash();
+  const active = sectionFromHash(hash, sections);
+  // A section opened from the rail: focus its heading (not on the first render, which keeps the page's own focus).
+  useEffect(() => {
+    if (changed) document.querySelector<HTMLElement>(`[data-section="${active}"] h1`)?.focus({ preventScroll: true });
+  }, [changed, active]);
+  const [busyKeys, setBusyKeys] = useState<ReadonlySet<string>>(new Set());
+  const reportBusy: BusyReport = useCallback((key, on) => {
+    setBusyKeys((b) => {
+      if (b.has(key) === on) return b;
+      const next = new Set(b);
+      if (on) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }, []);
+  const busySections = useMemo(() => new Set([...busyKeys].map((k) => k.split("/")[0])), [busyKeys]);
+  const [counts, setCounts] = useState<Partial<Record<AdminSectionId, number | null>>>({});
+  const report: Report = useCallback((id, n) => {
+    const v = n ? n : null;
+    setCounts((c) => ((c[id] ?? null) === v ? c : { ...c, [id]: v }));
+  }, []);
+  const foot = (
+    <>
+      <RailWallet />
+      <div className={a.railFoot}>
+        {REG && (
+          <button type="button" className={a.linkButton} onClick={() => chain.mutate()} disabled={chain.isValidating}>
+            {chain.isValidating ? "Reading chain…" : "Re-read chain"}
+          </button>
+        )}
+        <button type="button" className={a.linkButton} onClick={signOut}>
+          Sign out
+        </button>
+      </div>
+    </>
+  );
   return (
     <ViewCtx.Provider value={view}>
     <WonderStatusProvider sources={wonderSources}>
-      <div className="adm-stack">
-        <div className="adm-bar">
-          <span>
-            Signed in as <b className="tnum">{shortAddr(admin)}</b>
-            {role === "onboarder" && <> · onboarder: you can read everything here and onboard builders from this wallet</>}
-          </span>
-          <span className="adm-bar-actions">
-            <a className="vf-mini" href="/admin/proposals/">
-              Market proposals →
-            </a>
-            {REG && (
-              <button type="button" className="vf-mini" onClick={() => chain.mutate()} disabled={chain.isValidating}>
-                {chain.isValidating ? "reading chain…" : "re-read chain"}
-              </button>
-            )}
-            <button type="button" className="vf-mini" onClick={signOut}>
-              sign out
-            </button>
-          </span>
-        </div>
+    <ActiveCtx.Provider value={active}>
+    <CountCtx.Provider value={report}>
+    <BusyCtx.Provider value={reportBusy}>
+      <AdminShell nav={adminNav(sections, "", counts, busySections)} active={active} who={{ address: admin, role }} foot={foot}>
+        {role === "onboarder" && (
+          <p className={a.callout}>
+            <b>Onboarder session.</b> You can read everything here and onboard builders from this wallet.
+          </p>
+        )}
 
-        {view.inviteForm && <InviteForm onChanged={() => invites.mutate()} />}
+        <AdminPage id="invites">
+          {view.inviteForm && <InviteForm onChanged={() => invites.mutate()} />}
 
-        <InvitesTable
-          invites={invites.data}
-          error={invites.error && !(invites.error instanceof SignedOut) ? String((invites.error as Error).message) : null}
-          builders={chain.data ?? null}
-          chainNote={chainNote}
-          onChanged={() => invites.mutate()}
-        />
+          <InvitesTable
+            invites={invites.data}
+            error={invites.error && !(invites.error instanceof SignedOut) ? String((invites.error as Error).message) : null}
+            builders={chain.data ?? null}
+            chainNote={chainNote}
+            onChanged={() => invites.mutate()}
+          />
+        </AdminPage>
 
         <SuggestionsSection onInvited={() => invites.mutate()} onSignedOut={onSignedOut} />
 
@@ -410,7 +560,10 @@ function Dashboard({
         )}
 
         {view.wonder && WONDER_ON_BUILDERS && <WonderSection invites={invites.data ?? []} />}
-      </div>
+      </AdminShell>
+    </BusyCtx.Provider>
+    </CountCtx.Provider>
+    </ActiveCtx.Provider>
     </WonderStatusProvider>
     </ViewCtx.Provider>
   );
@@ -422,28 +575,28 @@ function InviteLink({ invite, existed }: { invite: AdminInvite; existed: boolean
   const wonder = useWonderContext();
   const dm = inviteDm(invite, invite.claimLink, waitingAmount(wonder.status[invite.source], Math.floor(Date.now() / 1000), wonder.expiry));
   return (
-    <div className="adm-result">
-      <p className={existed ? "vf-error" : "vf-ok"}>
+    <div className={cx.result}>
+      <p className={existed ? cx.error : cx.ok}>
         {existed
           ? `Already invited on ${isoDay(invite.createdAt)}: here is its existing link.`
           : `Invited. ${invite.name ?? sourceLabel(invite.source)} is listed as Invited on the gallery.`}
       </p>
-      <div className="vf-copyline">
+      <div className={cx.copyline}>
         <code>{invite.claimLink}</code>
         <CopyButton text={invite.claimLink} label="copy link" />
       </div>
-      <div className="vf-file-head">
+      <div className={cx.fileHead}>
         <span>DM for {invite.x ?? "X"}</span>
         <span>
           <CopyButton text={dm} label="copy DM" />
           {invite.x && (
-            <a className="vf-mini" href={xHref(invite.x)} target="_blank" rel="noreferrer">
+            <a className={cx.mini} href={xHref(invite.x)} target="_blank" rel="noreferrer">
               open X ↗
             </a>
           )}
         </span>
       </div>
-      <pre className="vf-pre adm-dm">{dm}</pre>
+      <pre className={cx.dm}>{dm}</pre>
     </div>
   );
 }
@@ -489,14 +642,14 @@ function InviteForm({ onChanged }: { onChanged: () => void }) {
 
   return (
     <Section title="Invite a project">
-      <p className="vf-note">
+      <p className={cx.text}>
         Lists the project on the gallery as <b>Invited</b> and makes a personal claim link. DM it on X yourself; opens
         of the link are tracked below.
       </p>
-      <form className="adm-form" onSubmit={submit}>
-        <label className="vf-field">
+      <form className={cx.form} onSubmit={submit}>
+        <label className={cx.field}>
           <span>Project</span>
-          <input
+          <input className={a.input}
             value={source}
             onChange={(e) => setSource(e.target.value)}
             placeholder="github.com/owner/repo, owner/repo or a domain"
@@ -506,28 +659,28 @@ function InviteForm({ onChanged }: { onChanged: () => void }) {
           />
           <em>{source.trim() ? (normalized ?? "not a repo or domain") : ""}</em>
         </label>
-        <label className="vf-field">
+        <label className={cx.field}>
           <span>Name</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="shown on the gallery" />
+          <input className={a.input} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="shown on the gallery" />
           <em />
         </label>
-        <label className="vf-field">
+        <label className={cx.field}>
           <span>X handle</span>
-          <input value={x} onChange={(e) => setX(e.target.value)} maxLength={16} placeholder="@handle" spellCheck={false} autoCapitalize="off" />
+          <input className={a.input} value={x} onChange={(e) => setX(e.target.value)} maxLength={16} placeholder="@handle" spellCheck={false} autoCapitalize="off" />
           <em />
         </label>
-        <label className="vf-field">
+        <label className={`${cx.field} ${cx.wide}`}>
           <span>Private note</span>
-          <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={2} placeholder="never shown publicly" />
+          <textarea className={a.textarea} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={2} placeholder="never shown publicly" />
           <em>{note.length ? `${note.length}/500` : ""}</em>
         </label>
-        <div>
-          <button type="submit" className="vf-primary" disabled={busy || !normalized}>
+        <div className={cx.wide}>
+          <button type="submit" className={a.primary} disabled={busy || !normalized}>
             {busy ? "creating…" : "Create invite"}
           </button>
         </div>
       </form>
-      {error && <p className="vf-error">{error}</p>}
+      {error && <p className={cx.error}>{error}</p>}
       {result && <InviteLink invite={result.invite} existed={result.existed} />}
     </Section>
   );
@@ -550,6 +703,7 @@ function SuggestionsSection({ onInvited, onSignedOut }: { onInvited: () => void;
   useEffect(() => {
     if (list.error instanceof SignedOut) onSignedOut();
   }, [list.error, onSignedOut]);
+  useRailCount("suggestions", list.data?.length);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
 
@@ -578,33 +732,34 @@ function SuggestionsSection({ onInvited, onSignedOut }: { onInvited: () => void;
   }
 
   return (
-    <Section title="Suggestions">
-      <p className="vf-note">
+    <AdminPage id="suggestions">
+      <Section>
+      <p className={cx.text}>
         Projects the public suggested at /suggest (website plus X or another public link). Check the social proof, then invite: the
         evidence goes into the invite&apos;s private note. Nothing is public until you invite.
       </p>
       {list.error && !(list.error instanceof SignedOut) ? (
-        <p className="vf-error">Could not read the suggestions: {(list.error as Error).message}</p>
+        <p className={cx.error}>Could not read the suggestions: {(list.error as Error).message}</p>
       ) : !list.data ? (
-        <p className="vf-hint">Reading suggestions…</p>
+        <p className={cx.hint}>Reading suggestions…</p>
       ) : list.data.length === 0 ? (
-        <p className="vf-hint">No open suggestions.</p>
+        <p className={cx.hint}>No open suggestions.</p>
       ) : (
-        <ul className="adm-list">
+        <ul className={cx.rows}>
           {list.data.map((s) => (
             <li key={s.source}>
-              <b>{s.name}</b> <span className="adm-sub">{sourceLabel(s.source)} · ×{s.count} · last {isoDay(s.lastAt)}</span>
-              <div className="adm-sub">
+              <b>{s.name}</b> <span className={cx.sub}>{sourceLabel(s.source)} · ×{s.count} · last {isoDay(s.lastAt)}</span>
+              <div className={cx.sub}>
                 <a href={s.website} target="_blank" rel="noreferrer noopener">{s.website} ↗</a>
                 {s.x && <> · <a href={xHref(s.x)} target="_blank" rel="noreferrer noopener">{s.x} ↗</a></>}
                 {s.social && <> · <a href={s.social} target="_blank" rel="noreferrer noopener">{s.social} ↗</a></>}
                 {s.github && <> · <a href={sourceHref(s.github)} target="_blank" rel="noreferrer noopener">{sourceLabel(s.github)} ↗</a></>}
                 {!s.github && <> · no GitHub repo: no markets</>}
               </div>
-              {s.why && <div className="adm-sub">“{s.why}”</div>}
-              {s.by.length > 0 && <div className="adm-sub">by {s.by.join(", ")}</div>}
+              {s.why && <div className={cx.sub}>“{s.why}”</div>}
+              {s.by.length > 0 && <div className={cx.sub}>by {s.by.join(", ")}</div>}
               {s.wallets?.length > 0 && (
-                <div className="adm-sub">
+                <div className={cx.sub}>
                   signed by{" "}
                   {s.wallets.slice(0, 5).map((w, i) => (
                     <span key={w}>
@@ -616,11 +771,11 @@ function SuggestionsSection({ onInvited, onSignedOut }: { onInvited: () => void;
                 </div>
               )}
               {view.inviteForm && (
-                <span className="flex gap-2">
-                  <button type="button" className="vf-mini" disabled={busy !== null} onClick={() => invite(s)}>
+                <span className={cx.rowActions}>
+                  <button type="button" className={cx.mini} disabled={busy !== null} onClick={() => invite(s)}>
                     {busy === s.source ? "inviting…" : "invite"}
                   </button>
-                  <button type="button" className="vf-mini" disabled={busy !== null} onClick={() => dismiss(s.source)}>
+                  <button type="button" className={cx.miniDanger} disabled={busy !== null} onClick={() => dismiss(s.source)}>
                     dismiss
                   </button>
                 </span>
@@ -629,37 +784,38 @@ function SuggestionsSection({ onInvited, onSignedOut }: { onInvited: () => void;
           ))}
         </ul>
       )}
-      {msg.ok && <p className="vf-ok">{msg.ok}</p>}
-      {msg.error && <p className="vf-error">{msg.error}</p>}
-    </Section>
+      {msg.ok && <p className={cx.ok}>{msg.ok}</p>}
+      {msg.error && <p className={cx.error}>{msg.error}</p>}
+      </Section>
+    </AdminPage>
   );
 }
 
 // ───────────────────────────── invites & tracking ─────────────────────────────
 
 function StatusChip({ s }: { s: InviteChainStatus | null }) {
-  if (!s) return <span className="bld-chip">…</span>;
-  if (s.kind === "invited") return <span className="bld-chip" data-kind="invited">Invited</span>;
+  if (!s) return <span className={cx.chip}>…</span>;
+  if (s.kind === "invited") return <span className={cx.chip} data-kind="invited">Invited</span>;
   if (s.kind === "verified")
     return (
-      <span className="bld-chip" data-kind="verified" title={`builder #${s.builderId}`}>
+      <span className={cx.chip} data-kind="verified" title={`builder #${s.builderId}`}>
         Verified{s.serial ? ` · ${serialLabel(s.serial)}` : ""}
       </span>
     );
   if (s.kind === "nominated")
     return (
-      <span className="bld-chip" data-kind="nominated" title={`builder #${s.builderId}${s.unchecked ? " · proof not readable just now" : ""}`}>
+      <span className={cx.chip} data-kind="nominated" title={`builder #${s.builderId}${s.unchecked ? " · proof not readable just now" : ""}`}>
         Onboarding{s.unchecked ? " · unchecked" : ""}
       </span>
     );
   if (s.kind === "unconfirmed")
     return (
-      <span className="bld-chip" data-kind="unconfirmed" title={`builder #${s.builderId} holds it, but its proof couldn't be read: the gallery still shows the invite`}>
+      <span className={cx.chip} data-kind="unconfirmed" title={`builder #${s.builderId} holds it, but its proof couldn't be read: the gallery still shows the invite`}>
         Unconfirmed · #{s.builderId}
       </span>
     );
   return (
-    <span className="bld-chip" data-kind="lapsed" title={`builder #${s.builderId} holds it without a proof that checks out: the gallery still shows the invite`}>
+    <span className={cx.chip} data-kind="lapsed" title={`builder #${s.builderId} holds it without a proof that checks out: the gallery still shows the invite`}>
       Lapsed · #{s.builderId}
     </span>
   );
@@ -704,39 +860,39 @@ function InviteRow({ inv, status, onChanged }: { inv: AdminInvite; status: Invit
     <tr>
       <td>
         <b>{inv.name ?? sourceLabel(inv.source)}</b>
-        <a className="adm-sub" href={sourceHref(inv.source)} target="_blank" rel="noreferrer">
+        <a className={cx.sub} href={sourceHref(inv.source)} target="_blank" rel="noreferrer">
           {sourceLabel(inv.source)} ↗
         </a>
         {editing ? (
-          <div className="adm-edit">
-            <label className="vf-field">
+          <div className={cx.edit}>
+            <label className={cx.field}>
               <span>Name</span>
-              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
+              <input className={a.input} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
               <em />
             </label>
-            <label className="vf-field">
+            <label className={cx.field}>
               <span>X handle</span>
-              <input value={x} onChange={(e) => setX(e.target.value)} maxLength={16} spellCheck={false} />
+              <input className={a.input} value={x} onChange={(e) => setX(e.target.value)} maxLength={16} spellCheck={false} />
               <em />
             </label>
-            <label className="vf-field">
+            <label className={cx.field}>
               <span>Private note</span>
-              <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={2} />
+              <textarea className={a.textarea} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={2} />
               <em />
             </label>
-            <span className="adm-actions">
-              <button type="button" className="vf-mini vf-mini-strong" onClick={save} disabled={busy}>
+            <span className={cx.rowActions}>
+              <button type="button" className={cx.miniInk} onClick={save} disabled={busy}>
                 save
               </button>
-              <button type="button" className="vf-mini" onClick={() => setEditing(false)} disabled={busy}>
+              <button type="button" className={cx.mini} onClick={() => setEditing(false)} disabled={busy}>
                 cancel
               </button>
             </span>
           </div>
         ) : (
-          inv.note && <span className="adm-note">{inv.note}</span>
+          inv.note && <span className={cx.privNote}>{inv.note}</span>
         )}
-        {error && <span className="vf-error">{error}</span>}
+        {error && <span className={cx.error}>{error}</span>}
       </td>
       <td>
         {inv.x ? (
@@ -749,25 +905,25 @@ function InviteRow({ inv, status, onChanged }: { inv: AdminInvite; status: Invit
       </td>
       <td className="tnum">{isoDay(inv.createdAt)}</td>
       <td>
-        <span className="adm-actions">
+        <span className={cx.rowActions}>
           <CopyButton text={inv.claimLink} label="link" />
           <CopyButton text={inviteDm(inv, inv.claimLink, waitingAmount(wonder.status[inv.source], Math.floor(Date.now() / 1000), wonder.expiry))} label="DM" />
         </span>
       </td>
       <td className="tnum">
         {inv.opens}
-        <span className="adm-sub">{inv.firstOpenedAt ? `first ${isoDay(inv.firstOpenedAt)}` : "never opened"}</span>
+        <span className={cx.sub}>{inv.firstOpenedAt ? `first ${isoDay(inv.firstOpenedAt)}` : "never opened"}</span>
       </td>
       <td>
         <StatusChip s={status} />
       </td>
       <td>
         {!editing && view.editInvites && (
-          <span className="adm-actions">
-            <button type="button" className="vf-mini" onClick={() => setEditing(true)} disabled={busy}>
+          <span className={cx.rowActions}>
+            <button type="button" className={cx.mini} onClick={() => setEditing(true)} disabled={busy}>
               edit
             </button>
-            <button type="button" className="vf-mini" onClick={remove} disabled={busy}>
+            <button type="button" className={cx.miniDanger} onClick={remove} disabled={busy}>
               delete
             </button>
           </span>
@@ -799,30 +955,31 @@ function InvitesTable({
   // Without a chain read every invite counts as not claimed.
   const chase = rows.filter((r) => needsFollowUp(r.inv, r.status ?? { kind: "invited" }, now));
   const shown = followUp ? chase : rows;
+  useRailCount("invites", invites ? chase.length : null);
 
   return (
     <Section
       title="Invites & tracking"
       aside={
-        <div className="bld-chips" role="group" aria-label="Filter invites">
-          <button type="button" aria-pressed={!followUp} onClick={() => setFollowUp(false)}>
+        <div className={a.pills} role="group" aria-label="Filter invites">
+          <button type="button" className={a.pill} aria-pressed={!followUp} onClick={() => setFollowUp(false)}>
             All <span className="tnum">{rows.length}</span>
           </button>
-          <button type="button" aria-pressed={followUp} onClick={() => setFollowUp(true)} title="Not opened after 3 days, or opened but not claimed">
+          <button type="button" className={a.pill} aria-pressed={followUp} onClick={() => setFollowUp(true)} title="Not opened after 3 days, or opened but not claimed">
             Needs follow-up <span className="tnum">{chase.length}</span>
           </button>
         </div>
       }
     >
-      {chainNote && <p className="vf-hint">{chainNote}</p>}
-      {error && <p className="vf-error">{error}</p>}
+      {chainNote && <p className={cx.hint}>{chainNote}</p>}
+      {error && <p className={cx.error}>{error}</p>}
       {!invites && !error ? (
-        <p className="vf-hint">Loading invites…</p>
+        <p className={cx.hint}>Loading invites…</p>
       ) : shown.length === 0 ? (
-        <p className="vf-hint">{followUp ? "Nobody to chase." : "No invites yet."}</p>
+        <p className={cx.hint}>{followUp ? "Nobody to chase." : "No invites yet."}</p>
       ) : (
-        <div className="adm-table-wrap">
-          <table className="adm-table">
+        <div className={cx.tableWrap}>
+          <table className={cx.table}>
             <thead>
               <tr>
                 <th>Project</th>
@@ -861,21 +1018,21 @@ const txHref = (hash: string) => `${BUILDERS.explorer.url}/tx/${hash}`;
 
 function OnboardRunLine({ run }: { run: OnboardRun }) {
   return (
-    <span className="adm-run">
+    <span className={cx.run}>
       {run.txs.map((t, i) => (
         <span key={i}>
           <code>{t.label}</code>{" "}
           {t.hash ? (
-            <a className="vf-link" href={txHref(t.hash)} target="_blank" rel="noreferrer">
+            <a href={txHref(t.hash)} target="_blank" rel="noreferrer">
               {t.confirmed ? "confirmed" : "sent, waiting for the receipt"} · {shortAddr(t.hash)} ↗
             </a>
           ) : (
-            <span className="adm-sub">{run.state === "running" ? "waiting" : "not sent"}</span>
+            <span className={cx.sub}>{run.state === "running" ? "waiting" : "not sent"}</span>
           )}
         </span>
       ))}
-      {run.note && <span className={run.state === "done" ? "vf-ok" : "vf-hint"}>{run.note}</span>}
-      {run.error && <span className="vf-error">{run.error}</span>}
+      {run.note && <span className={run.state === "done" ? cx.ok : cx.hint}>{run.note}</span>}
+      {run.error && <span className={cx.error}>{run.error}</span>}
     </span>
   );
 }
@@ -924,6 +1081,7 @@ function GaslessSection({
     () => (requests.data && builders ? requests.data.filter((r) => gaslessState(r, builders).kind !== "done") : null),
     [requests.data, builders],
   );
+  useRailCount("register-requests", open?.length);
   // Re-check every open request's proof against the wallet that asked, now.
   const proofs = useSWR(
     open && open.length ? ["admin-register-proofs", ...open.map((r) => `${r.source}|${r.builder}`)] : null,
@@ -959,25 +1117,26 @@ function GaslessSection({
   }
 
   return (
-    <Section title="Register for builders without gas">
+    <AdminPage id="register-requests">
+      <Section>
       {requests.error && !(requests.error instanceof SignedOut) ? (
-        <p className="vf-error">Could not read the requests: {(requests.error as Error).message}</p>
+        <p className={cx.error}>Could not read the requests: {(requests.error as Error).message}</p>
       ) : !requests.data ? (
-        <p className="vf-hint">Reading requests…</p>
+        <p className={cx.hint}>Reading requests…</p>
       ) : !builders ? (
-        <p className="vf-hint">{chainNote}</p>
+        <p className={cx.hint}>{chainNote}</p>
       ) : !open || open.length === 0 ? (
-        <p className="vf-hint">No open requests. Builders without gas ask from step 5 of /verify; each request is stored only with a valid published proof.</p>
+        <p className={cx.hint}>No open requests. Builders without gas ask from step 5 of /verify; each request is stored only with a valid published proof.</p>
       ) : (
         <>
-          <ul className="adm-list">
+          <ul className={cx.rows}>
             {open.map((r) => {
               const st = gaslessState(r, builders);
               const ok = proofs.data?.get(r.source);
               return (
                 <li key={r.source}>
                   <b>{sourceLabel(r.source)}</b>{" "}
-                  <span className="adm-sub">
+                  <span className={cx.sub}>
                     {shortAddr(r.builder)} · asked {isoDay(r.requestedAt)} ·{" "}
                     {st.kind === "register"
                       ? "new wallet: registerFor now, the project in the next batch"
@@ -990,7 +1149,7 @@ function GaslessSection({
                     {ok === undefined ? "checking proof…" : ok ? "proof valid" : "proof does NOT check out"}
                   </span>{" "}
                   {view.dismissRequests && (
-                    <button type="button" className="vf-mini" onClick={() => dismiss(r.source)}>
+                    <button type="button" className={cx.miniDanger} onClick={() => dismiss(r.source)}>
                       dismiss
                     </button>
                   )}
@@ -999,10 +1158,10 @@ function GaslessSection({
             })}
           </ul>
           {plan && plan.txs.length > 0 && !view.safeFiles ? (
-            <p className="vf-hint">The Safe registers these ({plan.txs.length} tx): an admin downloads the batch.</p>
+            <p className={cx.hint}>The Safe registers these ({plan.txs.length} tx): an admin downloads the batch.</p>
           ) : plan && plan.txs.length > 0 ? (
             <>
-              <ol className="adm-txs">
+              <ol className={cx.txs}>
                 {plan.txs.map((t, i) => (
                   <li key={i}>
                     <code>{t.label}</code>
@@ -1011,7 +1170,7 @@ function GaslessSection({
               </ol>
               <button
                 type="button"
-                className="vf-primary"
+                className={a.primary}
                 onClick={() =>
                   download(
                     safeFileName("registrations", Date.now()),
@@ -1021,20 +1180,20 @@ function GaslessSection({
               >
                 Download Safe batch ({plan.txs.length} tx)
               </button>
-              <p className="vf-hint">
+              <p className={cx.hint}>
                 Registration needs the Safe (REGISTRAR). After a registerFor executes, re-read the chain: the same request
                 then plans its addProjectFor, and the onboarding queue below picks the builder up once its project is on-chain.
               </p>
             </>
           ) : plan ? (
-            <p className="vf-hint">Nothing to send right now.</p>
+            <p className={cx.hint}>Nothing to send right now.</p>
           ) : (
-            <p className="vf-hint">Checking proofs…</p>
+            <p className={cx.hint}>Checking proofs…</p>
           )}
           {plan && plan.skipped.length > 0 && (
-            <ul className="adm-list">
+            <ul className={cx.rows}>
               {plan.skipped.map((k, i) => (
-                <li key={i} className="adm-sub">
+                <li key={i} className={cx.sub}>
                   skipped {k.what}: {k.reason}
                 </li>
               ))}
@@ -1042,7 +1201,8 @@ function GaslessSection({
           )}
         </>
       )}
-    </Section>
+      </Section>
+    </AdminPage>
   );
 }
 
@@ -1097,6 +1257,7 @@ function OnboardingSection({
         : null,
     [builders, badge, revoked],
   );
+  useRailCount("onboarding", queue?.included.length);
 
   // Direct onboarding: the connected wallet must hold BOTH onboarder roles.
   const directPossible = Boolean(REG && CARE && OPERATOR && badge);
@@ -1108,6 +1269,7 @@ function OnboardingSection({
   const gate = onboarderGate(roles.data);
   const [runs, setRuns] = useState<Record<number, OnboardRun>>({});
   const [busy, setBusy] = useState(false);
+  useRailBusy("onboarding", "send", busy);
   const [allError, setAllError] = useState<string>();
 
   const patch = (id: number, f: (r: OnboardRun) => OnboardRun) =>
@@ -1202,34 +1364,35 @@ function OnboardingSection({
   const sentLog = queue ? Object.entries(runs).filter(([id]) => !queue.included.some((b) => b.id === Number(id))) : [];
 
   const direct = !directPossible ? (
-    <p className="vf-hint">Direct onboarding needs a Verified Builder Badge contract on {BUILDERS.label}: use the Safe batch.</p>
+    <p className={cx.hint}>Direct onboarding needs a Verified Builder Badge contract on {BUILDERS.label}: use the Safe batch.</p>
   ) : !address ? (
-    <p className="vf-hint">
+    <p className={cx.hint}>
       Connect the onboarder wallet to onboard directly.{" "}
-      <button type="button" className="vf-mini" onClick={connect} disabled={isConnecting}>
+      <button type="button" className={cx.mini} onClick={connect} disabled={isConnecting}>
         {isConnecting ? "connecting…" : "connect"}
       </button>
     </p>
   ) : roles.error ? (
-    <p className="vf-error">Could not read {shortAddr(address)}&apos;s roles: {humanizeError(roles.error, HUMAN)}</p>
+    <p className={cx.error}>Could not read {shortAddr(address)}&apos;s roles: {humanizeError(roles.error, HUMAN)}</p>
   ) : !roles.data ? (
-    <p className="vf-hint">Checking {shortAddr(address)}&apos;s onboarder roles…</p>
+    <p className={cx.hint}>Checking {shortAddr(address)}&apos;s onboarder roles…</p>
   ) : !gate.ok ? (
-    <p className="vf-hint">
+    <p className={cx.hint}>
       {shortAddr(address)} can&apos;t onboard directly: it lacks {gate.missing.join(" and ")}. Connect the onboarder wallet,
       or use the Safe batch.
     </p>
   ) : null;
 
   return (
-    <Section title="Onboarding queue">
+    <AdminPage id="onboarding">
+      <Section>
       {missing.length ? (
-        <p className="vf-hint">Onboarding needs {missing.join(", ")} on {BUILDERS.label}.</p>
+        <p className={cx.hint}>Onboarding needs {missing.join(", ")} on {BUILDERS.label}.</p>
       ) : !queue ? (
-        <p className="vf-hint">{chainNote}</p>
+        <p className={cx.hint}>{chainNote}</p>
       ) : (
         <>
-          <p className="vf-note">
+          <p className={cx.text}>
             Builders with at least one project proof validated just now (read through the builders site&apos;s proof
             check; onboarding is per builder, not per project), never a deactivated or revoked one: pending ones get{" "}
             <code>setCaretaker(id, operator)</code>
@@ -1243,35 +1406,35 @@ function OnboardingSection({
           </p>
           {queue.included.length > 0 && direct}
           {queue.included.length > 0 && gate.ok && (
-            <div className="adm-actions">
-              <button type="button" className="vf-primary" onClick={onboardAll} disabled={busy}>
+            <div className={cx.rowActions}>
+              <button type="button" className={a.approve} onClick={onboardAll} disabled={busy}>
                 {busy ? "onboarding…" : `Onboard all (${queue.included.length})`}
               </button>
-              <span className="vf-hint">Sends from your connected onboarder wallet. The Safe can remove this wallet&apos;s roles any time.</span>
+              <span className={cx.hint}>Sends from your connected onboarder wallet. The Safe can remove this wallet&apos;s roles any time.</span>
             </div>
           )}
           {gate.ok && walletChainId !== BUILDERS.chainId && queue.included.length > 0 && (
-            <p className="vf-hint">Your wallet is on another network: Onboard switches it to {BUILDERS.label} first.</p>
+            <p className={cx.hint}>Your wallet is on another network: Onboard switches it to {BUILDERS.label} first.</p>
           )}
-          {allError && <p className="vf-error">{allError}</p>}
+          {allError && <p className={cx.error}>{allError}</p>}
           {queue.included.length === 0 ? (
-            <p className="vf-hint">Nobody to onboard.</p>
+            <p className={cx.hint}>Nobody to onboard.</p>
           ) : (
             <>
-              <ul className="adm-list">
+              <ul className={cx.rows}>
                 {queue.included.map((b) => {
                   const run = runs[b.id];
                   return (
                     <li key={b.id}>
                       <b>{nameOf(b)}</b>{" "}
-                      <span className="adm-sub">
+                      <span className={cx.sub}>
                         builder #{b.id} · {b.status === "pending" ? "claimed, awaiting onboarding" : "verified, no badge"} ·{" "}
                         {b.projects.filter((p) => p.status === "verified" && !p.proofUnchecked).map((p) => sourceLabel(p.source)).join(", ")}
                       </span>{" "}
                       {gate.ok && (
                         <button
                           type="button"
-                          className="vf-mini vf-mini-strong"
+                          className={cx.miniGo}
                           onClick={() => onboardSingle(b)}
                           disabled={busy || run?.state === "done"}
                         >
@@ -1285,8 +1448,8 @@ function OnboardingSection({
               </ul>
               {view.safeFiles && (
               <>
-              <div className="pp-card-label">Or: the Safe batch</div>
-              <ol className="adm-txs">
+              <div className={cx.label}>Or: the Safe batch</div>
+              <ol className={cx.txs}>
                 {queue.plan.txs.map((t, i) => (
                   <li key={i}>
                     <code>{t.label}</code>
@@ -1295,12 +1458,12 @@ function OnboardingSection({
               </ol>
               <button
                 type="button"
-                className={gate.ok ? "vf-mini" : "vf-primary"}
+                className={gate.ok ? cx.mini : a.primary}
                 onClick={() => download(safeFileName("onboarding", Date.now()), onboardingSafeFile(queue, BUILDERS.chainId, Date.now()))}
               >
                 Download Safe batch ({queue.plan.txs.length} tx)
               </button>
-              <p className="vf-hint">
+              <p className={cx.hint}>
                 Safe → Apps → Transaction Builder → drag the file in. Chain {BUILDERS.chainId}, CaretakerRegistry {CARE && shortAddr(CARE)}
                 {badge ? `, badge ${shortAddr(badge)}` : ""}, operator {OPERATOR && shortAddr(OPERATOR)}.
               </p>
@@ -1309,12 +1472,12 @@ function OnboardingSection({
             </>
           )}
           {sentLog.length > 0 && (
-            <div className="adm-result">
-              <div className="pp-card-label">Sent from this page</div>
-              <ul className="adm-list">
+            <div className={cx.result}>
+              <div className={cx.label}>Sent from this page</div>
+              <ul className={cx.rows}>
                 {sentLog.map(([id, run]) => (
                   <li key={id}>
-                    <b>{run.name}</b> <span className="adm-sub">builder #{id}</span>
+                    <b>{run.name}</b> <span className={cx.sub}>builder #{id}</span>
                     <OnboardRunLine run={run} />
                   </li>
                 ))}
@@ -1322,16 +1485,16 @@ function OnboardingSection({
             </div>
           )}
           {queue.excluded.length > 0 && (
-            <div className="adm-excluded">
-              <p className="vf-note">
+            <div className={cx.boxed}>
+              <p className={cx.text}>
                 <b>Not in this batch:</b> none of their project proofs could be read just now (unconfirmed). Re-read the
                 chain later, or verify with <code>{CLI}</code>.
               </p>
-              <ul className="adm-list">
+              <ul className={cx.rows}>
                 {queue.excluded.map((b) => (
                   <li key={b.id}>
                     <b>{nameOf(b)}</b>{" "}
-                    <span className="adm-sub">
+                    <span className={cx.sub}>
                       builder #{b.id} · {b.projects.filter((p) => p.proofUnchecked).map((p) => sourceLabel(p.source)).join(", ")}
                     </span>
                   </li>
@@ -1340,7 +1503,7 @@ function OnboardingSection({
             </div>
           )}
           {badge && revoked === null && (
-            <p className="vf-hint">
+            <p className={cx.hint}>
               {revocations.error || (revocations.data && !revocations.data.ok)
                 ? `Couldn't read the badge revocation history (${revocations.data && !revocations.data.ok ? revocations.data.error : "log read failed"}): verified builders without a badge are held back. The CLI reads the full history: `
                 : "Reading the badge revocation history…"}
@@ -1348,15 +1511,15 @@ function OnboardingSection({
             </p>
           )}
           {queue.revoked.length > 0 && (
-            <div className="adm-excluded">
-              <p className="vf-note">
+            <div className={cx.boxed}>
+              <p className={cx.text}>
                 <b>Not onboarded again:</b> a revoked badge is never re-issued from here. To re-admit a builder, the Safe
                 reactivates it (<code>setActive(id, true)</code>) first.
               </p>
-              <ul className="adm-list">
+              <ul className={cx.rows}>
                 {queue.revoked.map(({ builder: b, reason }) => (
                   <li key={b.id}>
-                    <b>{nameOf(b)}</b> <span className="adm-sub">builder #{b.id} · {reason}</span>
+                    <b>{nameOf(b)}</b> <span className={cx.sub}>builder #{b.id} · {reason}</span>
                   </li>
                 ))}
               </ul>
@@ -1364,7 +1527,8 @@ function OnboardingSection({
           )}
         </>
       )}
-    </Section>
+      </Section>
+    </AdminPage>
   );
 }
 
@@ -1387,20 +1551,23 @@ function BadgeSection({
 
   if (!BUILDERS.badgesOn || !BADGE) {
     return (
-      <Section title="Badge actions">
-        <p className="vf-hint">No Verified Builder Badge on {BUILDERS.label}.</p>
-      </Section>
+      <AdminPage id="badges">
+      <Section>
+        <p className={cx.hint}>No Verified Builder Badge on {BUILDERS.label}.</p>
+        </Section>
+      </AdminPage>
     );
   }
   return (
-    <Section title="Badge actions">
+    <AdminPage id="badges">
+      <Section>
       {!builders ? (
-        <p className="vf-hint">{chainNote}</p>
+        <p className={cx.hint}>{chainNote}</p>
       ) : holders.length === 0 ? (
-        <p className="vf-hint">No badges issued yet.</p>
+        <p className={cx.hint}>No badges issued yet.</p>
       ) : (
-        <div className="adm-table-wrap">
-          <table className="adm-table">
+        <div className={cx.tableWrap}>
+          <table className={cx.table}>
             <thead>
               <tr>
                 <th>Badge</th>
@@ -1426,7 +1593,7 @@ function BadgeSection({
                   </td>
                   <td>{b.badge!.lapsed ? "lapsed" : b.status}</td>
                   <td>
-                    <button type="button" className="vf-mini" onClick={() => setConfirm(b)} disabled={!REG}>
+                    <button type="button" className={cx.miniDanger} onClick={() => setConfirm(b)} disabled={!REG}>
                       Revoke badge
                     </button>
                   </td>
@@ -1437,7 +1604,8 @@ function BadgeSection({
         </div>
       )}
       {confirm && <RevokeDialog b={confirm} name={nameOf(confirm)} onClose={() => setConfirm(null)} />}
-    </Section>
+      </Section>
+    </AdminPage>
   );
 }
 
@@ -1449,25 +1617,25 @@ function RevokeDialog({ b, name, onClose }: { b: GalleryBuilder; name: string; o
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
-    <div className="bld-detail-backdrop" onClick={onClose}>
-      <section role="alertdialog" aria-modal="true" aria-label={`Revoke ${serialLabel(serial)}`} className="bld-detail" onClick={(e) => e.stopPropagation()}>
-        <h2 className="adm-dialog-title">
+    <div className={cx.backdrop} onClick={onClose}>
+      <section role="alertdialog" aria-modal="true" aria-label={`Revoke ${serialLabel(serial)}`} className={cx.dialog} onClick={(e) => e.stopPropagation()}>
+        <h2 className={a.h2}>
           Revoke {serialLabel(serial)} of {name}?
         </h2>
-        <p className="vf-note">
+        <p className={cx.text}>
           <code>revoke({b.id})</code> on the badge contract burns builder #{b.id}&apos;s soulbound badge and retires{" "}
           {serialLabel(serial)} for good, and <code>setActive({b.id}, false)</code> on the registry{" "}
           <b>deactivates builder #{b.id}</b>: it leaves the gallery, can&apos;t add projects, and is never onboarded or
           given a badge again unless the Safe reactivates it.
         </p>
-        <p className="vf-note">
+        <p className={cx.text}>
           Nothing is sent from this page. You download a two-transaction Safe batch (revoke, then deactivate); the
           Safe&apos;s signers decide.
         </p>
-        <div className="adm-actions">
+        <div className={a.actions}>
           <button
             type="button"
-            className="vf-primary"
+            className={cx.danger}
             onClick={() => {
               download(
                 safeFileName(`revoke-badge-${serial}`, Date.now()),
@@ -1478,7 +1646,7 @@ function RevokeDialog({ b, name, onClose }: { b: GalleryBuilder; name: string; o
           >
             Download revoke + deactivate batch
           </button>
-          <button type="button" className="vf-mini" onClick={onClose}>
+          <button type="button" className={a.quiet} onClick={onClose}>
             cancel
           </button>
         </div>
@@ -1519,18 +1687,22 @@ function RecoverySection({
   const [toInput, setToInput] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [finish, setFinish] = useState<{ id?: number; error?: string; hash?: string }>({});
+  useRailBusy("recovery", "finish", finish.id !== undefined);
   const now = useTick();
   const ids = useMemo(() => (builders ?? []).map((b) => b.id), [builders]);
   const pending = useSWR(REG && builders ? ["admin-recoveries", BUILDERS.chainId, REG, ids.join(",")] : null, async () => {
     const client = createPublicClient({ chain: BUILDERS.chain.viemChain, transport: transportFor(BUILDERS.chain, { batch: true }) }) as PublicClient;
     return readRecoveries(client as unknown as GalleryReader, REG!, ids);
   }, { revalidateOnFocus: false });
+  useRailCount("recovery", pending.data?.length);
 
   if (!REG) {
     return (
-      <Section title="Recovery">
-        <p className="vf-hint">No builder registry on {BUILDERS.label}.</p>
-      </Section>
+      <AdminPage id="recovery">
+      <Section>
+        <p className={cx.hint}>No builder registry on {BUILDERS.label}.</p>
+        </Section>
+      </AdminPage>
     );
   }
 
@@ -1572,42 +1744,43 @@ function RecoverySection({
 
   const rows = pending.data ?? [];
   return (
-    <Section title="Recovery">
-      <p className="vf-note">
+    <AdminPage id="recovery">
+      <Section>
+      <p className={cx.text}>
         For a builder who lost their key (or had it stolen): <code>startRecovery(builderId, newOwner)</code> from the Safe. The
         current owner sees a banner on /verify and may cancel it for 7 days; after that anyone can finish it. The new wallet
         must hold no builder. Payouts fall back to the new owner; project proofs must be re-signed with the new wallet and the
         badge synced.
       </p>
-      <div className="adm-inline">
-        <label className="vf-field">
+      <div className={cx.inline}>
+        <label className={cx.field}>
           <span>Builder id</span>
-          <input value={idInput} onChange={(e) => setIdInput(e.target.value)} inputMode="numeric" placeholder="7" />
+          <input className={a.input} value={idInput} onChange={(e) => setIdInput(e.target.value)} inputMode="numeric" placeholder="7" />
           <em>{builders?.find((b) => b.id === Number(idInput)) ? nameOf(builders.find((b) => b.id === Number(idInput))!) : ""}</em>
         </label>
-        <label className="vf-field">
+        <label className={cx.field}>
           <span>New owner</span>
-          <input value={toInput} onChange={(e) => setToInput(e.target.value)} placeholder="0x…" spellCheck={false} autoCapitalize="off" />
+          <input className={a.input} value={toInput} onChange={(e) => setToInput(e.target.value)} placeholder="0x…" spellCheck={false} autoCapitalize="off" />
           <em />
         </label>
-        <button type="button" className="vf-primary" onClick={start} disabled={!idInput.trim() || !toInput.trim()}>
+        <button type="button" className={a.primary} onClick={start} disabled={!idInput.trim() || !toInput.trim()}>
           Download recovery batch
         </button>
       </div>
-      {formError && <p className="vf-error">{formError}</p>}
+      {formError && <p className={cx.error}>{formError}</p>}
 
-      <div className="pp-card-label">Pending recoveries</div>
+      <div className={cx.label}>Pending recoveries</div>
       {!builders ? (
-        <p className="vf-hint">{chainNote}</p>
+        <p className={cx.hint}>{chainNote}</p>
       ) : pending.error ? (
-        <p className="vf-error">Could not read recoveries: {humanizeError(pending.error, HUMAN)}</p>
+        <p className={cx.error}>Could not read recoveries: {humanizeError(pending.error, HUMAN)}</p>
       ) : !pending.data ? (
-        <p className="vf-hint">Reading recoveries…</p>
+        <p className={cx.hint}>Reading recoveries…</p>
       ) : rows.length === 0 ? (
-        <p className="vf-hint">None.</p>
+        <p className={cx.hint}>None.</p>
       ) : (
-        <div className="adm-table-wrap">
-          <table className="adm-table">
+        <div className={cx.tableWrap}>
+          <table className={cx.table}>
             <thead>
               <tr>
                 <th>Builder</th>
@@ -1624,7 +1797,7 @@ function RecoverySection({
                   <tr key={r.builderId}>
                     <td>
                       <b>{b ? nameOf(b) : `Builder #${r.builderId}`}</b>
-                      <span className="adm-sub">#{r.builderId}{b ? ` · owner ${shortAddr(b.owner)}` : ""}</span>
+                      <span className={cx.sub}>#{r.builderId}{b ? ` · owner ${shortAddr(b.owner)}` : ""}</span>
                     </td>
                     <td>
                       <a href={`${BUILDERS.explorer.url}/address/${r.newOwner}`} target="_blank" rel="noreferrer">
@@ -1633,14 +1806,14 @@ function RecoverySection({
                     </td>
                     <td className="tnum">
                       {v.kind === "waiting" ? `in ${formatCountdown(v.secondsLeft)}` : "ready"}
-                      <span className="adm-sub">{utcMinute(r.readyAt)}</span>
+                      <span className={cx.sub}>{utcMinute(r.readyAt)}</span>
                     </td>
                     <td>
-                      <span className="adm-actions">
+                      <span className={cx.rowActions}>
                         {v.kind === "ready" && (
                           <button
                             type="button"
-                            className="vf-mini vf-mini-strong"
+                            className={cx.miniGo}
                             disabled={!address || finish.id === r.builderId}
                             title={address ? "finishRecovery: anyone may send it" : "connect a wallet to send it"}
                             onClick={() => finishRecovery(r)}
@@ -1650,7 +1823,7 @@ function RecoverySection({
                         )}
                         <button
                           type="button"
-                          className="vf-mini"
+                          className={cx.mini}
                           onClick={() =>
                             download(
                               safeFileName(`cancel-recovery-builder-${r.builderId}`, Date.now()),
@@ -1669,13 +1842,14 @@ function RecoverySection({
           </table>
         </div>
       )}
-      {finish.error && <p className="vf-error">{finish.error}</p>}
+      {finish.error && <p className={cx.error}>{finish.error}</p>}
       {finish.hash && (
-        <a className="vf-link" href={`${BUILDERS.explorer.url}/tx/${finish.hash}`} target="_blank" rel="noreferrer">
+        <a href={`${BUILDERS.explorer.url}/tx/${finish.hash}`} target="_blank" rel="noreferrer">
           view transaction ↗
         </a>
       )}
-    </Section>
+      </Section>
+    </AdminPage>
   );
 }
 
@@ -1700,27 +1874,28 @@ function ProjectsSection({
   }, [builders, query, nameOf]);
   if (!REG) return null;
   return (
-    <Section
-      title="Projects"
+    <AdminPage
+      id="projects"
       aside={
-        <label className="bld-search">
+        <label className={cx.search}>
           <span className="sr-only">Filter projects</span>
-          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="filter: source, #id, name" spellCheck={false} />
+          <input className={a.input} type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="filter: source, #id, name" spellCheck={false} />
         </label>
       }
     >
-      <p className="vf-note">
+      <Section>
+      <p className={cx.text}>
         Active projects on {BUILDERS.label}. <b>Deactivate</b> downloads a one-transaction Safe batch,{" "}
         <code>setProjectActive(projectId, false)</code> (e.g. a fraudulent claim). The project keeps its id and history; the
         builder&apos;s status follows at the next read.
       </p>
       {!builders ? (
-        <p className="vf-hint">{chainNote}</p>
+        <p className={cx.hint}>{chainNote}</p>
       ) : rows.length === 0 ? (
-        <p className="vf-hint">{query ? "Nothing matches." : "No active projects."}</p>
+        <p className={cx.hint}>{query ? "Nothing matches." : "No active projects."}</p>
       ) : (
-        <div className="adm-table-wrap">
-          <table className="adm-table">
+        <div className={cx.tableWrap}>
+          <table className={cx.table}>
             <thead>
               <tr>
                 <th>Project</th>
@@ -1736,17 +1911,17 @@ function ProjectsSection({
                     <a href={sourceHref(p.source)} target="_blank" rel="noreferrer">
                       {sourceLabel(p.source)} ↗
                     </a>
-                    <span className="adm-sub">project #{p.id}</span>
+                    <span className={cx.sub}>project #{p.id}</span>
                   </td>
                   <td>
                     <b>{nameOf(b)}</b>
-                    <span className="adm-sub">#{b.id}</span>
+                    <span className={cx.sub}>#{b.id}</span>
                   </td>
                   <td>{projectChipKind(p, b) ?? "inactive"}</td>
                   <td>
                     <button
                       type="button"
-                      className="vf-mini"
+                      className={cx.miniDanger}
                       onClick={() => {
                         if (!window.confirm(`Download a Safe batch deactivating project #${p.id} (${p.source}) of builder #${b.id}?`)) return;
                         download(
@@ -1764,11 +1939,15 @@ function ProjectsSection({
           </table>
         </div>
       )}
-    </Section>
+      </Section>
+    </AdminPage>
   );
 }
 
 // ───────────────────────────── on-chain nominations ─────────────────────────────
+
+/** The drafts list shows this many until "Show all" (the live KV holds two dozen). */
+const DRAFTS_SHOWN = 8;
 
 /** arc-80's prepared drafts: review, then Invite → Save profile → Nominate, each once the step before is done. */
 function DraftsTable({
@@ -1802,6 +1981,7 @@ function DraftsTable({
     return out;
   }, { revalidateOnFocus: false, shouldRetryOnError: false });
   const [open, setOpen] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
 
@@ -1836,8 +2016,6 @@ function DraftsTable({
     await drafts.mutate();
   }
 
-  if (drafts.error) return <p className="vf-error">Could not read the drafts: {(drafts.error as Error).message}</p>;
-  if (!drafts.data) return <p className="vf-hint">Reading drafts…</p>;
   // A verified builder's project (from the chain) only needs its profile saved.
   const stepOf = (d: NominationDraft) => {
     const n = nominations?.get(d.source);
@@ -1849,13 +2027,16 @@ function DraftsTable({
       anchored: Boolean(n?.active && p && n.profileHash === profileHash(p)),
     });
   };
-  const pending = drafts.data.filter((d) => !stepOf(d).done);
-  if (!pending.length) return <p className="vf-hint">No drafts waiting. New ones appear here once the investigation hands them over.</p>;
+  const pending = drafts.data ? drafts.data.filter((d) => !stepOf(d).done) : null;
+  useRailCount("nominations", pending?.length);
+
+  if (drafts.error) return <p className={cx.error}>Could not read the drafts: {(drafts.error as Error).message}</p>;
+  if (!drafts.data) return <p className={cx.hint}>Reading drafts…</p>;
+  if (!pending?.length) return <p className={cx.hint}>No drafts waiting. New ones appear here once the investigation hands them over.</p>;
   return (
-    <div className="adm-drafts">
-      <h3>Drafts to review and sign</h3>
-      <ul className="adm-list">
-        {pending.map((d) => {
+    <div className={cx.drafts}>
+      <ul className={cx.rows}>
+        {(showAll ? pending : pending.slice(0, DRAFTS_SHOWN)).map((d) => {
           const step = stepOf(d);
           const p = saved.data?.get(d.source);
           const n = nominations?.get(d.source);
@@ -1863,11 +2044,11 @@ function DraftsTable({
           const verified = step.label === "save profile";
           const expanded = open === d.source;
           return (
-            <li key={d.source} className={hold ? "adm-muted" : undefined}>
-              <b>{d.invite.name}</b> <span className="adm-sub">{sourceLabel(d.source)}</span>{" "}
-              <span className="bld-chip" data-kind={hold ? "lapsed" : "verified"}>{step.label}</span>
-              <div className="adm-sub">{d.summary}</div>
-              <div className="adm-sub">
+            <li key={d.source} className={hold ? cx.muted : undefined}>
+              <b>{d.invite.name}</b> <span className={cx.sub}>{sourceLabel(d.source)}</span>{" "}
+              <span className={cx.chip} data-kind={hold ? "lapsed" : "verified"}>{step.label}</span>
+              <div className={cx.sub}>{d.summary}</div>
+              <div className={cx.sub}>
                 {verified
                   ? `verified builder: saving its profile is all it needs · ${p ? "✓ profile saved" : "profile not saved"}`
                   : <>
@@ -1875,29 +2056,36 @@ function DraftsTable({
                       {n?.active ? (p && n.profileHash === profileHash(p) ? "✓ nominated" : "nominated (profile not anchored: re-nominate)") : "not nominated"}
                     </>}
               </div>
-              <span className="flex flex-wrap gap-2">
-                <button type="button" className="vf-mini" onClick={() => setOpen(expanded ? null : d.source)}>{expanded ? "hide details" : "details"}</button>
+              <span className={cx.rowActions}>
+                <button type="button" className={cx.mini} onClick={() => setOpen(expanded ? null : d.source)}>{expanded ? "hide details" : "details"}</button>
                 {view.inviteForm && step.actions.includes("invite") && (
-                  <button type="button" className="vf-mini" disabled={working !== null} onClick={() => void invite(d)}>{working === d.source ? "…" : "Invite"}</button>
+                  <button type="button" className={cx.mini} disabled={working !== null} onClick={() => void invite(d)}>{working === d.source ? "…" : "Invite"}</button>
                 )}
                 {view.inviteForm && step.actions.includes("save") && (
-                  <button type="button" className="vf-mini" disabled={working !== null} onClick={() => void save(d)}>{working === d.source ? "…" : p ? "Save profile again" : "Save profile"}</button>
+                  <button type="button" className={cx.mini} disabled={working !== null} onClick={() => void save(d)}>{working === d.source ? "…" : p ? "Save profile again" : "Save profile"}</button>
                 )}
                 {step.actions.includes("nominate") && (
-                  <button type="button" className="vf-mini" disabled={busy} onClick={() => onNominate(d.source)}>{n?.active ? "Re-nominate" : "Nominate"}</button>
+                  <button type="button" className={cx.miniGo} disabled={busy} onClick={() => onNominate(d.source)}>{n?.active ? "Re-nominate" : "Nominate"}</button>
                 )}
                 {view.safeFiles && step.actions.includes("nominate") && (
-                  <button type="button" className="vf-mini" onClick={() => onSafeFile(d.source)}>Safe file</button>
+                  <button type="button" className={cx.mini} onClick={() => onSafeFile(d.source)}>Safe file</button>
                 )}
-                {view.inviteForm && <button type="button" className="vf-mini" onClick={() => void dismiss(d)}>drop</button>}
+                {view.inviteForm && <button type="button" className={cx.miniDanger} onClick={() => void dismiss(d)}>drop</button>}
               </span>
               {expanded && <DraftDetails d={d} />}
             </li>
           );
         })}
       </ul>
-      {msg.ok && <p className="vf-ok">{msg.ok}</p>}
-      {msg.error && <p className="vf-error">{msg.error}</p>}
+      {pending.length > DRAFTS_SHOWN && (
+        <div>
+          <button type="button" className={cx.mini} aria-expanded={showAll} onClick={() => setShowAll((v) => !v)}>
+            {showAll ? `Show the first ${DRAFTS_SHOWN}` : `Show all ${pending.length} drafts`}
+          </button>
+        </div>
+      )}
+      {msg.ok && <p className={cx.ok}>{msg.ok}</p>}
+      {msg.error && <p className={cx.error}>{msg.error}</p>}
     </div>
   );
 }
@@ -1906,7 +2094,7 @@ function DraftDetails({ d }: { d: NominationDraft }) {
   const pr = d.profile;
   const addr = (a: string) => <a href={`${BUILDERS.explorer.url.replace(/\/$/, "")}/address/${a}`} target="_blank" rel="noreferrer">{shortAddr(a)}</a>;
   return (
-    <div className="adm-sub">
+    <div className={cx.draftDetails}>
       <p>
         <a href={pr.website} target="_blank" rel="noreferrer">{pr.website} ↗</a>
         {pr.x && <> · <a href={xHref(pr.x)} target="_blank" rel="noreferrer">{pr.x}{pr.xChecked ? " ✓" : ""} ↗</a></>}
@@ -1917,7 +2105,7 @@ function DraftDetails({ d }: { d: NominationDraft }) {
       {pr.contracts.length > 0 && <p>Contracts: {pr.contracts.map((x, i) => <span key={x.address}>{i ? ", " : ""}{x.label} {addr(x.address)}</span>)}</p>}
       {pr.token && <p>Token: {addr(pr.token.address)}{pr.token.note ? ` (${pr.token.note})` : ""}</p>}
       <p>Metrics: {pr.metrics.length ? pr.metrics.join(", ") : "none"}</p>
-      {pr.redFlags?.length ? <p className="vf-error">Red flags: {pr.redFlags.join("; ")}</p> : null}
+      {pr.redFlags?.length ? <p className={cx.error}>Red flags: {pr.redFlags.join("; ")}</p> : null}
     </div>
   );
 }
@@ -1932,6 +2120,7 @@ function NominationsSection({ invites, onInvitesChanged, builders }: { invites: 
   const [input, setInput] = useState("");
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
   const [busy, setBusy] = useState(false);
+  useRailBusy("nominations", "send", busy);
   const invited = useMemo(() => new Set(invites.map((i) => i.source)), [invites]);
   const list = useSWR(
     ["admin-nominations", contract],
@@ -1978,7 +2167,8 @@ function NominationsSection({ invites, onInvitesChanged, builders }: { invites: 
 
   const rows = [...(list.data ?? new Map<string, Nomination>()).entries()];
   return (
-    <Section title="Nominate on chain">
+    <AdminPage id="nominations">
+      <Section title="Drafts to review and sign">
       <DraftsTable
         invited={invited}
         builders={builders}
@@ -1996,14 +2186,16 @@ function NominationsSection({ invites, onInvitesChanged, builders }: { invites: 
         }}
         busy={busy}
       />
-      <p className="vf-note">
+      </Section>
+      <Section title="Nominate on chain">
+      <p className={cx.text}>
         Anchor an invited project as <b>nominated</b> on {BUILDERS.label} (ProjectNominations): the onboarder wallet or the Safe.
         It records the project and a fingerprint of its saved profile; the gallery links to it. No funds, no markets yet.
       </p>
-      <div className="adm-inline">
-        <label className="vf-field">
+      <div className={cx.inline}>
+        <label className={cx.field}>
           <span>Invited project</span>
-          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="github:owner/repo or domain" spellCheck={false} autoCapitalize="off" list="adm-invited-sources" />
+          <input className={a.input} value={input} onChange={(e) => setInput(e.target.value)} placeholder="github:owner/repo or domain" spellCheck={false} autoCapitalize="off" list="adm-invited-sources" />
           <em />
         </label>
         <datalist id="adm-invited-sources">
@@ -2011,24 +2203,25 @@ function NominationsSection({ invites, onInvitesChanged, builders }: { invites: 
             <option key={src} value={src} />
           ))}
         </datalist>
-        <button type="button" className="vf-primary" onClick={() => void act(true, "wallet")} disabled={busy || !input.trim()}>{busy ? "Sending…" : "Nominate"}</button>
-        <button type="button" onClick={() => void act(false, "wallet")} disabled={busy || !input.trim()}>Un-nominate</button>
-        {view.safeFiles && <button type="button" onClick={() => void act(true, "safe")} disabled={!input.trim()}>Safe file: nominate</button>}
+        <button type="button" className={a.approve} onClick={() => void act(true, "wallet")} disabled={busy || !input.trim()}>{busy ? "Sending…" : "Nominate"}</button>
+        <button type="button" className={a.approveOutline} onClick={() => void act(false, "wallet")} disabled={busy || !input.trim()}>Un-nominate</button>
+        {view.safeFiles && <button type="button" className={a.quiet} onClick={() => void act(true, "safe")} disabled={!input.trim()}>Safe file: nominate</button>}
       </div>
-      {msg.ok && <p className="vf-ok">{msg.ok}</p>}
-      {msg.error && <p className="vf-error">{msg.error}</p>}
+      {msg.ok && <p className={cx.ok}>{msg.ok}</p>}
+      {msg.error && <p className={cx.error}>{msg.error}</p>}
+      <div className={cx.label}>On chain</div>
       {list.error ? (
-        <p className="vf-error">Could not read the nominations: {humanizeError(list.error, HUMAN)}</p>
+        <p className={cx.error}>Could not read the nominations: {humanizeError(list.error, HUMAN)}</p>
       ) : !list.data ? (
-        <p className="vf-hint">Reading nominations…</p>
+        <p className={cx.hint}>Reading nominations…</p>
       ) : rows.length === 0 ? (
-        <p className="vf-hint">No project nominated on chain yet.</p>
+        <p className={cx.hint}>No project nominated on chain yet.</p>
       ) : (
-        <ul className="adm-list">
+        <ul className={cx.rows}>
           {rows.map(([src, n]) => (
             <li key={src}>
               <b>{sourceLabel(src)}</b>{" "}
-              <span className="adm-sub">
+              <span className={cx.sub}>
                 {n.active ? "nominated" : "withdrawn"} · {new Date(n.at * 1000).toISOString().slice(0, 10)} by {shortAddr(n.by)}
                 {n.profileHash !== profileHash(null) ? " · profile anchored" : " · no profile anchored"}
               </span>
@@ -2036,7 +2229,8 @@ function NominationsSection({ invites, onInvitesChanged, builders }: { invites: 
           ))}
         </ul>
       )}
-    </Section>
+      </Section>
+    </AdminPage>
   );
 }
 
@@ -2048,6 +2242,7 @@ function WonderSection({ invites }: { invites: AdminInvite[] }) {
   const [input, setInput] = useState("");
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
   const [busy, setBusy] = useState(false);
+  useRailBusy("wonder", "send", busy);
   const invited = useMemo(() => new Set(invites.map((i) => i.source)), [invites]);
   const sources = useMemo(() => [...invited], [invited]);
   const wonder = useWonderContext();
@@ -2091,44 +2286,45 @@ function WonderSection({ invites }: { invites: AdminInvite[] }) {
     .map((s) => ({ s, st: wonder.status[s] }))
     .filter((r) => r.st && (r.st.nominated || r.st.escrow > 0n || r.st.pending || r.st.releasedTo));
   return (
-    <Section title="Wonder markets">
-      <p className="vf-note">
+    <AdminPage id="wonder">
+      <Section>
+      <p className={cx.text}>
         Nominate an invited project to open wonder markets on it (the onboarder wallet or the Safe). Un-nominate when a
         team opts out: no new wonder markets; existing ones settle and their escrow expires 90% to the season pool, 10% to the treasury. The
         keeper queues a release once the team&apos;s claim has held three checks; cancel a wrong one here within 7 days.
       </p>
-      <div className="adm-inline">
-        <label className="vf-field">
+      <div className={cx.inline}>
+        <label className={cx.field}>
           <span>Invited project</span>
-          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="github:owner/repo or domain" spellCheck={false} autoCapitalize="off" />
+          <input className={a.input} value={input} onChange={(e) => setInput(e.target.value)} placeholder="github:owner/repo or domain" spellCheck={false} autoCapitalize="off" />
           <em />
         </label>
-        <button type="button" className="vf-primary" onClick={() => act(true, "wallet")} disabled={busy || !input.trim()}>{busy ? "Sending…" : "Nominate"}</button>
-        <button type="button" onClick={() => act(false, "wallet")} disabled={busy || !input.trim()}>Un-nominate</button>
-        <button type="button" onClick={() => act(true, "safe")} disabled={!input.trim()}>Safe file: nominate</button>
-        <button type="button" onClick={() => act(false, "safe")} disabled={!input.trim()}>Safe file: un-nominate</button>
+        <button type="button" className={a.approve} onClick={() => act(true, "wallet")} disabled={busy || !input.trim()}>{busy ? "Sending…" : "Nominate"}</button>
+        <button type="button" className={a.approveOutline} onClick={() => act(false, "wallet")} disabled={busy || !input.trim()}>Un-nominate</button>
+        <button type="button" className={a.quiet} onClick={() => act(true, "safe")} disabled={!input.trim()}>Safe file: nominate</button>
+        <button type="button" className={a.quiet} onClick={() => act(false, "safe")} disabled={!input.trim()}>Safe file: un-nominate</button>
       </div>
-      {msg.ok && <p className="vf-ok">{msg.ok}</p>}
-      {msg.error && <p className="vf-error">{msg.error}</p>}
+      {msg.ok && <p className={cx.ok}>{msg.ok}</p>}
+      {msg.error && <p className={cx.error}>{msg.error}</p>}
 
-      <div className="pp-card-label">Escrow</div>
+      <div className={cx.label}>Escrow</div>
       {rows.length === 0 ? (
-        <p className="vf-hint">No nominated project, no escrow.</p>
+        <p className={cx.hint}>No nominated project, no escrow.</p>
       ) : (
-        <div className="adm-table-wrap">
-          <table className="adm-table">
+        <div className={cx.tableWrap}>
+          <table className={cx.table}>
             <thead><tr><th>Project</th><th>Nominated</th><th>Escrow</th><th /></tr></thead>
             <tbody>
               {rows.map(({ s, st }) => {
                 const v = wonder.expiry !== null ? releaseView(st!, now, wonder.expiry) : null;
                 return (
                   <tr key={s}>
-                    <td><b>{sourceLabel(s)}</b><span className="adm-sub">{s}</span></td>
+                    <td><b>{sourceLabel(s)}</b><span className={cx.sub}>{s}</span></td>
                     <td>{st!.nominated ? "yes" : "no"}</td>
                     <td>{v?.line ?? usd(st!.escrow)}</td>
                     <td>
                       {st!.pending && (
-                        <button type="button" onClick={() => download(safeFileName(`cancel-release-${s.replace(/[^a-z0-9]+/g, "-")}`, Date.now()),
+                        <button type="button" className={cx.mini} onClick={() => download(safeFileName(`cancel-release-${s.replace(/[^a-z0-9]+/g, "-")}`, Date.now()),
                           cancelReleaseSafeFile({ escrow: w.escrow, source: s, chainId: BUILDERS.chainId, createdAt: Date.now() }))}>
                           Safe file: cancel release
                         </button>
@@ -2141,6 +2337,7 @@ function WonderSection({ invites }: { invites: AdminInvite[] }) {
           </table>
         </div>
       )}
-    </Section>
+      </Section>
+    </AdminPage>
   );
 }

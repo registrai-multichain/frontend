@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { useWallet } from "@/components/WalletProvider";
-import { newsreader } from "@/components/proposals/fonts";
-import { ADMIN_SERVICE, type AdminRole } from "@/lib/builders-admin";
+import { ADMIN_SERVICE, adminView, type AdminRole } from "@/lib/builders-admin";
+import { adminNav, adminSections, signedOutSections } from "@/lib/admin-sections";
 import { shortAddr } from "@/lib/format";
 import { humanizeError } from "@/lib/humanize-error";
 import { activeProvider } from "@/lib/wallets";
@@ -20,7 +20,13 @@ import {
 } from "@/lib/proposals-admin";
 import { statusHref } from "@/lib/propose-form";
 import mainnetRounds from "@/lib/deployments/arc-mainnet-rounds.json";
-import s from "./proposals-admin.module.css";
+import { AdminShell, type AdminNavItem } from "./AdminShell";
+import { ADMIN_DEPLOYMENT } from "./deployment";
+import a from "./admin.module.css";
+import pa from "./proposals-admin.module.css";
+
+/** The shared primitives (admin.module.css) and this page's layout: no class name is in both. */
+const s = { ...a, ...pa };
 
 /**
  * builder.registrai.cc/admin/proposals: review, edit, approve (an EIP-712
@@ -213,122 +219,106 @@ export function ProposalsAdmin() {
   }, [signOut]);
 
   return (
-    <div className={`${s.shell} ${newsreader.variable}`}>
-      <nav className={s.rail} aria-label="Admin">
-        <div className={s.brand}>Registrai admin</div>
-        <a className={s.navLink} href="/admin/#invites">Invites</a>
-        <a className={s.navLink} href="/admin/#register-requests">Register requests</a>
-        <a className={s.navLink} href="/admin/#suggestions">Project suggestions</a>
-        <a className={s.navActive} href="/admin/proposals/" aria-current="page">
-          Market proposals {list.data && <span className={s.badge}>{counts.pending}</span>}
-        </a>
-        <div className={s.spacer} />
-        <div className={s.who}>
-          {admin ? (
-            <>
-              Signed in as <br />
-              <span className={s.mono}>{shortAddr(admin).toLowerCase()}</span> · {role}
-            </>
-          ) : (
-            "Not signed in"
-          )}
-        </div>
-      </nav>
-
-      <main className={s.main}>
-        <div className={s.head}>
-          <div>
-            <h1 className={s.h1}>Market proposals</h1>
-            <p className={s.sub}>
-              Approving signs the exact market with your admin wallet; the agent opens only markets carrying a valid admin
-              signature.
-            </p>
-          </div>
-          {admin && (
-            <div className={s.pills} role="group" aria-label="Filter">
-              {FILTERS.map((f) => (
-                <button key={f.id} type="button" className={s.pill} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
-                  {f.label}
-                  {f.count && list.data ? ` ${counts[f.id]}` : ""}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {notice && (
-          <p className={s.notice} role="status">
-            {notice}
+    <AdminShell nav={proposalsNav(admin ? role : null, list.data ? counts.pending : null)} active="proposals" who={admin ? { address: admin, role } : null}>
+      <div className={s.head}>
+        <div>
+          <h1 className={s.h1}>Market proposals</h1>
+          <p className={s.sub}>
+            Approving signs the exact market with your admin wallet; the agent opens only markets carrying a valid admin
+            signature.
           </p>
+        </div>
+        {admin && (
+          <div className={s.pills} role="group" aria-label="Filter">
+            {FILTERS.map((f) => (
+              <button key={f.id} type="button" className={s.pill} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
+                {f.label}
+                {f.count && list.data ? ` ${counts[f.id]}` : ""}
+              </button>
+            ))}
+          </div>
         )}
+      </div>
 
-        {api.state === "checking" && <p className={s.state}>Checking the admin API…</p>}
-        {api.state === "unavailable" && (
-          <div className={s.stateBox}>
-            <h2 className={s.stateTitle}>Admin runs on builder.registrai.cc</h2>
-            <p className={s.state}>
-              <a href={`${BUILDERS_SITE}/admin/proposals/`}>Open builder.registrai.cc/admin/proposals →</a>
-            </p>
-          </div>
-        )}
-        {api.state === "ready" && !admin && (
-          <div className={s.stateBox}>
-            <h2 className={s.stateTitle}>Sign in on /admin first</h2>
-            <p className={s.state}>
-              Proposals are behind the admin session. <a href="/admin/">Sign in on /admin</a>, then come back here.
-            </p>
-          </div>
-        )}
-        {admin && list.error && !(list.error instanceof SignedOut) && (
-          <p className={s.error} role="alert">
-            Could not load proposals: {(list.error as Error).message}{" "}
-            <button type="button" className={s.quiet} onClick={() => list.mutate()}>
-              Try again
-            </button>
+      {notice && (
+        <p className={s.notice} role="status">
+          {notice}
+        </p>
+      )}
+
+      {api.state === "checking" && <p className={s.state}>Checking the admin API…</p>}
+      {api.state === "unavailable" && (
+        <div className={s.stateBox}>
+          <h2 className={s.stateTitle}>Admin runs on builder.registrai.cc</h2>
+          <p className={s.state}>
+            <a href={`${BUILDERS_SITE}/admin/proposals/`}>Open builder.registrai.cc/admin/proposals →</a>
           </p>
-        )}
-        {admin && !list.data && !list.error && <p className={s.state}>Loading proposals…</p>}
+        </div>
+      )}
+      {api.state === "ready" && !admin && (
+        <div className={s.stateBox}>
+          <h2 className={s.stateTitle}>Sign in on /admin first</h2>
+          <p className={s.state}>
+            Proposals are behind the admin session. <a href="/admin/">Sign in on /admin</a>, then come back here.
+          </p>
+        </div>
+      )}
+      {admin && list.error && !(list.error instanceof SignedOut) && (
+        <p className={s.error} role="alert">
+          Could not load proposals: {(list.error as Error).message}{" "}
+          <button type="button" className={s.quiet} onClick={() => list.mutate()}>
+            Try again
+          </button>
+        </p>
+      )}
+      {admin && !list.data && !list.error && <p className={s.state}>Loading proposals…</p>}
 
-        {admin && list.data && (
-          <div className={s.grid}>
-            <section className={s.list} aria-label={`${FILTERS.find((f) => f.id === filter)?.label} proposals`}>
-              {shown.length === 0 && <p className={s.empty}>No {filter === "queued" ? "phase 2" : filter} proposals.</p>}
-              {shown.map((p) => (
-                <ProposalCard
-                  key={p.id}
-                  p={p}
-                  all={all}
-                  now={now}
-                  selected={selected?.id === p.id}
-                  onSelect={() => {
-                    setSelectedId(p.id);
-                    setNotice(null);
-                  }}
-                />
-              ))}
+      {admin && list.data && (
+        <div className={s.grid}>
+          <section className={s.list} aria-label={`${FILTERS.find((f) => f.id === filter)?.label} proposals`}>
+            {shown.length === 0 && <p className={s.empty}>No {filter === "queued" ? "phase 2" : filter} proposals.</p>}
+            {shown.map((p) => (
+              <ProposalCard
+                key={p.id}
+                p={p}
+                all={all}
+                now={now}
+                selected={selected?.id === p.id}
+                onSelect={() => {
+                  setSelectedId(p.id);
+                  setNotice(null);
+                }}
+              />
+            ))}
+          </section>
+          {selected && detail.data?.id === selected.id && (
+            <Detail key={selected.id} p={detail.data} all={all} now={now} admin={admin} role={role} nonces={nonces} onDone={done} onFailed={failed} />
+          )}
+          {selected && detail.data?.id !== selected.id && (
+            <section className={s.detail} aria-label="Proposal detail">
+              {detail.error && !(detail.error instanceof SignedOut) ? (
+                <p className={s.error} role="alert">
+                  Could not load {selected.id}: {(detail.error as Error).message}{" "}
+                  <button type="button" className={s.quiet} onClick={() => detail.mutate()}>
+                    Try again
+                  </button>
+                </p>
+              ) : (
+                <p className={s.state}>Loading {selected.id}…</p>
+              )}
             </section>
-            {selected && detail.data?.id === selected.id && (
-              <Detail key={selected.id} p={detail.data} all={all} now={now} admin={admin} role={role} nonces={nonces} onDone={done} onFailed={failed} />
-            )}
-            {selected && detail.data?.id !== selected.id && (
-              <section className={s.detail} aria-label="Proposal detail">
-                {detail.error && !(detail.error instanceof SignedOut) ? (
-                  <p className={s.error} role="alert">
-                    Could not load {selected.id}: {(detail.error as Error).message}{" "}
-                    <button type="button" className={s.quiet} onClick={() => detail.mutate()}>
-                      Try again
-                    </button>
-                  </p>
-                ) : (
-                  <p className={s.state}>Loading {selected.id}…</p>
-                )}
-              </section>
-            )}
-          </div>
-        )}
-      </main>
-    </div>
+          )}
+        </div>
+      )}
+    </AdminShell>
   );
+}
+
+/** The admin rail: the /admin sections this session sees (links into /admin), then this page. */
+function proposalsNav(role: AdminRole | null, pending: number | null): AdminNavItem[] {
+  // Signed out (role unknown): only the sections every role has.
+  const sections = role ? adminSections(adminView(role), ADMIN_DEPLOYMENT) : signedOutSections(ADMIN_DEPLOYMENT, adminView("onboarder"));
+  return adminNav(sections, "/admin/", { proposals: pending });
 }
 
 function liveMatchOf(p: Pick<Proposal, "question">): string | null {
@@ -701,7 +691,7 @@ function Tile({ label, value, mono }: { label: string; value: string; mono?: boo
   return (
     <div className={s.tile}>
       <div className={s.tileLabel}>{label}</div>
-      <div className={`${s.tileValue} ${mono ? s.mono : ""}`}>{value}</div>
+      <div className={`${s.tileValue} ${mono ? `${s.mono} ${s.tileMono}` : ""}`}>{value}</div>
     </div>
   );
 }

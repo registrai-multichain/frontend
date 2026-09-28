@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { BuildersShell } from "@/components/BuildersShell";
 import { AdminApp } from "@/components/admin/AdminApp";
 import live from "@/lib/live-data.json";
 
@@ -14,14 +13,9 @@ export const metadata: Metadata = {
  * page is static; everything behind it is the session-gated API of the
  * builders-site Pages Functions (builders-site/functions), which exists only on
  * builder.registrai.cc. Anywhere else (registrai.cc, a local static build) it
- * only says where admin runs.
+ * only says where admin runs. Its own chrome (AdminShell: the left rail, one
+ * section at a time by the URL hash), shared with /admin/proposals.
  */
 export default function AdminPage() {
-  return (
-    <BuildersShell wallet>
-      <article className="perennial-app-page">
-        <AdminApp revocationCheckpoint={(live as { revocations?: unknown }).revocations ?? null} />
-      </article>
-    </BuildersShell>
-  );
+  return <AdminApp revocationCheckpoint={(live as { revocations?: unknown }).revocations ?? null} />;
 }
