@@ -25,6 +25,8 @@ export interface AdminSection {
   title: string;
   /** One line under the heading. */
   lede: string;
+  /** The line for a session that cannot act here (an onboarder: no invites, no dismissing). */
+  ledeReadOnly?: string;
 }
 
 export const ADMIN_SECTIONS: readonly AdminSection[] = [
@@ -33,6 +35,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     label: "Invites",
     title: "Invites",
     lede: "Invite a project, send its claim link, and follow up until it is claimed.",
+    ledeReadOnly: "Invited projects, their claim links, and who opened and claimed them.",
   },
   {
     id: "register-requests",
@@ -45,6 +48,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     label: "Project suggestions",
     title: "Project suggestions",
     lede: "What the public suggested at /suggest: invite it or dismiss it.",
+    ledeReadOnly: "What the public suggested at /suggest, with its social proof.",
   },
   {
     id: "onboarding",
@@ -99,6 +103,19 @@ export function adminSections(view: AdminView, has: AdminDeployment): AdminSecti
   return ADMIN_SECTIONS.filter((s) => shown[s.id]);
 }
 
+/** The lede for this session: the read-only wording where the role cannot invite. */
+export function sectionLede(s: Pick<AdminSection, "lede" | "ledeReadOnly">, view: Pick<AdminView, "inviteForm">): string {
+  return !view.inviteForm && s.ledeReadOnly ? s.ledeReadOnly : s.lede;
+}
+
+/**
+ * Before sign-in the role is unknown: the rail lists only the sections every role has
+ * (an admin's sections include an onboarder's), never the admin-only ones.
+ */
+export function signedOutSections(has: AdminDeployment, onboarderView: AdminView): AdminSection[] {
+  return adminSections(onboarderView, has);
+}
+
 /** "#badges" → "badges" when the session has it; anything else → the first section (Invites). */
 export function sectionFromHash(hash: string, available: readonly Pick<AdminSection, "id">[]): AdminSectionId {
   const id = decodeURIComponent(hash.replace(/^#/, "")).trim().toLowerCase();
@@ -112,9 +129,18 @@ export function adminNav(
   sections: readonly AdminSection[],
   base: "" | "/admin/",
   counts: Partial<Record<AdminSectionId | "proposals", number | null>> = {},
-): { key: string; label: string; href: string; count?: number | null }[] {
+  busy: ReadonlySet<string> = new Set(),
+): { key: string; label: string; href: string; count?: number | null; busy?: boolean; current?: "page" | "location" }[] {
   return [
-    ...sections.map((s) => ({ key: s.id, label: s.label, href: `${base}#${s.id}`, count: counts[s.id] ?? null })),
-    { key: "proposals", label: "Market proposals", href: PROPOSALS_HREF, count: counts.proposals ?? null },
+    // On /admin a section is a place in the page (aria-current="location"); from elsewhere it is a page.
+    ...sections.map((s) => ({
+      key: s.id,
+      label: s.label,
+      href: `${base}#${s.id}`,
+      count: counts[s.id] ?? null,
+      busy: busy.has(s.id),
+      current: base === "" ? ("location" as const) : ("page" as const),
+    })),
+    { key: "proposals", label: "Market proposals", href: PROPOSALS_HREF, count: counts.proposals ?? null, busy: false, current: "page" as const },
   ];
 }

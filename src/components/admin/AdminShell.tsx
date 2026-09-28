@@ -10,6 +10,10 @@ export interface AdminNavItem {
   label: string;
   href: string;
   count?: number | null;
+  /** Something is in progress in this section (a send, a batch of transactions): a dot and "working". */
+  busy?: boolean;
+  /** aria-current when active: "page" (default) or "location" (a section of the same page). */
+  current?: "page" | "location";
 }
 
 /**
@@ -35,18 +39,25 @@ export function AdminShell({
     <div className={`${a.shell} ${newsreader.variable}`}>
       <nav className={a.rail} aria-label="Admin">
         <div className={a.brand}>Registrai admin</div>
-        {nav.map((i) =>
-          i.key === active ? (
-            <a key={i.key} className={a.navActive} href={i.href} aria-current="page">
-              {i.label} {i.count != null && <span className={a.badge}>{i.count}</span>}
+        {nav.map((i) => {
+          const working = i.busy ? (
+            <span className={a.working}>
+              <i aria-hidden="true" /> working
+            </span>
+          ) : null;
+          return i.key === active ? (
+            <a key={i.key} className={a.navActive} href={i.href} aria-current={i.current ?? "page"}>
+              {i.label} {working}
+              {i.count != null && <span className={a.badge}>{i.count}</span>}
             </a>
           ) : (
             <a key={i.key} className={a.navLink} href={i.href}>
               {i.label}
+              {working}
               {i.count != null && <span className={a.badge}>{i.count}</span>}
             </a>
-          ),
-        )}
+          );
+        })}
         <div className={a.spacer} />
         <div className={a.who}>
           {who ? (

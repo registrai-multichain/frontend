@@ -45,7 +45,21 @@ const FALLBACK = {
   "admin-invites": [
     { source: "domain:beta.example", name: "Beta", x: "@beta", code: "c0de", createdAt: NOW, createdBy: "0xabc", opens: 0, claimLink: "https://builder.registrai.cc/verify/?invite=c0de" },
   ],
-  [unstable_serialize(["admin-chain", BUILDERS.chainId, REG])]: [],
+  // One claimed builder awaiting onboarding: the onboarding queue has a row and a Safe batch.
+  [unstable_serialize(["admin-chain", BUILDERS.chainId, REG])]: [
+    {
+      id: 7,
+      owner: "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+      status: "pending",
+      profileURI: "",
+      projects: [{ id: 9, source: "domain:epsilon.example", active: true, status: "verified", country: null, proofUrl: null }],
+      country: null,
+      badge: null,
+      createdAt: 0,
+    },
+  ],
+  // The register request's proof re-checked as valid: a registerFor to put in the Safe batch.
+  [unstable_serialize(["admin-register-proofs", "domain:delta.example|0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc"])]: new Map([["domain:delta.example", true]]),
   "admin-suggestions": [
     { source: "domain:gamma.example", name: "Gamma", website: "https://gamma.example", by: [], wallets: ["0x70997970c51812dc3a010c7d01b50e0d17dc79c8"], count: 1, firstAt: NOW, lastAt: NOW },
   ],
@@ -87,6 +101,32 @@ describe("/admin by role", () => {
     expect(admin).toMatch(/Signed in as <br\/?>.*· admin/);
     expect(onboarder).toMatch(/Signed in as <br\/?>.*· onboarder/);
     expect(onboarder).toContain("Onboarder session.");
+  });
+
+  test("register requests: the admin downloads the Safe batch, an onboarder is told an admin does", () => {
+    const req = (html: string) => html.slice(html.indexOf('data-section="register-requests"'), html.indexOf('data-section="onboarding"'));
+    expect(req(admin)).toMatch(/>Download Safe batch \(1 tx\)<\/button>/);
+    expect(req(admin)).toContain("registerFor(");
+    expect(req(admin)).not.toContain("an admin downloads the batch");
+    expect(req(onboarder)).not.toContain("Download Safe batch");
+    expect(req(onboarder)).toContain("The Safe registers these (1 tx): an admin downloads the batch.");
+  });
+
+  test("onboarding queue: the Safe batch is the admin's; both see the builder", () => {
+    const q = (html: string) => html.slice(html.indexOf('data-section="onboarding"'), html.indexOf("</main>"));
+    for (const html of [admin, onboarder]) expect(q(html)).toContain("builder #7");
+    expect(q(admin)).toContain("Or: the Safe batch");
+    expect(q(admin)).toMatch(/>Download Safe batch \(\d+ tx\)<\/button>/);
+    expect(q(onboarder)).not.toContain("Or: the Safe batch");
+    expect(q(onboarder)).not.toContain("Download Safe batch");
+  });
+
+  test("ledes: an onboarder, who cannot invite, reads the neutral wording", () => {
+    expect(admin).toContain("Invite a project, send its claim link");
+    expect(onboarder).not.toContain("Invite a project, send its claim link");
+    expect(onboarder).toContain("Invited projects, their claim links");
+    expect(admin).toContain("invite it or dismiss it");
+    expect(onboarder).not.toContain("invite it or dismiss it");
   });
 
   test("invites: the form and edit/delete are the admin's; both copy the link and the DM", () => {

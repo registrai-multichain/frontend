@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { useWallet } from "@/components/WalletProvider";
 import { ADMIN_SERVICE, adminView, type AdminRole } from "@/lib/builders-admin";
-import { adminNav, adminSections } from "@/lib/admin-sections";
+import { adminNav, adminSections, signedOutSections } from "@/lib/admin-sections";
 import { shortAddr } from "@/lib/format";
 import { humanizeError } from "@/lib/humanize-error";
 import { activeProvider } from "@/lib/wallets";
@@ -219,7 +219,7 @@ export function ProposalsAdmin() {
   }, [signOut]);
 
   return (
-    <AdminShell nav={proposalsNav(role, list.data ? counts.pending : null)} active="proposals" who={admin ? { address: admin, role } : null}>
+    <AdminShell nav={proposalsNav(admin ? role : null, list.data ? counts.pending : null)} active="proposals" who={admin ? { address: admin, role } : null}>
       <div className={s.head}>
         <div>
           <h1 className={s.h1}>Market proposals</h1>
@@ -315,8 +315,10 @@ export function ProposalsAdmin() {
 }
 
 /** The admin rail: the /admin sections this session sees (links into /admin), then this page. */
-function proposalsNav(role: AdminRole, pending: number | null): AdminNavItem[] {
-  return adminNav(adminSections(adminView(role), ADMIN_DEPLOYMENT), "/admin/", { proposals: pending });
+function proposalsNav(role: AdminRole | null, pending: number | null): AdminNavItem[] {
+  // Signed out (role unknown): only the sections every role has.
+  const sections = role ? adminSections(adminView(role), ADMIN_DEPLOYMENT) : signedOutSections(ADMIN_DEPLOYMENT, adminView("onboarder"));
+  return adminNav(sections, "/admin/", { proposals: pending });
 }
 
 function liveMatchOf(p: Pick<Proposal, "question">): string | null {

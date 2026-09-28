@@ -61,7 +61,9 @@ import { buildersClient } from "@/components/verify/useMyBuilder";
 import { useWonderContext, WonderStatusProvider } from "@/components/wonder/WonderBits";
 import { releaseView, usd, waitingAmount, WONDER_ON_BUILDERS, wonderMarketsAbi } from "@/lib/wonder";
 import { cancelReleaseSafeFile, nominateInput, nominateSafeFile } from "@/lib/wonder-admin";
-import { ADMIN_SECTIONS, adminNav, adminSections, sectionFromHash, type AdminSection, type AdminSectionId } from "@/lib/admin-sections";
+import {
+  ADMIN_SECTIONS, adminNav, adminSections, sectionFromHash, sectionLede, signedOutSections, type AdminSection, type AdminSectionId,
+} from "@/lib/admin-sections";
 import { AdminShell } from "./AdminShell";
 import { ADMIN_DEPLOYMENT } from "./deployment";
 import a from "./admin.module.css";
@@ -93,19 +95,34 @@ function useRailCount(id: AdminSectionId, n: number | null | undefined) {
   useEffect(() => report(id, n), [report, id, n]);
 }
 
-/** The URL hash, kept in step with the address bar. A new section starts at the top. */
-function useHash(): string {
-  const [hash, setHash] = useState("");
+/** Work in progress (`what` within section `id`) marks the section's rail item "working" while it runs hidden. */
+type BusyReport = (key: string, on: boolean) => void;
+const BusyCtx = createContext<BusyReport>(() => undefined);
+function useRailBusy(id: AdminSectionId, what: string, on: boolean) {
+  const report = useContext(BusyCtx);
   useEffect(() => {
-    setHash(window.location.hash);
+    report(`${id}/${what}`, on);
+    return () => report(`${id}/${what}`, false);
+  }, [report, id, what, on]);
+}
+
+/**
+ * The URL hash, kept in step with the address bar. The first value is read at mount
+ * (the dashboard only mounts in the browser, after the session check), so a deep link
+ * such as #badges opens there without showing Invites first. `changed` counts the
+ * hash changes since, so the page can move focus to the new section.
+ */
+function useHash(): { hash: string; changed: number } {
+  const [state, setState] = useState(() => ({ hash: typeof window === "undefined" ? "" : window.location.hash, changed: 0 }));
+  useEffect(() => {
     const on = () => {
-      setHash(window.location.hash);
+      setState((s) => ({ hash: window.location.hash, changed: s.changed + 1 }));
       window.scrollTo(0, 0);
     };
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
-  return hash;
+  return state;
 }
 
 /**
@@ -115,13 +132,17 @@ function useHash(): string {
  */
 function AdminPage({ id, aside, children }: { id: AdminSectionId; aside?: ReactNode; children: ReactNode }) {
   const active = useContext(ActiveCtx);
+  const view = useContext(ViewCtx);
   const s = ADMIN_SECTIONS.find((x) => x.id === id)!;
   return (
     <div className={cx.page} hidden={active !== id} data-section={id}>
       <div className={a.head}>
         <div>
-          <h1 className={a.h1}>{s.title}</h1>
-          <p className={a.sub}>{s.lede}</p>
+          {/* tabIndex -1: focus moves here when the rail (the hash) changes the section. */}
+          <h1 className={a.h1} tabIndex={-1}>
+            {s.title}
+          </h1>
+          <p className={a.sub}>{sectionLede(s, view)}</p>
         </div>
         {aside}
       </div>
@@ -132,31 +153,43 @@ function AdminPage({ id, aside, children }: { id: AdminSectionId; aside?: ReactN
 
 /** The rail's foot: the connected wallet (connect, switch network, disconnect), as the old header's wallet button. */
 function RailWallet() {
-  const { address, isConnecting, walletChainId, connect, disconnect, switchChain } = useWallet();
+  const { address, isConnecting, walletChainId, connect, disconnect, switchChain, error } = useWallet();
+  // The wallet's own error (a refused connect or network switch), as the old header button showed it.
+  const errorLine = error ? (
+    <p className={a.railError} role="alert">
+      {error}
+    </p>
+  ) : null;
   if (!address) {
     return (
-      <div className={a.railFoot}>
-        <span>No wallet connected</span>
-        <button type="button" className={a.linkButton} onClick={connect} disabled={isConnecting}>
-          {isConnecting ? "Connecting…" : "Connect wallet"}
-        </button>
-      </div>
+      <>
+        <div className={a.railFoot}>
+          <span>No wallet connected</span>
+          <button type="button" className={a.linkButton} onClick={connect} disabled={isConnecting}>
+            {isConnecting ? "Connecting…" : "Connect wallet"}
+          </button>
+        </div>
+        {errorLine}
+      </>
     );
   }
   return (
-    <div className={a.railFoot}>
-      <span>
-        Wallet <span className={a.mono}>{shortAddr(address).toLowerCase()}</span>
-      </span>
-      {walletChainId !== BUILDERS.chainId && (
-        <button type="button" className={a.linkButton} onClick={() => switchChain(BUILDERS.chainId)}>
-          Switch to {BUILDERS.chain.name}
+    <>
+      <div className={a.railFoot}>
+        <span>
+          Wallet <span className={a.mono}>{shortAddr(address).toLowerCase()}</span>
+        </span>
+        {walletChainId !== BUILDERS.chainId && (
+          <button type="button" className={a.linkButton} onClick={() => switchChain(BUILDERS.chainId)} title={error}>
+            Switch to {BUILDERS.chain.name}
+          </button>
+        )}
+        <button type="button" className={a.linkButton} onClick={disconnect} title={`${BUILDERS.chain.name} · disconnect`}>
+          Disconnect
         </button>
-      )}
-      <button type="button" className={a.linkButton} onClick={disconnect} title={`${BUILDERS.chain.name} · disconnect`}>
-        Disconnect
-      </button>
-    </div>
+      </div>
+      {errorLine}
+    </>
   );
 }
 
@@ -292,7 +325,7 @@ export function AdminApp({ revocationCheckpoint = null }: { revocationCheckpoint
     );
   }
   return (
-    <AdminShell nav={adminNav(adminSections(adminView("admin"), ADMIN_DEPLOYMENT), "")} active={null} who={null} foot={<RailWallet />}>
+    <AdminShell nav={adminNav(signedOutSections(ADMIN_DEPLOYMENT, adminView("onboarder")), "")} active={null} who={null} foot={<RailWallet />}>
       <div className={a.head}>
         <div>
           <h1 className={a.h1}>{api.state === "ready" ? "Sign in" : "Builders admin"}</h1>
@@ -442,7 +475,23 @@ export function Dashboard({
   const wonderSources = WONDER_ON_BUILDERS ? (invites.data ?? []).map((i) => i.source) : [];
   const view = adminView(role);
   const sections: AdminSection[] = useMemo(() => adminSections(adminView(role), ADMIN_DEPLOYMENT), [role]);
-  const active = sectionFromHash(useHash(), sections);
+  const { hash, changed } = useHash();
+  const active = sectionFromHash(hash, sections);
+  // A section opened from the rail: focus its heading (not on the first render, which keeps the page's own focus).
+  useEffect(() => {
+    if (changed) document.querySelector<HTMLElement>(`[data-section="${active}"] h1`)?.focus({ preventScroll: true });
+  }, [changed, active]);
+  const [busyKeys, setBusyKeys] = useState<ReadonlySet<string>>(new Set());
+  const reportBusy: BusyReport = useCallback((key, on) => {
+    setBusyKeys((b) => {
+      if (b.has(key) === on) return b;
+      const next = new Set(b);
+      if (on) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }, []);
+  const busySections = useMemo(() => new Set([...busyKeys].map((k) => k.split("/")[0])), [busyKeys]);
   const [counts, setCounts] = useState<Partial<Record<AdminSectionId, number | null>>>({});
   const report: Report = useCallback((id, n) => {
     const v = n ? n : null;
@@ -468,7 +517,8 @@ export function Dashboard({
     <WonderStatusProvider sources={wonderSources}>
     <ActiveCtx.Provider value={active}>
     <CountCtx.Provider value={report}>
-      <AdminShell nav={adminNav(sections, "", counts)} active={active} who={{ address: admin, role }} foot={foot}>
+    <BusyCtx.Provider value={reportBusy}>
+      <AdminShell nav={adminNav(sections, "", counts, busySections)} active={active} who={{ address: admin, role }} foot={foot}>
         {role === "onboarder" && (
           <p className={a.callout}>
             <b>Onboarder session.</b> You can read everything here and onboard builders from this wallet.
@@ -511,6 +561,7 @@ export function Dashboard({
 
         {view.wonder && WONDER_ON_BUILDERS && <WonderSection invites={invites.data ?? []} />}
       </AdminShell>
+    </BusyCtx.Provider>
     </CountCtx.Provider>
     </ActiveCtx.Provider>
     </WonderStatusProvider>
@@ -724,7 +775,7 @@ function SuggestionsSection({ onInvited, onSignedOut }: { onInvited: () => void;
                   <button type="button" className={cx.mini} disabled={busy !== null} onClick={() => invite(s)}>
                     {busy === s.source ? "inviting…" : "invite"}
                   </button>
-                  <button type="button" className={cx.mini} disabled={busy !== null} onClick={() => dismiss(s.source)}>
+                  <button type="button" className={cx.miniDanger} disabled={busy !== null} onClick={() => dismiss(s.source)}>
                     dismiss
                   </button>
                 </span>
@@ -1098,7 +1149,7 @@ function GaslessSection({
                     {ok === undefined ? "checking proof…" : ok ? "proof valid" : "proof does NOT check out"}
                   </span>{" "}
                   {view.dismissRequests && (
-                    <button type="button" className={cx.mini} onClick={() => dismiss(r.source)}>
+                    <button type="button" className={cx.miniDanger} onClick={() => dismiss(r.source)}>
                       dismiss
                     </button>
                   )}
@@ -1218,6 +1269,7 @@ function OnboardingSection({
   const gate = onboarderGate(roles.data);
   const [runs, setRuns] = useState<Record<number, OnboardRun>>({});
   const [busy, setBusy] = useState(false);
+  useRailBusy("onboarding", "send", busy);
   const [allError, setAllError] = useState<string>();
 
   const patch = (id: number, f: (r: OnboardRun) => OnboardRun) =>
@@ -1635,6 +1687,7 @@ function RecoverySection({
   const [toInput, setToInput] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [finish, setFinish] = useState<{ id?: number; error?: string; hash?: string }>({});
+  useRailBusy("recovery", "finish", finish.id !== undefined);
   const now = useTick();
   const ids = useMemo(() => (builders ?? []).map((b) => b.id), [builders]);
   const pending = useSWR(REG && builders ? ["admin-recoveries", BUILDERS.chainId, REG, ids.join(",")] : null, async () => {
@@ -2012,12 +2065,12 @@ function DraftsTable({
                   <button type="button" className={cx.mini} disabled={working !== null} onClick={() => void save(d)}>{working === d.source ? "…" : p ? "Save profile again" : "Save profile"}</button>
                 )}
                 {step.actions.includes("nominate") && (
-                  <button type="button" className={cx.mini} disabled={busy} onClick={() => onNominate(d.source)}>{n?.active ? "Re-nominate" : "Nominate"}</button>
+                  <button type="button" className={cx.miniGo} disabled={busy} onClick={() => onNominate(d.source)}>{n?.active ? "Re-nominate" : "Nominate"}</button>
                 )}
                 {view.safeFiles && step.actions.includes("nominate") && (
                   <button type="button" className={cx.mini} onClick={() => onSafeFile(d.source)}>Safe file</button>
                 )}
-                {view.inviteForm && <button type="button" className={cx.mini} onClick={() => void dismiss(d)}>drop</button>}
+                {view.inviteForm && <button type="button" className={cx.miniDanger} onClick={() => void dismiss(d)}>drop</button>}
               </span>
               {expanded && <DraftDetails d={d} />}
             </li>
@@ -2067,6 +2120,7 @@ function NominationsSection({ invites, onInvitesChanged, builders }: { invites: 
   const [input, setInput] = useState("");
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
   const [busy, setBusy] = useState(false);
+  useRailBusy("nominations", "send", busy);
   const invited = useMemo(() => new Set(invites.map((i) => i.source)), [invites]);
   const list = useSWR(
     ["admin-nominations", contract],
@@ -2150,7 +2204,7 @@ function NominationsSection({ invites, onInvitesChanged, builders }: { invites: 
           ))}
         </datalist>
         <button type="button" className={a.approve} onClick={() => void act(true, "wallet")} disabled={busy || !input.trim()}>{busy ? "Sending…" : "Nominate"}</button>
-        <button type="button" className={a.quiet} onClick={() => void act(false, "wallet")} disabled={busy || !input.trim()}>Un-nominate</button>
+        <button type="button" className={a.approveOutline} onClick={() => void act(false, "wallet")} disabled={busy || !input.trim()}>Un-nominate</button>
         {view.safeFiles && <button type="button" className={a.quiet} onClick={() => void act(true, "safe")} disabled={!input.trim()}>Safe file: nominate</button>}
       </div>
       {msg.ok && <p className={cx.ok}>{msg.ok}</p>}
@@ -2188,6 +2242,7 @@ function WonderSection({ invites }: { invites: AdminInvite[] }) {
   const [input, setInput] = useState("");
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
   const [busy, setBusy] = useState(false);
+  useRailBusy("wonder", "send", busy);
   const invited = useMemo(() => new Set(invites.map((i) => i.source)), [invites]);
   const sources = useMemo(() => [...invited], [invited]);
   const wonder = useWonderContext();
@@ -2245,7 +2300,7 @@ function WonderSection({ invites }: { invites: AdminInvite[] }) {
           <em />
         </label>
         <button type="button" className={a.approve} onClick={() => act(true, "wallet")} disabled={busy || !input.trim()}>{busy ? "Sending…" : "Nominate"}</button>
-        <button type="button" className={a.quiet} onClick={() => act(false, "wallet")} disabled={busy || !input.trim()}>Un-nominate</button>
+        <button type="button" className={a.approveOutline} onClick={() => act(false, "wallet")} disabled={busy || !input.trim()}>Un-nominate</button>
         <button type="button" className={a.quiet} onClick={() => act(true, "safe")} disabled={!input.trim()}>Safe file: nominate</button>
         <button type="button" className={a.quiet} onClick={() => act(false, "safe")} disabled={!input.trim()}>Safe file: un-nominate</button>
       </div>

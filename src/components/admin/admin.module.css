@@ -99,7 +99,8 @@
   cursor: pointer;
 }
 .linkButton:hover { color: var(--pp-accent-hover); }
-.linkButton:disabled { color: var(--pp-label); cursor: not-allowed; }
+.linkButton:disabled { color: var(--pp-muted); cursor: not-allowed; }
+.railError { margin: 4px 0 0; max-width: 100%; color: var(--pp-error); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
 
 /* ── main ── */
 .main { display: flex; min-width: 0; flex-grow: 1; flex-direction: column; gap: 18px; padding: 32px 36px; }
@@ -199,6 +200,7 @@
 /* ── buttons: ink (primary), green (approve / send), red outline (destructive), quiet ── */
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .approve,
+.approveOutline,
 .reject,
 .quiet,
 .primary {
@@ -211,6 +213,9 @@
 }
 .approve { border: 0; background: var(--pp-ok); color: #fff; }
 .approve:hover { background: #185a3e; }
+/* Green, outlined: a transaction that undoes (un-nominate) beside a solid green one. */
+.approveOutline { border: 1px solid var(--pp-ok); background: transparent; color: var(--pp-ok); }
+.approveOutline:hover { background: #e7f0ea; }
 .reject { border: 1px solid #c9b8a0; background: transparent; color: var(--pp-error); }
 .reject:hover { border-color: var(--pp-error); }
 .quiet { border: 1px solid var(--pp-edge); background: transparent; color: var(--pp-ink); }
@@ -218,6 +223,7 @@
 .primary { border: 0; background: var(--pp-ink); color: var(--pp-bg); }
 .primary:hover { background: #3a332b; }
 .approve:disabled,
+.approveOutline:disabled,
 .reject:disabled,
 .quiet:disabled,
 .primary:disabled { opacity: 0.55; cursor: not-allowed; }
@@ -249,3 +255,12 @@
   .main { padding: 20px 16px; }
   .h1 { font-size: 30px; }
 }
+
+/* A rail item whose section has something in progress (a send, a batch). */
+.working { display: inline-flex; flex: none; align-items: center; gap: 5px; margin-left: auto; color: inherit; font-size: 12px; opacity: 0.85; }
+.working i { width: 7px; height: 7px; border-radius: 50%; background: var(--pp-ok); }
+.navActive .working i { background: #8fd1b0; }
+@media (prefers-reduced-motion: no-preference) {
+  .working i { animation: admin-working 1.2s ease-in-out infinite; }
+}
+@keyframes admin-working { 50% { opacity: 0.3; } }
