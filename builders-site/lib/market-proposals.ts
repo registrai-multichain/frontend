@@ -57,6 +57,16 @@ async function guarded(env: Env, f: () => Promise<Response>): Promise<Response> 
   }
 }
 
+/** Registrai's prediction markets are frozen (2026-09-29): no new proposals and no approvals.
+ *  Reads (status, approved list, outcomes) stay up. */
+export const PROPOSALS_CLOSED = true;
+export const PROPOSALS_CLOSED_MESSAGE = "Market proposals are closed: Registrai's prediction markets are frozen.";
+
+/** 410 for the closed write paths, with CORS so the app can show the message. */
+export function handleClosed(env: Env): Response {
+  return json({ error: PROPOSALS_CLOSED_MESSAGE }, 410, cors(env));
+}
+
 export function handlePreflight(env: Env): Response {
   return new Response(null, { status: 204, headers: { ...cors(env), "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type", "access-control-max-age": "600" } });
 }

@@ -228,3 +228,23 @@ describe("admin review", () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe("proposals closed while markets are frozen", () => {
+  test("the submit and approve routes answer 410 with CORS; nothing is written", async () => {
+    const { PROPOSALS_CLOSED, PROPOSALS_CLOSED_MESSAGE, handleClosed } = await import("../lib/market-proposals");
+    const submit = await import("../functions/api/market-proposals/index");
+    const approve = await import("../functions/api/admin/market-proposals/[id]/approve");
+    expect(PROPOSALS_CLOSED).toBe(true);
+    const kv = new MemoryKV();
+    const env = { INVITES: kv, PROPOSALS_ALLOWED_ORIGIN: "https://app.registrai.cc" } as unknown as Env;
+    const req = new Request("https://builder.registrai.cc/api/market-proposals", { method: "POST", headers: { origin: "https://app.registrai.cc", "content-type": "application/json" }, body: "{}" });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ctx = (r: Request) => ({ request: r, env, params: { id: "pabcdefghij" }, data: { admin: "0x0" } }) as any;
+    for (const res of [handleClosed(env), await submit.onRequestPost(ctx(req)), await approve.onRequestPost(ctx(req.clone()))]) {
+      expect(res.status).toBe(410);
+      expect(res.headers.get("access-control-allow-origin")).toBe("https://app.registrai.cc");
+      expect(((await res.json()) as { error: string }).error).toBe(PROPOSALS_CLOSED_MESSAGE);
+    }
+    expect(kv.store.size).toBe(0);
+  });
+});
