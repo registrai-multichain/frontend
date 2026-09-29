@@ -3,7 +3,9 @@ import type { ReactNode } from "react";
 import { BrandLockup } from "../Brand";
 import { WalletButton } from "../WalletButton";
 import { Toasts } from "../paper/Toasts";
+import { FreezeBanner } from "../FreezeNotice";
 import { BUILDERS } from "@/lib/builders-network";
+import { MARKETS_FROZEN } from "@/lib/freeze";
 import { APP_URL, HOME_URL } from "@/lib/site-nav";
 
 // Keep the server-to-client prop JSON-safe (viem's chain object carries functions).
@@ -24,6 +26,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
+      {MARKETS_FROZEN && <FreezeBanner />}
 
       <main className="pa-main w-full flex-1">{children}</main>
 

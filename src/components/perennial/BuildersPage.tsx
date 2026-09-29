@@ -26,14 +26,13 @@ export function BuildersPage({ verified = [] }: { verified?: VerifiedCard[] }) {
   return <Suspense fallback={<p className="pa-muted">Reading builders…</p>}><Live /></Suspense>;
 }
 
-/** Before Perennial is deployed on this network: the verified builders its markets will pay. */
+/** Before Perennial is deployed on this network (and while markets are frozen): the verified builders. */
 function BeforeLaunch({ verified }: { verified: VerifiedCard[] }) {
   return (
     <>
       <h1 className="pa-h1 pu-h">Builders</h1>
       <p className="pa-lede">
-        The verified builders Perennial markets will pay. Markets aren&apos;t live on {D.label} yet; once they open, half of each trading fee on a
-        market about a builder is their income.
+        Builders who proved they control their project, verified on {D.label}. Registrai keeps supporting project builders on any chain.
       </p>
       <ul className="bld-grid mt-10">
         {verified.map((b) => (
@@ -47,7 +46,6 @@ function BeforeLaunch({ verified }: { verified: VerifiedCard[] }) {
             sub={b.source ? sourceLabel(b.source) : undefined}
             facts={[
               { label: "Projects", value: <span className="tnum">{b.projects}</span> },
-              { label: "Open markets", value: "At launch" },
             ]}
           />
         ))}

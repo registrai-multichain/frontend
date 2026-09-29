@@ -5,8 +5,10 @@ import { WalletButton } from "./WalletButton";
 import { PaperNav } from "./paper/PaperNav";
 import { Toasts } from "./paper/Toasts";
 import { BalancePill } from "./perennial/BalancePill";
+import { FreezeBanner } from "./FreezeNotice";
 import { newsreader } from "./proposals/fonts";
 import { PERENNIAL, networkStatusLine } from "@/lib/perennial-network";
+import { MARKETS_FROZEN } from "@/lib/freeze";
 import { APP_NAV, DASHBOARD_URL } from "@/lib/site-nav";
 
 // Keep the server-to-client prop JSON-safe (viem's chain object carries functions).
@@ -30,12 +32,17 @@ export function PerennialShell({ children, status }: { children: ReactNode; stat
         </div>
         <PaperNav items={APP_NAV} variant="row" />
       </header>
+      {MARKETS_FROZEN && <FreezeBanner />}
 
       <main className="pa-main w-full flex-1">{children}</main>
 
       <footer className="pa-foot">
         <div className="pa-foot-in">
-          <span>{status ?? networkStatusLine(PERENNIAL)} · settles in {PERENNIAL.network === "mainnet" ? "USDC" : "test USDC"}</span>
+          <span>
+            {MARKETS_FROZEN
+              ? `${PERENNIAL.label} · prediction markets frozen`
+              : `${status ?? networkStatusLine(PERENNIAL)} · settles in ${PERENNIAL.network === "mainnet" ? "USDC" : "test USDC"}`}
+          </span>
           <span className="flex flex-wrap gap-4">
             <Link href="/">Home</Link>
             <a href={DASHBOARD_URL}>Transparency ↗</a>

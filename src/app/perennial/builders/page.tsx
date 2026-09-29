@@ -6,8 +6,8 @@ import { parseGallerySnapshot, verifiedCards } from "@/lib/builders-gallery";
 import live from "@/lib/live-data.json";
 
 export const metadata: Metadata = {
-  title: "Builders · Perennial · Registrai",
-  description: "The builders Perennial markets pay, what they earned this epoch, and your own builder income.",
+  title: "Builders · Registrai",
+  description: "Builders who proved they control their project, verified on Arc.",
   alternates: { canonical: "/perennial/builders" },
 };
 

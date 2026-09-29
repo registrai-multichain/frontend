@@ -273,7 +273,7 @@ export function Transparency() {
       <section className={`${card} lg:col-span-5`} aria-labelledby="t-shares">
         <h2 id="t-shares" className="pa-h2">Who gets each fee</h2>
         <p className="pa-muted pa-small">
-          <b className="text-fg">{TRADE_FEE_PCT}%</b> on every buy and sell. Collected so far: <b className="text-fg tnum">$0</b> (markets open later).
+          <b className="text-fg">{TRADE_FEE_PCT}%</b> on every buy and sell. Collected so far: <b className="text-fg tnum">$0</b>. Markets are frozen, so no fees come in.
         </p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
           {FEE_SPLITS.map((s) => (

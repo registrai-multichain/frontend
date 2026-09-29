@@ -60,14 +60,13 @@ export default function Image() {
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          <div style={{ display: "flex", fontSize: 26, color: MUTE }}>Perennial · Builder atlas</div>
+          <div style={{ display: "flex", fontSize: 26, color: MUTE }}>Registrai · Builder atlas</div>
           <div style={{ display: "flex", fontSize: 88, lineHeight: 1 }}>Where the grind is.</div>
         </div>
 
         <div style={{ display: "flex", gap: 56, alignItems: "flex-end" }}>
           <Stat label={season ? season.label : "Season"} value={season ? `${fmt(season.startedAt)} – ${fmt(season.endsAt)}` : "—"} accent={GREEN} dim={MUTE} />
           <Stat label="Builders ranked" value={String(rankedBuilders.length)} accent={GREEN} dim={MUTE} />
-          <Stat label="Traders ranked" value={String(board?.traders.length ?? 0)} accent={GREEN} dim={MUTE} />
           <div style={{ display: "flex", marginLeft: "auto", fontSize: 22, color: MUTE }}>registrai.cc</div>
         </div>
       </div>

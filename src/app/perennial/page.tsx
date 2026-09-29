@@ -1,34 +1,20 @@
 import type { Metadata } from "next";
+import { FreezeNotice } from "@/components/FreezeNotice";
 import { PerennialShell } from "@/components/PerennialShell";
-import { PerennialApp } from "@/components/perennial/PerennialApp";
-import { PERENNIAL } from "@/lib/perennial-network";
+import { FREEZE } from "@/lib/freeze";
 
-const ON = PERENNIAL.label;
-
+// Markets are frozen (src/lib/freeze.ts): this page shows the notice instead.
 export const metadata: Metadata = {
-  title: "Perennial Markets · Registrai",
-  description:
-    `Trade builder milestone markets on ${ON}: half of every trading fee is the income of the builder the market is about.`,
+  title: "Prediction markets frozen · Registrai",
+  description: FREEZE.text,
   alternates: { canonical: "/perennial" },
-  openGraph: {
-    title: "Perennial Markets · Registrai",
-    description: `Builder milestone markets on ${ON} whose fees pay the builder they are about.`,
-    url: "https://registrai.cc/perennial/",
-    images: [{ url: "/social/registrai-landing-regi.png", width: 1200, height: 630 }],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Perennial Markets · Registrai",
-    description: `Builder milestone markets on ${ON} whose fees pay the builder they are about.`,
-    images: ["/social/registrai-landing-regi.png"],
-  },
 };
 
 export default function PerennialPage() {
   return (
     <PerennialShell>
       <div className="pu-bridge">
-        <PerennialApp />
+        <FreezeNotice />
       </div>
     </PerennialShell>
   );

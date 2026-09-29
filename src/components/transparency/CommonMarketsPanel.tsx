@@ -54,7 +54,7 @@ export function CommonMarketsPanel({ marketsClass = "", oracleClass = "" }: { ma
     <>
       <section className={`pa-stack min-w-0 ${marketsClass}`} aria-labelledby="t-common">
         <h2 id="t-common" className="pa-h2">Common markets</h2>
-        <p className="pa-muted pa-small">5-minute Up/Down rounds and event markets, since launch. Half of every 1% fee goes to the fee splitter (40% of it buys back REGI).</p>
+        <p className="pa-muted pa-small">5-minute Up/Down rounds and event markets, since launch. Frozen since 28 Sept 2026: no new rounds or markets open.</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Stat label="Rounds opened" value={s ? String(s.markets.opened) : "…"} />
           <Stat label="Settled" value={s ? String(s.markets.settled) : "…"} sub={s && s.markets.voided ? `${s.markets.voided} voided, refunded` : "none voided"} />

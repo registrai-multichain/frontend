@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { FreezeNotice } from "@/components/FreezeNotice";
 import { PerennialShell } from "@/components/PerennialShell";
-import { PerennialApp } from "@/components/perennial/PerennialApp";
+import { FREEZE } from "@/lib/freeze";
 
+// Markets are frozen (src/lib/freeze.ts): this page shows the notice instead.
 export const metadata: Metadata = {
-  title: "Wonder markets · Perennial · Registrai",
-  description: "Markets about nominated projects that have not joined Registrai yet; the team's share of the fees waits for them.",
+  title: "Prediction markets frozen · Registrai",
+  description: FREEZE.text,
   alternates: { canonical: "/perennial/wonder" },
   robots: { index: false },
 };
@@ -13,7 +15,7 @@ export default function WonderPage() {
   return (
     <PerennialShell>
       <div className="pu-bridge">
-        <PerennialApp initialTab="unclaimed" />
+        <FreezeNotice />
       </div>
     </PerennialShell>
   );

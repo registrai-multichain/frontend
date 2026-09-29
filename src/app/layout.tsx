@@ -33,7 +33,7 @@ const serif = Instrument_Serif({
 
 const TITLE = "Registrai · The anti-launchpad";
 const DESCRIPTION =
-  "$REGI bootstraps Registrai on Arc. Perennial markets settle in USDC and route half of a 1% trading fee to builders who prove they shipped.";
+  "Registrai supports project builders on any chain: a verified builder registry on Arc and bonded, public proof of what they ship. No token launch needed.";
 
 export const viewport: Viewport = {
   themeColor: "#0d0d0c",
@@ -53,7 +53,7 @@ export const metadata: Metadata = {
     url: "https://registrai.cc/",
     title: TITLE,
     description: DESCRIPTION,
-    images: [{ url: "/social/registrai-landing-regi.png", width: 1200, height: 630, alt: "Registrai · $REGI bootstraps the network while builders stay tokenless" }],
+    images: [{ url: "/social/registrai-landing-builders.png", width: 1200, height: 630, alt: "Registrai: launchpads sell promises, Registrai shows proof. Verified builders on any chain, built on Arc." }],
   },
   twitter: {
     card: "summary_large_image",
@@ -61,7 +61,7 @@ export const metadata: Metadata = {
     creator: `@${REGISTRAI_X_HANDLE}`,
     title: TITLE,
     description: DESCRIPTION,
-    images: ["/social/registrai-landing-regi.png"],
+    images: ["/social/registrai-landing-builders.png"],
   },
 };
 

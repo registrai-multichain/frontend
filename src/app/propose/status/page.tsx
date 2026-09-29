@@ -1,18 +1,21 @@
-import { Suspense } from "react";
+import type { Metadata } from "next";
+import { FreezeNotice } from "@/components/FreezeNotice";
 import { PerennialShell } from "@/components/PerennialShell";
-import { PERENNIAL } from "@/lib/perennial-network";
-import { ROUNDS, roundsStatusLine } from "@/lib/rounds";
-import { ProposalStatus } from "@/components/proposals/ProposalStatus";
+import { FREEZE } from "@/lib/freeze";
 
-export const metadata = { title: "Proposal status · Registrai" };
+// Markets are frozen (src/lib/freeze.ts): this page shows the notice instead.
+export const metadata: Metadata = {
+  title: "Proposals closed · Registrai",
+  description: FREEZE.text,
+  robots: { index: false },
+};
 
 export default function ProposalStatusPage() {
-  // Approved proposals open on the common markets: the footer names that network's state.
   return (
-    <PerennialShell status={roundsStatusLine(ROUNDS, PERENNIAL.chain.id)}>
-      <Suspense fallback={null}>
-        <ProposalStatus />
-      </Suspense>
+    <PerennialShell>
+      <div className="pu-bridge">
+        <FreezeNotice />
+      </div>
     </PerennialShell>
   );
 }

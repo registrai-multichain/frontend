@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { ROUNDS } from "@/lib/rounds";
+import { FREEZE } from "@/lib/freeze";
 
+// Markets are frozen (src/lib/freeze.ts): /rounds/ is withdraw-and-claim only.
 export const metadata: Metadata = {
-  title: "Common markets · Registrai",
-  description:
-    `Five-minute Up/Down rounds on BTC, ETH, SOL, ZEC and HYPE, and event markets, settled on chain by Registrai's rounds agent on ${ROUNDS.label}.`,
+  title: "Withdraw and claim · Registrai",
+  description: FREEZE.funds,
+  robots: { index: false },
 };
 
 export default function RoundsLayout({ children }: { children: React.ReactNode }) {

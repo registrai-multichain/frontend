@@ -30,6 +30,7 @@ import {
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { useWallet } from "./WalletProvider";
+import { FREEZE, MARKETS_FROZEN } from "@/lib/freeze";
 import { getWalletChain, transportFor, txUrl as txUrlFor, type WalletChain } from "@/lib/chains";
 import { activeProvider } from "@/lib/wallets";
 import { attestationAbi, marketsV4Abi, nanoLedgerAbi, registryAbi, usdcAbi } from "@/lib/abi";
@@ -1309,7 +1310,9 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
   return (
     <SessionCtx.Provider value={session}>
     <div className="fade-up pu-bridge">
-      {view.kind === "overview" ? (
+      {MARKETS_FROZEN ? (
+        <FrozenHeader back={view.kind !== "overview"} />
+      ) : view.kind === "overview" ? (
         <Header now={now} roundEnd={roundEnd} showTimer={tab === "price"} />
       ) : (
         <Link href="/rounds/" className="mb-4 inline-block text-[13px] text-fg-dim hover:text-fg">
@@ -1331,7 +1334,7 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
         </p>
       )}
 
-      {pageAsset && (
+      {!MARKETS_FROZEN && pageAsset && (
         <AssetPage
           asset={pageAsset}
           snap={snap}
@@ -1347,30 +1350,30 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
           canTrade={canTrade}
         />
       )}
-      {pageEvent && (
+      {!MARKETS_FROZEN && pageEvent && (
         <div className="max-w-[760px]">
           <EventCard ev={pageEvent} snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={canTrade} address={address} page />
           <EventRules />
         </div>
       )}
-      {pageProposed && (
+      {!MARKETS_FROZEN && pageProposed && (
         <div className="max-w-[760px]">
           <EventCard ev={pageProposed} snap={snap} now={now} open={open} setOpen={setOpen} tx={tx} canTrade={canTrade} address={address} page />
           <EventRules proposal={pageProposed.proposal} />
         </div>
       )}
-      {proposedLoading && (
+      {!MARKETS_FROZEN && proposedLoading && (
         <div className="max-w-[760px]" aria-busy="true">
           <div className="pu-card pu-card--static text-[13px] text-fg-mute">Reading the market from {D.label}…</div>
         </div>
       )}
-      {view.kind !== "overview" && !pageAsset && !pageEvent && !pageProposed && !proposedLoading && (
+      {!MARKETS_FROZEN && view.kind !== "overview" && !pageAsset && !pageEvent && !pageProposed && !proposedLoading && (
         <p className="text-fg-mute">This market does not exist.</p>
       )}
 
       {address && <Claims snap={snap} tx={tx} now={now} info={proposalInfo} />}
 
-      {view.kind === "overview" && (
+      {!MARKETS_FROZEN && view.kind === "overview" && (
       <>
       <nav className="pa-tabs mb-5" aria-label="Market categories">
         {ROUNDS_TABS.map((t) => (
@@ -1433,8 +1436,14 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
         <a className="text-fg-mute underline" href={`${D.explorer}/address/${D.agent}`} target="_blank" rel="noreferrer">
           {D.agent.slice(0, 6)}…{D.agent.slice(-4)}
         </a>
-        , which seeds each pool with 5 USDC. Every buy and sell pays a {snap?.feeBps !== undefined ? `${Number(snap.feeBps) / 100}%` : "1%"}{" "}
-        trading fee; nothing is charged at settlement.{D.testnet ? " Testnet USDC only." : ""}
+        {MARKETS_FROZEN ? (
+          <>. No new rounds or markets are opened while markets are frozen.{D.testnet ? " Testnet USDC only." : ""}</>
+        ) : (
+          <>
+            , which seeds each pool with 5 USDC. Every buy and sell pays a {snap?.feeBps !== undefined ? `${Number(snap.feeBps) / 100}%` : "1%"}{" "}
+            trading fee; nothing is charged at settlement.{D.testnet ? " Testnet USDC only." : ""}
+          </>
+        )}
       </p>
     </div>
     </SessionCtx.Provider>
@@ -1442,6 +1451,21 @@ export function CommonMarkets({ view = { kind: "overview" } }: { view?: RoundsVi
 }
 
 // ───────────────────────────── header ─────────────────────────────
+
+/** The page head while markets are frozen (src/lib/freeze.ts): withdraw and claim only. */
+function FrozenHeader({ back }: { back: boolean }) {
+  return (
+    <header className="mb-8 border-b border-line pb-6">
+      {back && (
+        <Link href="/rounds/" className="mb-4 inline-block text-[13px] text-fg-dim hover:text-fg">
+          ← Withdraw and claim
+        </Link>
+      )}
+      <h1 className="pa-h1 pu-h">Withdraw and claim</h1>
+      <p className="pa-lede max-w-[72ch]">{FREEZE.funds}</p>
+    </header>
+  );
+}
 
 function Header({ now, roundEnd, showTimer }: { now: number; roundEnd: number; showTimer: boolean }) {
   const left = now ? roundEnd - now : 0;
@@ -1521,7 +1545,9 @@ function LedgerBar({
   if (!address) {
     return (
       <div className="pu-card pu-card--compact pu-card--static mb-6 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[13px] text-fg-mute">Connect a wallet to trade. Prices and results are public.</p>
+        <p className="text-[13px] text-fg-mute">
+          {MARKETS_FROZEN ? "Connect a wallet to withdraw your balance or claim a settled position." : "Connect a wallet to trade. Prices and results are public."}
+        </p>
         <button onClick={() => void connect()} className="pa-btn pu-btn pu-btn--primary">
           Connect wallet
         </button>
@@ -1549,9 +1575,11 @@ function LedgerBar({
         <div className="text-[13px] text-fg-dim">
           Wallet <span className="tnum text-fg-mute">{fmt(walletBal)} USDC</span>
           <br />
-          Buys draw from the trading balance; winnings land there too.
+          {MARKETS_FROZEN ? "Winnings and refunds land here; withdraw them to your wallet." : "Buys draw from the trading balance; winnings land there too."}
         </div>
         <div className="ml-auto flex items-stretch gap-2">
+          {!MARKETS_FROZEN && (
+          <>
           <input
             value={amt}
             onChange={(e) => setAmt(e.target.value)}
@@ -1563,6 +1591,8 @@ function LedgerBar({
           <button onClick={deposit} disabled={busy} className="pa-btn pu-btn pu-btn--primary">
             {tx.st.pending === "depositing" ? "Depositing…" : "Deposit"}
           </button>
+          </>
+          )}
           <button
             onClick={withdraw}
             disabled={busy || ledgerBal === 0n}
@@ -1573,7 +1603,7 @@ function LedgerBar({
         </div>
       </div>
       <TxLine tx={tx} scope={scope} />
-      <SessionRow tx={tx} />
+      {!MARKETS_FROZEN && <SessionRow tx={tx} />}
     </div>
   );
 }

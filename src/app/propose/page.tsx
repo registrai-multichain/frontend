@@ -1,15 +1,21 @@
+import type { Metadata } from "next";
+import { FreezeNotice } from "@/components/FreezeNotice";
 import { PerennialShell } from "@/components/PerennialShell";
-import { PERENNIAL } from "@/lib/perennial-network";
-import { ROUNDS, roundsStatusLine } from "@/lib/rounds";
-import { ProposeForm } from "@/components/proposals/ProposeForm";
+import { FREEZE } from "@/lib/freeze";
 
-export const metadata = { title: "Propose a market · Registrai", description: "Suggest a question people can bet on; approved markets open on Arc mainnet." };
+// Markets are frozen (src/lib/freeze.ts): this page shows the notice instead.
+export const metadata: Metadata = {
+  title: "Proposals closed · Registrai",
+  description: FREEZE.text,
+  robots: { index: false },
+};
 
 export default function ProposePage() {
-  // Approved proposals open on the common markets: the footer names that network's state.
   return (
-    <PerennialShell status={roundsStatusLine(ROUNDS, PERENNIAL.chain.id)}>
-      <ProposeForm />
+    <PerennialShell>
+      <div className="pu-bridge">
+        <FreezeNotice />
+      </div>
     </PerennialShell>
   );
 }

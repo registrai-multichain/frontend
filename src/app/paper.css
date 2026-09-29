@@ -199,3 +199,10 @@
 .paper-type .season-picker button[data-active="true"] { background: var(--fg); color: var(--bg); }
 .paper-type .globe-caption { font-family: inherit; font-size: 13px; letter-spacing: 0; text-transform: none; color: var(--fg-mute); }
 .paper-type .globe-caption em { font-style: normal; font-size: 13px; }
+
+/* Markets freeze (src/lib/freeze.ts): one line under the top bar of the app and the dashboard. */
+.freeze-banner { border-bottom: 1px solid color-mix(in srgb, var(--down) 35%, transparent); background: color-mix(in srgb, var(--down) 8%, var(--bg)); }
+.freeze-banner-in { max-width: 1280px; margin: 0 auto; padding: 10px 20px; font-size: 14px; line-height: 1.5; color: var(--fg); }
+.freeze-banner-in b { color: var(--down); font-weight: 600; }
+.freeze-banner-in a { color: var(--fg); text-decoration: underline; text-underline-offset: 2px; }
+@media (min-width: 1024px) { .freeze-banner-in { padding: 10px 40px; } }
