@@ -164,8 +164,11 @@ export function diffChangelog(prev: Fact[], next: Fact[], at: string): ChangeLog
   return out;
 }
 
+/** Shown once `at` is absent or a date at/before now; an unparseable date fails closed (stays hidden). */
+const released = (at: string | undefined, now: number) => !at || Date.parse(at) <= now;
+
 export function publicFacts(p: ProjectFacts, now: number): ProjectFacts {
-  const hidden = new Set(p.facts.filter((f) => f.publishAt && Date.parse(f.publishAt) > now).map((f) => f.id));
+  const hidden = new Set(p.facts.filter((f) => !released(f.publishAt, now)).map((f) => f.id));
   return {
     ...p,
     facts: p.facts.filter((f) => !hidden.has(f.id)).map(({ publishAt: _p, ...f }) => {
@@ -174,7 +177,7 @@ export function publicFacts(p: ProjectFacts, now: number): ProjectFacts {
       return f;
     }),
     changelog: p.changelog
-      .filter((c) => !hidden.has(c.factId) && !(c.hiddenUntil && Date.parse(c.hiddenUntil) > now))
+      .filter((c) => !hidden.has(c.factId) && released(c.hiddenUntil, now))
       .map(({ hiddenUntil: _h, ...c }) => { void _h; return c; }),
   };
 }

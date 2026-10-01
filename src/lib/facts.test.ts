@@ -63,6 +63,22 @@ describe("publicFacts", () => {
     expect(out.changelog.map((c) => c.factId)).toEqual(["f1"]);
     expect(publicFacts(p, Date.parse("2026-11-01T00:00:00.000Z")).facts).toHaveLength(2);
   });
+  test("an unparseable publishAt or hiddenUntil fails closed (stays hidden)", () => {
+    const now = Date.parse("2026-11-01T00:00:00.000Z");
+    const p: ProjectFacts = {
+      source: SRC, facts: [fact(), fact({ id: "sec", text: "Private detail.", publishAt: "garbage" })],
+      changelog: [
+        { at: "2026-09-29T00:00:00.000Z", kind: "added", factId: "sec", text: "Private detail." },
+        { at: "2026-09-29T00:00:00.000Z", kind: "removed", factId: "gone", text: "Old private.", hiddenUntil: "garbage" },
+        { at: "2026-09-29T00:00:00.000Z", kind: "added", factId: "f1", text: "y" },
+      ],
+      lastReviewedAt: "2026-09-29T00:00:00.000Z", reviewedBy: "registrai", rev: 3,
+    };
+    const out = publicFacts(p, now);
+    expect(out.facts.map((f) => f.id)).toEqual(["f1"]);
+    expect(out.changelog.map((c) => c.factId)).toEqual(["f1"]);
+    expect(JSON.stringify(out)).not.toContain("Private");
+  });
 });
 
 describe("private facts never leak through the change log", () => {
