@@ -34,7 +34,7 @@ export const TIERS: Tier[] = [
     price: "Free with verification",
     items: [
       { text: "Radar alerts on your own contracts and wallets", tag: "Building now" },
-      { text: "A public facts page for your project", tag: "Building now" },
+      { text: "A public facts page for your project", tag: "Live" },
       { text: "Right of reply: add context next to any fact, and get errors corrected" },
     ],
     cta: "Verify your project",

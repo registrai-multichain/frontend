@@ -56,3 +56,10 @@ describe("landing CSS", () => {
     expect(found).toEqual(["@media (min-width: 641px) 220px"]);
   });
 });
+
+it("the public facts page is live; Radar alerts are still building", async () => {
+  const { TIERS } = await import("./landing");
+  const items = TIERS[0].items;
+  expect(items.find((i) => i.text === "A public facts page for your project")?.tag).toBe("Live");
+  expect(items.find((i) => i.text.startsWith("Radar alerts"))?.tag).toBe("Building now");
+});

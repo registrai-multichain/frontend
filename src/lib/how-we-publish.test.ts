@@ -26,6 +26,10 @@ describe("how-we-publish + routing", () => {
     for (const must of ["proof, not opinions", "You judge", "30 days", "No personal data", "Nobody can pay us to change a fact"]) {
       expect(src, must).toContain(must);
     }
+    // Nothing stated as live that isn't: the Milli jury needs 21 members first, alerts aren't sold yet.
+    expect(src).not.toContain("reviewed by a random jury");
+    expect(src).not.toContain("We sell alerts");
+    expect(src).toContain("one independent reviewer");
     for (const w of VERDICT_WORDS) expect(src.toLowerCase(), w).not.toMatch(new RegExp(`\\b${w.replace(" ", "\\s+")}\\b`));
   });
 });

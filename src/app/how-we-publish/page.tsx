@@ -41,11 +41,11 @@ export default function HowWePublishPage() {
         </p>
         <p>
           <strong>We correct mistakes in the open.</strong> If a fact is wrong, the correction stays visible in the
-          project&apos;s change log. Accuracy disputes are reviewed by a random jury of Milli members, the verified projects
-          that make up Registrai&apos;s community.
+          project&apos;s change log. Accuracy disputes are reviewed by Registrai and one independent reviewer. Once the Milli community of verified
+          projects is large enough, a random jury of its members will review them instead.
         </p>
         <p>
-          <strong>Nobody can pay us to change a fact.</strong> We sell alerts, data access and deeper custom research. None of
+          <strong>Nobody can pay us to change a fact.</strong> Our paid work is alerts, data access and deeper custom research. None of
           it buys coverage, silence or different wording.
         </p>
       </article>

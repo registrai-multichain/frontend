@@ -168,7 +168,10 @@ export function diffChangelog(prev: Fact[], next: Fact[], at: string): ChangeLog
 }
 
 /** Shown once `at` is absent or a date at/before now; an unparseable date fails closed (stays hidden). */
-const released = (at: string | undefined, now: number) => !at || Date.parse(at) <= now;
+/** Public only when no embargo field is present, or it is a parseable time that has passed. Anything else
+ * (null, "", a number, garbage) fails closed: private-first must not depend on the stored value being clean. */
+const released = (at: unknown, now: number) =>
+  at === undefined || (typeof at === "string" && Number.isFinite(Date.parse(at)) && Date.parse(at) <= now);
 
 export function publicFacts(p: ProjectFacts, now: number): ProjectFacts {
   const hidden = new Set(p.facts.filter((f) => !released(f.publishAt, now)).map((f) => f.id));
