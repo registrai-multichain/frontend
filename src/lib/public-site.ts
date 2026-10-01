@@ -18,7 +18,7 @@ export const PUBLIC_SITE = "https://registrai.cc";
 export const PUBLIC_ROUTES = ["bridge"] as const;
 
 /** App routes that move to the builders site (same path). */
-export const BUILDERS_SITE_ROUTES = ["builders", "verify", "admin", "guide", "suggest"] as const;
+export const BUILDERS_SITE_ROUTES = ["builders", "verify", "admin", "guide", "suggest", "project"] as const;
 
 /** App routes that move to the markets app, app.registrai.cc (same path; built for mainnet). */
 export const APP_SITE_ROUTES = ["atlas", "perennial", "rounds", "propose"] as const;
