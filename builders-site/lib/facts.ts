@@ -2,10 +2,10 @@
  * Public project facts (contract: src/lib/facts.ts). KV `facts:<source>` -> ProjectFacts.
  *   GET /api/admin/facts/<source>  (session)      editor state (empty rev 0 when none)
  *   PUT /api/admin/facts/<source>  (admin + CSRF, via the middleware) FactsInput; rev must match
- *   GET /api/facts/<source>        public, publishAt-filtered
+ *   GET /api/facts/<source>        public, publishAt-filtered; reviewer "Registrai", no rev (publicResponse)
  * The change log is built only here, from the stored previous facts; a body changelog is ignored.
  */
-import { diffChangelog, FACTS_LIMITS, publicFacts, validateFacts, type ProjectFacts } from "../../src/lib/facts";
+import { diffChangelog, FACTS_LIMITS, publicResponse, validateFacts, type ProjectFacts } from "../../src/lib/facts";
 import { normalizeSource } from "../../src/lib/verified-builders";
 import type { Env, KV } from "./env";
 import { errorJson, json, readJson } from "./http";
@@ -64,5 +64,5 @@ export async function handlePublicFacts(req: Request, env: Env, rawSource: strin
   if (!source) return errorJson(400, "not a canonical source");
   const stored = await getFacts(env.INVITES, source);
   if (!stored) return errorJson(404, "no facts for this project");
-  return json({ facts: publicFacts(stored, deps.now ?? Date.now()) }, 200, { "cache-control": "public, max-age=60" });
+  return json({ facts: publicResponse(stored, deps.now ?? Date.now()) }, 200, { "cache-control": "public, max-age=60" });
 }

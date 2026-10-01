@@ -60,6 +60,28 @@ describe("facts API", () => {
     expect((await pub("domain:Kairo.Market")).status).toBe(400);
     expect((await pub("domain:nothing.here")).status).toBe(404);
   });
+  test("public view: reviewed by Registrai, no rev, no wallet; lastReviewedAt from public facts only", async () => {
+    const { put, get, pub } = setup();
+    const none = await pub(SRC);
+    expect(none.status).toBe(404);
+    await put(SRC, { rev: 0, facts: [fact("sec", { publishAt: "2026-10-29T00:00:00.000Z" })] });
+    const onlyPrivate = await pub(SRC);
+    expect(onlyPrivate.body.facts.reviewedBy).toBe("Registrai");
+    expect(onlyPrivate.body.facts).not.toHaveProperty("lastReviewedAt");
+    expect(onlyPrivate.body.facts).not.toHaveProperty("rev");
+    await put(SRC, { rev: 1, facts: [fact("f1"), fact("sec", { publishAt: "2026-10-29T00:00:00.000Z" })] }, T0 + 1000);
+    const first = await pub(SRC, T0 + 2000);
+    const latest = first.body.facts.facts.map((f: any) => f.updatedAt).sort().pop();
+    expect(first.body.facts.lastReviewedAt).toBe(latest);
+    // A later edit to the private fact alone changes nothing public, not even the review time.
+    await put(SRC, { rev: 2, facts: [fact("f1"), fact("sec", { text: "A changed private detail.", publishAt: "2026-10-29T00:00:00.000Z" })] }, T0 + 3_600_000);
+    const after = await pub(SRC, T0 + 3_700_000);
+    expect(after.body).toEqual(first.body);
+    expect(JSON.stringify(after.body).toLowerCase()).not.toContain(ADMIN);
+    // The stored document and the admin view keep the wallet and rev.
+    const admin = await get(SRC);
+    expect(admin.body.facts).toMatchObject({ reviewedBy: ADMIN, rev: 3, lastReviewedAt: new Date(T0 + 3_600_000).toISOString() });
+  });
   test("verdict words are refused with 400", async () => {
     const { put } = setup();
     expect((await put(SRC, { rev: 0, facts: [fact("f1", { text: "This looks like a scam." })] })).status).toBe(400);

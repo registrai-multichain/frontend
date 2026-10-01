@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { evidenceHref, type ChangeLogEntry, type Fact } from "@/lib/facts";
+import { evidenceHref, PUBLIC_REVIEWER, type ChangeLogEntry, type Fact } from "@/lib/facts";
 import { evidenceLabel, factsPath, groupFacts, pageState, parseSourceParam, safeHttpsHref, type PageState } from "@/lib/project-page";
 import { projectPath } from "@/lib/projects";
 
@@ -76,7 +76,7 @@ export function LoadFailed() {
   );
 }
 
-function View({ source, state }: { source: string; state: Extract<PageState, { kind: "ready" }> }) {
+export function View({ source, state }: { source: string; state: Extract<PageState, { kind: "ready" }> }) {
   const { profile, facts } = state;
   const groups = facts ? groupFacts(facts.facts) : [];
   const log = facts ? [...facts.changelog].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)) : [];
@@ -95,7 +95,7 @@ function View({ source, state }: { source: string; state: Extract<PageState, { k
         </p>
         {facts?.summary && <p>{facts.summary}</p>}
         {facts && facts.lastReviewedAt && (
-          <p className="pa-muted pa-small">Last reviewed {day(facts.lastReviewedAt)} by {facts.reviewedBy}</p>
+          <p className="pa-muted pa-small">Last reviewed {day(facts.lastReviewedAt)} by {PUBLIC_REVIEWER}</p>
         )}
       </header>
 

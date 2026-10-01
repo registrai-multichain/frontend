@@ -1,4 +1,4 @@
-import { FACT_TOPICS, type Fact, type FactTopic, type ProjectFacts } from "./facts";
+import { FACT_TOPICS, type Fact, type FactTopic, type PublicProjectFacts } from "./facts";
 import type { PublicProjectResponse } from "./projects";
 import { normalizeSource } from "./verified-builders";
 
@@ -46,7 +46,7 @@ export type PageState =
   | { kind: "loading" }
   | { kind: "missing" }
   | { kind: "error" }
-  | { kind: "ready"; profile: PublicProjectResponse["profile"] | null; facts: ProjectFacts | null };
+  | { kind: "ready"; profile: PublicProjectResponse["profile"] | null; facts: PublicProjectFacts | null };
 
 type Res = { status: number; body: unknown };
 const obj = (x: unknown): Record<string, unknown> | null => (typeof x === "object" && x !== null && !Array.isArray(x) ? (x as Record<string, unknown>) : null);
@@ -58,7 +58,7 @@ export function pageState(profileRes: Res | null, factsRes: Res | null): PageSta
   const p = profileRes.status === 200 ? obj(obj(profileRes.body)?.profile) : null;
   const f = factsRes.status === 200 ? obj(obj(factsRes.body)?.facts) : null;
   const profile = p ? (p as unknown as PublicProjectResponse["profile"]) : null;
-  const facts = f && Array.isArray(f.facts) && Array.isArray(f.changelog) ? (f as unknown as ProjectFacts) : null;
+  const facts = f && Array.isArray(f.facts) && Array.isArray(f.changelog) ? (f as unknown as PublicProjectFacts) : null;
   if (!profile && !facts) return failed(profileRes) || failed(factsRes) ? { kind: "error" } : { kind: "missing" };
   return { kind: "ready", profile, facts };
 }

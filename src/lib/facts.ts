@@ -33,6 +33,9 @@ export interface ProjectFacts {
   reviewedBy: string;
   rev: number;
 }
+/** What GET /api/facts/<source> answers: no rev, Registrai as reviewer, and the review time of the public facts only. */
+export const PUBLIC_REVIEWER = "Registrai";
+export type PublicProjectFacts = Omit<ProjectFacts, "rev" | "lastReviewedAt" | "reviewedBy"> & { lastReviewedAt?: string; reviewedBy: typeof PUBLIC_REVIEWER };
 export type FactsInput = Pick<ProjectFacts, "summary" | "offArc" | "facts"> & { rev: number };
 
 export const FACTS_LIMITS = { facts: 60, text: 300, note: 500, summary: 280, evidence: 5, changelog: 200, id: 40, offArc: 5, offArcItem: 60 } as const;
@@ -180,4 +183,13 @@ export function publicFacts(p: ProjectFacts, now: number): ProjectFacts {
       .filter((c) => !hidden.has(c.factId) && released(c.hiddenUntil, now))
       .map(({ hiddenUntil: _h, ...c }) => { void _h; return c; }),
   };
+}
+
+/** The public answer: publicFacts without rev or the admin's wallet; lastReviewedAt is the newest
+ *  updatedAt/observedAt among the facts shown (absent when none), so private edits leave no trace. */
+export function publicResponse(p: ProjectFacts, now: number): PublicProjectFacts {
+  const { rev: _r, lastReviewedAt: _l, reviewedBy: _b, ...shown } = publicFacts(p, now);
+  void _r; void _l; void _b;
+  const last = Math.max(...shown.facts.flatMap((f) => [Date.parse(f.updatedAt), Date.parse(f.observedAt)]).filter(Number.isFinite));
+  return { ...shown, reviewedBy: PUBLIC_REVIEWER, ...(Number.isFinite(last) ? { lastReviewedAt: new Date(last).toISOString() } : {}) };
 }
