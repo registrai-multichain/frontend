@@ -1,12 +1,13 @@
 /**
  * Public project facts (contract: src/lib/facts.ts). KV `facts:<source>` -> ProjectFacts.
- *   GET /api/admin/facts/<source>  (session)      editor state (empty rev 0 when none)
+ *   GET /api/admin/facts/<source>  (session)      admin: editor state (empty rev 0 when none); onboarder: the public view
  *   PUT /api/admin/facts/<source>  (admin + CSRF, via the middleware) FactsInput; rev must match
  *   GET /api/facts/<source>        public, publishAt-filtered; reviewer "Registrai", no rev (publicResponse)
  * The change log is built only here, from the stored previous facts; a body changelog is ignored.
  */
-import { diffChangelog, FACTS_LIMITS, publicResponse, validateFacts, type Fact, type ProjectFacts } from "../../src/lib/facts";
+import { diffChangelog, FACTS_LIMITS, publicFacts, publicResponse, validateFacts, type Fact, type ProjectFacts } from "../../src/lib/facts";
 import { normalizeSource } from "../../src/lib/verified-builders";
+import { ONBOARDER_READ_ONLY, type Role } from "./auth";
 import type { Env, KV } from "./env";
 import { errorJson, json, readJson } from "./http";
 
@@ -47,13 +48,15 @@ function stampUpdated(prev: Fact[], next: Fact[], at: string): Fact[] {
   });
 }
 
-export async function handleAdminFacts(req: Request, env: Env, rawSource: string, admin: string, deps: { now?: number } = {}): Promise<Response> {
+export async function handleAdminFacts(req: Request, env: Env, rawSource: string, admin: string, role: Role | undefined, deps: { now?: number } = {}): Promise<Response> {
   const source = canonical(rawSource);
   if (!source) return errorJson(400, "not a canonical source");
   const method = req.method.toUpperCase();
   const stored = (await getFacts(env.INVITES, source)) ?? empty(source);
-  if (method === "GET") return json({ facts: stored });
+  // Private-first: embargoed (publishAt) facts stay with the admins; an onboarder reads the public view.
+  if (method === "GET") return json({ facts: role === "admin" ? stored : publicFacts(stored, deps.now ?? Date.now()) });
   if (method === "PUT") {
+    if (role !== "admin") return errorJson(403, ONBOARDER_READ_ONLY);
     const v = validateFacts(await readJson(req), source);
     if (!v.ok) return errorJson(400, v.error);
     if (v.value.rev !== stored.rev) return errorJson(409, "someone saved a newer version; reload", { rev: stored.rev });

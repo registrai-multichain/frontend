@@ -90,5 +90,9 @@ describe("before sign-in and by role", () => {
     expect(sectionLede(suggestions, adminView("onboarder"))).not.toMatch(/invite|dismiss/i);
     const onboarding = ADMIN_SECTIONS.find((s) => s.id === "onboarding")!;
     expect(sectionLede(onboarding, adminView("onboarder"))).toBe(onboarding.lede);
+    // An onboarder reads the public view of facts (the API leaves embargoed ones out), and the lede says so.
+    const facts = ADMIN_SECTIONS.find((s) => s.id === "facts")!;
+    expect(sectionLede(facts, adminView("onboarder"))).toMatch(/public view/i);
+    expect(sectionLede(facts, adminView("onboarder"))).toMatch(/embargo/i);
   });
 });

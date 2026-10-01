@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import type { Env } from "../lib/env";
 import { getFacts, handleAdminFacts, handlePublicFacts } from "../lib/facts";
+import { onRequest as adminMiddleware } from "../functions/api/admin/_middleware";
+import { onRequest as adminFactsRoute } from "../functions/api/admin/facts/[[source]]";
 import { MemoryKV } from "./memory-kv";
 
 const ORIGIN = "https://builder.registrai.cc";
@@ -19,8 +21,8 @@ function setup() {
   const req = (path: string, method = "GET", body?: unknown) =>
     new Request(`${ORIGIN}${path}`, { method, headers: body === undefined ? {} : { "content-type": "application/json", origin: ORIGIN }, body: body === undefined ? undefined : JSON.stringify(body) });
   const call = async (res: Promise<Response>) => { const r = await res; return { status: r.status, body: (await r.json()) as Record<string, any>, headers: r.headers }; };
-  const put = (s: string, body: unknown, now = T0) => call(handleAdminFacts(req(`/api/admin/facts/${encodeURIComponent(s)}`, "PUT", body), env, s, ADMIN, { now }));
-  const get = (s: string) => call(handleAdminFacts(req(`/api/admin/facts/${encodeURIComponent(s)}`), env, s, ADMIN, { now: T0 }));
+  const put = (s: string, body: unknown, now = T0) => call(handleAdminFacts(req(`/api/admin/facts/${encodeURIComponent(s)}`, "PUT", body), env, s, ADMIN, "admin", { now }));
+  const get = (s: string) => call(handleAdminFacts(req(`/api/admin/facts/${encodeURIComponent(s)}`), env, s, ADMIN, "admin", { now: T0 }));
   const pub = (s: string, now = T0) => call(handlePublicFacts(req(`/api/facts/${encodeURIComponent(s)}`), env, s, { now }));
   return { put, get, pub, kv };
 }
@@ -143,5 +145,37 @@ describe("facts API", () => {
     expect(stored.changelog).toHaveLength(200);
     expect(stored.changelog.at(-1)!.text).toBe("Version 24 of fact 9.");
     expect(stored.changelog[0].text).not.toBe("Version 0 of fact 0.");
+  });
+});
+
+describe("/api/admin/facts through the admin middleware", () => {
+  const ONBOARDER = "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65";
+  const tok = (c: string) => c.repeat(64);
+  async function viaMiddleware(env: Env, token: string, method = "GET", body?: unknown) {
+    const path = `/api/admin/facts/${encodeURIComponent(SRC)}`;
+    const headers: Record<string, string> = { cookie: `__Host-rb_admin=${token}` };
+    if (body !== undefined) Object.assign(headers, { "content-type": "application/json", origin: ORIGIN });
+    const request = new Request(`${ORIGIN}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const ctx = { request, env, params: { source: [encodeURIComponent(SRC)] }, data: {} as Record<string, unknown>, next: async () => adminFactsRoute(ctx as never), waitUntil: () => {} };
+    const r = await adminMiddleware(ctx as never);
+    return { status: r.status, text: await r.text() };
+  }
+  test("an onboarder reads the public view (no embargoed fact); an admin reads everything", async () => {
+    const kv = new MemoryKV(() => T0);
+    const env: Env = { INVITES: kv, SITE_ORIGIN: ORIGIN, ADMIN_ADDRESSES: ADMIN, ONBOARDER_ADDRESSES: ONBOARDER };
+    await kv.put(`session:${tok("a")}`, ADMIN);
+    await kv.put(`session:${tok("b")}`, ONBOARDER);
+    const saved = await viaMiddleware(env, tok("a"), "PUT", { rev: 0, facts: [fact("f1"), fact("embargoed", { text: "Embargoed finding about the deployer.", publishAt: "2999-01-01T00:00:00.000Z" })] });
+    expect(saved.status).toBe(200);
+    const admin = await viaMiddleware(env, tok("a"));
+    expect(admin.status).toBe(200);
+    expect(admin.text).toContain("embargoed");
+    expect(admin.text).toContain("Embargoed finding");
+    const onboarder = await viaMiddleware(env, tok("b"));
+    expect(onboarder.status).toBe(200);
+    expect(onboarder.text).toContain("f1");
+    expect(onboarder.text).not.toContain("embargoed");
+    expect(onboarder.text).not.toContain("Embargoed finding");
+    expect((await viaMiddleware(env, tok("b"), "PUT", { rev: 1, facts: [] })).status).toBe(403);
   });
 });

@@ -76,7 +76,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     label: "Project facts",
     title: "Project facts",
     lede: "Write the neutral, evidenced facts shown on a project's public page.",
-    ledeReadOnly: "The facts shown on a project's public page (only the admin role can save).",
+    ledeReadOnly: "The public view of a project's facts: embargoed facts stay with the admins, and only the admin role can save.",
   },
   {
     id: "wonder",
