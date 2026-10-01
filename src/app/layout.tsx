@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono, Instrument_Serif, Instrument_Sans } from "next/font/google";
 import { Providers } from "@/components/Providers";
+import { HERO } from "@/lib/landing";
 import { REGISTRAI_X_HANDLE } from "@/lib/regi";
 import "./globals.css";
 import "./paper.css";
@@ -31,9 +32,8 @@ const serif = Instrument_Serif({
   display: "swap",
 });
 
-const TITLE = "Registrai · The anti-launchpad";
-const DESCRIPTION =
-  "Registrai supports project builders on any chain: a verified builder registry on Arc and bonded, public proof of what they ship. No token launch needed.";
+const TITLE = "Tabula by Registrai · Proof, mapped.";
+const DESCRIPTION = HERO.subline;
 
 export const viewport: Viewport = {
   themeColor: "#0d0d0c",

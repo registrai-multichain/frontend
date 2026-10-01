@@ -102,10 +102,10 @@ function HowWePublish() {
       <div>
         <p className="lp-kicker">{HOW_WE_PUBLISH.kicker}</p>
         <h2>{HOW_WE_PUBLISH.headline}</h2>
+        <a className="lp-cta lp-publish-link" href={HOW_WE_PUBLISH_URL} target="_blank" rel="noreferrer">{HOW_WE_PUBLISH.link} <span>→</span></a>
       </div>
       <div>
         <ul>{HOW_WE_PUBLISH.lines.map((line) => <li key={line}>{line}</li>)}</ul>
-        <a className="lp-cta" href={HOW_WE_PUBLISH_URL} target="_blank" rel="noreferrer">{HOW_WE_PUBLISH.link} <span>→</span></a>
       </div>
     </section>
   );
@@ -120,7 +120,7 @@ function RegiBootstrap() {
           <h2>Registrai&apos;s token on Arc.<br /><em>Builders never need one.</em></h2>
         </div>
         <div className="lp-regi-copy">
-          <p>$REGI is Registrai&apos;s token on Arc mainnet. It is separate from verification: builders don&apos;t hold, buy or issue a token to be verified, and agent bonds stay in USDC. The official contract is below; anything else using the name is not ours.</p>
+          <p>$REGI is Registrai&apos;s token on Arc mainnet. It is separate from verification: builders don&apos;t hold, buy or issue a token to be verified. The official contract is below; anything else using the name is not ours.</p>
           <div className="lp-regi-ca">
             <span>official contract · Arc</span>
             <code>{REGI_CONTRACT}</code>
