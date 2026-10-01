@@ -1583,7 +1583,7 @@ details.bld-legend p { margin: 10px 0 0; }
 .lp-tag { display: inline-block; margin-left: 8px; padding: 2px 7px; border: 1px solid currentColor; font-family: var(--font-mono), monospace; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; opacity: .7; white-space: nowrap; }
 .lp-fees .lp-kicker { margin-bottom: 40px; }
 .lp-fees .lp-route h3 { margin-top: 0; }
-.lp-fees .lp-route { min-height: 220px; }
+@media (min-width: 641px) { .lp-fees .lp-route { min-height: 220px; } }
 .lp-fees .lp-route .lp-tag { margin: 18px 0 0; }
 .lp-fees .lp-fineprint { margin-left: 0; }
 .lp-tiers { padding-block: 110px; }
