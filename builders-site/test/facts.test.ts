@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import type { ProjectFacts } from "../../src/lib/facts";
 import type { Env } from "../lib/env";
 import { getFacts, handleAdminFacts, handlePublicFacts } from "../lib/facts";
 import { onRequest as adminMiddleware } from "../functions/api/admin/_middleware";
@@ -11,6 +12,8 @@ const T0 = Date.parse("2026-09-29T12:00:00.000Z");
 const ADMIN = "0xb7ecf980a4732b75e57e2ec80903dee3964f2573";
 const SRC = "domain:kairo.market";
 const GH = "github:owner/repo";
+/** The JSON these handlers answer (admin, public or error). */
+type Body = { facts: ProjectFacts; rev?: number; error?: string };
 const fact = (id: string, extra: Record<string, unknown> = {}) => ({
   id, topic: "control", text: "One externally owned account deployed all 16 contracts.",
   evidence: ["0xdaf97c69eb8fb68ca9f4269eb8c458b3a5a31122"], observedAt: "2026-09-27T00:00:00.000Z", ...extra,
@@ -21,7 +24,7 @@ function setup() {
   const env: Env = { INVITES: kv, SITE_ORIGIN: ORIGIN };
   const req = (path: string, method = "GET", body?: unknown) =>
     new Request(`${ORIGIN}${path}`, { method, headers: body === undefined ? {} : { "content-type": "application/json", origin: ORIGIN }, body: body === undefined ? undefined : JSON.stringify(body) });
-  const call = async (res: Promise<Response>) => { const r = await res; return { status: r.status, body: (await r.json()) as Record<string, any>, headers: r.headers }; };
+  const call = async (res: Promise<Response>) => { const r = await res; return { status: r.status, body: (await r.json()) as Body, headers: r.headers }; };
   const put = (s: string, body: unknown, now = T0) => call(handleAdminFacts(req(`/api/admin/facts/${encodeURIComponent(s)}`, "PUT", body), env, s, ADMIN, "admin", { now }));
   const get = (s: string) => call(handleAdminFacts(req(`/api/admin/facts/${encodeURIComponent(s)}`), env, s, ADMIN, "admin", { now: T0 }));
   const pub = (s: string, now = T0, cache?: Cache | null, query = "") => call(handlePublicFacts(req(`/api/facts/${encodeURIComponent(s)}${query}`), env, s, { now, cache }));
@@ -36,7 +39,7 @@ describe("facts API", () => {
     expect(r.status).toBe(200);
     expect(r.body.facts.rev).toBe(1);
     expect(r.body.facts.reviewedBy).toBe(ADMIN);
-    expect(r.body.facts.changelog.map((c: any) => c.kind)).toEqual(["added"]);
+    expect(r.body.facts.changelog.map((c) => c.kind)).toEqual(["added"]);
   });
   test("stale rev is refused with 409", async () => {
     const { put } = setup();
@@ -50,7 +53,7 @@ describe("facts API", () => {
     await put(SRC, { rev: 0, facts: [fact("f1"), fact("sec", { topic: "infrastructure", publishAt: "2026-10-29T00:00:00.000Z" })] });
     const now = await pub(SRC);
     expect(now.status).toBe(200);
-    expect(now.body.facts.facts.map((f: any) => f.id)).toEqual(["f1"]);
+    expect(now.body.facts.facts.map((f) => f.id)).toEqual(["f1"]);
     expect(JSON.stringify(now.body)).not.toContain("sec");
     expect(now.headers.get("cache-control")).toContain("max-age=60");
     const later = await pub(SRC, Date.parse("2026-11-01T00:00:00.000Z"));
@@ -74,7 +77,7 @@ describe("facts API", () => {
     expect(onlyPrivate.body.facts).not.toHaveProperty("rev");
     await put(SRC, { rev: 1, facts: [fact("f1"), fact("sec", { publishAt: "2026-10-29T00:00:00.000Z" })] }, T0 + 1000);
     const first = await pub(SRC, T0 + 2000);
-    const latest = first.body.facts.facts.map((f: any) => f.updatedAt).sort().pop();
+    const latest = first.body.facts.facts.map((f) => f.updatedAt).sort().pop();
     expect(first.body.facts.lastReviewedAt).toBe(latest);
     // A later edit to the private fact alone changes nothing public, not even the review time.
     await put(SRC, { rev: 2, facts: [fact("f1"), fact("sec", { text: "A changed private detail.", publishAt: "2026-10-29T00:00:00.000Z" })] }, T0 + 3_600_000);
@@ -91,7 +94,7 @@ describe("facts API", () => {
     const forged = "2020-01-01T00:00:00.000Z";
     await put(SRC, { rev: 0, facts: [fact("a", { updatedAt: forged }), fact("b"), fact("c"), fact("d"), fact("e"), fact("g")] });
     const first = (await get(SRC)).body.facts.facts;
-    expect(first.map((f: any) => f.updatedAt)).toEqual(Array(6).fill(new Date(T0).toISOString()));
+    expect(first.map((f) => f.updatedAt)).toEqual(Array(6).fill(new Date(T0).toISOString()));
     const r = await put(SRC, {
       rev: 1,
       facts: [
@@ -105,7 +108,7 @@ describe("facts API", () => {
       ],
     }, T1);
     expect(r.status).toBe(200);
-    const at = Object.fromEntries(r.body.facts.facts.map((f: any) => [f.id, f.updatedAt]));
+    const at = Object.fromEntries(r.body.facts.facts.map((f) => [f.id, f.updatedAt]));
     expect(at).toEqual({
       a: new Date(T0).toISOString(),
       b: new Date(T1).toISOString(),
@@ -131,7 +134,7 @@ describe("facts API", () => {
     await put(SRC, { rev: 0, facts: [fact("f1"), fact("sec", { publishAt: "2026-10-29T00:00:00.000Z" })] });
     expect(JSON.stringify((await pub(SRC)).body)).not.toContain("sec");
     const later = await pub(SRC, Date.parse("2026-11-01T00:00:00.000Z"));
-    expect(later.body.facts.changelog.map((c: any) => c.factId).sort()).toEqual(["f1", "sec"]);
+    expect(later.body.facts.changelog.map((c) => c.factId).sort()).toEqual(["f1", "sec"]);
     expect(later.body.facts.changelog[0].hiddenUntil).toBeUndefined();
   });
   test("the change log keeps the newest 200 entries", async () => {
