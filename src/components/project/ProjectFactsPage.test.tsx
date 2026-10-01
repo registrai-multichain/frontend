@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 import { LoadFailed, Missing, View } from "./ProjectFactsPage";
 import type { PublicProjectFacts } from "@/lib/facts";
+import { removeHref } from "@/lib/builders-gallery";
 
 const SRC = "domain:kairo.market";
 const facts: PublicProjectFacts = {
@@ -32,5 +33,9 @@ describe("project page", () => {
     expect(old).toContain("by Registrai");
     expect(old).not.toContain("0xb7ec");
     expect(view({ ...facts, lastReviewedAt: undefined })).not.toContain("Last reviewed");
+  });
+  test("footer: Ask for removal, the gallery's own mailto", () => {
+    const html = view(facts);
+    expect(html).toContain(`<a class="pa-link" href="${removeHref(SRC).replace(/&/g, "&amp;")}">Ask for removal</a>`);
   });
 });

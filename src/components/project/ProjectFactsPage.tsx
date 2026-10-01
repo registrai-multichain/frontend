@@ -6,6 +6,7 @@ import Link from "next/link";
 import { evidenceHref, PUBLIC_REVIEWER, type ChangeLogEntry, type Fact } from "@/lib/facts";
 import { evidenceLabel, factsPath, groupFacts, pageState, parseSourceParam, safeHttpsHref, type PageState } from "@/lib/project-page";
 import { projectPath } from "@/lib/projects";
+import { removeHref } from "@/lib/builders-gallery";
 
 type Res = { status: number; body: unknown };
 
@@ -153,6 +154,8 @@ export function View({ source, state }: { source: string; state: Extract<PageSta
         <Link className="pa-link" href={`/verify/?source=${encodeURIComponent(source)}`}>Is this your project? Claim it</Link>
         {" · "}
         <a className="pa-link" href={`mailto:contact@registrai.cc?subject=${encodeURIComponent(`Registrai: ${source}`)}`}>Add a note or report an error</a>
+        {" · "}
+        <a className="pa-link" href={removeHref(source)}>Ask for removal</a>
         {" · "}
         <Link className="pa-link" href="/how-we-publish/">How we publish</Link>
       </footer>
