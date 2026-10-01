@@ -22,7 +22,7 @@ export interface Fact {
   supersededBy?: string;
   publishAt?: string;
 }
-export interface ChangeLogEntry { at: string; kind: "added" | "updated" | "superseded" | "removed" | "note"; factId: string; text: string }
+export interface ChangeLogEntry { at: string; kind: "added" | "updated" | "superseded" | "removed" | "note"; factId: string; text: string; hiddenUntil?: string }
 export interface ProjectFacts {
   source: string;
   summary?: string;
@@ -37,7 +37,12 @@ export type FactsInput = Pick<ProjectFacts, "summary" | "offArc" | "facts"> & { 
 
 export const FACTS_LIMITS = { facts: 60, text: 300, note: 500, summary: 280, evidence: 5, changelog: 200, id: 40, offArc: 5, offArcItem: 60 } as const;
 export const VERDICT_WORDS = ["scam", "rug", "rugged", "fraud", "fraudulent", "risky", "risk", "safe", "unsafe", "trustworthy", "untrustworthy", "legit", "shady", "suspicious", "dangerous", "red flag"] as const;
-const VERDICT_RE = new RegExp(`\\b(${VERDICT_WORDS.map((w) => w.replace(" ", "\\s+")).join("|")})\\b`, "i");
+// "Safe" is a multisig product name, so safe/unsafe match lowercase only; the rest are case-insensitive.
+const CASE_SENSITIVE = new Set<string>(["safe", "unsafe"]);
+const wordsRe = (ws: readonly string[]) => ws.map((w) => w.replace(" ", "\\s+")).join("|");
+const VERDICT_CI = new RegExp(`\\b(${wordsRe(VERDICT_WORDS.filter((w) => !CASE_SENSITIVE.has(w)))})\\b`, "i");
+const VERDICT_CS = new RegExp(`\\b(${wordsRe(VERDICT_WORDS.filter((w) => CASE_SENSITIVE.has(w)))})\\b`);
+const VERDICT_RE = { test: (t: string) => VERDICT_CI.test(t) || VERDICT_CS.test(t) };
 const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 const HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -141,16 +146,21 @@ export function validateFacts(body: unknown, source: string): { ok: true; value:
 
 export function diffChangelog(prev: Fact[], next: Fact[], at: string): ChangeLogEntry[] {
   const before = new Map(prev.map((f) => [f.id, f]));
-  const after = new Set(next.map((f) => f.id));
+  const now = new Map(next.map((f) => [f.id, f]));
   const out: ChangeLogEntry[] = [];
+  const push = (e: ChangeLogEntry, ...facts: (Fact | undefined)[]) => {
+    const t = Date.parse(at);
+    const until = facts.map((f) => f?.publishAt).filter((x): x is string => !!x && Date.parse(x) > t).sort().pop();
+    out.push(until ? { ...e, hiddenUntil: until } : e);
+  };
   for (const f of next) {
     const p = before.get(f.id);
-    if (!p) { out.push({ at, kind: "added", factId: f.id, text: f.text }); continue; }
-    if (p.text !== f.text || p.evidence.join() !== f.evidence.join() || p.topic !== f.topic) out.push({ at, kind: "updated", factId: f.id, text: f.text });
-    if (!p.supersededBy && f.supersededBy) out.push({ at, kind: "superseded", factId: f.id, text: `Superseded by ${f.supersededBy}` });
-    if (f.projectNote && f.projectNote.text !== p.projectNote?.text) out.push({ at, kind: "note", factId: f.id, text: f.projectNote.text });
+    if (!p) { push({ at, kind: "added", factId: f.id, text: f.text }, f); continue; }
+    if (p.text !== f.text || p.evidence.join() !== f.evidence.join() || p.topic !== f.topic) push({ at, kind: "updated", factId: f.id, text: f.text }, p, f);
+    if (!p.supersededBy && f.supersededBy) push({ at, kind: "superseded", factId: f.id, text: `Superseded by ${f.supersededBy}` }, p, f, now.get(f.supersededBy));
+    if (f.projectNote && f.projectNote.text !== p.projectNote?.text) push({ at, kind: "note", factId: f.id, text: f.projectNote.text }, p, f);
   }
-  for (const p of prev) if (!after.has(p.id)) out.push({ at, kind: "removed", factId: p.id, text: p.text });
+  for (const p of prev) if (!now.has(p.id)) push({ at, kind: "removed", factId: p.id, text: p.text }, p);
   return out;
 }
 
@@ -158,7 +168,13 @@ export function publicFacts(p: ProjectFacts, now: number): ProjectFacts {
   const hidden = new Set(p.facts.filter((f) => f.publishAt && Date.parse(f.publishAt) > now).map((f) => f.id));
   return {
     ...p,
-    facts: p.facts.filter((f) => !hidden.has(f.id)).map(({ publishAt: _p, ...f }) => { void _p; return f; }),
-    changelog: p.changelog.filter((c) => !hidden.has(c.factId)),
+    facts: p.facts.filter((f) => !hidden.has(f.id)).map(({ publishAt: _p, ...f }) => {
+      void _p;
+      if (f.supersededBy && hidden.has(f.supersededBy)) delete f.supersededBy;
+      return f;
+    }),
+    changelog: p.changelog
+      .filter((c) => !hidden.has(c.factId) && !(c.hiddenUntil && Date.parse(c.hiddenUntil) > now))
+      .map(({ hiddenUntil: _h, ...c }) => { void _h; return c; }),
   };
 }

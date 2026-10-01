@@ -21,6 +21,9 @@ describe("validateFacts", () => {
       const r = validateFacts(body([fact({ text: t })]), SRC);
       expect(r.ok, t).toBe(false);
     }
+    expect(validateFacts(body([fact({ text: "Ownership moved to 0xdaf97c69eb8fb68ca9f4269eb8c458b3a5a31122, a Safe requiring 2 of 3 owner signatures." })]), SRC).ok).toBe(true);
+    expect(validateFacts(body([fact({ text: "the contract is safe" })]), SRC).ok).toBe(false);
+    expect(validateFacts(body([fact({ text: "SCAM" })]), SRC).ok).toBe(false);
     expect(validateFacts(body([fact({ text: "The safeguard module is enabled." })]), SRC).ok).toBe(true); // "safeguard" is not "safe"
   });
   test("requires 1-5 evidence links, https or 0x only", () => {
@@ -59,6 +62,29 @@ describe("publicFacts", () => {
     expect(out.facts.map((f) => f.id)).toEqual(["f1"]);
     expect(out.changelog.map((c) => c.factId)).toEqual(["f1"]);
     expect(publicFacts(p, Date.parse("2026-11-01T00:00:00.000Z")).facts).toHaveLength(2);
+  });
+});
+
+describe("private facts never leak through the change log", () => {
+  const at = "2026-09-29T00:00:00.000Z";
+  const pub = "2026-10-29T00:00:00.000Z";
+  const mk = (changelog: ProjectFacts["changelog"], facts: Fact[]): ProjectFacts => ({ source: SRC, facts, changelog, lastReviewedAt: at, reviewedBy: "r", rev: 1 });
+  test("added then removed before publish stays hidden; visible after publish time", () => {
+    const priv = fact({ id: "sec", text: "Private detail.", publishAt: pub });
+    const log = [...diffChangelog([], [priv], at), ...diffChangelog([priv], [], at)];
+    expect(log.map((e) => e.hiddenUntil)).toEqual([pub, pub]);
+    expect(publicFacts(mk(log, []), Date.parse(at)).changelog).toEqual([]);
+    const later = publicFacts(mk(log, []), Date.parse("2026-11-01T00:00:00.000Z")).changelog;
+    expect(later.map((e) => e.kind)).toEqual(["added", "removed"]);
+    expect(later.every((e) => !("hiddenUntil" in e))).toBe(true);
+  });
+  test("visible fact superseded by a private one reveals nothing", () => {
+    const priv = fact({ id: "sec", publishAt: pub });
+    const prev = [fact()];
+    const next = [fact({ supersededBy: "sec" }), priv];
+    const out = publicFacts(mk(diffChangelog(prev, next, at), next), Date.parse(at));
+    expect(out.facts.map((f) => f.supersededBy)).toEqual([undefined]);
+    expect(JSON.stringify(out)).not.toContain("sec");
   });
 });
 
