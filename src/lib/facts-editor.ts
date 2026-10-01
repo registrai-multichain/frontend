@@ -32,3 +32,23 @@ export function canonicalSourceInput(raw: string): { ok: true; source: string } 
   if (!raw1) return { ok: false, error: "" };
   return normalizeSource(raw1) === raw1 ? { ok: true, source: raw1 } : { ok: false, error: "not a canonical source" };
 }
+
+/**
+ * The admin facts source box: a picked source takes effect at once; a typed one only once
+ * committed (Enter or blur), so the partial strings typed on the way never remount the editor
+ * or fire a GET. A committed canonical source wins over the pick.
+ */
+export interface SourceBox { picked: string; typed: string; committed: string }
+export type SourceBoxAction = { type: "pick"; value: string } | { type: "type"; value: string } | { type: "commit" };
+export const SOURCE_BOX: SourceBox = { picked: "", typed: "", committed: "" };
+
+export function sourceBox(s: SourceBox, a: SourceBoxAction): SourceBox {
+  if (a.type === "pick") return { picked: a.value, typed: "", committed: "" };
+  if (a.type === "type") return { ...s, typed: a.value };
+  return { ...s, committed: s.typed };
+}
+
+export function boxSource(s: SourceBox): { source: string; error: string } {
+  const c = canonicalSourceInput(s.committed);
+  return c.ok ? { source: c.source, error: "" } : { source: s.picked, error: c.error };
+}

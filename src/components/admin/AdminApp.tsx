@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useState, type FormEvent, type ReactNode } from "react";
 import useSWR from "swr";
 import { createPublicClient, getAddress, isAddress, type Abi, type Address, type Hex, type PublicClient } from "viem";
 import { useWallet } from "@/components/WalletProvider";
@@ -66,7 +66,7 @@ import {
 } from "@/lib/admin-sections";
 import { AdminShell } from "./AdminShell";
 import { FactsEditor } from "./FactsEditor";
-import { canonicalSourceInput, factsSources } from "@/lib/facts-editor";
+import { boxSource, factsSources, SOURCE_BOX, sourceBox } from "@/lib/facts-editor";
 import { ADMIN_DEPLOYMENT } from "./deployment";
 import a from "./admin.module.css";
 import cx from "./admin-app.module.css";
@@ -2136,16 +2136,15 @@ function FactsSection({ builders, invites }: { builders: GalleryBuilder[] | null
       ),
     [saved.data, drafts.data, builders, invites],
   );
-  const [picked, setPicked] = useState("");
-  const [typed, setTyped] = useState("");
-  const typedCheck = canonicalSourceInput(typed);
-  const source = typedCheck.ok ? typedCheck.source : picked;
+  // A typed source takes effect on Enter or blur only, so partial strings never remount FactsEditor or fire GETs.
+  const [box, dispatch] = useReducer(sourceBox, SOURCE_BOX);
+  const { source, error } = boxSource(box);
   return (
     <AdminPage id="facts">
       <Section>
         <label className={cx.search}>
           <span className="sr-only">Project</span>
-          <select className={a.input} value={picked} onChange={(e) => { setPicked(e.target.value); setTyped(""); }}>
+          <select className={a.input} value={box.picked} onChange={(e) => dispatch({ type: "pick", value: e.target.value })}>
             <option value="">Choose a project…</option>
             {sources.map((s) => (
               <option key={s} value={s}>{s}</option>
@@ -2154,9 +2153,17 @@ function FactsSection({ builders, invites }: { builders: GalleryBuilder[] | null
         </label>
         <label className={cx.search}>
           <span className="sr-only">Or type a source</span>
-          <input className={a.input} value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="or type a source, e.g. domain:example.com" spellCheck={false} />
+          <input
+            className={a.input}
+            value={box.typed}
+            onChange={(e) => dispatch({ type: "type", value: e.target.value })}
+            onKeyDown={(e) => { if (e.key === "Enter") dispatch({ type: "commit" }); }}
+            onBlur={() => dispatch({ type: "commit" })}
+            placeholder="or type a source and press Enter, e.g. domain:example.com"
+            spellCheck={false}
+          />
         </label>
-        {!typedCheck.ok && typedCheck.error && <p className={cx.error}>{typedCheck.error}</p>}
+        {error && <p className={cx.error}>{error}</p>}
         {source ? <FactsEditor key={source} source={source} canEdit={view.inviteForm} /> : <p className={cx.hint}>Choose a project to read or write its public facts.</p>}
       </Section>
     </AdminPage>
