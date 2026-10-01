@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { editorDraft, parseDraft } from "./facts-editor";
+import { canonicalSourceInput, editorDraft, factsSources, parseDraft } from "./facts-editor";
 
 const SRC = "domain:kairo.market";
 describe("facts editor helpers", () => {
@@ -15,5 +15,20 @@ describe("facts editor helpers", () => {
     expect(bad.ok === false && bad.error).toMatch(/^not valid JSON/);
     const verdict = parseDraft(JSON.stringify({ rev: 0, facts: [{ id: "a", topic: "control", text: "a scam", evidence: ["https://a.io"], observedAt: "2026-09-29" }] }), SRC);
     expect(verdict.ok).toBe(false);
+  });
+});
+
+describe("facts sources", () => {
+  test("union of the lists, de-duplicated and sorted, ignoring null lists", () => {
+    expect(factsSources(["domain:b.io", "github:x/y"], null, new Set(["domain:a.io", "domain:b.io"]), undefined)).toEqual(["domain:a.io", "domain:b.io", "github:x/y"]);
+  });
+  test("typed input must be canonical", () => {
+    expect(canonicalSourceInput("domain:kairo.market")).toEqual({ ok: true, source: "domain:kairo.market" });
+    expect(canonicalSourceInput("  domain:kairo.market ")).toEqual({ ok: true, source: "domain:kairo.market" });
+    const bad = canonicalSourceInput("https://Kairo.market/");
+    expect(bad.ok).toBe(false);
+    expect(!bad.ok && bad.error).toBe("not a canonical source");
+    expect(canonicalSourceInput("domain:KAIRO.market").ok).toBe(false);
+    expect(canonicalSourceInput("").ok).toBe(false);
   });
 });

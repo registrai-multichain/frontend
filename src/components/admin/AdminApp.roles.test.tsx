@@ -88,7 +88,7 @@ describe("/admin by role", () => {
 
   test("the rail and the mounted sections follow the role", () => {
     const all = ["invites", "register-requests", "suggestions", "onboarding", "badges", "recovery", "projects"];
-    const nom = NOMINATIONS ? ["nominations"] : [];
+    const nom = NOMINATIONS ? ["nominations", "facts"] : ["facts"];
     expect(sections(admin)).toEqual([...all, ...nom].sort());
     expect(rail(admin)).toEqual([...[...all, ...nom].map((s) => `#${s}`), "/admin/proposals/"]);
     expect(sections(onboarder)).toEqual(["invites", "register-requests", "suggestions", "onboarding", ...nom].sort());

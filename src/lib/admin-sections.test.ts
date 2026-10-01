@@ -8,15 +8,15 @@ const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
 describe("adminSections: the rail follows adminView, as the page gated its sections before", () => {
   test("an admin sees every deployed section, in rail order", () => {
     expect(ids(adminSections(adminView("admin"), ALL))).toEqual([
-      "invites", "register-requests", "suggestions", "onboarding", "badges", "recovery", "projects", "nominations", "wonder",
+      "invites", "register-requests", "suggestions", "onboarding", "badges", "recovery", "projects", "nominations", "facts", "wonder",
     ]);
   });
   test("an onboarder has no badges, recovery, projects or wonder; nominations stay (directOnboard)", () => {
-    expect(ids(adminSections(adminView("onboarder"), ALL))).toEqual(["invites", "register-requests", "suggestions", "onboarding", "nominations"]);
+    expect(ids(adminSections(adminView("onboarder"), ALL))).toEqual(["invites", "register-requests", "suggestions", "onboarding", "nominations", "facts"]);
   });
   test("what is not deployed is left out", () => {
     expect(ids(adminSections(adminView("admin"), { registry: false, nominations: false, wonder: false }))).toEqual([
-      "invites", "register-requests", "suggestions", "onboarding", "badges", "recovery",
+      "invites", "register-requests", "suggestions", "onboarding", "badges", "recovery", "facts",
     ]);
   });
   test("every section has a heading and a one-line lede", () => {
@@ -74,7 +74,7 @@ describe("adminNav", () => {
 describe("before sign-in and by role", () => {
   test("signed out, the rail has only the sections every role has", () => {
     const out = ids(signedOutSections(ALL, adminView("onboarder")));
-    expect(out).toEqual(["invites", "register-requests", "suggestions", "onboarding", "nominations"]);
+    expect(out).toEqual(["invites", "register-requests", "suggestions", "onboarding", "nominations", "facts"]);
     for (const id of ["badges", "recovery", "projects", "wonder"]) expect(out).not.toContain(id);
     // Every one of them is also an admin's and an onboarder's.
     const admin = ids(adminSections(adminView("admin"), ALL));

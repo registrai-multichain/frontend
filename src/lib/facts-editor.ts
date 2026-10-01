@@ -1,3 +1,4 @@
+import { normalizeSource } from "./verified-builders";
 import { validateFacts, type FactsInput, type ProjectFacts } from "./facts";
 
 export function editorDraft(p: ProjectFacts): string {
@@ -16,4 +17,18 @@ export function parseDraft(text: string, source: string): { ok: true; value: Fac
     return { ok: false, error: `not valid JSON: ${(e as Error).message}` };
   }
   return validateFacts(body, source);
+}
+
+/** Every known source for the facts picker: the union of the lists already loaded, de-duplicated and sorted. */
+export function factsSources(...lists: ReadonlyArray<Iterable<string> | null | undefined>): string[] {
+  const out = new Set<string>();
+  for (const l of lists) for (const s of l ?? []) if (s) out.add(s);
+  return [...out].sort((x, y) => x.localeCompare(y));
+}
+
+/** Typed input must already be a canonical source (normalizeSource(raw) === raw). */
+export function canonicalSourceInput(raw: string): { ok: true; source: string } | { ok: false; error: string } {
+  const raw1 = raw.trim();
+  if (!raw1) return { ok: false, error: "" };
+  return normalizeSource(raw1) === raw1 ? { ok: true, source: raw1 } : { ok: false, error: "not a canonical source" };
 }

@@ -66,6 +66,7 @@ import {
 } from "@/lib/admin-sections";
 import { AdminShell } from "./AdminShell";
 import { FactsEditor } from "./FactsEditor";
+import { canonicalSourceInput, factsSources } from "@/lib/facts-editor";
 import { ADMIN_DEPLOYMENT } from "./deployment";
 import a from "./admin.module.css";
 import cx from "./admin-app.module.css";
@@ -559,6 +560,8 @@ export function Dashboard({
         {view.directOnboard && NOMINATIONS && (
           <NominationsSection invites={invites.data ?? []} onInvitesChanged={() => invites.mutate()} builders={chain.data ?? null} />
         )}
+
+        <FactsSection builders={chain.data ?? null} invites={invites.data ?? null} />
 
         {view.wonder && WONDER_ON_BUILDERS && <WonderSection invites={invites.data ?? []} />}
       </AdminShell>
@@ -1950,6 +1953,19 @@ function ProjectsSection({
 /** The drafts list shows this many until "Show all" (the live KV holds two dozen). */
 const DRAFTS_SHOWN = 8;
 
+async function fetchDrafts() {
+  const r = await call<{ drafts?: NominationDraft[]; error?: string }>("/api/admin/drafts");
+  if (r.status !== 200 || !r.body.drafts) throw new Error(r.body.error ?? `drafts (${r.status})`);
+  return r.body.drafts;
+}
+async function fetchSavedProfiles() {
+  const r = await call<{ projects?: ProjectListItem[] }>("/api/admin/projects");
+  const out = new Map<string, ProjectProfile>();
+  // The list adds a server-computed `status`; the anchored hash is of the profile alone.
+  for (const p of r.body.projects ?? []) if (p.declaredBy) out.set(p.source, profileOfListItem(p));
+  return out;
+}
+
 /** arc-80's prepared drafts: review, then Invite → Save profile → Nominate, each once the step before is done. */
 function DraftsTable({
   invited,
@@ -1969,18 +1985,8 @@ function DraftsTable({
   busy: boolean;
 }) {
   const view = useContext(ViewCtx);
-  const drafts = useSWR("admin-drafts", async () => {
-    const r = await call<{ drafts?: NominationDraft[]; error?: string }>("/api/admin/drafts");
-    if (r.status !== 200 || !r.body.drafts) throw new Error(r.body.error ?? `drafts (${r.status})`);
-    return r.body.drafts;
-  }, { revalidateOnFocus: false, shouldRetryOnError: false });
-  const saved = useSWR("admin-projects-saved", async () => {
-    const r = await call<{ projects?: ProjectListItem[] }>("/api/admin/projects");
-    const out = new Map<string, ProjectProfile>();
-    // The list adds a server-computed `status`; the anchored hash is of the profile alone.
-    for (const p of r.body.projects ?? []) if (p.declaredBy) out.set(p.source, profileOfListItem(p));
-    return out;
-  }, { revalidateOnFocus: false, shouldRetryOnError: false });
+  const drafts = useSWR("admin-drafts", fetchDrafts, { revalidateOnFocus: false, shouldRetryOnError: false });
+  const saved = useSWR("admin-projects-saved", fetchSavedProfiles, { revalidateOnFocus: false, shouldRetryOnError: false });
   const [open, setOpen] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
@@ -2112,6 +2118,50 @@ function DraftDetails({ d }: { d: NominationDraft }) {
 }
 
 
+
+// ───────────────────────────── project facts ─────────────────────────────
+
+/** Pick any known project (or type a canonical source) and edit its public facts. Reuses the lists the page already loads (same SWR keys). */
+function FactsSection({ builders, invites }: { builders: GalleryBuilder[] | null; invites: AdminInvite[] | null }) {
+  const view = useContext(ViewCtx);
+  const drafts = useSWR("admin-drafts", fetchDrafts, { revalidateOnFocus: false, shouldRetryOnError: false });
+  const saved = useSWR("admin-projects-saved", fetchSavedProfiles, { revalidateOnFocus: false, shouldRetryOnError: false });
+  const sources = useMemo(
+    () =>
+      factsSources(
+        saved.data?.keys(),
+        drafts.data?.map((d) => d.source),
+        builders?.flatMap((b) => b.projects.map((p) => p.source)),
+        invites?.map((i) => i.source),
+      ),
+    [saved.data, drafts.data, builders, invites],
+  );
+  const [picked, setPicked] = useState("");
+  const [typed, setTyped] = useState("");
+  const typedCheck = canonicalSourceInput(typed);
+  const source = typedCheck.ok ? typedCheck.source : picked;
+  return (
+    <AdminPage id="facts">
+      <Section>
+        <label className={cx.search}>
+          <span className="sr-only">Project</span>
+          <select className={a.input} value={picked} onChange={(e) => { setPicked(e.target.value); setTyped(""); }}>
+            <option value="">Choose a project…</option>
+            {sources.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </label>
+        <label className={cx.search}>
+          <span className="sr-only">Or type a source</span>
+          <input className={a.input} value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="or type a source, e.g. domain:example.com" spellCheck={false} />
+        </label>
+        {!typedCheck.ok && typedCheck.error && <p className={cx.error}>{typedCheck.error}</p>}
+        {source ? <FactsEditor key={source} source={source} canEdit={view.inviteForm} /> : <p className={cx.hint}>Choose a project to read or write its public facts.</p>}
+      </Section>
+    </AdminPage>
+  );
+}
 
 /** ProjectNominations: anchor an invited project on chain as nominated (the gallery's backup). */
 function NominationsSection({ invites, onInvitesChanged, builders }: { invites: AdminInvite[]; onInvitesChanged: () => void; builders: GalleryBuilder[] | null }) {

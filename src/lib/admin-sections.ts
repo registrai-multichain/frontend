@@ -15,6 +15,7 @@ export type AdminSectionId =
   | "recovery"
   | "projects"
   | "nominations"
+  | "facts"
   | "wonder";
 
 export interface AdminSection {
@@ -71,6 +72,13 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     lede: "Review the prepared drafts, then anchor invited projects on chain as nominated.",
   },
   {
+    id: "facts",
+    label: "Project facts",
+    title: "Project facts",
+    lede: "Write the neutral, evidenced facts shown on a project's public page.",
+    ledeReadOnly: "The facts shown on a project's public page (only the admin role can save).",
+  },
+  {
     id: "wonder",
     label: "Wonder markets",
     title: "Wonder markets",
@@ -98,6 +106,7 @@ export function adminSections(view: AdminView, has: AdminDeployment): AdminSecti
     recovery: view.recovery,
     projects: view.projects && has.registry,
     nominations: view.directOnboard && has.nominations,
+    facts: true,
     wonder: view.wonder && has.wonder,
   };
   return ADMIN_SECTIONS.filter((s) => shown[s.id]);
