@@ -3,6 +3,7 @@ import type { Env } from "../lib/env";
 import { getFacts, handleAdminFacts, handlePublicFacts } from "../lib/facts";
 import { onRequest as adminMiddleware } from "../functions/api/admin/_middleware";
 import { onRequest as adminFactsRoute } from "../functions/api/admin/facts/[[source]]";
+import { MemoryCache } from "./memory-cache";
 import { MemoryKV } from "./memory-kv";
 
 const ORIGIN = "https://builder.registrai.cc";
@@ -23,7 +24,7 @@ function setup() {
   const call = async (res: Promise<Response>) => { const r = await res; return { status: r.status, body: (await r.json()) as Record<string, any>, headers: r.headers }; };
   const put = (s: string, body: unknown, now = T0) => call(handleAdminFacts(req(`/api/admin/facts/${encodeURIComponent(s)}`, "PUT", body), env, s, ADMIN, "admin", { now }));
   const get = (s: string) => call(handleAdminFacts(req(`/api/admin/facts/${encodeURIComponent(s)}`), env, s, ADMIN, "admin", { now: T0 }));
-  const pub = (s: string, now = T0) => call(handlePublicFacts(req(`/api/facts/${encodeURIComponent(s)}`), env, s, { now }));
+  const pub = (s: string, now = T0, cache?: Cache | null, query = "") => call(handlePublicFacts(req(`/api/facts/${encodeURIComponent(s)}${query}`), env, s, { now, cache }));
   return { put, get, pub, kv };
 }
 
@@ -177,5 +178,41 @@ describe("/api/admin/facts through the admin middleware", () => {
     expect(onboarder.text).not.toContain("embargoed");
     expect(onboarder.text).not.toContain("Embargoed finding");
     expect((await viaMiddleware(env, tok("b"), "PUT", { rev: 1, facts: [] })).status).toBe(403);
+  });
+});
+
+describe("edge cache", () => {
+  test("public GET /api/facts: 200 and 404 kept under the path alone (60 s); a 400 is not", async () => {
+    const { put, pub } = setup();
+    const mem = new MemoryCache();
+    const cache = mem as unknown as Cache;
+    await put(SRC, { rev: 0, facts: [fact("f1")] });
+    const a = await pub(SRC, T0, cache, "?x=1");
+    expect(a.status).toBe(200);
+    expect(a.headers.get("cache-control")).toBe("public, max-age=60");
+    await put(SRC, { rev: 1, facts: [fact("f1"), fact("f2")] });
+    const b = await pub(SRC, T0, cache, "?y=2");
+    expect(b.body).toEqual(a.body);
+    expect((await pub("domain:nothing.here", T0, cache)).status).toBe(404);
+    expect((await pub("domain:Kairo.Market", T0, cache)).status).toBe(400);
+    expect([...mem.store.keys()].sort()).toEqual([`${ORIGIN}/api/facts/${encodeURIComponent("domain:nothing.here")}`, `${ORIGIN}/api/facts/${encodeURIComponent(SRC)}`].sort());
+    expect(mem.store.get(`${ORIGIN}/api/facts/${encodeURIComponent("domain:nothing.here")}`)!.headers.get("cache-control")).toBe("public, max-age=60");
+  });
+  test("admin routes never touch the edge cache, even when caches.default exists", async () => {
+    const mem = new MemoryCache();
+    const g = globalThis as { caches?: unknown };
+    const before = g.caches;
+    g.caches = { default: mem };
+    try {
+      const { put, get, pub } = setup();
+      await put(SRC, { rev: 0, facts: [fact("f1")] });
+      expect((await get(SRC)).headers.get("cache-control")).toBe("no-store");
+      expect((await pub(SRC)).status).toBe(200); // no cache given: caches.default
+      await put(SRC, { rev: 1, facts: [fact("f1"), fact("f2")] });
+      expect((await get(SRC)).body.facts.facts).toHaveLength(2);
+      expect([...mem.store.keys()]).toEqual([`${ORIGIN}/api/facts/${encodeURIComponent(SRC)}`]);
+    } finally {
+      g.caches = before;
+    }
   });
 });

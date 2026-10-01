@@ -21,7 +21,7 @@ import {
 } from "../../src/lib/projects";
 import { normalizeSource } from "../../src/lib/verified-builders";
 import type { Env, KV } from "./env";
-import { errorJson, json, readJson } from "./http";
+import { edgeCachedGet, errorJson, json, readJson, type EdgeCacheDeps } from "./http";
 import { readIndex } from "./invites";
 import { listSuggestions } from "./suggestions";
 
@@ -121,11 +121,13 @@ export async function handleAdminProject(req: Request, env: Env, rawSource: stri
 }
 
 /** GET /api/projects/<source> (public). */
-export async function handlePublicProject(req: Request, env: Env, rawSource: string): Promise<Response> {
+export async function handlePublicProject(req: Request, env: Env, rawSource: string, deps: EdgeCacheDeps = {}): Promise<Response> {
   if (req.method.toUpperCase() !== "GET") return errorJson(405, "method not allowed");
   const source = normalizeSource(rawSource);
   if (!source || source !== rawSource) return errorJson(400, "not a canonical source");
-  const profile = await getProfile(env.INVITES, source);
-  if (!profile) return errorJson(404, "no profile for this project");
-  return json({ profile: publicProfile(profile), feeds: await feedsOf(env, profile) }, 200, { "cache-control": "public, max-age=60" });
+  return edgeCachedGet(req, deps, async () => {
+    const profile = await getProfile(env.INVITES, source);
+    if (!profile) return errorJson(404, "no profile for this project");
+    return json({ profile: publicProfile(profile), feeds: await feedsOf(env, profile) }, 200, { "cache-control": "public, max-age=60" });
+  });
 }

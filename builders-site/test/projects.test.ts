@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { Env } from "../lib/env";
 import { handleAdminProject, handleAdminProjects, handlePublicProject } from "../lib/projects";
+import { MemoryCache } from "./memory-cache";
 import { MemoryKV } from "./memory-kv";
 
 const ORIGIN = "https://builder.registrai.cc";
@@ -37,7 +38,7 @@ function setup() {
     call(handleAdminProject(req(`/api/admin/projects/${encodeURIComponent(source)}`, "PUT", body), env, source, ADMIN, { now: T0 }));
   const get = (source: string) => call(handleAdminProject(req(`/api/admin/projects/${encodeURIComponent(source)}`), env, source, ADMIN, { now: T0 }));
   const list = () => call(handleAdminProjects(req("/api/admin/projects"), env));
-  const pub = (source: string) => call(handlePublicProject(req(`/api/projects/${encodeURIComponent(source)}`), env, source));
+  const pub = (source: string, cache?: Cache | null, query = "") => call(handlePublicProject(req(`/api/projects/${encodeURIComponent(source)}${query}`), env, source, { cache }));
   return { kv, env, put, get, list, pub };
 }
 
@@ -123,5 +124,23 @@ describe("sourceParam", () => {
     expect(sourceParam(["github:acme", "tool"])).toBe("github:acme/tool");
     expect(sourceParam(undefined)).toBe("");
     expect(sourceParam("%E0%A4%A")).toBe("");
+  });
+});
+
+describe("edge cache: GET /api/projects/<source>", () => {
+  test("200 and 404 kept under the path alone (60 s); a 400 is not; admin GET is never cached", async () => {
+    const { put, get, pub } = setup();
+    const mem = new MemoryCache();
+    const cache = mem as unknown as Cache;
+    expect((await pub("domain:nothing.here", cache)).status).toBe(404);
+    await put(SRC, profile);
+    const a = await pub(SRC, cache, "?x=1");
+    expect(a.status).toBe(200);
+    await put(SRC, { ...profile, name: "ArcTools 2" });
+    expect((await pub(SRC, cache, "?y=2")).body).toEqual(a.body);
+    expect((await get(SRC)).body).toMatchObject({ profile: { name: "ArcTools 2" } });
+    expect((await pub("domain:ArcTools.fun", cache)).status).toBe(400);
+    expect([...mem.store.keys()].sort()).toEqual([`${ORIGIN}/api/projects/${encodeURIComponent("domain:nothing.here")}`, `${ORIGIN}/api/projects/${encodeURIComponent(SRC)}`].sort());
+    for (const r of mem.store.values()) expect(r.headers.get("cache-control")).toBe("public, max-age=60");
   });
 });
