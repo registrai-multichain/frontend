@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { evidenceLabel, factsPath, groupFacts, pageState, parseSourceParam } from "./project-page";
+import { evidenceLabel, factsPath, groupFacts, pageState, parseSourceParam, safeHttpsHref } from "./project-page";
 import type { Fact } from "./facts";
 
 const f = (id: string, topic: Fact["topic"], observedAt: string, extra: Partial<Fact> = {}): Fact =>
@@ -38,5 +38,14 @@ describe("project page view-model", () => {
     const s = pageState({ status: 200, body: { profile: { name: "X" }, feeds: [] } }, { status: 404, body: {} });
     expect(s.kind === "ready" && s.profile?.name).toBe("X");
     expect(s.kind === "ready" && s.facts).toBeNull();
+  });
+});
+
+describe("safeHttpsHref", () => {
+  test("accepts plain https only", () => {
+    expect(safeHttpsHref("https://kairo.market")).toBe("https://kairo.market/");
+    for (const bad of ["javascript:alert(1)", "data:text/html,x", "http://kairo.market", "https://user:pw@x.y", "not a url", "", null, 5]) {
+      expect(safeHttpsHref(bad)).toBeNull();
+    }
   });
 });

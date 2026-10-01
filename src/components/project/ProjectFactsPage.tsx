@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { evidenceHref, type ChangeLogEntry, type Fact } from "@/lib/facts";
-import { evidenceLabel, factsPath, groupFacts, pageState, parseSourceParam, type PageState } from "@/lib/project-page";
+import { evidenceLabel, factsPath, groupFacts, pageState, parseSourceParam, safeHttpsHref, type PageState } from "@/lib/project-page";
 import { projectPath } from "@/lib/projects";
 
 type Res = { status: number; body: unknown };
@@ -72,6 +72,8 @@ function View({ source, state }: { source: string; state: Extract<PageState, { k
   const { profile, facts } = state;
   const groups = facts ? groupFacts(facts.facts) : [];
   const log = facts ? [...facts.changelog].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)) : [];
+  const website = safeHttpsHref(profile?.website);
+  const xHandle = profile?.x?.replace(/^@/, "") ?? "";
   const addr = (a: string) => (
     <a className="pa-link" href={evidenceHref(a)} target="_blank" rel="noreferrer">{evidenceLabel(a)} ↗</a>
   );
@@ -80,8 +82,8 @@ function View({ source, state }: { source: string; state: Extract<PageState, { k
       <header className="mb-7">
         <h1>{profile?.name ?? source}</h1>
         <p className="pa-small">
-          {profile?.website && <a className="pa-link" href={profile.website} target="_blank" rel="noreferrer">{profile.website}</a>}
-          {profile?.x && <> · <a className="pa-link" href={`https://x.com/${profile.x.replace(/^@/, "")}`} target="_blank" rel="noreferrer">{profile.x}</a></>}
+          {website && <a className="pa-link" href={website} target="_blank" rel="noreferrer">{website}</a>}
+          {profile?.x && /^[A-Za-z0-9_]{1,15}$/.test(xHandle) && <>{website ? " · " : ""}<a className="pa-link" href={`https://x.com/${xHandle}`} target="_blank" rel="noreferrer">@{xHandle}</a></>}
         </p>
         {facts?.summary && <p>{facts.summary}</p>}
         {facts && facts.lastReviewedAt && (

@@ -54,3 +54,15 @@ export function pageState(profileRes: { status: number; body: unknown } | null, 
   if (!profile && !facts) return { kind: "missing" };
   return { kind: "ready", profile, facts };
 }
+
+/** A stored URL is only linked when it is plain https without credentials. */
+export function safeHttpsHref(u: unknown): string | null {
+  if (typeof u !== "string") return null;
+  try {
+    const url = new URL(u);
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
