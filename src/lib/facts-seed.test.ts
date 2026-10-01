@@ -3,17 +3,14 @@ import { describe, expect, test } from "vitest";
 import { validateFacts } from "./facts";
 
 // The seed files live in the main checkout's docs/ (outside git). From the repo root
-// the relative path resolves; from a worktree (.worktrees/<name>/) it does not, so
-// fall back to the main checkout. FACTS_SEED_DIR overrides both.
-const CANDIDATES = [
-  process.env.FACTS_SEED_DIR,
-  new URL("../../../docs/superpowers/investigations/facts/", import.meta.url).pathname,
-  "/Users/tobiasd/Desktop/arc/docs/superpowers/investigations/facts/",
-].filter((p): p is string => !!p);
-const DIR = (CANDIDATES.find((p) => existsSync(p)) ?? CANDIDATES[0]).replace(/\/?$/, "/");
+// the relative path resolves; from a worktree (.worktrees/<name>/) it does not, so set
+// FACTS_SEED_DIR there. If neither exists the suite is skipped.
+const CANDIDATES = [process.env.FACTS_SEED_DIR, new URL("../../../docs/superpowers/investigations/facts/", import.meta.url).pathname].filter((p): p is string => !!p);
+const FOUND = CANDIDATES.find((p) => existsSync(p));
+const DIR = (FOUND ?? "").replace(/\/?$/, "/");
 
-describe("seed facts", () => {
-  const files = existsSync(DIR) ? readdirSync(DIR).filter((f) => f.endsWith(".json")) : [];
+describe.skipIf(!FOUND)("seed facts (skipped: set FACTS_SEED_DIR or run from the repo root)", () => {
+  const files = FOUND ? readdirSync(DIR).filter((f) => f.endsWith(".json")) : [];
   test("there are seed files", () => expect(files.length).toBeGreaterThanOrEqual(2));
   for (const f of files) {
     test(`${f} validates and has at least 6 facts across 3+ topics`, () => {
