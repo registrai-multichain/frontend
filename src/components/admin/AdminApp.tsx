@@ -65,6 +65,7 @@ import {
   ADMIN_SECTIONS, adminNav, adminSections, sectionFromHash, sectionLede, signedOutSections, type AdminSection, type AdminSectionId,
 } from "@/lib/admin-sections";
 import { AdminShell } from "./AdminShell";
+import { FactsEditor } from "./FactsEditor";
 import { ADMIN_DEPLOYMENT } from "./deployment";
 import a from "./admin.module.css";
 import cx from "./admin-app.module.css";
@@ -2072,7 +2073,7 @@ function DraftsTable({
                 )}
                 {view.inviteForm && <button type="button" className={cx.miniDanger} onClick={() => void dismiss(d)}>drop</button>}
               </span>
-              {expanded && <DraftDetails d={d} />}
+              {expanded && <><DraftDetails d={d} /><FactsEditor source={d.source} canEdit={view.inviteForm} /></>}
             </li>
           );
         })}
