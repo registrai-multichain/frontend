@@ -45,13 +45,21 @@ export function evidenceLabel(e: string): string {
 export type PageState =
   | { kind: "loading" }
   | { kind: "missing" }
+  | { kind: "error" }
   | { kind: "ready"; profile: PublicProjectResponse["profile"] | null; facts: ProjectFacts | null };
 
-export function pageState(profileRes: { status: number; body: unknown } | null, factsRes: { status: number; body: unknown } | null): PageState {
+type Res = { status: number; body: unknown };
+const obj = (x: unknown): Record<string, unknown> | null => (typeof x === "object" && x !== null && !Array.isArray(x) ? (x as Record<string, unknown>) : null);
+/** No answer, rate-limited or a server error: we cannot say the project is absent. */
+const failed = (r: Res) => r.status === 0 || r.status === 429 || r.status >= 500;
+
+export function pageState(profileRes: Res | null, factsRes: Res | null): PageState {
   if (!profileRes || !factsRes) return { kind: "loading" };
-  const profile = profileRes.status === 200 ? ((profileRes.body as PublicProjectResponse).profile ?? null) : null;
-  const facts = factsRes.status === 200 ? ((factsRes.body as { facts?: ProjectFacts }).facts ?? null) : null;
-  if (!profile && !facts) return { kind: "missing" };
+  const p = profileRes.status === 200 ? obj(obj(profileRes.body)?.profile) : null;
+  const f = factsRes.status === 200 ? obj(obj(factsRes.body)?.facts) : null;
+  const profile = p ? (p as unknown as PublicProjectResponse["profile"]) : null;
+  const facts = f && Array.isArray(f.facts) && Array.isArray(f.changelog) ? (f as unknown as ProjectFacts) : null;
+  if (!profile && !facts) return failed(profileRes) || failed(factsRes) ? { kind: "error" } : { kind: "missing" };
   return { kind: "ready", profile, facts };
 }
 

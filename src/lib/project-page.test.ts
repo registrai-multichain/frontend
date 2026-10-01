@@ -39,6 +39,22 @@ describe("project page view-model", () => {
     expect(s.kind === "ready" && s.profile?.name).toBe("X");
     expect(s.kind === "ready" && s.facts).toBeNull();
   });
+  test("pageState: a failed request is an error, never \"missing\"", () => {
+    const nf = { status: 404, body: {} };
+    expect(pageState({ status: 0, body: {} }, nf)).toEqual({ kind: "error" });
+    expect(pageState({ status: 503, body: {} }, nf)).toEqual({ kind: "error" });
+    expect(pageState(nf, { status: 500, body: {} })).toEqual({ kind: "error" });
+    expect(pageState({ status: 0, body: {} }, { status: 0, body: {} })).toEqual({ kind: "error" });
+    expect(pageState(nf, { status: 429, body: {} })).toEqual({ kind: "error" });
+  });
+  test("pageState: a 200 with a null or non-object body counts as absent, never throws", () => {
+    const nf = { status: 404, body: {} };
+    expect(pageState({ status: 200, body: null }, nf)).toEqual({ kind: "missing" });
+    expect(pageState(nf, { status: 200, body: null })).toEqual({ kind: "missing" });
+    expect(pageState({ status: 200, body: "x" }, { status: 200, body: { facts: "x" } })).toEqual({ kind: "missing" });
+    expect(pageState({ status: 200, body: { profile: 5 } }, { status: 200, body: { facts: { facts: [] } } })).toEqual({ kind: "missing" });
+    expect(pageState({ status: 200, body: null }, { status: 503, body: {} })).toEqual({ kind: "error" });
+  });
 });
 
 describe("safeHttpsHref", () => {

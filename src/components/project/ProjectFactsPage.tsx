@@ -57,13 +57,21 @@ function FactItem({ f, struck }: { f: Fact; struck?: boolean }) {
   );
 }
 
-function Missing() {
+export function Missing() {
   return (
     <div className="pa-card">
-      <p>This project is not in the registry.</p>
+      <p>No public facts for this project yet.</p>
       <p>
         <Link className="pa-link" href="/builders/">See the builders</Link>
       </p>
+    </div>
+  );
+}
+
+export function LoadFailed() {
+  return (
+    <div className="pa-card">
+      <p>Couldn&apos;t load this page. Try again.</p>
     </div>
   );
 }
@@ -170,6 +178,7 @@ function Inner() {
   if (!source) return <Missing />;
   if (state.kind === "loading") return <p className="pa-muted">Loading…</p>;
   if (state.kind === "missing") return <Missing />;
+  if (state.kind === "error") return <LoadFailed />;
   return <View source={source} state={state} />;
 }
 
