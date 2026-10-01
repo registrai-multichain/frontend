@@ -82,6 +82,37 @@ describe("facts API", () => {
     const admin = await get(SRC);
     expect(admin.body.facts).toMatchObject({ reviewedBy: ADMIN, rev: 3, lastReviewedAt: new Date(T0 + 3_600_000).toISOString() });
   });
+  test("the server sets updatedAt: now for new or changed facts, the stored one for unchanged; a body updatedAt is ignored", async () => {
+    const { put, get } = setup();
+    const T1 = T0 + 3_600_000;
+    const forged = "2020-01-01T00:00:00.000Z";
+    await put(SRC, { rev: 0, facts: [fact("a", { updatedAt: forged }), fact("b"), fact("c"), fact("d"), fact("e"), fact("g")] });
+    const first = (await get(SRC)).body.facts.facts;
+    expect(first.map((f: any) => f.updatedAt)).toEqual(Array(6).fill(new Date(T0).toISOString()));
+    const r = await put(SRC, {
+      rev: 1,
+      facts: [
+        fact("a", { updatedAt: forged }),
+        fact("b", { text: "Two accounts deployed the contracts." }),
+        fact("c", { evidence: ["https://kairo.market/docs"] }),
+        fact("d", { projectNote: { text: "We moved to a Safe.", at: "2026-09-28T00:00:00.000Z" } }),
+        fact("e", { publishAt: "2026-10-29T00:00:00.000Z" }),
+        fact("g", { supersededBy: "h" }),
+        fact("h", { updatedAt: forged }),
+      ],
+    }, T1);
+    expect(r.status).toBe(200);
+    const at = Object.fromEntries(r.body.facts.facts.map((f: any) => [f.id, f.updatedAt]));
+    expect(at).toEqual({
+      a: new Date(T0).toISOString(),
+      b: new Date(T1).toISOString(),
+      c: new Date(T1).toISOString(),
+      d: new Date(T1).toISOString(),
+      e: new Date(T1).toISOString(),
+      g: new Date(T1).toISOString(),
+      h: new Date(T1).toISOString(),
+    });
+  });
   test("verdict words are refused with 400", async () => {
     const { put } = setup();
     expect((await put(SRC, { rev: 0, facts: [fact("f1", { text: "This looks like a scam." })] })).status).toBe(400);

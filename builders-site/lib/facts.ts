@@ -5,7 +5,7 @@
  *   GET /api/facts/<source>        public, publishAt-filtered; reviewer "Registrai", no rev (publicResponse)
  * The change log is built only here, from the stored previous facts; a body changelog is ignored.
  */
-import { diffChangelog, FACTS_LIMITS, publicResponse, validateFacts, type ProjectFacts } from "../../src/lib/facts";
+import { diffChangelog, FACTS_LIMITS, publicResponse, validateFacts, type Fact, type ProjectFacts } from "../../src/lib/facts";
 import { normalizeSource } from "../../src/lib/verified-builders";
 import type { Env, KV } from "./env";
 import { errorJson, json, readJson } from "./http";
@@ -31,6 +31,22 @@ function canonical(raw: string): string | null {
   return s && s === raw ? s : null;
 }
 
+/** True when what a reader sees of the fact changed (observedAt and updatedAt aside). */
+function factChanged(p: Fact, f: Fact): boolean {
+  return p.text !== f.text || p.evidence.join() !== f.evidence.join() || p.topic !== f.topic ||
+    p.projectNote?.text !== f.projectNote?.text || p.projectNote?.at !== f.projectNote?.at ||
+    p.publishAt !== f.publishAt || p.supersededBy !== f.supersededBy;
+}
+
+/** updatedAt is the server's: now for a new or changed fact, the stored value otherwise (a body's is ignored). */
+function stampUpdated(prev: Fact[], next: Fact[], at: string): Fact[] {
+  const before = new Map(prev.map((f) => [f.id, f]));
+  return next.map((f) => {
+    const p = before.get(f.id);
+    return { ...f, updatedAt: p && !factChanged(p, f) ? p.updatedAt : at };
+  });
+}
+
 export async function handleAdminFacts(req: Request, env: Env, rawSource: string, admin: string, deps: { now?: number } = {}): Promise<Response> {
   const source = canonical(rawSource);
   if (!source) return errorJson(400, "not a canonical source");
@@ -46,7 +62,7 @@ export async function handleAdminFacts(req: Request, env: Env, rawSource: string
       source,
       ...(v.value.summary ? { summary: v.value.summary } : {}),
       ...(v.value.offArc ? { offArc: v.value.offArc } : {}),
-      facts: v.value.facts,
+      facts: stampUpdated(stored.facts, v.value.facts, at),
       changelog: [...stored.changelog, ...diffChangelog(stored.facts, v.value.facts, at)].slice(-FACTS_LIMITS.changelog),
       lastReviewedAt: at,
       reviewedBy: admin.toLowerCase(),
