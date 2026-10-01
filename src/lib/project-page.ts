@@ -66,3 +66,4 @@ export function safeHttpsHref(u: unknown): string | null {
     return null;
   }
 }
+export const projectHref = (source: string) => `/project/?source=${encodeURIComponent(source)}`;

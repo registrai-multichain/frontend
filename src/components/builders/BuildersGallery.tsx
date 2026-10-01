@@ -53,6 +53,7 @@ import { nextBadgeImage } from "@/lib/verify-invite";
 import { Avatar, BuilderCardView } from "./BuilderCardView";
 import { NOMINATIONS, readNominations, type Nomination, type NominationsReader } from "@/lib/nominations";
 import { goneDarkDate, goneDarkOf } from "@/lib/gone-dark";
+import { projectHref } from "@/lib/project-page";
 
 const REG = BUILDERS.contracts.BuilderRegistry;
 const BADGE = BUILDERS.contracts.VerifiedBuilderBadge;
@@ -251,6 +252,7 @@ function BuilderCard({ e, highlighted, waiting, nominated = false, onChain = fal
               <a className="pa-link" href={removeHref(e.source)}>Ask us to remove it</a>
             </span>
           )}
+          {e.source && <Link className="pa-link" href={projectHref(e.source)}>facts →</Link>}
           {b && <Link className="pa-link" href={detailHref(b.id)} scroll={false}>details →</Link>}
         </>
       }

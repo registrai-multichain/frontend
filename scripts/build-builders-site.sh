@@ -10,7 +10,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 D=dist-builders
 rm -rf "$D"; mkdir -p "$D"
-for x in 404 404.html _headers _next _not-found apple-icon.png icon.png admin badge brand builders guide suggest verify \
+for x in 404 404.html _headers _next _not-found apple-icon.png icon.png admin badge brand builders guide how-we-publish project suggest verify \
          mark.png mark-ring.svg mark-ring-512.png wordmark.png wordmark-dark.png; do
   [ -e "out/$x" ] && cp -R "out/$x" "$D/"
 done
@@ -29,7 +29,7 @@ mkdir -p "$D/social" && cp out/social/registrai-landing-regi.png "$D/social/"
   echo "/            /builders/  302"
   echo "/index.html  /builders/  302"
   for d in $(cd out && ls -d */ | tr -d /); do
-    case "$d" in _next|_not-found|admin|badge|brand|builders|guide|suggest|verify|social|404) ;;
+    case "$d" in _next|_not-found|admin|badge|brand|builders|guide|how-we-publish|project|suggest|verify|social|404) ;;
       *) echo "/$d    https://registrai.cc/$d/    302"; echo "/$d/*  https://registrai.cc/$d/:splat  302" ;;
     esac
   done
