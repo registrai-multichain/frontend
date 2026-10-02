@@ -46,6 +46,8 @@ const wordsRe = (ws: readonly string[]) => ws.map((w) => w.replace(" ", "\\s+"))
 const VERDICT_CI = new RegExp(`\\b(${wordsRe(VERDICT_WORDS.filter((w) => !CASE_SENSITIVE.has(w)))})\\b`, "i");
 const VERDICT_CS = new RegExp(`\\b(${wordsRe(VERDICT_WORDS.filter((w) => CASE_SENSITIVE.has(w)))})\\b`);
 const VERDICT_RE = { test: (t: string) => VERDICT_CI.test(t) || VERDICT_CS.test(t) };
+/** True when the text contains a verdict word (same rule validateFacts applies). */
+export const hasVerdict = (text: string): boolean => VERDICT_RE.test(text);
 const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 const HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -63,7 +65,7 @@ function iso(raw: unknown): string | null {
   const t = Date.parse(raw);
   return Number.isFinite(t) ? new Date(t).toISOString() : null;
 }
-function evidenceItem(raw: unknown): string | null {
+export function evidenceItem(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const s = raw.trim();
   if (ADDR_RE.test(s) || HASH_RE.test(s)) return s.toLowerCase();
