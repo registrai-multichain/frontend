@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeMonth, monthKey, PUBLIC_KINDS, trackStats, validateBatch, type TrackItem } from "./track";
+import { describesOnly, mergeMonth, monthKey, PUBLIC_KINDS, trackStats, validateBatch, type TrackItem } from "./track";
 
 const C = "0x" + "c1".repeat(20);
 const TX = "0x" + "ab".repeat(32);
@@ -54,5 +54,22 @@ describe("month storage + stats", () => {
     ], "2026-10-03T00:00:00Z");
     s[2].retracted = { at: "2026-10-04T00:00:00Z", reason: "wrong contract" };
     expect(trackStats(s, now)).toEqual({ published30: 3, retracted30: 1, medianSeconds30: 360 });
+  });
+});
+
+describe("describesOnly", () => {
+  it("rejects verdict and banned words, accepts plain description", () => {
+    expect(describesOnly("scam alert was wrong")).toBe(false);
+    expect(describesOnly("Ownership moved to a new address.")).toBe(true);
+    expect(describesOnly("the Rug moved")).toBe(false);
+    expect(describesOnly("a rugby match")).toBe(true);
+  });
+});
+
+describe("validateBatch alertTime sanity", () => {
+  const now = Date.parse("2026-10-02T12:00:00Z");
+  it("rejects an alertTime more than 1 day after now", () => {
+    expect(validateBatch({ watching: 1, items: [item({ alertTime: "2026-10-04T12:00:00Z" })] }, now).ok).toBe(false);
+    expect(validateBatch({ watching: 1, items: [item({ alertTime: "2026-10-03T11:00:00Z" })] }, now).ok).toBe(true);
   });
 });

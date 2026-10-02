@@ -1,16 +1,30 @@
 /**
  * Public track record (contract: src/lib/track.ts). KV `track:<yyyy-mm>` -> { items: StoredItem[] }, `track:meta` -> { watching, updatedAt }.
  *   POST /api/bot/track            radar keeper (Bearer RADAR_PUBLISH_SECRET): a batch; at most 3 KV writes (2 months + meta)
- *   GET  /api/track                public; reads the current and previous month, never writes; edge-cached 60 s
- *   POST /api/admin/track/retract  admin: marks one item retracted (kept, never deleted); one write
+ *   GET  /api/track                public; reads the current and previous month plus track:retracted, never writes; edge-cached 60 s
+ *   POST /api/admin/track/retract  admin: records the retraction in track:retracted only (month records untouched); one write
  */
-import { mergeMonth, monthKey, trackStats, TRACK_LIMITS, validateBatch, type StoredItem, type TrackItem } from "../../src/lib/track";
+import { describesOnly, mergeMonth, monthKey, trackStats, TRACK_LIMITS, validateBatch, type StoredItem, type TrackItem } from "../../src/lib/track";
 import { safeEqual } from "../../src/lib/builders-admin";
 import { ONBOARDER_READ_ONLY, type Role } from "./auth";
 import type { Env, KV } from "./env";
 import { edgeCachedGet, errorJson, json, readJson, type EdgeCacheDeps } from "./http";
 
 export const TRACK_META_KEY = "track:meta";
+/** `{ "<id>": { at, reason } }`: kept apart from the month records so a publish can never undo a retraction. */
+export const TRACK_RETRACTED_KEY = "track:retracted";
+type Retractions = Record<string, { at: string; reason: string }>;
+
+async function readRetractions(kv: KV): Promise<Retractions> {
+  const text = await kv.get(TRACK_RETRACTED_KEY);
+  if (!text) return {};
+  try {
+    const p = JSON.parse(text) as unknown;
+    return typeof p === "object" && p !== null && !Array.isArray(p) ? (p as Retractions) : {};
+  } catch {
+    return {};
+  }
+}
 const PUBLIC_MAX_ITEMS = 500;
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ID_RE = /^[0-9a-f]{64}$/;
@@ -33,7 +47,7 @@ export async function handleBotTrack(req: Request, env: Env, nowMs = Date.now())
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   if (!token || !safeEqual(token, secret)) return errorJson(401, "unauthorized");
   if (req.method.toUpperCase() !== "POST") return errorJson(405, "method not allowed");
-  const v = validateBatch(await readJson(req));
+  const v = validateBatch(await readJson(req), nowMs);
   if (!v.ok) return errorJson(400, v.error);
   const groups = new Map<string, TrackItem[]>();
   for (const it of v.items) {
@@ -46,7 +60,8 @@ export async function handleBotTrack(req: Request, env: Env, nowMs = Date.now())
   for (const [k, incoming] of groups) {
     const existing = await readMonth(env.INVITES, k);
     const merged = mergeMonth(existing, incoming, nowIso);
-    stored += merged.length - existing.length;
+    const have = new Set(existing.map((e) => e.id));
+    stored += new Set(incoming.filter((i) => !have.has(i.id)).map((i) => i.id)).size;
     await env.INVITES.put(k, JSON.stringify({ items: merged }));
   }
   await env.INVITES.put(TRACK_META_KEY, JSON.stringify({ watching: v.watching, updatedAt: nowIso }));
@@ -65,14 +80,14 @@ export async function handlePublicTrack(req: Request, env: Env, deps: { now?: nu
   const now = deps.now ?? Date.now();
   return edgeCachedGet(req, deps, async () => {
     const [cur, prev] = monthsOf(now);
-    const [a, b, metaText] = await Promise.all([readMonth(env.INVITES, `track:${cur}`), readMonth(env.INVITES, `track:${prev}`), env.INVITES.get(TRACK_META_KEY)]);
+    const [a, b, metaText, retracted] = await Promise.all([readMonth(env.INVITES, `track:${cur}`), readMonth(env.INVITES, `track:${prev}`), env.INVITES.get(TRACK_META_KEY), readRetractions(env.INVITES)]);
     let meta: { watching?: unknown; updatedAt?: unknown } = {};
     try {
       meta = metaText ? (JSON.parse(metaText) as typeof meta) : {};
     } catch {
       /* unreadable meta reads as empty */
     }
-    const all = [...b, ...a];
+    const all = [...b, ...a].map((i) => (Object.hasOwn(retracted, i.id) ? { ...i, retracted: retracted[i.id] } : i));
     const items = [...all].sort((x, y) => (x.alertTime < y.alertTime ? 1 : x.alertTime > y.alertTime ? -1 : 0)).slice(0, PUBLIC_MAX_ITEMS);
     return json(
       {
@@ -97,14 +112,17 @@ export async function handleAdminTrackRetract(req: Request, env: Env, admin: str
   if (typeof b.month !== "string" || !MONTH_RE.test(b.month)) return errorJson(400, "month must be YYYY-MM");
   const reason = typeof b.reason === "string" ? b.reason.trim() : "";
   if (reason.length < 1 || reason.length > TRACK_LIMITS.reason) return errorJson(400, `reason must be 1 to ${TRACK_LIMITS.reason} characters`);
+  if (!describesOnly(reason)) return errorJson(400, "reason must describe, not judge (banned word found)");
   void admin;
   const key = `track:${b.month}`;
   const items = await readMonth(env.INVITES, key);
   const i = items.findIndex((x) => x.id === b.id);
   if (i < 0) return errorJson(404, "no such item in that month");
-  if (items[i].retracted) return errorJson(409, "already retracted");
-  const updated: StoredItem = { ...items[i], retracted: { at: new Date(nowMs).toISOString(), reason } };
-  items[i] = updated;
-  await env.INVITES.put(key, JSON.stringify({ items }));
+  const retractions = await readRetractions(env.INVITES);
+  if (Object.hasOwn(retractions, b.id)) return errorJson(409, "already retracted");
+  const retracted = { at: new Date(nowMs).toISOString(), reason };
+  retractions[b.id] = retracted;
+  await env.INVITES.put(TRACK_RETRACTED_KEY, JSON.stringify(retractions));
+  const updated: StoredItem = { ...items[i], retracted };
   return json({ item: updated });
 }

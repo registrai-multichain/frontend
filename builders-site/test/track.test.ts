@@ -77,6 +77,22 @@ describe("POST /api/bot/track", () => {
   });
 });
 
+describe("stored count and alertTime sanity", () => {
+  test("stored counts new ids even at the 2000 cap", async () => {
+    const s = setup();
+    const full = Array.from({ length: 2000 }, (_, i) => ({ ...item(String(i).padStart(64, "0")), publishedAt: "2026-10-01T00:00:00.000Z" }));
+    await s.kv.put("track:2026-10", JSON.stringify({ items: full }));
+    const r = await s.publish({ watching: 1, items: [item(hex("a")), item(String(5).padStart(64, "0"))] });
+    expect(r.body.stored).toBe(1);
+    expect((await s.read("track:2026-10")).items).toHaveLength(2000);
+  });
+  test("an alertTime more than a day ahead is 400", async () => {
+    const s = setup();
+    expect((await s.publish({ watching: 1, items: [item(hex("a"), { alertTime: "2026-10-05T10:00:00.000Z" })] })).status).toBe(400);
+    expect(s.kv.puts).toBe(0);
+  });
+});
+
 describe("GET /api/track", () => {
   test("returns merged items newest first and stats; never writes; no secret", async () => {
     const s = setup();
@@ -121,10 +137,34 @@ describe("POST /api/admin/track/retract", () => {
     expect(r.status).toBe(200);
     expect(r.body.item?.retracted?.reason).toBe("Wrong address in the text.");
     expect(s.kv.puts).toBe(before + 1);
-    expect((await s.read("track:2026-10")).items[0].retracted).toMatchObject({ reason: "Wrong address in the text." });
+    expect((await s.read("track:retracted"))[hex("a")]).toMatchObject({ reason: "Wrong address in the text." });
+    expect((await s.read("track:2026-10")).items[0].retracted).toBeUndefined();
     expect((await viaMiddleware(s.env, tok("a"), { id: hex("a"), month: "2026-10", reason: "again" })).status).toBe(409);
     expect((await viaMiddleware(s.env, tok("a"), { id: hex("f"), month: "2026-10", reason: "x" })).status).toBe(404);
     expect((await viaMiddleware(s.env, tok("a"), { id: hex("a"), month: "2026-10", reason: "" })).status).toBe(400);
+  });
+  test("a reason that breaks the copy rules is 400 and nothing is written", async () => {
+    const s = setup();
+    await s.publish({ watching: 19, items: [item(hex("a"))] });
+    await s.kv.put(`session:${tok("a")}`, ADMIN);
+    const before = s.kv.puts;
+    expect((await viaMiddleware(s.env, tok("a"), { id: hex("a"), month: "2026-10", reason: "scam alert was wrong" })).status).toBe(400);
+    expect(s.kv.puts).toBe(before);
+    expect(await s.read("track:retracted")).toBeNull();
+  });
+  test("a retraction survives a later publish into the same month; the month key is untouched by retract", async () => {
+    const s = setup();
+    await s.publish({ watching: 19, items: [item(hex("a"))] });
+    await s.kv.put(`session:${tok("a")}`, ADMIN);
+    const monthBefore = await s.kv.get("track:2026-10");
+    await viaMiddleware(s.env, tok("a"), { id: hex("a"), month: "2026-10", reason: "Wrong address in the text." });
+    expect(await s.kv.get("track:2026-10")).toBe(monthBefore);
+    await s.publish({ watching: 20, items: [item(hex("a")), item(hex("b"))] });
+    const res = await handlePublicTrack(new Request(`${ORIGIN}/api/track`), s.env, { now: T0, cache: null });
+    const body = (await res.json()) as { stats: { retracted30: number }; items: { id: string; retracted?: { reason: string } }[] };
+    expect(body.items.find((i) => i.id === hex("a"))?.retracted?.reason).toBe("Wrong address in the text.");
+    expect(body.items.find((i) => i.id === hex("b"))?.retracted).toBeUndefined();
+    expect(body.stats.retracted30).toBe(1);
   });
   test("a non-admin is blocked by the middleware, and by the handler itself", async () => {
     const s = setup();

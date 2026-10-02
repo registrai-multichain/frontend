@@ -37,9 +37,12 @@ const BANNED_RE = new RegExp(`\\b(${BANNED_TRACK_WORDS.join("|")})\\b`, "i");
 const MAX_WATCHING = 10_000;
 const DAY_MS = 86_400_000;
 
+/** Copy rule: no verdict word and no banned word (whole-word, case-insensitive). */
+export const describesOnly = (text: string): boolean => !hasVerdict(text) && !BANNED_RE.test(text);
+
 const isTime = (v: unknown): v is string => typeof v === "string" && TIME_RE.test(v) && Number.isFinite(Date.parse(v));
 
-export function validateBatch(body: unknown): { ok: true; watching: number; items: TrackItem[] } | { ok: false; error: string } {
+export function validateBatch(body: unknown, nowMs: number = Date.now()): { ok: true; watching: number; items: TrackItem[] } | { ok: false; error: string } {
   if (typeof body !== "object" || body === null || Array.isArray(body)) return { ok: false, error: "expected a JSON object" };
   const b = body as Record<string, unknown>;
   if (typeof b.watching !== "number" || !Number.isInteger(b.watching) || b.watching < 0 || b.watching > MAX_WATCHING) {
@@ -56,7 +59,7 @@ export function validateBatch(body: unknown): { ok: true; watching: number; item
     if (typeof r.source !== "string" || normalizeSource(r.source) !== r.source) return { ok: false, error: `${at}: source must be canonical` };
     if (typeof r.kind !== "string" || !PUBLIC_KINDS.includes(r.kind)) return { ok: false, error: `${at}: kind is not public` };
     if (typeof r.text !== "string" || r.text.length < 1 || r.text.length > TRACK_LIMITS.text) return { ok: false, error: `${at}: text must be 1 to ${TRACK_LIMITS.text} characters` };
-    if (hasVerdict(r.text) || BANNED_RE.test(r.text)) return { ok: false, error: `${at}: text must describe, not judge (banned word found)` };
+    if (!describesOnly(r.text)) return { ok: false, error: `${at}: text must describe, not judge (banned word found)` };
     if (!Array.isArray(r.evidence) || r.evidence.length < 1 || r.evidence.length > TRACK_LIMITS.evidence) return { ok: false, error: `${at}: 1 to ${TRACK_LIMITS.evidence} evidence items` };
     const evidence: string[] = [];
     for (const e of r.evidence) {
@@ -66,6 +69,7 @@ export function validateBatch(body: unknown): { ok: true; watching: number; item
     }
     if (typeof r.observedAt !== "string" || !DAY_RE.test(r.observedAt) || !Number.isFinite(Date.parse(r.observedAt))) return { ok: false, error: `${at}: observedAt must be YYYY-MM-DD` };
     if (!isTime(r.alertTime)) return { ok: false, error: `${at}: alertTime must be an ISO UTC time` };
+    if (Date.parse(r.alertTime) > nowMs + DAY_MS) return { ok: false, error: `${at}: alertTime is in the future` };
     if (r.blockTime !== null && !isTime(r.blockTime)) return { ok: false, error: `${at}: blockTime must be an ISO UTC time or null` };
     items.push({ id: r.id, source: r.source, kind: r.kind, text: r.text, evidence, observedAt: r.observedAt, alertTime: r.alertTime, blockTime: r.blockTime });
   }
