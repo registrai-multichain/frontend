@@ -53,7 +53,7 @@ export const metadata: Metadata = {
     url: "https://registrai.cc/",
     title: TITLE,
     description: DESCRIPTION,
-    images: [{ url: "/social/registrai-landing-builders.png", width: 1200, height: 630, alt: "Registrai: launchpads sell promises, Registrai shows proof. Verified builders on any chain, built on Arc." }],
+    images: [{ url: "/social/tabula-og.png", width: 1200, height: 630, alt: "Tabula by Registrai · Proof, mapped. The proof layer, anchored on Arc." }],
   },
   twitter: {
     card: "summary_large_image",
@@ -61,7 +61,7 @@ export const metadata: Metadata = {
     creator: `@${REGISTRAI_X_HANDLE}`,
     title: TITLE,
     description: DESCRIPTION,
-    images: ["/social/registrai-landing-builders.png"],
+    images: ["/social/tabula-og.png"],
   },
 };
 

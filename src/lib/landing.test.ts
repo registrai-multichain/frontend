@@ -64,3 +64,18 @@ it("the public facts page is live; Radar alerts are still building", async () =>
   expect(items.find((i) => i.text === "A public facts page for your project")?.tag).toBe("Live");
   expect(items.find((i) => i.text.startsWith("Radar alerts"))?.tag).toBe("Building now");
 });
+
+describe("social preview image", () => {
+  const layout = readFileSync(resolve(__dirname, "../app/layout.tsx"), "utf8");
+  it("layout points openGraph and twitter at tabula-og.png with a launchpad-free alt", () => {
+    expect(layout).toContain("/social/tabula-og.png");
+    const alt = layout.match(/alt: "([^"]*)"/)?.[1] ?? "";
+    expect(alt).toContain("Tabula by Registrai");
+    expect(alt).not.toMatch(/launchpads?/i);
+  });
+  it("the PNG exists and is 1200x630", () => {
+    const png = readFileSync(resolve(__dirname, "../../public/social/tabula-og.png"));
+    expect(png.readUInt32BE(16)).toBe(1200);
+    expect(png.readUInt32BE(20)).toBe(630);
+  });
+});
