@@ -5,6 +5,7 @@ export const contactHref = (subject: string) => `mailto:${CONTACT_EMAIL}?subject
 
 export const VERIFY_URL = "https://builder.registrai.cc/verify/";
 export const HOW_WE_PUBLISH_URL = "https://builder.registrai.cc/how-we-publish/";
+export const TRACK_RECORD_URL = "https://builder.registrai.cc/track-record/";
 
 export const HERO = {
   eyebrow: "TABULA · BY REGISTRAI",
@@ -23,6 +24,7 @@ export const STRIP = {
     { name: "Record", line: "Publishes neutral, evidenced facts and anchors each note's hash and time on Arc, so the record can't be quietly rewritten.", tag: "Building now" },
   ],
   note: "Today: the verified builder registry and hand-run investigations. The rest ships piece by piece, and this page will say when.",
+  trackLink: "See the track record",
 };
 
 type TierItem = { text: string; tag?: string };

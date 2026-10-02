@@ -18,6 +18,12 @@ describe("how-we-publish + routing", () => {
       expect(keep, `case list ${r}`).toContain(r);
     }
   });
+  test("the track record is a builder-site route, copied and kept", () => {
+    expect(BUILDERS_SITE_ROUTES).toContain("track-record");
+    const sh = readFileSync(new URL("../../scripts/build-builders-site.sh", import.meta.url), "utf8");
+    expect(sh.split("\n").filter((l) => l.includes("for x in"))[0]).toContain("track-record");
+    expect(sh.split("\n").filter((l) => l.includes("case"))[0]).toContain("track-record");
+  });
   test("projectHref encodes github sources", () => {
     expect(projectHref("github:owner/repo")).toBe("/project/?source=github%3Aowner%2Frepo");
   });

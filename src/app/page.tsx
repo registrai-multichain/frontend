@@ -2,7 +2,7 @@ import { BrandLockup, BrandMark } from "@/components/Brand";
 import { REGISTRAI_X_URL, REGI_CONTRACT, REGI_DEXSCREENER_URL, REGI_EXPLORER_URL } from "@/lib/regi";
 import Link from "next/link";
 
-import { FOOTER_BRAND_LINE, FOOTER_PAUSE_LINE, HERO, HOW_WE_PUBLISH, HOW_WE_PUBLISH_URL, STRIP, TIERS, TIERS_SECTION, VERIFY_URL } from "@/lib/landing";
+import { FOOTER_BRAND_LINE, FOOTER_PAUSE_LINE, HERO, HOW_WE_PUBLISH, HOW_WE_PUBLISH_URL, STRIP, TRACK_RECORD_URL, TIERS, TIERS_SECTION, VERIFY_URL } from "@/lib/landing";
 
 export default function Home() {
   return (
@@ -64,7 +64,7 @@ function WhatTabulaDoes() {
             </article>
           ))}
         </div>
-        <p className="lp-fineprint">{STRIP.note}</p>
+        <p className="lp-fineprint">{STRIP.note}{" "}<a href={TRACK_RECORD_URL} target="_blank" rel="noreferrer">{STRIP.trackLink}</a></p>
       </div>
     </section>
   );

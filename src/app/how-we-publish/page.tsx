@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
 
 export const metadata: Metadata = {
@@ -35,6 +36,10 @@ export default function HowWePublishPage() {
         <p>
           <strong>Security issues stay private first.</strong> If we find a leaked key or an exploitable bug, we tell the team
           privately and publish only once it&apos;s fixed, or after 30 days, never with the details an attacker would need.
+        </p>
+        <p>
+          <strong>Alerts we publish appear on the track record.</strong> See the{" "}
+          <Link href="/track-record/">track record</Link>.
         </p>
         <p>
           <strong>No personal data.</strong> We look at wallets and contracts, not people.
