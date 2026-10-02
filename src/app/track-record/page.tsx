@@ -4,7 +4,7 @@ import { TrackRecordPage } from "@/components/track/TrackRecordPage";
 
 export const metadata: Metadata = {
   title: "Track record · Registrai",
-  description: "What the radar reported, published 24 hours after each change, with evidence.",
+  description: "Radar alerts that pass our publication rules appear here at least 24 hours after the alert, with evidence. Security findings and alerts we hold are not published here. Retracted entries stay listed with the reason.",
   alternates: { canonical: "/track-record" },
 };
 

@@ -55,8 +55,12 @@ export function View({ state, source }: { state: Extract<TrackState, { kind: "re
   const items = filterBySource(state.items, source);
   return (
     <div>
+      {source && <p className="pa-muted pa-small">All projects</p>}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }} className="mb-7">
-        <Stat label="Projects watched" value={String(state.watching)} />
+        <Stat
+          label={state.updatedAt ? `Projects watched as of ${day(state.updatedAt)}` : "Projects watched"}
+          value={state.updatedAt ? String(state.watching) : "—"}
+        />
         <Stat label="Alerts published (30 days)" value={String(state.stats.published30)} />
         <Stat label="Retracted (30 days)" value={String(state.stats.retracted30)} />
         <Stat label="Median time from block to alert" value={formatMedian(state.stats.medianSeconds30)} />
@@ -67,7 +71,7 @@ export function View({ state, source }: { state: Extract<TrackState, { kind: "re
         </p>
       )}
       {items.length === 0 ? (
-        <p className="pa-muted">Nothing published yet.</p>
+        <p className="pa-muted">{source ? "Nothing published for this project yet." : "Nothing published yet."}</p>
       ) : (
         <ul style={{ listStyle: "none", padding: 0 }}>
           {items.map((i) => <Row key={i.id} item={i} />)}
@@ -102,7 +106,7 @@ export function TrackRecordPage() {
       <header className="mb-6">
         <h1 className="pa-h1">Track record</h1>
         <p className="pa-lede">
-          What the radar reported, published 24 hours after each change, with evidence. Retracted entries stay listed with the reason.
+          Radar alerts that pass our publication rules appear here at least 24 hours after the alert, with evidence. Security findings and alerts we hold are not published here. Retracted entries stay listed with the reason.
         </p>
       </header>
       <Suspense fallback={<p className="pa-muted">Loading…</p>}>
