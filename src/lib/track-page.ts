@@ -22,7 +22,13 @@ export function trackState(res: { status: number; body: unknown } | null): Track
   if (!num(s.published30) || !num(s.retracted30) || !(s.medianSeconds30 === null || num(s.medianSeconds30))) return { kind: "error" };
   const items = b.items.filter((i): i is StoredItem => {
     const o = obj(i);
-    return !!o && typeof o.id === "string" && typeof o.source === "string" && typeof o.text === "string" && Array.isArray(o.evidence) && typeof o.alertTime === "string";
+    if (!o || typeof o.id !== "string" || typeof o.source !== "string" || typeof o.text !== "string" || typeof o.alertTime !== "string") return false;
+    if (!Array.isArray(o.evidence) || !o.evidence.every((e) => typeof e === "string")) return false;
+    if ("retracted" in o) {
+      const r = obj(o.retracted);
+      if (!r || typeof r.at !== "string" || typeof r.reason !== "string") return false;
+    }
+    return true;
   });
   return { kind: "ready", watching: b.watching, updatedAt: time(b.updatedAt), stats: { published30: s.published30, retracted30: s.retracted30, medianSeconds30: s.medianSeconds30 as number | null }, items };
 }

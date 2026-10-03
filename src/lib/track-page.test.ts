@@ -30,6 +30,26 @@ describe("trackState", () => {
     expect(trackState({ status: 200, body: { watching: 1, stats, items: "no" } }).kind).toBe("error");
     expect(trackState({ status: 200, body: { watching: "1", stats, items: [] } }).kind).toBe("error");
   });
+  test("items with malformed evidence or retracted are dropped, good ones kept", () => {
+    const good = item("github:a/b", "1".repeat(64));
+    const retracted = { ...item("github:a/b", "2".repeat(64)), retracted: { at: "2026-10-03T00:00:00Z", reason: "wrong" } };
+    const bad = [
+      { ...item("x", "3".repeat(64)), evidence: [1, "0x1"] },
+      { ...item("x", "4".repeat(64)), evidence: "0x1" },
+      { ...item("x", "5".repeat(64)), evidence: [null] },
+      { ...item("x", "6".repeat(64)), retracted: "yes" },
+      { ...item("x", "7".repeat(64)), retracted: { at: 5, reason: "r" } },
+      { ...item("x", "8".repeat(64)), retracted: { at: "t" } },
+      { ...item("x", "9".repeat(64)), retracted: null },
+    ];
+    const st = trackState({ status: 200, body: { watching: 1, updatedAt: null, stats, items: [good, ...bad, retracted] } });
+    expect(st.kind === "ready" && st.items).toEqual([good, retracted]);
+    if (st.kind === "ready") for (const i of st.items) for (const e of i.evidence) expect(typeof e).toBe("string");
+  });
+  test("a 200 whose every item is malformed is ready with no items", () => {
+    const items = [{ ...item("x"), evidence: [1] }, { ...item("x", "b".repeat(64)), retracted: 3 }, null, 5];
+    expect(trackState({ status: 200, body: { watching: 1, updatedAt: null, stats, items } })).toEqual({ kind: "ready", watching: 1, updatedAt: null, stats, items: [] });
+  });
   test("0, 429 and 5xx are errors", () => {
     for (const status of [0, 429, 503]) expect(trackState({ status, body: {} }).kind).toBe("error");
   });
