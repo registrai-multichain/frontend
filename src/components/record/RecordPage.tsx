@@ -32,6 +32,7 @@ function CopyDigest({ digest }: { digest: string }) {
 export function View({ state }: { state: Extract<RecordState, { kind: "ready" }> }) {
   if (state.rows.length === 0) return <p className="pa-muted">No days recorded yet.</p>;
   return (
+    <div className="pa-table-wrap">
     <table className="pa-table">
       <thead>
         <tr><th>Day</th><th>Digest</th><th>Arc tx</th><th>JSON</th></tr>
@@ -49,6 +50,7 @@ export function View({ state }: { state: Extract<RecordState, { kind: "ready" }>
         ))}
       </tbody>
     </table>
+    </div>
   );
 }
 

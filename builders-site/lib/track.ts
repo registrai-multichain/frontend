@@ -73,7 +73,8 @@ export async function handleBotTrack(req: Request, env: Env, nowMs = Date.now())
 /** What the public track shows per item: retraction and verifiedAt merged in, newest alertTime first. Shared with the record snapshot. */
 export function publicTrackItems(items: StoredItem[], retracted: Retractions, verify: VerifyMap): (StoredItem & { verifiedAt?: string })[] {
   const all = items.map((i) => {
-    const verifiedAt = Object.hasOwn(verify, i.id) ? verify[i.id].lastOk : undefined;
+    const lastOk = Object.hasOwn(verify, i.id) ? verify[i.id]?.lastOk : undefined;
+    const verifiedAt = typeof lastOk === "string" ? lastOk : undefined;
     return { ...i, ...(Object.hasOwn(retracted, i.id) ? { retracted: retracted[i.id] } : {}), ...(verifiedAt ? { verifiedAt } : {}) };
   });
   return all.sort((x, y) => (x.alertTime < y.alertTime ? 1 : x.alertTime > y.alertTime ? -1 : 0));

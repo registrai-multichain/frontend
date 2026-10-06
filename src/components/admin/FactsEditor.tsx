@@ -17,7 +17,6 @@ export function FactsEditor({ source, canEdit }: { source: string; canEdit: bool
   const [msg, setMsg] = useState<{ ok?: string; error?: string; stale?: boolean }>({});
   const [saving, setSaving] = useState(false);
   const [verify, setVerify] = useState<VerifyMap>({});
-  const [ids, setIds] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setText(null);
@@ -29,7 +28,6 @@ export function FactsEditor({ source, canEdit }: { source: string; canEdit: bool
       if (res.status !== 200 || !body.facts) throw new Error(body.error ?? `facts (${res.status})`);
       setText(editorDraft(body.facts));
       setVerify(body.verify ?? {});
-      setIds(body.facts.facts.map((f) => f.id));
     } catch (e) {
       setLoadError((e as Error).message);
     }
@@ -87,7 +85,7 @@ export function FactsEditor({ source, canEdit }: { source: string; canEdit: bool
             aria-label={`Facts JSON for ${source}`}
             onChange={(e) => setText(e.target.value)}
           />
-          {ids.map((id) => {
+          {(parsed?.ok ? parsed.value.facts.map((f) => f.id) : []).map((id) => {
             const problems = needsReview(verify, id);
             return problems ? (
               <p key={id} className={cx.error}>

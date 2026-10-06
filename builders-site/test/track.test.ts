@@ -120,6 +120,14 @@ describe("GET /api/track", () => {
     expect(body.items.find((i) => i.id === hex("a"))?.verifiedAt).toBe("2026-10-02T09:00:00.000Z");
     expect(body.items.find((i) => i.id === hex("b"))?.verifiedAt).toBeUndefined();
   });
+  test("a corrupt null verify entry does not break /api/track", async () => {
+    const s = setup();
+    await s.publish({ watching: 19, items: [item(hex("a"))] });
+    await s.kv.put("verify:track", JSON.stringify({ [hex("a")]: null }));
+    const res = await handlePublicTrack(new Request(`${ORIGIN}/api/track`), s.env, { now: T0, cache: null });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { items: { verifiedAt?: string }[] }).items[0].verifiedAt).toBeUndefined();
+  });
   test("an empty store answers 200 with zeros", async () => {
     const s = setup();
     const res = await handlePublicTrack(new Request(`${ORIGIN}/api/track`), s.env, { now: T0, cache: null });
