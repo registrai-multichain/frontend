@@ -9,14 +9,15 @@ import { safeEqual } from "../../src/lib/builders-admin";
 import { ONBOARDER_READ_ONLY, type Role } from "./auth";
 import type { Env, KV } from "./env";
 import { getVerify } from "./verify";
+import type { VerifyMap } from "../../src/lib/verify";
 import { edgeCachedGet, errorJson, json, readJson, type EdgeCacheDeps } from "./http";
 
 export const TRACK_META_KEY = "track:meta";
 /** `{ "<id>": { at, reason } }`: kept apart from the month records so a publish can never undo a retraction. */
 export const TRACK_RETRACTED_KEY = "track:retracted";
-type Retractions = Record<string, { at: string; reason: string }>;
+export type Retractions = Record<string, { at: string; reason: string }>;
 
-async function readRetractions(kv: KV): Promise<Retractions> {
+export async function readRetractions(kv: KV): Promise<Retractions> {
   const text = await kv.get(TRACK_RETRACTED_KEY);
   if (!text) return {};
   try {
@@ -30,7 +31,7 @@ const PUBLIC_MAX_ITEMS = 500;
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ID_RE = /^[0-9a-f]{64}$/;
 
-async function readMonth(kv: KV, key: string): Promise<StoredItem[]> {
+export async function readMonth(kv: KV, key: string): Promise<StoredItem[]> {
   const text = await kv.get(key);
   if (!text) return [];
   try {
@@ -69,6 +70,15 @@ export async function handleBotTrack(req: Request, env: Env, nowMs = Date.now())
   return json({ ok: true, stored });
 }
 
+/** What the public track shows per item: retraction and verifiedAt merged in, newest alertTime first. Shared with the record snapshot. */
+export function publicTrackItems(items: StoredItem[], retracted: Retractions, verify: VerifyMap): (StoredItem & { verifiedAt?: string })[] {
+  const all = items.map((i) => {
+    const verifiedAt = Object.hasOwn(verify, i.id) ? verify[i.id].lastOk : undefined;
+    return { ...i, ...(Object.hasOwn(retracted, i.id) ? { retracted: retracted[i.id] } : {}), ...(verifiedAt ? { verifiedAt } : {}) };
+  });
+  return all.sort((x, y) => (x.alertTime < y.alertTime ? 1 : x.alertTime > y.alertTime ? -1 : 0));
+}
+
 function monthsOf(nowMs: number): string[] {
   const d = new Date(nowMs);
   const cur = d.toISOString().slice(0, 7);
@@ -88,11 +98,8 @@ export async function handlePublicTrack(req: Request, env: Env, deps: { now?: nu
     } catch {
       /* unreadable meta reads as empty */
     }
-    const all = [...b, ...a].map((i) => {
-      const verifiedAt = Object.hasOwn(verify, i.id) ? verify[i.id].lastOk : undefined;
-      return { ...i, ...(Object.hasOwn(retracted, i.id) ? { retracted: retracted[i.id] } : {}), ...(verifiedAt ? { verifiedAt } : {}) };
-    });
-    const items = [...all].sort((x, y) => (x.alertTime < y.alertTime ? 1 : x.alertTime > y.alertTime ? -1 : 0)).slice(0, PUBLIC_MAX_ITEMS);
+    const all = publicTrackItems([...b, ...a], retracted, verify);
+    const items = all.slice(0, PUBLIC_MAX_ITEMS);
     return json(
       {
         watching: typeof meta.watching === "number" ? meta.watching : 0,

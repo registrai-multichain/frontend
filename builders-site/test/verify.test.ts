@@ -26,6 +26,8 @@ const ok = (at: string) => ({ ok: true, at, problems: [] });
 describe("POST /api/bot/facts/verify", () => {
   test("merges into verify:<source> with one write", async () => {
     const { kv, env, req } = setup();
+    await kv.put(`facts:${SRC}`, "{}");
+    kv.puts = 0;
     let r = await handleBotVerify(req("/api/bot/facts/verify", "POST", { source: SRC, results: { f1: ok("2026-10-06T10:00:00Z") } }), env, T0);
     expect(r.status).toBe(200);
     expect(kv.puts).toBe(1);
@@ -33,8 +35,15 @@ describe("POST /api/bot/facts/verify", () => {
     expect(kv.puts).toBe(2);
     expect(JSON.parse((await kv.get(`verify:${SRC}`))!)).toEqual({ f1: { ok: false, at: "2026-10-06T11:00:00.000Z", problems: ["url 404"], lastOk: "2026-10-06T10:00:00.000Z" } });
   });
+  test("a source with no facts is 404, except track", async () => {
+    const { kv, env, req } = setup();
+    const r = await handleBotVerify(req("/api/bot/facts/verify", "POST", { source: SRC, results: { f1: ok("2026-10-06T10:00:00Z") } }), env, T0);
+    expect(r.status).toBe(404);
+    expect(kv.puts).toBe(0);
+  });
   test("track goes to verify:track; bad input is 400 and writes nothing", async () => {
     const { kv, env, req } = setup();
+    await kv.put(`facts:${SRC}`, "{}");
     const id = "a".repeat(64);
     expect((await handleBotVerify(req("/api/bot/facts/verify", "POST", { source: "track", results: { [id]: ok("2026-10-06T10:00:00Z") } }), env, T0)).status).toBe(200);
     expect(await kv.get("verify:track")).not.toBeNull();
@@ -77,11 +86,18 @@ describe("GET /api/bot/facts", () => {
     expect((body.sources[1].facts as { publishAt?: string }[])[0].publishAt).toBe("2026-12-01T00:00:00.000Z");
     expect(body.sources[1].rev).toBe(2);
   });
+  test("more than 400 sources is a 507", async () => {
+    const { kv, env, req } = setup();
+    for (let i = 0; i < 401; i++) await kv.put(`facts:domain:s${i}.xyz`, stored(`domain:s${i}.xyz`));
+    const r = await handleBotFacts(req("/api/bot/facts", "GET"), env);
+    expect(r.status).toBe(507);
+    expect(await r.json()).toEqual({ error: "too many sources" });
+  });
   test("follows KV pagination", async () => {
     const { kv, env, req } = setup();
-    for (let i = 0; i < 1203; i++) await kv.put(`facts:domain:s${String(i).padStart(4, "0")}.xyz`, stored(`domain:s${String(i).padStart(4, "0")}.xyz`));
+    for (let i = 0; i < 400; i++) await kv.put(`facts:domain:s${String(i).padStart(4, "0")}.xyz`, stored(`domain:s${String(i).padStart(4, "0")}.xyz`));
     const body = (await (await handleBotFacts(req("/api/bot/facts", "GET"), env)).json()) as { sources: unknown[] };
-    expect(body.sources).toHaveLength(1203);
+    expect(body.sources).toHaveLength(400);
   });
   test("Bearer: 401 / 503 / 405", async () => {
     const { env, req } = setup();

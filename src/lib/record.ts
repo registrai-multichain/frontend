@@ -9,7 +9,6 @@
 export interface RecordEntry { day: string; digest: string; tx: string | null }
 export interface StoredRecord { json: string; digest: string; tx: string | null; createdAt: string }
 
-export const RECORD_MAX_DAYS_BACK = 7;
 export const RECORD_ORIGIN = "https://builder.registrai.cc";
 export const recordUrl = (day: string): string => `${RECORD_ORIGIN}/api/record/${day}.json`;
 
@@ -26,23 +25,30 @@ const byCodePoint = (a: string, b: string): number => {
   return x.length - y.length;
 };
 
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+function str(s: string): string {
+  if (LONE_SURROGATE.test(s)) throw new Error("canonicalise: string is not well-formed (lone surrogate)");
+  return JSON.stringify(s);
+}
+
 function emit(v: unknown): string {
   if (v === null) return "null";
-  if (typeof v === "string" || typeof v === "boolean") return JSON.stringify(v);
+  if (typeof v === "boolean") return JSON.stringify(v);
+  if (typeof v === "string") return str(v);
   if (typeof v === "number") {
-    if (!Number.isInteger(v)) throw new Error("canonicalise: only integers are allowed");
+    if (!Number.isSafeInteger(v)) throw new Error("canonicalise: only safe integers are allowed");
     return String(v);
   }
   if (Array.isArray(v)) return `[${v.map(emit).join(",")}]`;
   if (typeof v === "object") {
     const o = v as Record<string, unknown>;
     const keys = Object.keys(o).filter((k) => o[k] !== undefined).sort(byCodePoint);
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${emit(o[k])}`).join(",")}}`;
+    return `{${keys.map((k) => `${str(k)}:${emit(o[k])}`).join(",")}}`;
   }
   throw new Error(`canonicalise: unsupported value (${typeof v})`);
 }
 
-/** The canonical JSON text of a value. Throws on floats, NaN, bigint, functions. */
+/** The canonical JSON text of a value. Throws on floats, unsafe integers, NaN, lone surrogates, bigint, functions. */
 export const canonicalise = (v: unknown): string => emit(v);
 
 /** Lowercase hex sha256 of the UTF-8 bytes of `text` (Web Crypto). */
@@ -62,13 +68,10 @@ export function isRecordDay(v: unknown): v is string {
 export const dayToIndex = (day: string): number => Date.parse(`${day}T00:00:00Z`) / DAY_MS;
 export const endOfDayMs = (day: string): number => Date.parse(`${day}T00:00:00Z`) + DAY_MS - 1;
 
-/** Null when `day` may be snapshotted now: before today (UTC) and at most 7 days back. */
+/** Null when `day` may be snapshotted now: only today (UTC); a record is the public state at the moment it was taken. */
 export function validateRecordDay(day: unknown, nowMs: number): string | null {
   if (!isRecordDay(day)) return "day must be a date, YYYY-MM-DD";
-  const today = Math.floor(nowMs / DAY_MS);
-  const i = dayToIndex(day);
-  if (i >= today) return "day must be before today (UTC)";
-  if (i < today - RECORD_MAX_DAYS_BACK) return `day must be at most ${RECORD_MAX_DAYS_BACK} days back`;
+  if (dayToIndex(day) !== Math.floor(nowMs / DAY_MS)) return "day must be today (UTC)";
   return null;
 }
 

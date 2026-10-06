@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { Env } from "../lib/env";
+import { handlePublicFacts } from "../lib/facts";
+import { handlePublicTrack } from "../lib/track";
 import { handleBotRecord, handleBotRecordTx, handlePublicRecord } from "../lib/record";
 import { canonicalise, sha256Hex } from "../../src/lib/record";
 import { onRequest as recordRoute } from "../functions/api/bot/record";
@@ -11,7 +13,7 @@ import { MemoryKV } from "./memory-kv";
 const ORIGIN = "https://builder.registrai.cc";
 const SECRET = "s".repeat(40);
 const T0 = Date.parse("2026-10-06T00:30:00.000Z");
-const DAY = "2026-10-05";
+const DAY = "2026-10-06";
 const SRC = "domain:kairo.market";
 const TX = "0x" + "ab".repeat(32);
 const hex = (c: string) => c.repeat(64);
@@ -32,6 +34,7 @@ async function setup(secret: string = SECRET) {
   await kv.put(`facts:${SRC}`, stored(SRC, [fact("f1"), fact("emb", { publishAt: "2026-10-01T00:00:00.000Z" })]));
   await kv.put("facts:domain:hidden.xyz", stored("domain:hidden.xyz", [fact("x1", { publishAt: "2026-12-01T00:00:00.000Z" })]));
   await kv.put("track:2026-10", JSON.stringify({ items: [titem(hex("1")), titem(hex("2"), { publishedAt: "2026-10-05T23:00:00.000Z" }), titem(hex("3"), { publishedAt: "2026-10-06T00:10:00.000Z" })] }));
+  await kv.put("track:2026-07", JSON.stringify({ items: [titem(hex("4"), { alertTime: "2026-07-04T10:00:10.000Z", publishedAt: "2026-07-04T10:01:00.000Z" })] }));
   await kv.put("track:retracted", JSON.stringify({ [hex("1")]: { at: "2026-10-05T12:00:00.000Z", reason: "duplicate" } }));
   kv.puts = 0;
   const env: Env = { INVITES: kv, SITE_ORIGIN: ORIGIN, RADAR_PUBLISH_SECRET: secret };
@@ -57,26 +60,28 @@ describe("POST /api/bot/record", () => {
     expect(rec.json).toBe(canonicalise(JSON.parse(rec.json)));
     expect(JSON.parse((await kv.get("record:index"))!)).toEqual([{ day: DAY, digest: out.digest, tx: null }]);
   });
-  test("the snapshot holds only what was public that day", async () => {
-    const { kv, snapshot } = await setup();
+  test("the snapshot is the public state now: facts as GET /api/facts, track as GET /api/track over all months", async () => {
+    const { kv, env, req, snapshot } = await setup();
+    await kv.put(`verify:${SRC}`, JSON.stringify({ emb: { ok: true, at: "2026-10-05T08:00:00.000Z", problems: [], lastOk: "2026-10-05T08:00:00.000Z" } }));
+    await kv.put("verify:track", JSON.stringify({ [hex("2")]: { ok: true, at: "2026-10-06T00:00:00.000Z", problems: [], lastOk: "2026-10-06T00:00:00.000Z" } }));
     await snapshot();
-    const snap = JSON.parse(JSON.parse((await kv.get(`record:${DAY}`))!).json) as { day: string; facts: Record<string, { facts: { id: string }[]; reviewedBy: string }>; track: { id: string; retracted?: unknown }[] };
+    const snap = JSON.parse(JSON.parse((await kv.get(`record:${DAY}`))!).json) as { day: string; takenAt: string; facts: Record<string, unknown>; track: { id: string; retracted?: unknown; verifiedAt?: string }[] };
     expect(snap.day).toBe(DAY);
-    expect(Object.keys(snap.facts)).toEqual([SRC]); // hidden source leaves no trace
-    expect(snap.facts[SRC].facts.map((f) => f.id)).toEqual(["f1"]); // embargo passed but never re-checked: hidden
-    expect(snap.facts[SRC].reviewedBy).toBe("Registrai");
-    expect(snap.facts[SRC]).not.toHaveProperty("rev");
-    expect(snap.track.map((i) => i.id).sort()).toEqual([hex("1"), hex("2")]); // hex("3") was published after the day
+    expect(snap.takenAt).toBe("2026-10-06T00:30:00.000Z");
+    for (const source of Object.keys(snap.facts)) {
+      const pub = (await (await handlePublicFacts(req(`/api/facts/${encodeURIComponent(source)}`, "GET"), env, source, { now: T0, cache: null })).json()) as { facts: unknown };
+      expect(snap.facts[source]).toEqual(pub.facts);
+    }
+    expect(Object.keys(snap.facts).sort()).toEqual(["domain:hidden.xyz", SRC]);
+    const f = (snap.facts[SRC] as { facts: { id: string; verifiedAt?: string }[] }).facts;
+    expect(f.map((x) => x.id)).toEqual(["f1", "emb"]);
+    expect(f[1].verifiedAt).toBe("2026-10-05T08:00:00.000Z");
+    expect((snap.facts["domain:hidden.xyz"] as { facts: unknown[] }).facts).toEqual([]);
+    const pubTrack = (await (await handlePublicTrack(req("/api/track", "GET"), env, { now: T0, cache: null })).json()) as { items: { id: string }[] };
+    expect(snap.track.slice(0, pubTrack.items.length)).toEqual(pubTrack.items);
+    expect(snap.track.map((i) => i.id).sort()).toEqual([hex("1"), hex("2"), hex("3"), hex("4")]); // no day filtering, old month included
     expect(snap.track.find((i) => i.id === hex("1"))?.retracted).toEqual({ at: "2026-10-05T12:00:00.000Z", reason: "duplicate" });
-  });
-  test("an embargoed fact with a passing check since its update is included, with verifiedAt", async () => {
-    const { kv, snapshot } = await setup();
-    await kv.put(`verify:${SRC}`, JSON.stringify({ emb: { ok: true, at: "2026-10-05T08:00:00.000Z", problems: [], lastOk: "2026-10-05T08:00:00.000Z" }, f1: { ok: true, at: "2026-10-06T08:00:00.000Z", problems: [], lastOk: "2026-10-06T08:00:00.000Z" } }));
-    await snapshot();
-    const snap = JSON.parse(JSON.parse((await kv.get(`record:${DAY}`))!).json) as { facts: Record<string, { facts: { id: string; verifiedAt?: string }[] }> };
-    expect(snap.facts[SRC].facts.map((f) => f.id)).toEqual(["f1", "emb"]);
-    expect(snap.facts[SRC].facts[1].verifiedAt).toBe("2026-10-05T08:00:00.000Z");
-    expect(snap.facts[SRC].facts[0].verifiedAt).toBeUndefined(); // checked after the day: not part of that day
+    expect(snap.track.find((i) => i.id === hex("2"))?.verifiedAt).toBe("2026-10-06T00:00:00.000Z");
   });
   test("records are immutable: a second POST returns the same digest and writes nothing", async () => {
     const { kv, snapshot } = await setup();
@@ -97,17 +102,43 @@ describe("POST /api/bot/record", () => {
     expect(kv.puts).toBe(1);
     expect(JSON.parse((await kv.get("record:index"))!)).toHaveLength(1);
   });
-  test("day validation: future, today, more than 7 days back, malformed", async () => {
+  test("only today (UTC) may be recorded", async () => {
     const { snapshot, kv } = await setup();
-    for (const d of ["2026-10-06", "2026-10-07", "2026-09-28", "2026-10-5", "x"]) expect((await snapshot(d)).status, d).toBe(400);
-    expect((await snapshot("2026-09-29")).status).toBe(200);
-    expect(kv.puts).toBe(2);
+    for (const d of ["2026-10-05", "2026-10-07", "2026-09-29", "2026-10-6", "x"]) expect((await snapshot(d)).status, d).toBe(400);
+    expect(kv.puts).toBe(0);
+    expect((await snapshot("2026-10-06")).status).toBe(200);
   });
   test("the index stays sorted by day", async () => {
+    const { kv, env, req } = await setup();
+    const at = (day: string, now: string) => handleBotRecord(req("/api/bot/record", "POST", { day }), env, Date.parse(now));
+    await at("2026-10-08", "2026-10-08T01:00:00Z");
+    await at("2026-10-06", "2026-10-06T01:00:00Z");
+    expect((JSON.parse((await kv.get("record:index"))!) as { day: string }[]).map((e) => e.day)).toEqual(["2026-10-06", "2026-10-08"]);
+  });
+  test("a snapshot that cannot be canonicalised is a 500 with a fixed message and writes nothing", async () => {
     const { kv, snapshot } = await setup();
-    await snapshot("2026-10-05");
-    await snapshot("2026-10-03");
-    expect((JSON.parse((await kv.get("record:index"))!) as { day: string }[]).map((e) => e.day)).toEqual(["2026-10-03", "2026-10-05"]);
+    await kv.put(`facts:${SRC}`, stored(SRC, [fact("f1", { text: "bad \uD800 text" })]));
+    kv.puts = 0;
+    const r = await snapshot();
+    expect(r.status).toBe(500);
+    expect(await r.json()).toEqual({ error: "snapshot could not be canonicalised" });
+    expect(kv.puts).toBe(0);
+  });
+  test("more than 400 sources is a 507; reads run in chunks of 25", async () => {
+    const s = await setup();
+    let live = 0, peak = 0;
+    const get = s.kv.get.bind(s.kv);
+    s.kv.get = async (k: string) => { live++; peak = Math.max(peak, live); await new Promise((r) => setTimeout(r, 0)); const v = await get(k); live--; return v; };
+    for (let i = 0; i < 100; i++) await s.kv.put(`facts:domain:n${i}.xyz`, stored(`domain:n${i}.xyz`, [fact("f1")]));
+    expect((await s.snapshot()).status).toBe(200);
+    expect(peak).toBeLessThanOrEqual(25);
+    expect(peak).toBeGreaterThan(1);
+    const big = await setup();
+    for (let i = 0; i < 401; i++) await big.kv.put(`facts:domain:n${i}.xyz`, "{}");
+    const r = await big.snapshot();
+    expect(r.status).toBe(507);
+    expect(await r.json()).toEqual({ error: "too many sources" });
+    expect(await big.kv.get(`record:${DAY}`)).toBeNull();
   });
   test("Bearer: 401, 503 when unset or short, 405 for GET; the route is wired", async () => {
     const { env, req, snapshot } = await setup();

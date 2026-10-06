@@ -170,6 +170,8 @@ describe("publicFacts: embargo gate and verifiedAt", () => {
     expect(publicFacts(pf([plain]), NOW).facts).toEqual([plain]);
     const withV = publicFacts(pf([plain]), NOW, { p1: { ok: false, at: "2026-10-05T00:00:00.000Z", problems: ["x"], lastOk: "2026-10-04T00:00:00.000Z" } });
     expect(withV.facts[0].verifiedAt).toBe("2026-10-04T00:00:00.000Z");
+    // a pass from before the fact's last update says nothing about its current text
+    expect(publicFacts(pf([plain]), NOW, { p1: { ok: true, at: "2026-09-01T00:00:00.000Z", problems: [], lastOk: "2026-09-01T00:00:00.000Z" } }).facts[0]).not.toHaveProperty("verifiedAt");
     expect(publicFacts(pf([plain]), NOW, { p1: { ok: false, at: "2026-10-05T00:00:00.000Z", problems: ["x"] } }).facts[0]).not.toHaveProperty("verifiedAt");
   });
   test("a released embargoed fact carries verifiedAt and no publishAt", () => {

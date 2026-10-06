@@ -14,9 +14,17 @@ describe("canonicalise", () => {
   test("escapes like Python ensure_ascii=False", () => {
     expect(canonicalise({ s: 'a"b\\c\n\u0001\u007f/Ä' })).toBe('{"s":"a\\"b\\\\c\\n\\u0001\u007f/Ä"}');
   });
-  test("refuses floats and non-finite numbers", () => {
+  test("refuses floats, non-finite and unsafe integers", () => {
     expect(() => canonicalise({ n: 1.5 })).toThrow();
     expect(() => canonicalise({ n: NaN })).toThrow();
+    expect(() => canonicalise({ n: 2 ** 53 })).toThrow();
+    expect(canonicalise({ n: 2 ** 53 - 1 })).toBe('{"n":9007199254740991}');
+  });
+  test("refuses lone surrogates in values and keys, accepts pairs", () => {
+    expect(() => canonicalise({ s: "a\uD800b" })).toThrow();
+    expect(() => canonicalise({ s: "\uDC00" })).toThrow();
+    expect(() => canonicalise({ ["x\uD83D"]: 1 })).toThrow();
+    expect(canonicalise({ s: "\u{1F600}" })).toBe('{"s":"\u{1F600}"}');
   });
 });
 
@@ -32,12 +40,10 @@ describe("days", () => {
     expect(dayToIndex("1970-01-02")).toBe(1);
     expect(endOfDayMs("2026-10-05")).toBe(Date.parse("2026-10-05T23:59:59.999Z"));
   });
-  test("validateRecordDay: before today and at most 7 days back", () => {
-    expect(validateRecordDay("2026-10-05", now)).toBeNull();
-    expect(validateRecordDay("2026-09-29", now)).toBeNull();
-    expect(validateRecordDay("2026-09-28", now)).toMatch(/7 days/);
-    expect(validateRecordDay("2026-10-06", now)).toMatch(/before today/);
-    expect(validateRecordDay("2026-10-07", now)).toMatch(/before today/);
+  test("validateRecordDay: only today (UTC)", () => {
+    expect(validateRecordDay("2026-10-06", now)).toBeNull();
+    expect(validateRecordDay("2026-10-05", now)).toMatch(/today/);
+    expect(validateRecordDay("2026-10-07", now)).toMatch(/today/);
     expect(validateRecordDay("nope", now)).toMatch(/YYYY-MM-DD/);
   });
   test("validateTx: 32-byte hex", () => {

@@ -194,7 +194,7 @@ export function publicFacts(p: ProjectFacts, now: number, verify?: VerifyMap): P
       void _p;
       if (f.supersededBy && hidden.has(f.supersededBy)) delete f.supersededBy;
       const verifiedAt = verify?.[f.id]?.lastOk;
-      return verifiedAt ? { ...f, verifiedAt } : f;
+      return verifiedAt && verifiedSince(f, verify) ? { ...f, verifiedAt } : f;
     }),
     changelog: p.changelog
       .filter((c) => !hidden.has(c.factId) && released(c.hiddenUntil, now))
