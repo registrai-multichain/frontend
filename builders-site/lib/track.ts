@@ -8,6 +8,7 @@ import { describesOnly, mergeMonth, monthKey, trackStats, TRACK_LIMITS, validate
 import { safeEqual } from "../../src/lib/builders-admin";
 import { ONBOARDER_READ_ONLY, type Role } from "./auth";
 import type { Env, KV } from "./env";
+import { getVerify } from "./verify";
 import { edgeCachedGet, errorJson, json, readJson, type EdgeCacheDeps } from "./http";
 
 export const TRACK_META_KEY = "track:meta";
@@ -80,14 +81,17 @@ export async function handlePublicTrack(req: Request, env: Env, deps: { now?: nu
   const now = deps.now ?? Date.now();
   return edgeCachedGet(req, deps, async () => {
     const [cur, prev] = monthsOf(now);
-    const [a, b, metaText, retracted] = await Promise.all([readMonth(env.INVITES, `track:${cur}`), readMonth(env.INVITES, `track:${prev}`), env.INVITES.get(TRACK_META_KEY), readRetractions(env.INVITES)]);
+    const [a, b, metaText, retracted, verify] = await Promise.all([readMonth(env.INVITES, `track:${cur}`), readMonth(env.INVITES, `track:${prev}`), env.INVITES.get(TRACK_META_KEY), readRetractions(env.INVITES), getVerify(env.INVITES, "track")]);
     let meta: { watching?: unknown; updatedAt?: unknown } = {};
     try {
       meta = metaText ? (JSON.parse(metaText) as typeof meta) : {};
     } catch {
       /* unreadable meta reads as empty */
     }
-    const all = [...b, ...a].map((i) => (Object.hasOwn(retracted, i.id) ? { ...i, retracted: retracted[i.id] } : i));
+    const all = [...b, ...a].map((i) => {
+      const verifiedAt = Object.hasOwn(verify, i.id) ? verify[i.id].lastOk : undefined;
+      return { ...i, ...(Object.hasOwn(retracted, i.id) ? { retracted: retracted[i.id] } : {}), ...(verifiedAt ? { verifiedAt } : {}) };
+    });
     const items = [...all].sort((x, y) => (x.alertTime < y.alertTime ? 1 : x.alertTime > y.alertTime ? -1 : 0)).slice(0, PUBLIC_MAX_ITEMS);
     return json(
       {

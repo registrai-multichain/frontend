@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { evidenceHref, PUBLIC_REVIEWER, type ChangeLogEntry, type Fact } from "@/lib/facts";
 import { evidenceLabel, factsPath, groupFacts, pageState, parseSourceParam, safeHttpsHref, type PageState } from "@/lib/project-page";
+import { recheckedLine } from "@/lib/record-page";
 import { projectPath } from "@/lib/projects";
 import { removeHref } from "@/lib/builders-gallery";
 
@@ -49,6 +50,7 @@ function FactItem({ f, struck }: { f: Fact; struck?: boolean }) {
       <div>
         <Evidence items={f.evidence} /> <span className="pa-muted pa-small">observed {day(f.observedAt)}</span>
       </div>
+      {recheckedLine(f.verifiedAt) && <div className="pa-muted pa-small">{recheckedLine(f.verifiedAt)}</div>}
       {f.projectNote && (
         <blockquote className="pa-muted pa-small" style={{ margin: "6px 0 0", paddingLeft: 10, borderLeft: "2px solid currentColor" }}>
           Note from the project ({day(f.projectNote.at)}): {f.projectNote.text}

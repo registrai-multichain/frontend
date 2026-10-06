@@ -28,7 +28,7 @@ export interface TrackItem {
   alertTime: string;
   blockTime: string | null;
 }
-export type StoredItem = TrackItem & { publishedAt: string; retracted?: { at: string; reason: string } };
+export type StoredItem = TrackItem & { publishedAt: string; retracted?: { at: string; reason: string }; verifiedAt?: string };
 
 const ID_RE = /^[0-9a-f]{64}$/;
 const TIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;

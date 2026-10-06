@@ -111,6 +111,15 @@ describe("GET /api/track", () => {
     await handlePublicTrack(new Request(`${ORIGIN}/api/track`), s.env, { now: T0, cache: cache as unknown as Cache });
     expect(s.kv.puts).toBe(writes);
   });
+  test("items carry verifiedAt from verify:track (lastOk only)", async () => {
+    const s = setup();
+    await s.publish({ watching: 19, items: [item(hex("a")), item(hex("b"))] });
+    await s.kv.put("verify:track", JSON.stringify({ [hex("a")]: { ok: true, at: "2026-10-02T09:00:00.000Z", problems: [], lastOk: "2026-10-02T09:00:00.000Z" }, [hex("b")]: { ok: false, at: "2026-10-02T09:00:00.000Z", problems: ["x"] } }));
+    const res = await handlePublicTrack(new Request(`${ORIGIN}/api/track`), s.env, { now: T0, cache: null });
+    const body = (await res.json()) as { items: { id: string; verifiedAt?: string }[] };
+    expect(body.items.find((i) => i.id === hex("a"))?.verifiedAt).toBe("2026-10-02T09:00:00.000Z");
+    expect(body.items.find((i) => i.id === hex("b"))?.verifiedAt).toBeUndefined();
+  });
   test("an empty store answers 200 with zeros", async () => {
     const s = setup();
     const res = await handlePublicTrack(new Request(`${ORIGIN}/api/track`), s.env, { now: T0, cache: null });

@@ -42,6 +42,11 @@ export default function HowWePublishPage() {
           <Link href="/track-record/">track record</Link>.
         </p>
         <p>
+          <strong>Evidence is re-checked.</strong> Each fact and track record item shows the date its evidence was last
+          re-checked. A daily record of what we published is stored, and its digest is written to Arc; see the{" "}
+          <Link href="/record/">record</Link>.
+        </p>
+        <p>
           <strong>No personal data.</strong> We look at wallets and contracts, not people.
         </p>
         <p>

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ProjectFacts } from "@/lib/facts";
 import { editorDraft, parseDraft } from "@/lib/facts-editor";
+import { needsReview } from "@/lib/record-page";
+import type { VerifyMap } from "@/lib/verify";
 import a from "./admin.module.css";
 import cx from "./admin-app.module.css";
 
@@ -14,6 +16,8 @@ export function FactsEditor({ source, canEdit }: { source: string; canEdit: bool
   const [loadError, setLoadError] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok?: string; error?: string; stale?: boolean }>({});
   const [saving, setSaving] = useState(false);
+  const [verify, setVerify] = useState<VerifyMap>({});
+  const [ids, setIds] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setText(null);
@@ -21,9 +25,11 @@ export function FactsEditor({ source, canEdit }: { source: string; canEdit: bool
     setMsg({});
     try {
       const res = await fetch(path(source), { credentials: "same-origin", cache: "no-store", headers: { accept: "application/json" } });
-      const body = (await res.json().catch(() => ({}))) as { facts?: ProjectFacts; error?: string };
+      const body = (await res.json().catch(() => ({}))) as { facts?: ProjectFacts; verify?: VerifyMap; error?: string };
       if (res.status !== 200 || !body.facts) throw new Error(body.error ?? `facts (${res.status})`);
       setText(editorDraft(body.facts));
+      setVerify(body.verify ?? {});
+      setIds(body.facts.facts.map((f) => f.id));
     } catch (e) {
       setLoadError((e as Error).message);
     }
@@ -81,6 +87,14 @@ export function FactsEditor({ source, canEdit }: { source: string; canEdit: bool
             aria-label={`Facts JSON for ${source}`}
             onChange={(e) => setText(e.target.value)}
           />
+          {ids.map((id) => {
+            const problems = needsReview(verify, id);
+            return problems ? (
+              <p key={id} className={cx.error}>
+                {id}: needs review{problems.length ? ` — ${problems.join("; ")}` : ""}
+              </p>
+            ) : null;
+          })}
           <p className={parsed?.ok ? cx.hint : cx.error}>
             {parsed?.ok ? `Ready to save: ${parsed.value.facts.length} facts` : parsed?.error}
           </p>

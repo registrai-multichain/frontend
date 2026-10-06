@@ -6,6 +6,7 @@ import Link from "next/link";
 import { evidenceHref } from "@/lib/facts";
 import { evidenceLabel, parseSourceParam, projectHref } from "@/lib/project-page";
 import { filterBySource, formatMedian, trackPath, trackState, type TrackState } from "@/lib/track-page";
+import { recheckedLine } from "@/lib/record-page";
 import type { StoredItem } from "@/lib/track";
 
 const day = (iso: string) => (iso || "").slice(0, 10);
@@ -40,6 +41,7 @@ function Row({ item }: { item: StoredItem }) {
       </div>
       <div>{r ? <s>{item.text}</s> : item.text}</div>
       {r && <div className="pa-small">Retracted: {r.reason}</div>}
+      {recheckedLine(item.verifiedAt) && <div className="pa-muted pa-small">{recheckedLine(item.verifiedAt)}</div>}
       <div>
         {item.evidence.map((e) => (
           <a key={e} className="pa-link pa-small" href={evidenceHref(e)} target="_blank" rel="noreferrer" style={{ marginRight: 10 }}>

@@ -206,3 +206,12 @@
 .freeze-banner-in b { color: var(--down); font-weight: 600; }
 .freeze-banner-in a { color: var(--fg); text-decoration: underline; text-underline-offset: 2px; }
 @media (min-width: 1024px) { .freeze-banner-in { padding: 10px 40px; } }
+
+/* ── "i" info bubble ── */
+.pa-info { position: relative; display: inline-block; vertical-align: middle; }
+.pa-info > button { width: 20px; height: 20px; padding: 0; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--fg-mute); font: italic 13px/1 var(--font-serif), Georgia, serif; cursor: pointer; }
+.pa-info > button:hover { color: var(--fg); }
+.pa-info-bubble { position: absolute; z-index: 20; top: 28px; left: 0; width: min(320px, 80vw); padding: 10px 12px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; color: var(--fg); box-shadow: 0 6px 20px rgb(0 0 0 / 12%); }
+.pa-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.pa-table th, .pa-table td { text-align: left; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); vertical-align: baseline; }
+.pa-table th { font-weight: 400; color: var(--fg-mute); }
