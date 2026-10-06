@@ -49,7 +49,7 @@ describe("facts API", () => {
     expect(r.body.rev).toBe(1);
   });
   test("public view hides future publishAt facts and their log", async () => {
-    const { put, pub } = setup();
+    const { put, pub, kv } = setup();
     await put(SRC, { rev: 0, facts: [fact("f1"), fact("sec", { topic: "infrastructure", publishAt: "2026-10-29T00:00:00.000Z" })] });
     const now = await pub(SRC);
     expect(now.status).toBe(200);
@@ -57,7 +57,12 @@ describe("facts API", () => {
     expect(JSON.stringify(now.body)).not.toContain("sec");
     expect(now.headers.get("cache-control")).toContain("max-age=60");
     const later = await pub(SRC, Date.parse("2026-11-01T00:00:00.000Z"));
-    expect(later.body.facts.facts).toHaveLength(2);
+    expect(later.body.facts.facts).toHaveLength(1); // embargo passed, never re-checked: stays hidden
+    await kv.put(`verify:${SRC}`, JSON.stringify({ sec: { ok: true, at: "2026-10-30T00:00:00.000Z", problems: [], lastOk: "2026-10-30T00:00:00.000Z" } }));
+    const verified = await pub(SRC, Date.parse("2026-11-01T00:00:00.000Z"));
+    expect(verified.body.facts.facts.map((f) => f.id)).toEqual(["f1", "sec"]);
+    expect(verified.body.facts.facts[1]).toMatchObject({ verifiedAt: "2026-10-30T00:00:00.000Z" });
+    expect(verified.body.facts.facts[0]).not.toHaveProperty("verifiedAt");
   });
   test("github sources round-trip; non-canonical sources are 400; unknown is 404", async () => {
     const { put, pub } = setup();
@@ -130,9 +135,10 @@ describe("facts API", () => {
     expect(JSON.stringify(r.body.facts.changelog)).not.toContain("forged");
   });
   test("private fact log entries stay hidden publicly until publishAt, via the stored previous facts", async () => {
-    const { put, pub } = setup();
+    const { put, pub, kv } = setup();
     await put(SRC, { rev: 0, facts: [fact("f1"), fact("sec", { publishAt: "2026-10-29T00:00:00.000Z" })] });
     expect(JSON.stringify((await pub(SRC)).body)).not.toContain("sec");
+    await kv.put(`verify:${SRC}`, JSON.stringify({ sec: { ok: true, at: "2026-10-30T00:00:00.000Z", problems: [], lastOk: "2026-10-30T00:00:00.000Z" } }));
     const later = await pub(SRC, Date.parse("2026-11-01T00:00:00.000Z"));
     expect(later.body.facts.changelog.map((c) => c.factId).sort()).toEqual(["f1", "sec"]);
     expect(later.body.facts.changelog[0].hiddenUntil).toBeUndefined();
@@ -181,6 +187,28 @@ describe("/api/admin/facts through the admin middleware", () => {
     expect(onboarder.text).not.toContain("embargoed");
     expect(onboarder.text).not.toContain("Embargoed finding");
     expect((await viaMiddleware(env, tok("b"), "PUT", { rev: 1, facts: [] })).status).toBe(403);
+  });
+});
+
+describe("verify map in the facts API", () => {
+  test("a pass older than the fact's update does not release it; the admin GET carries the verify map", async () => {
+    const { put, get, pub, kv } = setup();
+    const r = await put(SRC, { rev: 0, facts: [fact("sec", { publishAt: "2026-09-01T00:00:00.000Z" })] });
+    const upd = (r.body.facts.facts[0] as { updatedAt: string }).updatedAt;
+    const verify = { sec: { ok: true, at: "2026-09-28T00:00:00.000Z", problems: [], lastOk: "2026-09-28T00:00:00.000Z" } };
+    await kv.put(`verify:${SRC}`, JSON.stringify(verify));
+    expect(upd).toBe("2026-09-29T12:00:00.000Z");
+    expect((await pub(SRC)).body.facts.facts).toEqual([]);
+    const g = (await get(SRC)) as unknown as { body: { facts: ProjectFacts; verify: unknown } };
+    expect(g.body.verify).toEqual(verify);
+    expect(g.body.facts.facts).toHaveLength(1);
+    await kv.put(`verify:${SRC}`, JSON.stringify({ sec: { ...verify.sec, lastOk: "2026-09-29T12:00:00.000Z" } }));
+    expect((await pub(SRC)).body.facts.facts.map((f) => f.id)).toEqual(["sec"]);
+  });
+  test("a missing verify map reads as empty ({})", async () => {
+    const { put, get } = setup();
+    await put(SRC, { rev: 0, facts: [fact("f1")] });
+    expect(((await get(SRC)) as unknown as { body: { verify: unknown } }).body.verify).toEqual({});
   });
 });
 

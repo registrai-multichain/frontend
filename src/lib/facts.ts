@@ -8,6 +8,8 @@
  *   GET /api/admin/facts/<encodeURIComponent(source)>  admin/onboarder session
  *   PUT /api/admin/facts/<encodeURIComponent(source)>  admin session: FactsInput (rev must match)
  */
+import type { VerifyMap } from "./verify";
+
 export type FactTopic = "control" | "contracts" | "token" | "treasury" | "activity" | "claims" | "infrastructure";
 export const FACT_TOPICS: readonly FactTopic[] = ["control", "contracts", "token", "treasury", "activity", "claims", "infrastructure"];
 
@@ -21,6 +23,8 @@ export interface Fact {
   projectNote?: { text: string; at: string };
   supersededBy?: string;
   publishAt?: string;
+  /** Public answer only: the last passing evidence re-check (verify.ts); never stored in facts:<source>. */
+  verifiedAt?: string;
 }
 export interface ChangeLogEntry { at: string; kind: "added" | "updated" | "superseded" | "removed" | "note"; factId: string; text: string; hiddenUntil?: string }
 export interface ProjectFacts {
@@ -175,14 +179,22 @@ export function diffChangelog(prev: Fact[], next: Fact[], at: string): ChangeLog
 const released = (at: unknown, now: number) =>
   at === undefined || (typeof at === "string" && Number.isFinite(Date.parse(at)) && Date.parse(at) <= now);
 
-export function publicFacts(p: ProjectFacts, now: number): ProjectFacts {
-  const hidden = new Set(p.facts.filter((f) => !released(f.publishAt, now)).map((f) => f.id));
+/** An embargoed fact (publishAt set) whose time passed is released only once a passing check exists at or after its updatedAt. */
+const verifiedSince = (f: Fact, verify: VerifyMap | undefined): boolean => {
+  const ok = Date.parse(verify?.[f.id]?.lastOk ?? "");
+  const upd = Date.parse(f.updatedAt);
+  return Number.isFinite(ok) && Number.isFinite(upd) && ok >= upd;
+};
+
+export function publicFacts(p: ProjectFacts, now: number, verify?: VerifyMap): ProjectFacts {
+  const hidden = new Set(p.facts.filter((f) => !released(f.publishAt, now) || (f.publishAt !== undefined && !verifiedSince(f, verify))).map((f) => f.id));
   return {
     ...p,
     facts: p.facts.filter((f) => !hidden.has(f.id)).map(({ publishAt: _p, ...f }) => {
       void _p;
       if (f.supersededBy && hidden.has(f.supersededBy)) delete f.supersededBy;
-      return f;
+      const verifiedAt = verify?.[f.id]?.lastOk;
+      return verifiedAt ? { ...f, verifiedAt } : f;
     }),
     changelog: p.changelog
       .filter((c) => !hidden.has(c.factId) && released(c.hiddenUntil, now))
@@ -192,8 +204,8 @@ export function publicFacts(p: ProjectFacts, now: number): ProjectFacts {
 
 /** The public answer: publicFacts without rev or the admin's wallet; lastReviewedAt is the newest
  *  updatedAt/observedAt among the facts shown (absent when none), so private edits leave no trace. */
-export function publicResponse(p: ProjectFacts, now: number): PublicProjectFacts {
-  const { rev: _r, lastReviewedAt: _l, reviewedBy: _b, ...shown } = publicFacts(p, now);
+export function publicResponse(p: ProjectFacts, now: number, verify?: VerifyMap): PublicProjectFacts {
+  const { rev: _r, lastReviewedAt: _l, reviewedBy: _b, ...shown } = publicFacts(p, now, verify);
   void _r; void _l; void _b;
   const last = Math.max(...shown.facts.flatMap((f) => [Date.parse(f.updatedAt), Date.parse(f.observedAt)]).filter(Number.isFinite));
   return { ...shown, reviewedBy: PUBLIC_REVIEWER, ...(Number.isFinite(last) ? { lastReviewedAt: new Date(last).toISOString() } : {}) };

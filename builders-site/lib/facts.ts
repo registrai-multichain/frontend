@@ -2,11 +2,12 @@
  * Public project facts (contract: src/lib/facts.ts). KV `facts:<source>` -> ProjectFacts.
  *   GET /api/admin/facts/<source>  (session)      admin: editor state (empty rev 0 when none); onboarder: the public view
  *   PUT /api/admin/facts/<source>  (admin + CSRF, via the middleware) FactsInput; rev must match
- *   GET /api/facts/<source>        public, publishAt-filtered; reviewer "Registrai", no rev (publicResponse); edge-cached 60 s
+ *   GET /api/facts/<source>        public, publishAt-filtered and (for embargoed facts) verify-gated, verifiedAt added; reviewer "Registrai", no rev (publicResponse); edge-cached 60 s
  * The change log is built only here, from the stored previous facts; a body changelog is ignored.
  */
 import { diffChangelog, FACTS_LIMITS, publicFacts, publicResponse, validateFacts, type Fact, type ProjectFacts } from "../../src/lib/facts";
 import { normalizeSource } from "../../src/lib/verified-builders";
+import { getVerify } from "./verify";
 import { ONBOARDER_READ_ONLY, type Role } from "./auth";
 import type { Env, KV } from "./env";
 import { edgeCachedGet, errorJson, json, readJson, type EdgeCacheDeps } from "./http";
@@ -54,7 +55,11 @@ export async function handleAdminFacts(req: Request, env: Env, rawSource: string
   const method = req.method.toUpperCase();
   const stored = (await getFacts(env.INVITES, source)) ?? empty(source);
   // Private-first: embargoed (publishAt) facts stay with the admins; an onboarder reads the public view.
-  if (method === "GET") return json({ facts: role === "admin" ? stored : publicFacts(stored, deps.now ?? Date.now()) });
+  if (method === "GET") {
+    const verify = await getVerify(env.INVITES, source);
+    // The admin editor also gets the verify map ("needs review"); an onboarder reads the public view.
+    return json(role === "admin" ? { facts: stored, verify } : { facts: publicFacts(stored, deps.now ?? Date.now(), verify) });
+  }
   if (method === "PUT") {
     if (role !== "admin") return errorJson(403, ONBOARDER_READ_ONLY);
     const v = validateFacts(await readJson(req), source);
@@ -84,6 +89,6 @@ export async function handlePublicFacts(req: Request, env: Env, rawSource: strin
   return edgeCachedGet(req, deps, async () => {
     const stored = await getFacts(env.INVITES, source);
     if (!stored) return errorJson(404, "no facts for this project");
-    return json({ facts: publicResponse(stored, deps.now ?? Date.now()) }, 200, { "cache-control": "public, max-age=60" });
+    return json({ facts: publicResponse(stored, deps.now ?? Date.now(), await getVerify(env.INVITES, source)) }, 200, { "cache-control": "public, max-age=60" });
   });
 }

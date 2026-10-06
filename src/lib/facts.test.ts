@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { diffChangelog, evidenceHref, publicFacts, validateFacts, type Fact, type ProjectFacts } from "./facts";
+import { diffChangelog, evidenceHref, publicFacts, publicResponse, validateFacts, type Fact, type ProjectFacts } from "./facts";
 
 const SRC = "domain:kairo.market";
 const ADDR = "0xdaf97c69eb8fb68ca9f4269eb8c458b3a5a31122";
@@ -61,7 +61,9 @@ describe("publicFacts", () => {
     const out = publicFacts(p, now);
     expect(out.facts.map((f) => f.id)).toEqual(["f1"]);
     expect(out.changelog.map((c) => c.factId)).toEqual(["f1"]);
-    expect(publicFacts(p, Date.parse("2026-11-01T00:00:00.000Z")).facts).toHaveLength(2);
+    const later = Date.parse("2026-11-01T00:00:00.000Z");
+    expect(publicFacts(p, later).facts).toHaveLength(1); // embargo passed but never re-checked: stays hidden
+    expect(publicFacts(p, later, { sec: { ok: true, at: "2026-10-30T00:00:00.000Z", problems: [], lastOk: "2026-10-30T00:00:00.000Z" } }).facts).toHaveLength(2);
   });
   test("a present but null, empty or non-string publishAt / hiddenUntil fails closed", () => {
     const now = Date.parse("2026-11-01T00:00:00.000Z");
@@ -140,5 +142,44 @@ describe("evidenceHref", () => {
     expect(evidenceHref(ADDR)).toBe(`https://explorer.arc.io/address/${ADDR}`);
     expect(evidenceHref(TX)).toBe(`https://explorer.arc.io/tx/${TX}`);
     expect(evidenceHref("https://kairo.market")).toBe("https://kairo.market/");
+  });
+});
+
+describe("publicFacts: embargo gate and verifiedAt", () => {
+  const NOW = Date.parse("2026-10-06T12:00:00.000Z");
+  const pf = (facts: Fact[]): ProjectFacts => ({ source: SRC, facts, changelog: [{ at: "2026-10-01T00:00:00.000Z", kind: "added", factId: "e1", text: "x" }], lastReviewedAt: "", reviewedBy: "0x1", rev: 1 });
+  const embargoed = fact({ id: "e1", publishAt: "2026-10-05T00:00:00.000Z", updatedAt: "2026-10-04T00:00:00.000Z" });
+  const v = (lastOk?: string) => ({ e1: { ok: true, at: lastOk ?? "2026-10-06T00:00:00.000Z", problems: [], ...(lastOk ? { lastOk } : {}) } });
+  test("an embargoed fact whose time passed stays hidden without a verify map (fails closed)", () => {
+    expect(publicFacts(pf([embargoed]), NOW).facts).toEqual([]);
+    expect(publicFacts(pf([embargoed]), NOW, {}).facts).toEqual([]);
+    expect(publicFacts(pf([embargoed]), NOW).changelog).toEqual([]);
+  });
+  test("a pass before updatedAt keeps it hidden; at or after updatedAt releases it", () => {
+    expect(publicFacts(pf([embargoed]), NOW, v("2026-10-03T00:00:00.000Z")).facts).toEqual([]);
+    expect(publicFacts(pf([embargoed]), NOW, { e1: { ok: false, at: "2026-10-06T00:00:00.000Z", problems: ["x"] } }).facts).toEqual([]);
+    expect(publicFacts(pf([embargoed]), NOW, v("2026-10-04T00:00:00.000Z")).facts.map((f) => f.id)).toEqual(["e1"]);
+    expect(publicFacts(pf([embargoed]), NOW, v("2026-10-05T10:00:00.000Z")).changelog).toHaveLength(1);
+  });
+  test("a future publishAt stays hidden even when verified", () => {
+    const later = fact({ id: "e1", publishAt: "2026-10-09T00:00:00.000Z", updatedAt: "2026-10-04T00:00:00.000Z" });
+    expect(publicFacts(pf([later]), NOW, v("2026-10-05T10:00:00.000Z")).facts).toEqual([]);
+  });
+  test("non-embargoed facts are unaffected by the gate and get verifiedAt only when verified", () => {
+    const plain = fact({ id: "p1" });
+    expect(publicFacts(pf([plain]), NOW).facts).toEqual([plain]);
+    const withV = publicFacts(pf([plain]), NOW, { p1: { ok: false, at: "2026-10-05T00:00:00.000Z", problems: ["x"], lastOk: "2026-10-04T00:00:00.000Z" } });
+    expect(withV.facts[0].verifiedAt).toBe("2026-10-04T00:00:00.000Z");
+    expect(publicFacts(pf([plain]), NOW, { p1: { ok: false, at: "2026-10-05T00:00:00.000Z", problems: ["x"] } }).facts[0]).not.toHaveProperty("verifiedAt");
+  });
+  test("a released embargoed fact carries verifiedAt and no publishAt", () => {
+    const f = publicFacts(pf([embargoed]), NOW, v("2026-10-05T10:00:00.000Z")).facts[0];
+    expect(f.verifiedAt).toBe("2026-10-05T10:00:00.000Z");
+    expect(f).not.toHaveProperty("publishAt");
+  });
+  test("publicResponse passes verify through", () => {
+    const r = publicResponse(pf([embargoed]), NOW, v("2026-10-05T10:00:00.000Z"));
+    expect(r.facts[0].verifiedAt).toBe("2026-10-05T10:00:00.000Z");
+    expect(publicResponse(pf([embargoed]), NOW).facts).toEqual([]);
   });
 });
