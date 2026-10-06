@@ -193,17 +193,18 @@ describe("/api/admin/facts through the admin middleware", () => {
 describe("verify map in the facts API", () => {
   test("a pass older than the fact's update does not release it; the admin GET carries the verify map", async () => {
     const { put, get, pub, kv } = setup();
-    const r = await put(SRC, { rev: 0, facts: [fact("sec", { publishAt: "2026-09-01T00:00:00.000Z" })] });
+    const LATER = Date.parse("2026-10-11T00:00:00.000Z");   // after the embargo, which ends after VERIFY_GATE_FROM
+    const r = await put(SRC, { rev: 0, facts: [fact("sec", { publishAt: "2026-10-10T00:00:00.000Z" })] });
     const upd = (r.body.facts.facts[0] as { updatedAt: string }).updatedAt;
     const verify = { sec: { ok: true, at: "2026-09-28T00:00:00.000Z", problems: [], lastOk: "2026-09-28T00:00:00.000Z" } };
     await kv.put(`verify:${SRC}`, JSON.stringify(verify));
     expect(upd).toBe("2026-09-29T12:00:00.000Z");
-    expect((await pub(SRC)).body.facts.facts).toEqual([]);
+    expect((await pub(SRC, LATER)).body.facts.facts).toEqual([]);
     const g = (await get(SRC)) as unknown as { body: { facts: ProjectFacts; verify: unknown } };
     expect(g.body.verify).toEqual(verify);
     expect(g.body.facts.facts).toHaveLength(1);
     await kv.put(`verify:${SRC}`, JSON.stringify({ sec: { ...verify.sec, lastOk: "2026-09-29T12:00:00.000Z" } }));
-    expect((await pub(SRC)).body.facts.facts.map((f) => f.id)).toEqual(["sec"]);
+    expect((await pub(SRC, LATER)).body.facts.facts.map((f) => f.id)).toEqual(["sec"]);
   });
   test("a missing verify map reads as empty ({})", async () => {
     const { put, get } = setup();

@@ -146,42 +146,57 @@ describe("evidenceHref", () => {
 });
 
 describe("publicFacts: embargo gate and verifiedAt", () => {
-  const NOW = Date.parse("2026-10-06T12:00:00.000Z");
-  const pf = (facts: Fact[]): ProjectFacts => ({ source: SRC, facts, changelog: [{ at: "2026-10-01T00:00:00.000Z", kind: "added", factId: "e1", text: "x" }], lastReviewedAt: "", reviewedBy: "0x1", rev: 1 });
-  const embargoed = fact({ id: "e1", publishAt: "2026-10-05T00:00:00.000Z", updatedAt: "2026-10-04T00:00:00.000Z" });
-  const v = (lastOk?: string) => ({ e1: { ok: true, at: lastOk ?? "2026-10-06T00:00:00.000Z", problems: [], ...(lastOk ? { lastOk } : {}) } });
+  const NOW = Date.parse("2026-10-16T12:00:00.000Z");
+  const pf = (facts: Fact[]): ProjectFacts => ({ source: SRC, facts, changelog: [{ at: "2026-10-11T00:00:00.000Z", kind: "added", factId: "e1", text: "x" }], lastReviewedAt: "", reviewedBy: "0x1", rev: 1 });
+  const embargoed = fact({ id: "e1", publishAt: "2026-10-15T00:00:00.000Z", updatedAt: "2026-10-14T00:00:00.000Z" });
+  const v = (lastOk?: string) => ({ e1: { ok: true, at: lastOk ?? "2026-10-16T00:00:00.000Z", problems: [], ...(lastOk ? { lastOk } : {}) } });
   test("an embargoed fact whose time passed stays hidden without a verify map (fails closed)", () => {
     expect(publicFacts(pf([embargoed]), NOW).facts).toEqual([]);
     expect(publicFacts(pf([embargoed]), NOW, {}).facts).toEqual([]);
     expect(publicFacts(pf([embargoed]), NOW).changelog).toEqual([]);
   });
   test("a pass before updatedAt keeps it hidden; at or after updatedAt releases it", () => {
-    expect(publicFacts(pf([embargoed]), NOW, v("2026-10-03T00:00:00.000Z")).facts).toEqual([]);
-    expect(publicFacts(pf([embargoed]), NOW, { e1: { ok: false, at: "2026-10-06T00:00:00.000Z", problems: ["x"] } }).facts).toEqual([]);
-    expect(publicFacts(pf([embargoed]), NOW, v("2026-10-04T00:00:00.000Z")).facts.map((f) => f.id)).toEqual(["e1"]);
-    expect(publicFacts(pf([embargoed]), NOW, v("2026-10-05T10:00:00.000Z")).changelog).toHaveLength(1);
+    expect(publicFacts(pf([embargoed]), NOW, v("2026-10-13T00:00:00.000Z")).facts).toEqual([]);
+    expect(publicFacts(pf([embargoed]), NOW, { e1: { ok: false, at: "2026-10-16T00:00:00.000Z", problems: ["x"] } }).facts).toEqual([]);
+    expect(publicFacts(pf([embargoed]), NOW, v("2026-10-14T00:00:00.000Z")).facts.map((f) => f.id)).toEqual(["e1"]);
+    expect(publicFacts(pf([embargoed]), NOW, v("2026-10-15T10:00:00.000Z")).changelog).toHaveLength(1);
   });
   test("a future publishAt stays hidden even when verified", () => {
-    const later = fact({ id: "e1", publishAt: "2026-10-09T00:00:00.000Z", updatedAt: "2026-10-04T00:00:00.000Z" });
-    expect(publicFacts(pf([later]), NOW, v("2026-10-05T10:00:00.000Z")).facts).toEqual([]);
+    const later = fact({ id: "e1", publishAt: "2026-10-19T00:00:00.000Z", updatedAt: "2026-10-14T00:00:00.000Z" });
+    expect(publicFacts(pf([later]), NOW, v("2026-10-15T10:00:00.000Z")).facts).toEqual([]);
   });
   test("non-embargoed facts are unaffected by the gate and get verifiedAt only when verified", () => {
     const plain = fact({ id: "p1" });
     expect(publicFacts(pf([plain]), NOW).facts).toEqual([plain]);
-    const withV = publicFacts(pf([plain]), NOW, { p1: { ok: false, at: "2026-10-05T00:00:00.000Z", problems: ["x"], lastOk: "2026-10-04T00:00:00.000Z" } });
-    expect(withV.facts[0].verifiedAt).toBe("2026-10-04T00:00:00.000Z");
+    const withV = publicFacts(pf([plain]), NOW, { p1: { ok: false, at: "2026-10-15T00:00:00.000Z", problems: ["x"], lastOk: "2026-10-14T00:00:00.000Z" } });
+    expect(withV.facts[0].verifiedAt).toBe("2026-10-14T00:00:00.000Z");
     // a pass from before the fact's last update says nothing about its current text
     expect(publicFacts(pf([plain]), NOW, { p1: { ok: true, at: "2026-09-01T00:00:00.000Z", problems: [], lastOk: "2026-09-01T00:00:00.000Z" } }).facts[0]).not.toHaveProperty("verifiedAt");
-    expect(publicFacts(pf([plain]), NOW, { p1: { ok: false, at: "2026-10-05T00:00:00.000Z", problems: ["x"] } }).facts[0]).not.toHaveProperty("verifiedAt");
+    expect(publicFacts(pf([plain]), NOW, { p1: { ok: false, at: "2026-10-15T00:00:00.000Z", problems: ["x"] } }).facts[0]).not.toHaveProperty("verifiedAt");
   });
   test("a released embargoed fact carries verifiedAt and no publishAt", () => {
-    const f = publicFacts(pf([embargoed]), NOW, v("2026-10-05T10:00:00.000Z")).facts[0];
-    expect(f.verifiedAt).toBe("2026-10-05T10:00:00.000Z");
+    const f = publicFacts(pf([embargoed]), NOW, v("2026-10-15T10:00:00.000Z")).facts[0];
+    expect(f.verifiedAt).toBe("2026-10-15T10:00:00.000Z");
     expect(f).not.toHaveProperty("publishAt");
   });
   test("publicResponse passes verify through", () => {
-    const r = publicResponse(pf([embargoed]), NOW, v("2026-10-05T10:00:00.000Z"));
-    expect(r.facts[0].verifiedAt).toBe("2026-10-05T10:00:00.000Z");
+    const r = publicResponse(pf([embargoed]), NOW, v("2026-10-15T10:00:00.000Z"));
+    expect(r.facts[0].verifiedAt).toBe("2026-10-15T10:00:00.000Z");
     expect(publicResponse(pf([embargoed]), NOW).facts).toEqual([]);
+  });
+});
+
+describe("evidence gate applies only to embargoes ending after it was introduced", () => {
+  const mk = (facts: Fact[]): ProjectFacts => ({ source: SRC, facts, changelog: [], lastReviewedAt: "2026-09-29T00:00:00.000Z", reviewedBy: "r", rev: 1 });
+  test("a fact released before the gate stays public without any verify result", () => {
+    const old = fact({ id: "old", publishAt: "2026-10-01T00:00:00.000Z" });
+    expect(publicFacts(mk([old]), Date.parse("2026-10-08T00:00:00.000Z")).facts.map((f) => f.id)).toEqual(["old"]);
+  });
+  test("an embargo ending after the gate still needs a passing check", () => {
+    const sec = fact({ id: "sec", publishAt: "2026-10-31T00:00:00.000Z", updatedAt: "2026-10-02T00:00:00.000Z" });
+    const now = Date.parse("2026-11-01T00:00:00.000Z");
+    expect(publicFacts(mk([sec]), now).facts).toEqual([]);
+    const ok = { sec: { ok: true, at: "2026-10-31T01:00:00.000Z", problems: [], lastOk: "2026-10-31T01:00:00.000Z" } };
+    expect(publicFacts(mk([sec]), now, ok as never).facts.map((f) => f.id)).toEqual(["sec"]);
   });
 });

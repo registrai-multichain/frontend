@@ -186,8 +186,15 @@ const verifiedSince = (f: Fact, verify: VerifyMap | undefined): boolean => {
   return Number.isFinite(ok) && Number.isFinite(upd) && ok >= upd;
 };
 
+/** The evidence gate applies to embargoes that end at or after this moment. Facts whose embargo ended
+ *  earlier were already public before the verifier existed and stay public (a failing fact stays public). */
+export const VERIFY_GATE_FROM = Date.parse("2026-10-07T00:00:00Z");
+
+const gated = (f: Fact) =>
+  f.publishAt !== undefined && !(typeof f.publishAt === "string" && Date.parse(f.publishAt) < VERIFY_GATE_FROM);
+
 export function publicFacts(p: ProjectFacts, now: number, verify?: VerifyMap): ProjectFacts {
-  const hidden = new Set(p.facts.filter((f) => !released(f.publishAt, now) || (f.publishAt !== undefined && !verifiedSince(f, verify))).map((f) => f.id));
+  const hidden = new Set(p.facts.filter((f) => !released(f.publishAt, now) || (gated(f) && !verifiedSince(f, verify))).map((f) => f.id));
   return {
     ...p,
     facts: p.facts.filter((f) => !hidden.has(f.id)).map(({ publishAt: _p, ...f }) => {
