@@ -117,7 +117,6 @@ export function tapeRows(d: AbiData, R: LiveResult | null, minUsd: number): Tape
     if (tt >= cut) continue;
     if (R && !sep) { rows.push({ sep: true }); sep = true; }
     rows.push({ t: tt, s, v, p, n: !!n, live: false });
-    if (rows.length > 160) break;
   }
   // filter by size, then group a project's payments within the same minute into one row
   const out: TapeRow[] = [];
@@ -130,6 +129,15 @@ export function tapeRows(d: AbiData, R: LiveResult | null, minUsd: number): Tape
     } else out.push({ ...r, k: 1 });
   }
   return out.slice(0, 120);
+}
+
+export const rowKey = (r: { t: number; s: string; v: number }): string => `${r.t}|${r.s}|${r.v}`;
+export const rowKeys = (rows: TapeRow[]): string[] => rows.flatMap((r) => (r.sep ? [] : [rowKey(r)]));
+/** Live rows not shown before. `seen` is null until the first paint: nothing flashes then. */
+export function freshKeys(rows: TapeRow[], seen: Set<string> | null): Set<string> {
+  const out = new Set<string>();
+  if (seen) for (const r of rows) if (!r.sep && r.live && !seen.has(rowKey(r))) out.add(rowKey(r));
+  return out;
 }
 
 /* ---------- members ---------- */

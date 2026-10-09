@@ -8,7 +8,7 @@ import { createEngine, StaleError, type Candle, type LiveResult } from "@/lib/ab
 import { validateSeen, type AbiData } from "@/lib/builders-index";
 import {
   barAt, candleList, chartModel, cls, fmt, hm, hms, members, methodRows, nameOf, ohlcLine, openHour, pct, quote, RANGE_BARS, RANGE_KEYS, rollOff, sgn,
-  status, tapeRows, tickerItems, ts, usdFmt, why, type Bar, type ChartModel, type RangeKey, type SortKey,
+  status, tapeRows, freshKeys, rowKey, rowKeys, tickerItems, ts, usdFmt, why, type Bar, type ChartModel, type RangeKey, type SortKey,
 } from "@/lib/abi-terminal";
 import { ABI_COPY, abiPath, abiSeenPath, abiState, baseTip, decayTip, type AbiState } from "@/lib/builders-index-page";
 import "./terminal.css";
@@ -159,7 +159,7 @@ function ChartPanel({ d, bars }: { d: AbiData; bars: Bar[] }) {
             }) : <path d={m.line} fill="none" stroke="var(--abi-accent)" strokeWidth={1.6} strokeLinejoin="round" />}
             <line x1={m.pad.l} x2={m.W - m.pad.r} y1={m.last.y} y2={m.last.y} stroke={m.last.up ? "var(--abi-up)" : "var(--abi-down)"} strokeDasharray="2 3" opacity={0.7} />
             <rect x={m.W - m.pad.r + 2} y={m.last.y - 9} width={m.pad.r - 4} height={18} rx={2} fill={m.last.up ? "var(--abi-up)" : "var(--abi-down)"} />
-            <text x={m.W - m.pad.r + 7} y={m.last.y + 4} style={{ fill: "#0B0B0A", fontWeight: 600 }}>{m.last.label}</text>
+            <text x={m.W - m.pad.r + 7} y={m.last.y + 4} style={{ fill: "var(--abi-bg)", fontWeight: 600 }}>{m.last.label}</text>
             {hi !== null && <line x1={m.bars[hi].x} x2={m.bars[hi].x} y1={m.pad.t} y2={m.H - m.pad.b} stroke="var(--abi-line2)" />}
             <rect x={m.pad.l} y={0} width={m.W - m.pad.l - m.pad.r} height={m.H} fill="transparent" style={{ touchAction: "pan-y" }}
               onPointerMove={(e) => setHover(barAt(m, e.clientX - e.currentTarget.ownerSVGElement!.getBoundingClientRect().left))}
@@ -200,15 +200,13 @@ function WhyPanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
 function TapePanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
   const [minUsd, setMin] = useState(0);
   const rows = tapeRows(d, R, minUsd);
-  const seen = useRef<Set<string>>(new Set());
-  const first = useRef(true);
-  const keyOf = (r: { t: number; s: string; v: number }) => `${r.t}|${r.s}|${r.v}`;
-  const fresh = new Set<string>();
-  if (!first.current) for (const r of rows) if (!r.sep && r.live && !seen.current.has(keyOf(r))) fresh.add(keyOf(r));
+  // rows already shown (null until the first paint, so the initial list does not flash)
+  const [seen, setSeen] = useState<Set<string> | null>(null);
+  const fresh = freshKeys(rows, seen);
+  const keys = rowKeys(rows);
   useEffect(() => {
-    for (const r of rows) if (!r.sep) seen.current.add(keyOf(r));
-    first.current = false;
-  });
+    setSeen((prev) => (prev && keys.every((k) => prev.has(k)) ? prev : new Set([...(prev ?? []), ...keys])));
+  }, [keys.join("\n")]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <section className="abi-panel abi-tape" aria-label="Time and sales">
       <div className="abi-ph">
@@ -219,7 +217,7 @@ function TapePanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
       <div className="abi-tape-b">
         {rows.length === 0 && <div className="abi-tape-r"><span className="dim" style={{ gridColumn: "1/-1" }}>No payments in the last hours.</span></div>}
         {rows.map((r, i) => r.sep ? <div key={`sep${i}`} className="abi-tape-sep">Closed hours</div> : (
-          <div key={`${keyOf(r)}|${i}`} className={`abi-tape-r${fresh.has(keyOf(r)) ? " fresh" : ""}`}>
+          <div key={`${rowKey(r)}|${i}`} className={`abi-tape-r${fresh.has(rowKey(r)) ? " fresh" : ""}`}>
             <span className="dim">{r.k > 1 ? hm(r.t) : hms(r.t)}</span>
             <span className="p">{nameOf(d, r.s)}{r.k > 1 && <span className="abi-cnt">×{r.k}</span>}{r.n && <span className="abi-nb">new</span>}</span>
             <span className="r">{usdFmt(r.v)}</span><span className="r up">+{fmt(r.p, 2)}</span>

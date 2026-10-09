@@ -117,7 +117,7 @@ function validateLive(v: unknown): AbiLive | null {
 
 export type AbiSeenResult = { ok: true; data: AbiSeen } | { ok: false; error: string };
 
-/** The wallets seen before the open hour: per source, concatenated 10-hex wallet prefixes. */
+/** The wallets seen before the open hour: per source, concatenated 10-hex payer-address prefixes. */
 export function validateSeen(raw: unknown): AbiSeenResult {
   if (!isObj(raw)) return { ok: false, error: "expected a JSON object" };
   if (!posInt(raw.hour_start)) return { ok: false, error: "hour_start must be a positive integer" };

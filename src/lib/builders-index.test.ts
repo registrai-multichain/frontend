@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- tests mutate loosely typed JSON */
 import { describe, expect, test } from "vitest";
 import { ABI_LIMITS, validateIndex, validateSeen } from "./builders-index";
 import real from "./fixtures/builders-index.json";

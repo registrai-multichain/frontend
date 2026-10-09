@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- tests mutate loosely typed JSON */
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, test, vi } from "vitest";

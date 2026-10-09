@@ -17,7 +17,7 @@ export function indexFixture(): Record<string, unknown> {
       { t: "2026-10-09T13:00:00Z", source: "domain:argus.world", name: "Argus", kind: "rise_limit" },
       { t: "2026-10-05T13:00:00Z", source: "domain:argus.world", name: "Argus", kind: "activity", payments: 2, wallets: 2, new_payers: 0, points: 5 },
     ],
-    params: { half_life_days: 14, decay_per_hour_pct: 0.206, cap_per_wallet_hour_usdc: 1000, new_payer_points: 1, rise_limit_own: 0.01, rise_limit_index: 0.005 },
+    params: { half_life_days: 21, decay_per_hour_pct: 0.137, cap_per_wallet_hour_usdc: 1000, new_payer_points: 1, rise_limit_own: 0.01, rise_limit_index: 0.005 },
     extra: { secret: "an unknown field is not published" },
     method: "docs/x.md",
   };

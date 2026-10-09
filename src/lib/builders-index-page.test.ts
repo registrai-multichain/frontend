@@ -25,30 +25,30 @@ describe("copy comes from the file", () => {
   });
 });
 
-describe("data only: no trading words anywhere in the page source", () => {
+describe("data only: no order-entry words anywhere in the page source", () => {
   const root = resolve(__dirname, "../..");
+  const walk = (dir: string): string[] =>
+    readdirSync(resolve(root, dir), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(`${dir}/${e.name}`) : [`${dir}/${e.name}`]));
+  const isTest = (f: string) => /\.test\.(ts|tsx)$/.test(f);
   const files = [
-    "src/app/builders-index/page.tsx",
-    "src/components/builders-index/IndexPage.tsx",
-    "src/lib/builders-index-page.ts",
-    "src/lib/builders-index.ts",
-    "src/lib/builders-index-fixture.ts",
-    "src/lib/abi-live.ts",
-    "src/lib/abi-live-mock.ts",
-    "src/lib/abi-terminal.ts",
-    "builders-site/lib/builders-index.ts",
-    ...readdirSync(resolve(root, "builders-site/functions/api/index")).map((f) => `builders-site/functions/api/index/${f}`),
-  ];
-  const WORDS = /\b(trade|trades|trading|trader|traders|long|short|leverage|leveraged|perp|perps|perpetual|perpetuals|buy|buys|sell|sells|bet|bets|betting|wager|wagers|odds|position|positions|swap|swaps|futures)\b/i;
-  test.each(files)("%s", (f) => {
-    expect(readFileSync(resolve(root, f), "utf8").match(WORDS)?.[0]).toBeUndefined();
+    ...walk("src/app/builders-index"),
+    ...walk("src/components/builders-index"),
+    ...walk("src/lib").filter((f) => /\/(abi-[^/]*|builders-index[^/]*)\.(ts|css)$/.test(f)),
+    ...walk("builders-site/lib").filter((f) => /\/builders-index\.ts$/.test(f) || /\/bot-auth\.ts$/.test(f)),
+    ...walk("builders-site/functions/api/index"),
+  ].filter((f) => !isTest(f));
+  // the CSS property names `position` (sticky bar, bubbles) are layout, not a word of the copy
+  const text = (f: string) => readFileSync(resolve(root, f), "utf8").replace(/\bposition\s*:/g, "pos:");
+  const WORDS = /\b(trade|trades|trading|trader|traders|long|short|leverage|leveraged|perp|perps|perpetual|perpetuals|buy|buys|sell|sells|bet|bets|betting|wager|wagers|odds|position|positions|swap|swaps|futures|order|orders|wallet|connect)\b/i;
+  test("the glob finds the sources, the stylesheet included", () => {
+    for (const f of ["src/app/builders-index/page.tsx", "src/components/builders-index/IndexPage.tsx", "src/components/builders-index/terminal.css", "src/lib/abi-live.ts", "src/lib/abi-terminal.ts", "src/lib/builders-index.ts", "builders-site/functions/api/index/seen.ts"]) expect(files).toContain(f);
   });
-  test("the page does not use the wallet shell", () => {
-    expect(readFileSync(resolve(root, "src/app/builders-index/page.tsx"), "utf8")).not.toMatch(/wallet/i);
+  test.each(files)("%s", (f) => {
+    expect(text(f).match(WORDS)?.[0]).toBeUndefined();
   });
   const built = resolve(root, "dist-builders/builders-index/index.html");
   test.skipIf(!existsSync(built))("the built page (skipped: run the builders-site build to create dist-builders)", () => {
-    const text = readFileSync(built, "utf8").replace(/<script[\s\S]*?<\/script>/g, "").replace(/<style[\s\S]*?<\/style>/g, "");
-    expect(text.match(WORDS)?.[0]).toBeUndefined();
+    const html = readFileSync(built, "utf8").replace(/<script[\s\S]*?<\/script>/g, "").replace(/<style[\s\S]*?<\/style>/g, "");
+    expect(html.match(WORDS)?.[0]).toBeUndefined();
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { createEngine, type LiveResult } from "./abi-live";
 import { HB, INDEX, mockRpc, SEEN } from "./abi-live-mock";
-import { barAt, candleList, chartModel, members, methodRows, openHour, paceAll, quote, rollOff, status, tapeRows, tickerItems, ts, why } from "./abi-terminal";
+import { barAt, candleList, freshKeys, rowKeys, chartModel, members, methodRows, openHour, paceAll, quote, rollOff, status, tapeRows, tickerItems, ts, why } from "./abi-terminal";
 import type { AbiData } from "./builders-index";
 
 const L = INDEX.live!;
@@ -115,6 +115,33 @@ describe("time & sales", () => {
     expect(rows[0].sep ? 0 : rows[0].p).toBeCloseTo(1, 12);
     expect(rows[1]).toMatchObject({ k: 1, v: 8 });
     expect(rows[3]).toMatchObject({ s: "domain:peach.ag", k: 1 }); // not adjacent to the first group
+  });
+});
+
+describe("time & sales: filter before the cap", () => {
+  test("the size filter is applied first, so older large payments survive 120 newer small ones", () => {
+    const tape: AbiData["tape"] = [];
+    // 200 small payments (newest), then 100 large ones; every row in its own minute and project so nothing groups
+    for (let i = 0; i < 200; i++) tape.push([new Date(Date.UTC(2026, 9, 9, 20, 0) - i * 120_000).toISOString().slice(0, 19) + "Z", `domain:s${i}.x`, 0.5, 0.1, 0]);
+    for (let i = 0; i < 100; i++) tape.push([new Date(Date.UTC(2026, 9, 9, 10, 0) - i * 120_000).toISOString().slice(0, 19) + "Z", `domain:b${i}.x`, 25, 4, 0]);
+    const d = { ...INDEX, tape };
+    expect(tapeRows(d, null, 0)).toHaveLength(120);
+    const big = tapeRows(d, null, 10);
+    expect(big).toHaveLength(100);
+    expect(big.every((r) => !r.sep && r.v >= 10)).toBe(true);
+    expect(tapeRows(d, null, 1)).toHaveLength(100);
+  });
+  test("fresh rows: nothing flashes before the first paint; later only unseen live rows do", async () => {
+    const R = await live(4100);
+    const rows = tapeRows(INDEX, R, 0);
+    expect(freshKeys(rows, null).size).toBe(0);
+    const keys = rowKeys(rows);
+    expect(freshKeys(rows, new Set(keys)).size).toBe(0);
+    const liveKey = keys[0];
+    const f = freshKeys(rows, new Set(keys.filter((k) => k !== liveKey)));
+    expect([...f]).toEqual([liveKey]);
+    const closedKey = keys[keys.length - 1];
+    expect(freshKeys(rows, new Set(keys.filter((k) => k !== closedKey))).size).toBe(0); // closed rows never flash
   });
 });
 
