@@ -44,6 +44,8 @@ export interface Env {
   BOT_SECRET?: string;
   /** Pages SECRET: the radar keeper's bearer for POST /api/bot/track. Under 32 characters = that route fails closed (503). */
   RADAR_PUBLISH_SECRET?: string;
+  /** Pages SECRET: the Arc Builders Index producer's bearer for POST /api/index. Under 32 characters = that route fails closed (503). */
+  ABI_PUSH_TOKEN?: string;
   /** https://app.registrai.cc — the only origin /api/market-proposals accepts submissions from (CORS). */
   PROPOSALS_ALLOWED_ORIGIN?: string;
 }
