@@ -11,6 +11,7 @@ export const ABI_COPY = {
   decay: "Every point loses half its value every half-life. With no new activity anywhere, the index falls.",
   weight: "A member's weight is its share of Σ√P. The square root keeps one large project from dominating. The Arc base layer carries chain-wide activity.",
   inputs: "USDC Transfer logs of the system emitter 0xffff…fffe on Arc mainnet, into contracts Tabula Radar watches. Payments from a project's own deployers or contracts do not count. Base layer: every USDC sender per hour, sampled from the first 240 blocks of each hour.",
+  openHour: "The last closed hour comes from the server; the open hour is computed in this browser from Arc RPC. Every input is public Arc chain data.",
   activity: "External USDC payments into each project's contracts, last 72 hours, hours with at least 1 point.",
 } as const;
 
@@ -135,7 +136,8 @@ export function withLive(d: AbiData, R: LiveResult | null): AbiData {
 }
 
 /** The status pill: live while the browser keeps up, else the last closed hour with a paused note. */
-export function liveStatus(d: AbiData, R: LiveResult | null, failures: number, engineOn: boolean, nowMs: number): { tone: "ok" | "down" | "neutral"; text: string; paused: boolean } {
+export function liveStatus(d: AbiData, R: LiveResult | null, failures: number, engineOn: boolean, nowMs: number, stale = false): { tone: "ok" | "down" | "neutral"; text: string; paused: boolean } {
+  if (stale) return { tone: "down", text: `Data delayed · Hour closed ${hourLabel(d.data_until)}`, paused: false };
   if (R && failures === 0) return { tone: "ok", text: `Live · ${new Date(R.headTs * 1000).toISOString().slice(11, 19)} UTC`, paused: false };
   const f = freshness(d, nowMs);
   const paused = engineOn || R !== null;

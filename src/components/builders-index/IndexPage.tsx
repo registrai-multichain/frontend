@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { InfoBubble } from "@/components/InfoBubble";
 import { projectHref } from "@/lib/project-page";
-import { createEngine, type LiveResult } from "@/lib/abi-live";
+import { createEngine, StaleError, type LiveResult } from "@/lib/abi-live";
 import { validateSeen, type AbiData } from "@/lib/builders-index";
 import {
   ABI_COPY, abiPath, abiSeenPath, abiState, activityRows, chartGeometry, CHART_PAD, dayLabel, fmt, hourLabel, liveStatus, memberRows, RANGES, shortHash,
@@ -206,7 +206,7 @@ export function Ready({ d, status }: { d: AbiData; status: { tone: "ok" | "down"
       <ChartCard d={d} />
       <Details d={d} />
       <Method d={d} />
-      <p className="pa-muted pa-small">Last closed hour from the server; the open hour is computed in this browser from Arc RPC. Block {d.head_block.toLocaleString("en-US")}. Every input is public Arc chain data.</p>
+      <p className="pa-muted pa-small">Block {d.head_block.toLocaleString("en-US")} <InfoBubble label="About the open hour">{ABI_COPY.openHour}</InfoBubble></p>
     </>
   );
 }
@@ -219,6 +219,7 @@ export function IndexPage() {
   const [res, setRes] = useState<LiveResult | null>(null);
   const [failures, setFailures] = useState(0);
   const [engineOn, setEngineOn] = useState(false);
+  const [stale, setStale] = useState(false);
   const [now, setNow] = useState(0);
   const engine = useRef<ReturnType<typeof createEngine> | null>(null);
   const server = useRef<AbiData | null>(null);
@@ -257,9 +258,12 @@ export function IndexPage() {
       busy.current = true;
       try {
         const out = await e.tick();
-        if (live && engine.current === e) { setRes(out); setFailures(0); }
-      } catch {
-        if (live) setFailures((n) => n + 1);
+        if (live && engine.current === e) { setRes(out); setFailures(0); setStale(false); }
+      } catch (err) {
+        if (err instanceof StaleError) {
+          // the server file is old: show its last closed value, no catch-up in the browser
+          if (live) { engine.current = null; setEngineOn(false); setRes(null); setStale(true); }
+        } else if (live) setFailures((n) => n + 1);
       }
       busy.current = false;
       if (live) setNow(Date.now());
@@ -279,7 +283,7 @@ export function IndexPage() {
       {state.kind === "loading" && <p className="pa-muted">Loading…</p>}
       {state.kind === "empty" && <div className="pa-card"><p>{ABI_COPY.empty}</p></div>}
       {state.kind === "error" && <div className="pa-card"><p>{ABI_COPY.failed}</p></div>}
-      {state.kind === "ready" && view && <Ready d={view} status={liveStatus(state.data, res, failures, engineOn, now)} />}
+      {state.kind === "ready" && view && <Ready d={view} status={liveStatus(state.data, res, failures, engineOn, now, stale)} />}
     </>
   );
 }

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, test, vi } from "vitest";
-import { CHUNK, createEngine, httpRpc } from "./abi-live";
+import { CHUNK, createEngine, httpRpc, StaleError } from "./abi-live";
 import { HB, HS, INDEX, mockRpc, SEEN } from "./abi-live-mock";
 
 const L = INDEX.live!;
@@ -117,6 +117,21 @@ describe.skipIf(!existsSync(REF))("equivalence with the reference live.js", () =
     expect(b.f).toBe(a.f);
     expect(Object.keys(b.act)).toEqual(Object.keys(a.act));
     for (const k of Object.keys(a.act)) expect({ ...b.act[k], wallets: [...b.act[k].wallets] }).toEqual({ ...a.act[k], wallets: [...a.act[k].wallets] });
+  });
+});
+
+describe("stale server data", () => {
+  test("more than 3 hours behind the chain: no catch-up, no log fetch", async () => {
+    const calls: string[] = [];
+    const e = createEngine({ call: mockRpc(HB + 2 * (3 * 3600 + 60), { calls }) as never });
+    e.load(L, SEEN);
+    await expect(e.tick()).rejects.toBeInstanceOf(StaleError);
+    expect(calls).toEqual(["eth_getBlockByNumber"]);
+  });
+  test("exactly 3 hours behind still catches up", async () => {
+    const e = createEngine({ call: mockRpc(HB + 2 * 3 * 3600) as never });
+    e.load(L, SEEN);
+    await expect(e.tick()).resolves.toMatchObject({ closedHours: expect.any(Array) });
   });
 });
 

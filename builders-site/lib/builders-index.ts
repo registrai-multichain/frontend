@@ -12,15 +12,41 @@ import { edgeCachedGet, errorJson, json, type EdgeCacheDeps } from "./http";
 
 export const ABI_CACHE_S = 30;
 
+/** The body as text, counting bytes as they arrive; null as soon as it exceeds maxBytes (nothing past the limit is buffered). */
+export async function readCapped(req: Request, maxBytes: number): Promise<string | null> {
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { all.set(c, off); off += c.byteLength; }
+  return new TextDecoder().decode(all);
+}
+
 type Checked<D> = { ok: true; data: D } | { ok: false; error: string };
 
 async function push<D>(req: Request, env: Env, key: string, maxBytes: number, validate: (raw: unknown) => Checked<D>, summary: (data: D) => Record<string, unknown>): Promise<Response> {
   const refused = bearerGuard(req, env.ABI_PUSH_TOKEN, "POST", "index publishing");
   if (refused) return refused;
-  const declared = Number(req.headers.get("content-length") ?? "0");
-  if (declared > maxBytes) return errorJson(413, `body must be at most ${maxBytes} bytes`);
-  const text = await req.text();
-  if (new TextEncoder().encode(text).length > maxBytes) return errorJson(413, `body must be at most ${maxBytes} bytes`);
+  const header = req.headers.get("content-length");
+  if (header !== null) {
+    const declared = Number(header);
+    if (!Number.isInteger(declared) || declared < 0) return errorJson(400, "invalid content-length");
+    if (declared > maxBytes) return errorJson(413, `body must be at most ${maxBytes} bytes`);
+  }
+  const text = await readCapped(req, maxBytes);
+  if (text === null) return errorJson(413, `body must be at most ${maxBytes} bytes`);
   let body: unknown;
   try {
     body = JSON.parse(text);

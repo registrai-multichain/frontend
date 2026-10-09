@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { AbiData } from "./builders-index";
@@ -131,28 +131,35 @@ describe("live view", () => {
     expect(liveStatus(INDEX, R, 0, true, now).text).toMatch(/^Live · \d\d:\d\d:\d\d UTC$/);
     expect(liveStatus(INDEX, R, 2, true, now)).toMatchObject({ tone: "neutral", paused: true });
     expect(liveStatus(INDEX, R, 2, true, now).text).toMatch(/^Live update paused · Hour closed 9 Oct 15:00 UTC$/);
+    expect(liveStatus(INDEX, R, 0, true, now, true)).toMatchObject({ tone: "down", text: "Data delayed · Hour closed 9 Oct 15:00 UTC" });
     expect(liveStatus(INDEX, null, 0, false, now)).toMatchObject({ paused: false, text: "Hour closed 9 Oct 15:00 UTC" });
     expect(liveStatus(INDEX, null, 0, false, Date.parse("2026-10-09T20:00:00Z")).tone).toBe("down");
   });
 });
 
 describe("data only: no trading words anywhere in the page source", () => {
+  const root = resolve(__dirname, "../..");
   const files = [
     "src/app/builders-index/page.tsx",
     "src/components/builders-index/IndexPage.tsx",
     "src/lib/builders-index-page.ts",
     "src/lib/builders-index.ts",
+    "src/lib/builders-index-fixture.ts",
     "src/lib/abi-live.ts",
+    "src/lib/abi-live-mock.ts",
     "builders-site/lib/builders-index.ts",
-    "builders-site/functions/api/index/index.ts",
+    ...readdirSync(resolve(root, "builders-site/functions/api/index")).map((f) => `builders-site/functions/api/index/${f}`),
   ];
-  const WORDS = /\b(trade|trades|trading|trader|long|short|leverage|leveraged|perp|perps|perpetual|buy|buys|sell|sells|wallet connect)\b/i;
+  const WORDS = /\b(trade|trades|trading|trader|traders|long|short|leverage|leveraged|perp|perps|perpetual|perpetuals|buy|buys|sell|sells|bet|bets|betting|wager|wagers|odds|position|positions|swap|swaps|futures)\b/i;
   test.each(files)("%s", (f) => {
-    const src = readFileSync(resolve(__dirname, "../..", f), "utf8");
-    expect(src.match(WORDS)?.[0]).toBeUndefined();
+    expect(readFileSync(resolve(root, f), "utf8").match(WORDS)?.[0]).toBeUndefined();
   });
   test("the page does not use the wallet shell", () => {
-    const src = readFileSync(resolve(__dirname, "../app/builders-index/page.tsx"), "utf8");
-    expect(src).not.toMatch(/wallet/i);
+    expect(readFileSync(resolve(root, "src/app/builders-index/page.tsx"), "utf8")).not.toMatch(/wallet/i);
+  });
+  const built = resolve(root, "dist-builders/builders-index/index.html");
+  test.skipIf(!existsSync(built))("the built page (skipped: run the builders-site build to create dist-builders)", () => {
+    const text = readFileSync(built, "utf8").replace(/<script[\s\S]*?<\/script>/g, "").replace(/<style[\s\S]*?<\/style>/g, "");
+    expect(text.match(WORDS)?.[0]).toBeUndefined();
   });
 });

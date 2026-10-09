@@ -14,6 +14,12 @@ const ZERO = "0x0000000000000000000000000000000000000000";
 export const CHUNK = 5000;
 export const RPC_URL = "https://rpc.mainnet.arc.io";
 
+/** The open hour is more than this many seconds behind the chain: the server file is stale, so the browser does not catch up. */
+export const STALE_AFTER_S = 3 * 3600;
+export class StaleError extends Error {
+  constructor() { super("server data is stale"); this.name = "StaleError"; }
+}
+
 export type RpcCall = (method: string, params: unknown[]) => Promise<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 export type SeenFile = { hour_start: number; seen: Record<string, string> };
 type Ev = { ts: number; b: number; src: string; w: string; v: number };
@@ -178,6 +184,7 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
   async function tick(): Promise<LiveResult> {
     const hb = await call("eth_getBlockByNumber", ["latest", false]); // number + time in one call
     const head = parseInt(hb.number, 16);
+    if (parseInt(hb.timestamp, 16) - hourStart > STALE_AFTER_S) throw new StaleError();
     if (head > lastBlock) {
       events.push(...(await fetchLogs(lastBlock + 1, head)));
       headTs = parseInt(hb.timestamp, 16);

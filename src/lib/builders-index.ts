@@ -12,6 +12,8 @@ export const ABI_LIMITS = {
   contracts: 5_000,
   deployersPer: 50,
   seenSources: 200,
+  /** under the RPC's getLogs range limit (10,000 blocks) */
+  baseWindow: 5_000,
   series: 10_000,
   projects: 200,
   events: 2_000,
@@ -75,7 +77,7 @@ function numberMap(v: unknown, max: number): Record<string, number> | null {
 /** The `live` block: null when malformed. Unknown keys are dropped. */
 function validateLive(v: unknown): AbiLive | null {
   if (!isObj(v)) return null;
-  if (!posInt(v.hour_start) || !count(v.hour_start_block) || !str(v.base) || !posInt(v.base_window) || v.base_window > 100_000 || !posInt(v.seen_prefix) || v.seen_prefix > 40) return null;
+  if (!posInt(v.hour_start) || !count(v.hour_start_block) || !str(v.base) || !posInt(v.base_window) || v.base_window > ABI_LIMITS.baseWindow || !posInt(v.seen_prefix) || v.seen_prefix > 40) return null;
   for (const k of ["K", "base_k", "decay_h", "cap", "new_payer", "proj_up", "rel_up", "entry", "base_scale"] as const) if (!num(v[k]) || v[k] < 0) return null;
   const P = numberMap(v.P, ABI_LIMITS.projects), roots = numberMap(v.roots_prev, ABI_LIMITS.projects);
   if (!P || !roots || !isObj(v.contracts) || !isObj(v.deployers)) return null;

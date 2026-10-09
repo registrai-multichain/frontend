@@ -61,6 +61,7 @@ describe("the live block", () => {
     ["uppercase address", (l: any) => { l.contracts["0x" + "A".repeat(40)] = "domain:x"; }],
     ["bad deployer", (l: any) => { l.deployers["domain:argus.world"] = ["nope"]; }],
     ["huge base window", (l: any) => { l.base_window = 10 ** 9; }],
+    ["base window over the RPC range limit", (l: any) => { l.base_window = 5001; }],
     ["zero seen prefix", (l: any) => { l.seen_prefix = 0; }],
   ])("rejects: %s", (_n, f) => {
     expect(mutate(f).ok).toBe(false);

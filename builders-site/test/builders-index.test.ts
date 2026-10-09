@@ -174,3 +174,36 @@ describe("/api/index/seen", () => {
     expect((await seenRoute(ctx(new Request(`${ORIGIN}/api/index/seen`)))).status).toBe(200);
   });
 });
+
+describe("body size is enforced while reading", () => {
+  const enc = new TextEncoder();
+  const chunked = (parts: number, size: number, pulled: { n: number }) =>
+    new ReadableStream<Uint8Array>({ pull(c) { if (pulled.n >= parts) return c.close(); pulled.n++; c.enqueue(enc.encode("x".repeat(size))); } });
+  const streamReq = (body: ReadableStream<Uint8Array>, headers: Record<string, string> = {}) =>
+    new Request(`${ORIGIN}/api/index`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}`, ...headers }, body, duplex: "half" } as RequestInit);
+
+  test("a chunked oversize body with no content-length is cut off with 413 before it is all read", async () => {
+    const s = setup();
+    const pulled = { n: 0 };
+    const r = await handlePushIndex(streamReq(chunked(1000, 64 * 1024, pulled)), s.env);
+    expect(r.status).toBe(413);
+    expect(pulled.n).toBeLessThan(20); // 256 KB / 64 KB = 4 chunks, plus stream read-ahead
+    expect(s.kv.puts).toBe(0);
+  });
+  test("a non-numeric or fractional content-length is 400", async () => {
+    const s = setup();
+    for (const v of ["NaN", "abc", "1.5", "-5", "Infinity"]) {
+      const req = new Request(`${ORIGIN}/api/index`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}`, "content-length": v }, body: "{}" });
+      // the platform may normalise the header away; when it keeps it, the handler must refuse it
+      const r = await handlePushIndex(req, s.env);
+      expect([400, 200].includes(r.status) || r.status === 413).toBe(true);
+      if (req.headers.get("content-length") === v) expect(r.status).toBe(400);
+    }
+  });
+  test("a stubbed NaN content-length is 400 and an oversize one 413", async () => {
+    const s = setup();
+    const fake = (cl: string) => ({ method: "POST", body: null, text: async () => "{}", headers: new Headers({ authorization: `Bearer ${TOKEN}`, "content-length": cl }) }) as unknown as Request;
+    expect((await handlePushIndex(fake("NaN"), s.env)).status).toBe(400);
+    expect((await handlePushIndex(fake(String(ABI_LIMITS.bytes + 1)), s.env)).status).toBe(413);
+  });
+});
