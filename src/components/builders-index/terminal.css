@@ -28,8 +28,8 @@
 .abi-t .mono { font-family: var(--abi-mono); font-variant-numeric: tabular-nums; }
 
 /* info bubble inside the terminal: pinned to the viewport gutters so it never widens the page */
-.abi-t .pa-info > button { width: 15px; height: 15px; border-color: var(--abi-line2); color: var(--abi-faint); font-size: 10px; }
-.abi-t .pa-info > button:hover { color: var(--abi-fg); }
+.abi-t .pa-info > button { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--abi-mute); color: var(--abi-mute); font-size: 10.5px; line-height: 1; }
+.abi-t .pa-info > button:hover, .abi-t .pa-info > button:focus-visible { color: var(--abi-fg); border-color: var(--abi-fg); }
 .abi-t .pa-info-bubble { position: fixed; left: 16px; right: 16px; top: auto; width: auto; max-width: 340px; margin-top: 8px; background: var(--abi-raise); border-color: var(--abi-line2); color: var(--abi-fg); font-size: 12.5px; line-height: 1.45; text-transform: none; letter-spacing: 0; font-family: var(--abi-sans); font-weight: 400; z-index: 40; }
 @media (min-width: 420px) { .abi-t .pa-info-bubble { position: absolute; left: 0; right: auto; width: min(300px, calc(100vw - 32px)); margin-top: 0; top: 22px; } }
 
@@ -124,9 +124,9 @@
 .abi-tag { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 3px; background: var(--abi-raise); color: var(--abi-mute); font-family: var(--abi-mono); font-size: 10px; }
 @media (max-width: 640px) { .abi-x { display: none; } .abi-t th, .abi-t td { padding-inline: 8px; } .abi-wbar { width: 50px; margin-left: 4px; } }
 
-.abi-kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; padding: 10px 12px; margin: 0; }
+.abi-kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; padding: 10px 12px; margin: 0; overflow-x: auto; }
 .abi-kv dt { color: var(--abi-mute); display: flex; align-items: center; gap: 5px; }
-.abi-kv dd { margin: 0; text-align: right; font-family: var(--abi-mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.abi-kv dd { margin: 0; text-align: right; font-family: var(--abi-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .abi-sepline { border-top: 1px solid var(--abi-line); }
 .abi-foot { display: flex; flex-wrap: wrap; gap: 4px 18px; font-family: var(--abi-mono); font-size: 10.5px; color: var(--abi-faint); padding-top: 4px; }
 .abi-msg { padding: 24px 0; color: var(--abi-mute); }
