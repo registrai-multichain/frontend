@@ -14,6 +14,8 @@ export const ABI_LIMITS = {
   seenSources: 200,
   /** under the RPC's getLogs range limit (10,000 blocks) */
   baseWindow: 5_000,
+  candles: 5_000,
+  tape: 1_000,
   series: 10_000,
   projects: 200,
   events: 2_000,
@@ -21,8 +23,10 @@ export const ABI_LIMITS = {
   str: 200,
 } as const;
 
-export type AbiProject = { source: string; name: string; share: number; share_base: number | null; points: number; contracts: number; base_layer: boolean };
-export type AbiEvent = { t: string; source: string; name: string; kind: "activity" | "rise_limit"; payments: number; wallets: number; new_payers: number; points: number; open?: true };
+export type AbiProject = { source: string; name: string; share: number; share_base: number | null; points: number; contracts: number; base_layer: boolean;
+  /** points this hour / last 24 closed hours, payments and USDC in the last 24 closed hours */
+  pts_1h: number; pts_24h: number; pay_24h: number; usdc_24h: number };
+export type AbiEvent = { t: string; source: string; name: string; kind: "activity" | "rise_limit"; payments: number; wallets: number; new_payers: number; points: number; usdc: number; open?: true };
 /** What the browser needs to replay the open hour (the producer's state at the last closed hour). */
 export type AbiLive = {
   hour_start: number; hour_start_block: number;
@@ -31,6 +35,10 @@ export type AbiLive = {
   decay_h: number; cap: number; new_payer: number; proj_up: number; rel_up: number; entry: number; base_scale: number; base_window: number;
   contracts: Record<string, string>; deployers: Record<string, string[]>; seen_prefix: number;
 };
+/** [iso hour open, open, high, low, close, payments, USDC, points] */
+export type AbiCandle = [string, number, number, number, number, number, number, number];
+/** [iso time, source, USDC, points, new payer 0|1] */
+export type AbiTapeRow = [string, string, number, number, 0 | 1];
 export type AbiData = {
   updated: string;
   data_until: string;
@@ -43,6 +51,9 @@ export type AbiData = {
   projects: AbiProject[];
   events: AbiEvent[];
   params: { half_life_days: number; decay_per_hour_pct: number } & Record<string, number>;
+  roots_24h: Record<string, number>;
+  candles: AbiCandle[];
+  tape: AbiTapeRow[];
   live?: AbiLive;
 };
 
@@ -143,7 +154,10 @@ export function validateIndex(raw: unknown): AbiResult {
   for (const p of raw.projects) {
     if (!isObj(p) || !str(p.source) || !str(p.name) || !num(p.share) || !num(p.points) || !count(p.contracts) || typeof p.base_layer !== "boolean") return bad("a project is malformed");
     if (p.share_base !== null && p.share_base !== undefined && !num(p.share_base)) return bad("share_base must be a number or null");
-    projects.push({ source: p.source, name: p.name, share: p.share, share_base: p.share_base ?? null, points: p.points, contracts: p.contracts, base_layer: p.base_layer });
+    const [h1, d1, pay, usd] = [p.pts_1h ?? 0, p.pts_24h ?? 0, p.pay_24h ?? 0, p.usdc_24h ?? 0];
+    if (!num(h1) || !num(d1) || !count(pay) || !num(usd)) return bad("a project's pts_1h, pts_24h, pay_24h or usdc_24h is malformed");
+    const extra = { pts_1h: h1, pts_24h: d1, pay_24h: pay, usdc_24h: usd };
+    projects.push({ source: p.source, name: p.name, share: p.share, share_base: p.share_base ?? null, points: p.points, contracts: p.contracts, base_layer: p.base_layer, ...extra });
   }
   if (!Array.isArray(raw.events) || raw.events.length > ABI_LIMITS.events) return bad(`events must be an array of at most ${ABI_LIMITS.events}`);
   const events: AbiEvent[] = [];
@@ -151,11 +165,34 @@ export function validateIndex(raw: unknown): AbiResult {
     if (!isObj(e) || !iso(e.t) || !str(e.source) || !str(e.name) || (e.kind !== "activity" && e.kind !== "rise_limit")) return bad("an event is malformed");
     if (e.kind === "rise_limit") {
       // the producer sends only { t, source, name, kind } for a rise-limit hit
-      events.push({ t: e.t, source: e.source, name: e.name, kind: e.kind, payments: 0, wallets: 0, new_payers: 0, points: 0 });
+      events.push({ t: e.t, source: e.source, name: e.name, kind: e.kind, payments: 0, wallets: 0, new_payers: 0, points: 0, usdc: 0 });
       continue;
     }
     if (!count(e.payments) || !count(e.wallets) || !count(e.new_payers) || !num(e.points)) return bad("event counts must be non-negative integers and points a number");
-    events.push({ t: e.t, source: e.source, name: e.name, kind: e.kind, payments: e.payments, wallets: e.wallets, new_payers: e.new_payers, points: e.points });
+    if (e.usdc !== undefined && (!num(e.usdc) || e.usdc < 0)) return bad("event usdc must be a non-negative number");
+    events.push({ t: e.t, source: e.source, name: e.name, kind: e.kind, payments: e.payments, wallets: e.wallets, new_payers: e.new_payers, points: e.points, usdc: (e.usdc as number | undefined) ?? 0 });
+  }
+  const candles: AbiCandle[] = [];
+  if (raw.candles !== undefined) {
+    if (!Array.isArray(raw.candles) || raw.candles.length > ABI_LIMITS.candles) return bad(`candles must be an array of at most ${ABI_LIMITS.candles}`);
+    for (const c of raw.candles) {
+      if (!Array.isArray(c) || c.length !== 8 || !iso(c[0]) || ![1, 2, 3, 4].every((i) => num(c[i]) && c[i] > 0) || !count(c[5]) || !num(c[6]) || c[6] < 0 || !num(c[7]) || c[7] < 0) return bad("candles entries must be [ISO time, open, high, low, close, payments, USDC, points]");
+      candles.push(c as AbiCandle);
+    }
+  }
+  const tape: AbiTapeRow[] = [];
+  if (raw.tape !== undefined) {
+    if (!Array.isArray(raw.tape) || raw.tape.length > ABI_LIMITS.tape) return bad(`tape must be an array of at most ${ABI_LIMITS.tape}`);
+    for (const r of raw.tape) {
+      if (!Array.isArray(r) || r.length !== 5 || !iso(r[0]) || !str(r[1]) || !num(r[2]) || r[2] < 0 || !num(r[3]) || r[3] < 0 || (r[4] !== 0 && r[4] !== 1)) return bad("tape entries must be [ISO time, source, USDC, points, 0|1]");
+      tape.push(r as AbiTapeRow);
+    }
+  }
+  let roots24: Record<string, number> = {};
+  if (raw.roots_24h !== undefined) {
+    const m = numberMap(raw.roots_24h, ABI_LIMITS.projects);
+    if (!m) return bad("roots_24h must map sources to non-negative numbers");
+    roots24 = m;
   }
   if (!isObj(raw.params)) return bad("params must be an object");
   const params: Record<string, number> = {};
@@ -180,7 +217,7 @@ export function validateIndex(raw: unknown): AbiResult {
       updated: raw.updated as string, data_until: raw.data_until as string, head_time: raw.head_time as string, head_block: raw.head_block,
       index: raw.index, index_24h_ago: (raw.index_24h_ago as number | null | undefined) ?? null,
       base: { time: b.time, level: b.level, sha256: b.sha256 },
-      series, projects, events, params: params as AbiData["params"],
+      series, projects, events, candles, tape, roots_24h: roots24, params: params as AbiData["params"],
     },
   };
 }

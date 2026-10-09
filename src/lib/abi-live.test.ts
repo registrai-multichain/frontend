@@ -14,20 +14,20 @@ function engine(head: number, stats?: { calls: string[] }) {
 }
 
 describe("replaying an empty range", () => {
-  test("gives the server value (944.756776) at the start of the open hour", async () => {
+  test("gives the server value (982.208204) at the start of the open hour", async () => {
     const e = engine(HB + 10);
-    expect(e.evaluate(0).index).toBe(944.7567764604551);
+    expect(e.evaluate(0).index).toBe(982.2082037374452);
     const r = await e.tick(); // head is 10 blocks into the hour: f = 5 s / 3600 s... but no payments
     expect(r.closedHours).toEqual([]);
     expect(r.head).toBe(HB + 10);
-    expect(r.index).toBeCloseTo(944.7567764604551 * 1, 1); // decay of 5 s only
-    expect(r.index).toBeLessThan(944.7567764604551);
+    expect(r.index).toBeCloseTo(982.2082037374452 * 1, 1); // decay of 5 s only
+    expect(r.index).toBeLessThan(982.2082037374452);
     expect(r.index).toBeGreaterThan(944.7);
     expect(Object.keys(r.act)).toEqual([]);
   });
   test("a full hour with no payments only decays", () => {
     const e = engine(HB + 10);
-    expect(e.evaluate(1).index).toBe(943.7827915193383);
+    expect(e.evaluate(1).index).toBe(981.5330243515509);
   });
 });
 
@@ -78,7 +78,7 @@ describe("hour roll", () => {
 });
 
 // produced by the reference live.js on the same mock chain (the equivalence tests below re-check them when it is present)
-const GOLD = { closed: 943.8193316630574, open: 943.8083994232524 };
+const GOLD = { closed: 981.5627449901694, open: 981.5554347816068 };
 
 describe("golden values (from the reference live.js)", () => {
   test("after the roll", async () => {
@@ -113,10 +113,39 @@ describe.skipIf(!existsSync(REF))("equivalence with the reference live.js", () =
     expect(b.P).toEqual(a.P);
     expect(b.capped).toEqual(a.capped);
     expect(b.closedHours).toEqual(a.closedHours);
+    expect(b.candle).toEqual(a.candle);
+    expect(b.tape).toEqual(a.tape);
+    expect(b.rootsPrev).toEqual(a.rootsPrev);
     expect(b.head).toBe(a.head);
     expect(b.f).toBe(a.f);
     expect(Object.keys(b.act)).toEqual(Object.keys(a.act));
     for (const k of Object.keys(a.act)) expect({ ...b.act[k], wallets: [...b.act[k].wallets] }).toEqual({ ...a.act[k], wallets: [...a.act[k].wallets] });
+  });
+});
+
+describe("candle, tape and roll-off inputs", () => {
+  test("the open candle starts at the previous close and tracks the path of each payment", async () => {
+    const r = await engine(HB + 4100).tick();
+    const [t, o, h, l, c, n, u, p] = r.candle;
+    expect(t).toBe(new Date(HS * 1000).toISOString().slice(0, 19) + "Z");
+    expect(o).toBeCloseTo(L.K * Object.values(L.roots_prev).reduce((x, y) => x + y, 0), 9);
+    expect(h).toBeGreaterThanOrEqual(Math.max(o, c));
+    expect(l).toBeLessThanOrEqual(Math.min(o, c));
+    expect(c).toBe(r.index);
+    expect(n).toBe(4);
+    expect(u).toBeCloseTo(5 + 995 + 12 + 50, 6); // counted USDC, after the per-wallet cap
+    expect(p).toBeCloseTo(Object.values(r.act).reduce((x, a) => x + a.points, 0), 9);
+    expect(r.tape).toHaveLength(4);
+    expect(r.tape[1]).toMatchObject({ v: 1500, isNew: false }); // raw amount on the tape, not the capped one
+    expect(r.rootsPrev).toEqual(L.roots_prev);
+  });
+  test("a self-closed hour carries its candle; the next candle opens at its close", async () => {
+    const r = await engine(HB + 7300).tick();
+    const c = r.closedHours[0].candle;
+    expect(c[4]).toBe(r.closedHours[0].index);
+    expect(c[0]).toBe(new Date(HS * 1000).toISOString().slice(0, 19) + "Z");
+    expect(r.candle[1]).toBe(c[4]);
+    expect(r.candle[0]).toBe(new Date((HS + 3600) * 1000).toISOString().slice(0, 19) + "Z");
   });
 });
 

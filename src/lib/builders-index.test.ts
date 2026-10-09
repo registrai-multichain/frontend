@@ -10,7 +10,7 @@ describe("validateIndex", () => {
     const r = validateIndex(indexFixture());
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(Object.keys(r.data).sort()).toEqual(["base", "events", "head_block", "head_time", "index", "index_24h_ago", "params", "projects", "series", "updated", "data_until"].sort());
+      expect(Object.keys(r.data).sort()).toEqual(["base", "events", "head_block", "head_time", "index", "index_24h_ago", "params", "projects", "series", "updated", "data_until", "candles", "tape", "roots_24h"].sort());
       expect(r.data.series).toHaveLength(200);
     }
   });
@@ -93,5 +93,50 @@ describe("validateSeen", () => {
   test("too many sources", () => {
     const seen = Object.fromEntries(Array.from({ length: ABI_LIMITS.seenSources + 1 }, (_, i) => [`s${i}`, ""]));
     expect(validateSeen({ hour_start: 1, seen }).ok).toBe(false);
+  });
+});
+
+describe("terminal keys: candles, tape, roots_24h, per-project and per-event stats", () => {
+  const real2 = () => JSON.parse(JSON.stringify(real));
+  const run = (f: (d: any) => void) => { const d = real2(); f(d); return validateIndex(d); };
+  test("the real file keeps all of them", () => {
+    const r = validateIndex(real);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.candles.length).toBe(real.candles.length);
+      expect(r.data.tape.length).toBe(real.tape.length);
+      expect(Object.keys(r.data.roots_24h).length).toBe(Object.keys(real.roots_24h).length);
+      expect(r.data.projects[1]).toMatchObject({ pts_1h: expect.any(Number), pts_24h: expect.any(Number), pay_24h: expect.any(Number), usdc_24h: expect.any(Number) });
+      expect(r.data.events.find((e) => e.kind === "activity")!.usdc).toBeGreaterThan(0);
+    }
+  });
+  test("a file without them still validates, with zero defaults", () => {
+    const r = validateIndex(indexFixture());
+    expect(r.ok && r.data.candles).toEqual([]);
+    expect(r.ok && r.data.projects[0]).toMatchObject({ pts_1h: 0, pts_24h: 0, pay_24h: 0, usdc_24h: 0 });
+  });
+  test.each([
+    ["candle with a missing field", (d: any) => { d.candles[0] = d.candles[0].slice(0, 7); }],
+    ["candle with NaN", (d: any) => { d.candles[0][2] = Number.NaN; }],
+    ["candle with a non-positive price", (d: any) => { d.candles[0][3] = 0; }],
+    ["candle with fractional payments", (d: any) => { d.candles[0][5] = 1.5; }],
+    ["candle with negative USDC", (d: any) => { d.candles[0][6] = -1; }],
+    ["candles not an array", (d: any) => { d.candles = {}; }],
+    ["tape with a bad flag", (d: any) => { d.tape[0][4] = 2; }],
+    ["tape with a non-ISO time", (d: any) => { d.tape[0][0] = "soon"; }],
+    ["tape with negative USDC", (d: any) => { d.tape[0][2] = -0.1; }],
+    ["tape with a long source", (d: any) => { d.tape[0][1] = "x".repeat(ABI_LIMITS.str + 1); }],
+    ["project with a string stat", (d: any) => { d.projects[1].pts_24h = "12"; }],
+    ["project with fractional payments", (d: any) => { d.projects[1].pay_24h = 2.5; }],
+    ["event with negative usdc", (d: any) => { d.events[0].usdc = -3; }],
+    ["roots_24h with a negative root", (d: any) => { d.roots_24h["base:arc"] = -1; }],
+    ["roots_24h as an array", (d: any) => { d.roots_24h = []; }],
+  ])("rejects: %s", (_n, f) => {
+    expect(run(f).ok).toBe(false);
+  });
+  test("row counts are bounded", () => {
+    expect(run((d) => { d.candles = Array.from({ length: ABI_LIMITS.candles + 1 }, () => d.candles[0]); }).ok).toBe(false);
+    expect(run((d) => { d.tape = Array.from({ length: ABI_LIMITS.tape + 1 }, () => d.tape[0]); }).ok).toBe(false);
+    expect(run((d) => { d.tape = Array.from({ length: ABI_LIMITS.tape }, () => d.tape[0]); }).ok).toBe(true);
   });
 });
