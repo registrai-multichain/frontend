@@ -187,6 +187,24 @@ describe("milestones, stablecoins, volume_24h, live_fx (spec §12, §13)", () =>
     expect(r.data.live!.stablecoins![EURC]).toEqual({ symbol: "EURC", currency: "EUR", decimals: 6, added: 1791619200 });
     expect(Object.keys(r.data.live_fx["2026-10-09"]).sort()).toEqual(["EUR", "JPY"]);
   });
+  const moonpay = () => ({ id: "20261010-120000-integration", t: 1791633600, target: "base:arc", tier: "integration", mult: 1.0508, title: "MoonPay live on Arc", evidence: ["https://www.moonpay.com/newsroom"], company: "MoonPay", revenue_usd: 108e6, revenue_kind: "estimate" });
+  test("integration milestones (§14) keep company and revenue", () => {
+    const r = run((d) => { d.milestones.push(moonpay()); });
+    expect(r.ok && r.data.milestones[2]).toEqual(moonpay());
+  });
+  test.each([
+    ["integration above ×1.10", (m: any) => { m.mult = 1.11; }],
+    ["integration on a member", (m: any) => { m.target = "domain:argus.world"; }],
+    ["company too long", (m: any) => { m.company = "x".repeat(61); }],
+    ["company with a newline", (m: any) => { m.company = "Moon\nPay"; }],
+    ["revenue zero", (m: any) => { m.revenue_usd = 0; }],
+    ["revenue as a string", (m: any) => { m.revenue_usd = "108000000"; }],
+    ["revenue without kind", (m: any) => { delete m.revenue_kind; }],
+    ["kind without revenue", (m: any) => { delete m.revenue_usd; }],
+    ["unknown revenue kind", (m: any) => { m.revenue_kind = "guess"; }],
+  ])("integration rejected: %s", (_n, f) => {
+    expect(run((d) => { const m = moonpay(); f(m); d.milestones.push(m); }).ok).toBe(false);
+  });
   test.each([
     ["unknown tier", (d: any) => { d.milestones[0].tier = "partnership"; }],
     ["base tier on a member", (d: any) => { d.milestones[0].target = "domain:argus.world"; }],

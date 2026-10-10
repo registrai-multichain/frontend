@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { createEngine, type LiveResult } from "./abi-live";
 import { HB, INDEX, mockRpc, SEEN } from "./abi-live-mock";
-import { barAt, candleList, freshKeys, rowKeys, chartModel, members, methodRows, openHour, paceAll, quote, rollOff, status, tapeRows, tickerItems, ts, why } from "./abi-terminal";
+import { barAt, candleList, freshKeys, rowKeys, chartModel, members, methodRows, milestoneRows, openHour, paceAll, quote, rollOff, status, tapeRows, tickerItems, ts, usdShort, why } from "./abi-terminal";
 import type { AbiData } from "./builders-index";
 
 const L = INDEX.live!;
@@ -247,5 +247,20 @@ describe("chart model", () => {
     expect(barAt(m, -50)).toBe(0);
     expect(barAt(m, 10_000)).toBe(23);
     expect(barAt(m, m.pad.l + m.slot * 5.5)).toBe(5);
+  });
+});
+
+describe("milestone rows", () => {
+  test("usdShort", () => {
+    expect([108e6, 1.23e9, 850e3, 4.5e6, 2.4e11].map(usdShort)).toEqual(["$108M", "$1.2B", "$850k", "$4.5M", "$240B"]);
+  });
+  test("integration detail: company and revenue; plain milestones have none", () => {
+    const base = { target: "base:arc", evidence: ["https://x.io"] };
+    const d = { ...INDEX, milestones: [
+      { ...base, id: "a", t: 1791633600, tier: "integration", mult: 1.0508, title: "MoonPay live on Arc", company: "MoonPay", revenue_usd: 108e6, revenue_kind: "estimate" },
+      { ...base, id: "b", t: 1791630000, tier: "integration", mult: 1.07, title: "Acme live on Arc", company: "Acme", revenue_usd: 6.3e9, revenue_kind: "filing" },
+      { ...base, id: "c", t: 1791620000, tier: "arc-upgrade", mult: 1.25, title: "Arc upgrade" },
+    ] } as unknown as AbiData;
+    expect(milestoneRows(d).map((r) => r.detail)).toEqual(["MoonPay · revenue ≈ $108M (estimate)", "Acme · revenue $6.3B (filing)", undefined]);
   });
 });

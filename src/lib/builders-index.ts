@@ -25,6 +25,7 @@ export const ABI_LIMITS = {
   str: 200,
   milestones: 500,
   milestoneTitle: 120,
+  company: 60,
   evidencePer: 10,
   stablecoins: 50,
   volumeCoins: 50,
@@ -32,11 +33,13 @@ export const ABI_LIMITS = {
   fxCurrencies: 20,
 } as const;
 
-/** Milestone tiers (spec §12): the multiplier on the target member's points, and whether the target is the Arc base layer. */
+/** Milestone tiers (spec §12, §14): the multiplier on the target member's points (for `integration` the maximum:
+ * 1 + 0.025 · log10(revenue / $1M)), and whether the target is the Arc base layer. */
 export const ABI_MILESTONE_TIERS = {
   "arc-upgrade": { mult: 1.25, base: true },
   "circle-product": { mult: 1.15, base: true },
   "stablecoin-launch": { mult: 1.1, base: true },
+  "integration": { mult: 1.1, base: true },
   "project-release": { mult: 1.1, base: false },
 } as const;
 export type AbiMilestoneTier = keyof typeof ABI_MILESTONE_TIERS;
@@ -57,7 +60,9 @@ export type AbiLive = {
 };
 export type AbiLiveCoin = { symbol: string; currency: string; decimals: number; added: number };
 /** A recorded milestone: from `t` (unix seconds) the target's √P is multiplied by √mult, after the rise limit. */
-export type AbiMilestone = { id: string; t: number; target: string; tier: AbiMilestoneTier; mult: number; title: string; evidence: string[] };
+export type AbiMilestone = { id: string; t: number; target: string; tier: AbiMilestoneTier; mult: number; title: string; evidence: string[];
+  /** integration milestones (§14): the company and its annual revenue, from a filing or a published estimate */
+  company?: string; revenue_usd?: number; revenue_kind?: "filing" | "estimate" };
 export type AbiStablecoin = { symbol: string; currency: string; issuer: string; address: string; decimals: number; added: number };
 export type AbiVolume = { members_usd: number; members_payments: number; base_usd_est: number; base_transfers_est: number };
 /** ECB fixes: date (YYYY-MM-DD) -> currency -> USD per unit */
@@ -147,6 +152,10 @@ function validateMilestones(v: unknown): AbiMilestone[] | string {
     if (!tier) return "a milestone tier is unknown";
     if (ABI_MILESTONE_TIERS[tier].base !== m.target.startsWith("base:")) return `milestone ${m.id}: ${tier} targets ${ABI_MILESTONE_TIERS[tier].base ? "the Arc base layer" : "a member"}`;
     if (!num(m.mult) || m.mult <= 1 || m.mult > 2) return "a milestone multiplier must be above 1 and at most 2";
+    if (tier === "integration" && m.mult > ABI_MILESTONE_TIERS.integration.mult) return `milestone ${m.id}: an integration multiplier is at most ${ABI_MILESTONE_TIERS.integration.mult}`;
+    if (m.company !== undefined && !line(m.company, ABI_LIMITS.company)) return `milestone ${m.id}: company must be one line of at most ${ABI_LIMITS.company} characters`;
+    if (m.revenue_usd !== undefined && (!num(m.revenue_usd) || m.revenue_usd <= 0)) return `milestone ${m.id}: revenue_usd must be a positive number`;
+    if ((m.revenue_usd === undefined) !== (m.revenue_kind === undefined) || (m.revenue_kind !== undefined && m.revenue_kind !== "filing" && m.revenue_kind !== "estimate")) return `milestone ${m.id}: revenue_usd needs revenue_kind "filing" or "estimate"`;
     if (!Array.isArray(m.evidence) || m.evidence.length < 1 || m.evidence.length > ABI_LIMITS.evidencePer) return `a milestone needs 1 to ${ABI_LIMITS.evidencePer} evidence items`;
     const evidence: string[] = [];
     for (const e of m.evidence) {
@@ -154,7 +163,10 @@ function validateMilestones(v: unknown): AbiMilestone[] | string {
       if (!ok) return "milestone evidence must be https URLs, 0x addresses or 0x tx hashes";
       evidence.push(ok);
     }
-    out.push({ id: m.id, t: m.t, target: m.target, tier, mult: m.mult, title: m.title, evidence });
+    const ms: AbiMilestone = { id: m.id, t: m.t, target: m.target, tier, mult: m.mult, title: m.title, evidence };
+    if (m.company !== undefined) ms.company = m.company as string;
+    if (m.revenue_usd !== undefined) { ms.revenue_usd = m.revenue_usd as number; ms.revenue_kind = m.revenue_kind as "filing" | "estimate"; }
+    out.push(ms);
   }
   return out;
 }

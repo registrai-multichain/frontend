@@ -292,10 +292,18 @@ export function evidenceLinks(evidence: string[]): EvidenceLink[] {
   });
 }
 
-export type MilestoneRow = { id: string; day: string; title: string; mult: string; target: string; evidence: EvidenceLink[] };
-/** The latest milestones first. */
+/** $108M, $1.2B, $850k */
+export function usdShort(v: number): string {
+  const [n, u] = v >= 1e9 ? [v / 1e9, "B"] : v >= 1e6 ? [v / 1e6, "M"] : [v / 1e3, "k"];
+  return `$${n >= 100 ? Math.round(n) : Number(n.toPrecision(2))}${u}`;
+}
+
+export type MilestoneRow = { id: string; day: string; title: string; mult: string; target: string; evidence: EvidenceLink[]; detail?: string };
+/** The latest milestones first. detail: "MoonPay · revenue ≈ $108M (estimate)" for integrations. */
 export function milestoneRows(d: AbiData, max = 6): MilestoneRow[] {
-  return d.milestones.slice().sort((a, b) => b.t - a.t).slice(0, max).map((m) => ({
-    id: m.id, day: dayLab(m.t), title: m.title, mult: `×${m.mult.toFixed(2)}`, target: nameOf(d, m.target), evidence: evidenceLinks(m.evidence),
-  }));
+  return d.milestones.slice().sort((a, b) => b.t - a.t).slice(0, max).map((m) => {
+    const rev = m.revenue_usd ? `revenue ${m.revenue_kind === "estimate" ? "≈ " : ""}${usdShort(m.revenue_usd)} (${m.revenue_kind})` : "";
+    const detail = [m.company, rev].filter(Boolean).join(" · ");
+    return { id: m.id, day: dayLab(m.t), title: m.title, mult: `×${m.mult.toFixed(2)}`, target: nameOf(d, m.target), evidence: evidenceLinks(m.evidence), ...(detail ? { detail } : {}) };
+  });
 }

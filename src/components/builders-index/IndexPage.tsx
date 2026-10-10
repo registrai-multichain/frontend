@@ -313,7 +313,7 @@ function MilestonesPanel({ d }: { d: AbiData }) {
         {rows.length === 0 ? <p className="abi-ms-empty">{ABI_COPY.noMilestones}</p> : rows.map((m) => (
           <div key={m.id} className="abi-ms">
             <span className="dim mono">{m.day}</span>
-            <span className="t">{m.title}<span className="abi-cc">{m.target}</span></span>
+            <span className="t">{m.title}<span className="abi-cc">{m.target}</span>{m.detail && <span className="abi-cc">{m.detail}</span>}</span>
             <span className="x">{m.mult}</span>
             <span className="ev">
               {m.evidence.map((e, i) => (
