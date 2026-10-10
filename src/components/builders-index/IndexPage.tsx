@@ -66,7 +66,7 @@ function QuoteBar({ d, bars, st }: { d: AbiData; bars: Bar[]; st: { kind: string
           <Q k="24h high" v={fmt(q.hi)} />
           <Q k="24h low" v={fmt(q.lo)} />
           <Q k="24h payments" v={q.pay.toLocaleString("en-US")} />
-          <Q k="24h USDC in" v={fmt(q.usd, 0)} />
+          <Q k="24h USD in" v={fmt(q.usd, 0)} />
           <Q k="Since base" tip={<InfoBubble label="About the base">{baseTip(d)}</InfoBubble>} v={<span className={cls(q.sinceBase)}>{pct(q.sinceBase)}</span>} />
         </div>
       )}
@@ -147,7 +147,7 @@ function ChartPanel({ d, bars }: { d: AbiData; bars: Bar[] }) {
             {m.bars.map((b, i) => (
               <rect key={`v${i}`} x={b.x - m.bw / 2} y={b.vy} width={m.bw} height={b.vh} fill={b.up ? "var(--abi-up)" : "var(--abi-down)"} opacity={b.live ? 0.55 : 0.32} />
             ))}
-            <text x={m.W - m.pad.r + 8} y={m.volTop + 9}>USDC/h</text>
+            <text x={m.W - m.pad.r + 8} y={m.volTop + 9}>USD/h</text>
             {kind === "c" ? m.bars.map((b, i) => {
               const col = b.up ? "var(--abi-up)" : "var(--abi-down)";
               return (
@@ -233,7 +233,7 @@ function TapePanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
 
 const COLS: { k: SortKey; label: string; x?: boolean }[] = [
   { k: "name", label: "Project" }, { k: "share", label: "Weight" }, { k: "dbase", label: "Δ base", x: true }, { k: "h1", label: "Pts this hour" },
-  { k: "d1", label: "Pts 24h", x: true }, { k: "pace", label: "Pace" }, { k: "pay", label: "Payments 24h", x: true }, { k: "usd", label: "USDC 24h", x: true },
+  { k: "d1", label: "Pts 24h", x: true }, { k: "pace", label: "Pace" }, { k: "pay", label: "Payments 24h", x: true }, { k: "usd", label: "USD 24h", x: true },
 ];
 
 function MembersPanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
@@ -345,7 +345,7 @@ function SidePanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
         <dt>Low</dt><dd>{oh ? fmt(oh.l) : "–"}</dd>
         <dt>Last</dt><dd>{oh ? <span className={cls(oh.c - oh.o)}>{fmt(oh.c)}</span> : "–"}</dd>
         <dt>Payments</dt><dd>{oh ? oh.n.toLocaleString("en-US") : "–"}</dd>
-        <dt>USDC in</dt><dd>{oh ? fmt(oh.u, 2) : "–"}</dd>
+        <dt>USD in</dt><dd>{oh ? fmt(oh.u, 2) : "–"}</dd>
         <dt>Closes in <InfoBubble label="About the hourly close">{ABI_COPY.close}</InfoBubble></dt><dd><Countdown R={R} /></dd>
       </dl>
       <div className="abi-ph abi-sepline"><h2>Method</h2><InfoBubble label="About the inputs">{ABI_COPY.inputs}</InfoBubble></div>
