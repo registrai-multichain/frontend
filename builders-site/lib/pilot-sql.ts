@@ -5,8 +5,25 @@
  * Ordered `?` parameters only (D1). No imports: the guard script loads this file directly.
  */
 
-export const TABLES = ["accounts", "positions", "orders", "bars", "gaps", "funding", "mark", "used_nonces", "ratelimit"] as const;
-export const INDEXES = ["positions_wallet", "positions_open", "orders_pending", "orders_wallet", "bars_l", "bars_h"] as const;
+export const TABLES = [
+  "accounts", "positions", "orders", "bars", "gaps", "funding", "mark", "used_nonces", "ratelimit",
+  "rates", "ledger", "pools", "splits", "house_hours",
+] as const;
+export const INDEXES = ["positions_wallet", "positions_open", "orders_pending", "orders_wallet", "bars_l", "bars_h", "ledger_ref", "ledger_kind_ts"] as const;
+/** The migrations, in order (the guard check and the D1 test double apply all of them). */
+export const MIGRATIONS = ["0001_pilot.sql", "0002_pilot_v3.sql"] as const;
+
+/**
+ * One ledger row plus the matching pools update, under the same guard (R4): `<guard>` is a SQL condition true only
+ * for the batch that owns the event. Ledger bind: ts, kind, amount, ref, …guard; pools bind: amount, gross, kind,
+ * …guard (gross = 0 for the weekly split's own rows).
+ */
+const ledgerUnder = (guard: string) => `INSERT INTO ledger (ts, kind, amount, ref) SELECT ?, ?, ?, ? WHERE ${guard}`;
+const poolUnder = (guard: string) => `UPDATE pools SET balance = balance + ?, gross = gross + ? WHERE kind = ? AND ${guard}`;
+const BY_SETTLE = "(SELECT settle FROM positions WHERE id = ?) = ?";
+const BY_RATES = "(SELECT post FROM rates WHERE hour = ?) = ?";
+const BY_HOUR = "(SELECT post FROM house_hours WHERE hour = ?) = ?";
+const BY_SPLIT = "(SELECT post FROM splits WHERE week = ?) = ?";
 
 export const SQL = {
   /**
@@ -18,30 +35,85 @@ export const SQL = {
     "AND (SELECT COUNT(*) FROM positions WHERE wallet = ? AND closed_at IS NULL) < ? " +
     "AND NOT EXISTS (SELECT 1 FROM positions WHERE wallet = ? AND closed_at IS NULL AND side <> ?) " +
     "AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')",
-  /** Open fill, 2/3 — bind: wallet, side, margin, lev, notional, entry, liq, opened_at, fee. Only after the debit. */
+  /** Open fill, 2/3 — bind: wallet, side, margin, lev, notional, entry, liq, opened_at, fee, booked_to (= opened_at). Only after the debit. */
   openInsert:
-    "INSERT INTO positions (wallet, side, margin, lev, notional, entry, liq, opened_at, fee) " +
-    "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1 RETURNING id",
+    "INSERT INTO positions (wallet, side, margin, lev, notional, entry, liq, opened_at, fee, booked_to) " +
+    "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1 RETURNING id",
   /** Open fill, 3/3 — bind: fill_px, filled_at, orderId. Only after the insert. */
   openFilled:
     "UPDATE orders SET status = 'filled', position_id = last_insert_rowid(), fill_px = ?, filled_at = ? " +
     "WHERE id = ? AND status = 'pending' AND changes() = 1",
-  /** Close fill, 1/3 — bind: closed_at, exit, pnl, accrued, closeFee, returned, positionId, wallet, orderId. */
+  /** Open fill, 4–5: the open fee to the ledger, only after the order was marked filled — bind: ts, fee, orderId; then pools: fee, fee. */
+  openFeeLedger: "INSERT INTO ledger (ts, kind, amount, ref) SELECT ?, 'fee', ?, 'open:' || (SELECT position_id FROM orders WHERE id = ?) WHERE changes() = 1",
+  openFeePool: "UPDATE pools SET balance = balance + ?, gross = gross + ? WHERE kind = 'fee' AND changes() = 1",
+  /**
+   * Close fill, 1/3 — bind: closed_at, exit, pnl, accrued, closeFee, returned, borrow, fill, settle, booked, booked_cut,
+   * booked_to, positionId, wallet, booked_to (as read), orderId. Settles only an open position whose booking has not
+   * moved since it was read, while the close order is pending.
+   */
   closeSettle:
-    "UPDATE positions SET closed_at = ?, exit = ?, pnl = ?, accrued = ?, fee = fee + ?, returned = ?, reason = 'close' " +
-    "WHERE id = ? AND wallet = ? AND closed_at IS NULL AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')",
+    "UPDATE positions SET closed_at = ?, exit = ?, pnl = ?, accrued = ?, fee = fee + ?, returned = ?, borrow = ?, fill = ?, settle = ?, " +
+    "booked = ?, booked_cut = ?, booked_to = ?, reason = 'close' " +
+    "WHERE id = ? AND wallet = ? AND closed_at IS NULL AND booked_to = ? AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')",
   /** Close fill, 2/3 — bind: returned, wallet. Credits only when the settle changed a row. */
   closeCredit: "UPDATE accounts SET balance = balance + ? WHERE wallet = ? AND changes() = 1",
   /** Close fill, 3/3 — bind: fill_px, filled_at, orderId. */
   closeFilled: "UPDATE orders SET status = 'filled', fill_px = ?, filled_at = ? WHERE id = ? AND status = 'pending' AND changes() = 1",
   /** bind: error, orderId. */
   refuse: "UPDATE orders SET status = 'refused', error = ? WHERE id = ? AND status = 'pending'",
-  /** Liquidation at the liquidation price, nothing returned — bind: closed_at, exit, pnl, accrued, positionId. */
-  liquidate: "UPDATE positions SET closed_at = ?, exit = ?, pnl = ?, accrued = ?, returned = 0, reason = 'liquidation' WHERE id = ? AND closed_at IS NULL",
-  /** The ingest's in-batch liquidation: only if this post won the mark row — bind: closed_at, exit, pnl, accrued, positionId, post. */
+  /**
+   * Liquidation at the liquidation price, nothing returned — bind: closed_at, exit, pnl, accrued, borrow, fill, settle,
+   * booked, booked_cut, booked_to, positionId, booked_to (as read).
+   */
+  liquidate:
+    "UPDATE positions SET closed_at = ?, exit = ?, pnl = ?, accrued = ?, borrow = ?, fill = ?, settle = ?, booked = ?, booked_cut = ?, booked_to = ?, " +
+    "returned = 0, reason = 'liquidation' WHERE id = ? AND closed_at IS NULL AND booked_to = ?",
+  /** The ingest's in-batch liquidation: only if this post won the mark row — bind: as `liquidate`, then post. */
   liquidateIfPost:
-    "UPDATE positions SET closed_at = ?, exit = ?, pnl = ?, accrued = ?, returned = 0, reason = 'liquidation' " +
-    "WHERE id = ? AND closed_at IS NULL AND (SELECT post FROM mark WHERE id = 1) = ?",
+    "UPDATE positions SET closed_at = ?, exit = ?, pnl = ?, accrued = ?, borrow = ?, fill = ?, settle = ?, booked = ?, booked_cut = ?, booked_to = ?, " +
+    "returned = 0, reason = 'liquidation' WHERE id = ? AND closed_at IS NULL AND booked_to = ? AND (SELECT post FROM mark WHERE id = 1) = ?",
+  /** A settlement's ledger rows: only under the token its settle statement wrote — guard bind: positionId, token. */
+  ledgerSettled: ledgerUnder(BY_SETTLE),
+  poolSettled: poolUnder(BY_SETTLE),
+  /**
+   * R2: the hour's rates, once (the first non-null trend wins), only by the post that won the mark row — bind: hour,
+   * long, short, skew, r, r_max, cut, house_exposure, house_funding, trend, sigma_1h, L, S, fixed_at, post, post.
+   */
+  ratesInsert:
+    "INSERT INTO rates (hour, long, short, skew, r, r_max, cut, house_exposure, house_funding, trend, sigma_1h, L, S, fixed_at, post) " +
+    "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT post FROM mark WHERE id = 1) = ? ON CONFLICT (hour) DO NOTHING",
+  /** Ledger rows of a rate fix (the projected cut): only if this post's rates insert won — guard bind: hour, post. */
+  ledgerByRates: ledgerUnder(BY_RATES),
+  poolByRates: poolUnder(BY_RATES),
+  /**
+   * The house's booked hour, once, only by the post whose rates insert won — bind: hour, open, close, exposure,
+   * price_pnl, funding, pnl, adj, total, cum, booked_at, post, rates hour, post.
+   */
+  houseHourInsert:
+    "INSERT INTO house_hours (hour, open, close, exposure, price_pnl, funding, pnl, adj, total, cum, booked_at, post) " +
+    "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT post FROM rates WHERE hour = ?) = ? ON CONFLICT (hour) DO NOTHING",
+  /** Ledger rows of a booked hour — guard bind: hour, post. */
+  ledgerByHour: ledgerUnder(BY_HOUR),
+  poolByHour: poolUnder(BY_HOUR),
+  /**
+   * The house's claim on a position still open at a booked hour's end — bind: booked, booked_cut, booked_to,
+   * positionId, booked_to (as read), rates hour, post. Must change one row: followed by `abortUnlessChanged`.
+   */
+  bookPosition:
+    "UPDATE positions SET booked = ?, booked_cut = ?, booked_to = ? " +
+    "WHERE id = ? AND closed_at IS NULL AND booked_to = ? AND (SELECT post FROM rates WHERE hour = ?) = ?",
+  /**
+   * Fails the whole batch (NOT NULL) unless the statement before it changed a row: the hour's ledger amounts were
+   * computed from what was read, so a position that moved meanwhile must not be booked half. The post is retried.
+   */
+  abortUnlessChanged: "INSERT INTO ledger (ts, kind, amount, ref) SELECT NULL, NULL, NULL, NULL WHERE changes() = 0",
+  /** R5: the week's split, once — bind: week, ts, pool, fee, borrow, cut, house, insurance, treasury, buyback, post. */
+  splitInsert:
+    "INSERT INTO splits (week, ts, pool, fee, borrow, cut, house, insurance, treasury, buyback, post) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (week) DO NOTHING",
+  /** The split's ledger rows: only if this request's insert won — guard bind: week, post. */
+  ledgerBySplit: ledgerUnder(BY_SPLIT),
+  poolBySplit: poolUnder(BY_SPLIT),
   /** bind: nonce, exp. changes = 1 only for the first use. */
   nonceUse: "INSERT INTO used_nonces (nonce, exp) VALUES (?, ?) ON CONFLICT (nonce) DO NOTHING",
   /** bind: key, slot. RETURNING the count in this window. */
@@ -67,10 +139,6 @@ export const SQL = {
     "INSERT INTO bars (minute, h, l, c) SELECT ?, ?, ?, ? WHERE (SELECT post FROM mark WHERE id = 1) = ? " +
     "ON CONFLICT (minute) DO UPDATE SET h = max(bars.h, excluded.h), l = min(bars.l, excluded.l), c = excluded.c " +
     "WHERE excluded.h > bars.h OR excluded.l < bars.l OR excluded.c <> bars.c",
-  /** bind: hour_start, rate, post. Written once per hour: the first rate posted for an hour stands. */
-  fundingInsert:
-    "INSERT INTO funding (hour_start, rate) SELECT ?, ? WHERE (SELECT post FROM mark WHERE id = 1) = ? " +
-    "ON CONFLICT (hour_start) DO NOTHING",
   /** bind: minute_from, minute_to, post. An earlier-hour gap no closed candle covers yet. */
   gapOpen:
     "INSERT INTO gaps (minute_from, minute_to) SELECT ?, ? WHERE (SELECT post FROM mark WHERE id = 1) = ? " +

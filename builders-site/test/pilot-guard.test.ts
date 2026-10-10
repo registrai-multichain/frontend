@@ -3,10 +3,10 @@ import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { D1PreparedStatement } from "../lib/env";
 import { runGuardChecks } from "../lib/pilot-guard";
-import { scratch, SQL } from "../lib/pilot-sql";
+import { INDEXES, MIGRATIONS, scratch, SQL, TABLES } from "../lib/pilot-sql";
 import { MemoryD1 } from "./memory-d1";
 
-const migration = readFileSync(resolve(__dirname, "../migrations/0001_pilot.sql"), "utf8");
+const migration = MIGRATIONS.map((f) => readFileSync(resolve(__dirname, "../migrations", f), "utf8"));
 
 describe("the remote D1 guard check (scripts/d1-guard-check.mjs)", () => {
   test("passes on the test double, and leaves only the real tables behind", async () => {
@@ -17,6 +17,8 @@ describe("the remote D1 guard check (scripts/d1-guard-check.mjs)", () => {
     expect(results.length).toBeGreaterThan(15);
     expect(db.q("SELECT name FROM sqlite_master ORDER BY name")).toEqual(before);
     expect(db.q("SELECT COUNT(*) AS n FROM accounts")[0]).toEqual({ n: 0 });
+    expect(db.q("SELECT COUNT(*) AS n FROM ledger")[0]).toEqual({ n: 0 });
+    expect(db.q("SELECT SUM(balance) AS b FROM pools")[0]).toEqual({ b: 0 });
   });
   test("fails loudly when a guard does not hold", async () => {
     const db = new MemoryD1();
@@ -30,5 +32,15 @@ describe("the remote D1 guard check (scripts/d1-guard-check.mjs)", () => {
     expect(scratch(SQL.liqCandidatesLong)).toContain("FROM _guard_bars INDEXED BY _guard_bars_l");
     expect(scratch(SQL.openDebit)).toMatch(/UPDATE _guard_accounts .* FROM _guard_positions .* FROM _guard_orders/);
     expect(scratch("SELECT position_id, funding_x FROM orders")).toBe("SELECT position_id, funding_x FROM _guard_orders");
+    expect(scratch(SQL.ledgerSettled)).toBe("INSERT INTO _guard_ledger (ts, kind, amount, ref) SELECT ?, ?, ?, ? WHERE (SELECT settle FROM _guard_positions WHERE id = ?) = ?");
+    expect(scratch(SQL.houseHourInsert)).toMatch(/^INSERT INTO _guard_house_hours .* FROM _guard_rates WHERE hour/);
+    expect(scratch(SQL.poolBySplit)).toContain("UPDATE _guard_pools SET balance");
+  });
+  test("every migration's table and index is in TABLES / INDEXES (so scratch() prefixes it)", () => {
+    const ddl = migration.join("\n");
+    const tables = [...ddl.matchAll(/CREATE TABLE (\w+)/g)].map((m) => m[1]);
+    const indexes = [...ddl.matchAll(/CREATE (?:UNIQUE )?INDEX (\w+)/g)].map((m) => m[1]);
+    expect([...tables].sort()).toEqual([...TABLES].sort());
+    expect([...indexes].sort()).toEqual([...INDEXES].sort());
   });
 });

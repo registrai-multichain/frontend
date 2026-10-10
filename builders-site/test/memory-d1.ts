@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { D1Database, D1PreparedStatement, D1Result } from "../lib/env";
+import { MIGRATIONS } from "../lib/pilot-sql";
 
 /**
  * An offline stand-in for Cloudflare D1: Node's built-in SQLite (node:sqlite, Node ≥ 22.13) behind
@@ -33,7 +34,7 @@ export class MemoryD1 implements D1Database {
   readonly log: string[] = [];
   batches = 0;
 
-  constructor(migrations: string[] = [resolve(__dirname, "../migrations/0001_pilot.sql")]) {
+  constructor(migrations: string[] = MIGRATIONS.map((f) => resolve(__dirname, "../migrations", f))) {
     for (const m of migrations) this.sqlite.exec(readFileSync(m, "utf8"));
   }
 
