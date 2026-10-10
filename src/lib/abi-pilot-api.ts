@@ -72,8 +72,10 @@ export const PILOT_PATHS = {
   positions: "/api/pilot/positions",
   history: "/api/pilot/history",
   leaderboard: "/api/pilot/leaderboard",
-  /** Public: the last 24 hourly funding rates (edge-cached 60 s). */
+  /** Public: the last 24 hourly rates (edge-cached 60 s). */
   funding: "/api/pilot/funding",
+  /** Public: skew, funding, the house, the fee pool, insurance and the weekly split (edge-cached 30 s). */
+  economy: "/api/pilot/economy",
 } as const;
 
 export const PILOT_LIMITS = {
@@ -84,6 +86,7 @@ export const PILOT_LIMITS = {
   history: 100,
   leaderboardCacheS: 60,
   fundingCacheS: 60,
+  economyCacheS: 30,
   /** REGI RPC back-off after a failure. */
   regiRetryS: 30,
   /** Orders pause this long after the hour's base sample lands (base_step_ts). */
@@ -121,12 +124,14 @@ export interface OpenPositionView {
   lev: number;
   notional: number;
   entry: number;
-  /** Liquidation price now (funding accrued so far moves it). */
+  /** Liquidation price now (funding and borrow paid so far move it). */
   liq: number;
   openedAt: number;
   fee: number;
-  /** Funding accrued so far (positive = credited). */
+  /** Funding so far (positive = received, negative = paid). */
   funding: number;
+  /** Borrow fee paid so far (points). */
+  borrow: number;
   /** At the latest mark (null without one). */
   pnl: number | null;
 }
@@ -142,7 +147,9 @@ export interface ClosedPositionView {
   closedAt: number;
   exit: number;
   pnl: number;
+  /** Positive = received. */
   funding: number;
+  borrow: number;
   /** Open fee + close fee. */
   fee: number;
   /** Points returned to the balance at close (0 when liquidated). */
@@ -172,17 +179,66 @@ export interface RegiView {
   now: boolean | null;
 }
 
+/** This hour's rates, per unit of notional per hour: + = the side pays, − = it receives. null: not fixed yet. */
 export interface FundingNow {
-  /** The rate in force now (null: none posted for this hour). */
-  current: number | null;
-  /** When the next hour's rate takes over (unix s). */
+  hour: number;
+  long: number | null;
+  short: number | null;
+  /** (L − S) / (L + S) of the traders' book at the fix. */
+  skew: number | null;
+  /** When the next hour's rates take over (unix s). */
   next: number;
 }
 
+/** One hour's rates (in force during [t, t + 1h)), as fixed at the hour's start. */
+export interface RateView {
+  t: number;
+  long: number;
+  short: number;
+  skew: number;
+  /** The ex-milestone drift (trend term). */
+  trend: number;
+  /** The skew term: > 0 longs heavy. */
+  r: number;
+  /** The protocol cut projected for the hour (points). */
+  cut: number;
+  /** Traders' open notional at the fix. */
+  L: number;
+  S: number;
+  /** S − L: the house's side of the book (+ = long). */
+  houseExposure: number;
+}
+
 /** GET /api/pilot/funding (public, edge-cached). */
-export interface FundingView extends FundingNow {
-  /** Newest first: the rate in force during [t, t + 1h). */
-  recent: { t: number; rate: number }[];
+export interface FundingView {
+  /** Newest first, the last 24. */
+  recent: RateView[];
+  /** The hour in force now, if fixed. */
+  current: RateView | null;
+  next: number;
+}
+
+/** GET /api/pilot/economy (public, edge-cached 30 s). Everything in points. */
+export interface EconomyView {
+  ts: number;
+  rates: { current: RateView | null; recent: RateView[] };
+  borrowApr: number;
+  house: {
+    /** Signed notional this hour (+ = long), null before the hour's rates are fixed. */
+    exposure: number | null;
+    pnl24h: number;
+    pnlWeek: number;
+    pnlAll: number;
+  };
+  /** Fee pool by source since the last split; house = max(0, the house's unsplit result). */
+  pool: { fee: number; borrow: number; cut: number; house: number; total: number };
+  insurance: number;
+  /** Treasury share from all splits, and the buyback earmark inside it. */
+  treasury: number;
+  buyback: number;
+  /** The running week (since the last split): its pool and how it would split now. */
+  week: { start: number; pool: number; insurance: number; treasury: number; buyback: number };
+  lastSplit: { week: number; ts: number; pool: number; insurance: number; treasury: number; buyback: number } | null;
 }
 
 export interface PilotAccountView {

@@ -21,19 +21,26 @@ Deploy from `frontend/` with `npm run deploy:builders`.
 ## ABI points pilot
 
 Points only: no deposits, no withdrawals, no prizes, no transfers. Spec
-`docs/superpowers/specs/2026-10-10-abi-points-pilot.md` (economy v2: §8); code `lib/pilot.ts`, `lib/pilot-auth.ts`,
+`docs/superpowers/specs/2026-10-10-abi-points-pilot.md` (economy v3: §9, §9.13; site plan
+`docs/superpowers/plans/2026-10-10-abi-pilot-v3-site.md`); code `lib/pilot.ts`, `lib/pilot-auth.ts`,
 `lib/pilot-sql.ts` (every guarded statement); rules engine `src/lib/abi-pilot.ts`, an exact port of
-`research/arc-builders-index/pilot/pilot.js` v2 (parity tests: `test/abi-pilot-engine.test.ts`).
+`research/arc-builders-index/pilot/pilot.js` v3 (parity tests: `test/abi-pilot-engine.test.ts`, every vector of
+`fixtures-v3.json`; the economy on the site: `test/pilot-v3.test.ts`).
+
+Economy v3: hourly skew + trend funding (fixed once per hour, `rates`), borrow at 10% APR, levels to 30×, the house as
+the counterparty to the net imbalance (`house_hours`), an append-only points ledger (`ledger`, totals in `pools`),
+an insurance pool for gap losses, and a weekly split (`splits`, Monday 00:00 UTC: 20% insurance, 80% treasury, half
+of it earmarked for the buyback), all in points.
 
 One-time setup, from `frontend/builders-site/`:
 
 ```sh
 npx wrangler d1 create registrai-pilot                      # paste database_id into wrangler.toml
-npx wrangler d1 migrations apply registrai-pilot --remote   # migrations/0001_pilot.sql
+npx wrangler d1 migrations apply registrai-pilot --remote   # migrations/0001_pilot.sql, 0002_pilot_v3.sql
 openssl rand -base64 48 | npx wrangler pages secret put PILOT_SESSION_SECRET --project-name=registrai-builders
 ```
 
-Before opening, from `frontend/`, prove the changes()-guarded batches hold on the remote database (scratch
+Before opening, from `frontend/`, prove the guarded batches hold on the remote database (scratch
 `_guard_*` tables through the real D1 binding, dropped afterwards; exit 0 = all passed):
 
 ```sh
@@ -44,10 +51,10 @@ npx tsx builders-site/scripts/d1-guard-check.mjs --local    # dry run on a throw
 To open: set `PILOT_REGI_SNAPSHOT_BLOCK` (a past Arc block) and `PILOT_OPEN = "1"` in `wrangler.toml`, redeploy.
 Anything else keeps new orders closed; closes, reads and the mark ingest keep working.
 
-### Mark producer (`research/arc-builders-index/live/mark.py` v2)
+### Mark producer (`research/arc-builders-index/live/mark.py` v3)
 
 `POST https://builder.registrai.cc/api/index/mark`, `Authorization: Bearer $ABI_PUSH_TOKEN`, every 5 s:
-`{mark, ts, head, hour_start, candle:[o,h,l,c,payments,usdc], ch24, ch1, funding_rate, funding_hour, sigma_1h,
+`{mark, ts, head, hour_start, candle:[o,h,l,c,payments,usdc], ch24, ch1, trend, funding_rate, funding_hour, sigma_1h,
 sigma_24h, base_pending, base_step_ts, milestone_ts, bars:[[minute,h,l,c] …]}`.
 
 - `ts` within 30 s of server time and newer than the stored mark (else 409, with `last_minute`).
@@ -60,8 +67,11 @@ sigma_24h, base_pending, base_step_ts, milestone_ts, bars:[[minute,h,l,c] …]}`
   low and high, for an earlier hour at that hour's closed candle from the index file in KV (`abi:index`
   `candles`). An earlier hour with no candle yet is kept in `gaps`; until a later post closes it, nothing fills
   and no order is accepted ("price updating").
-- `funding_rate` is stored for `funding_hour`, written once per hour (the first rate stands). `null` (fewer than
-  2 closed hours) means unknown: nothing is stored and orders are refused ("price updating"). `sigma_24h`,
+- The first post of an hour whose `trend` and `sigma_1h` are not null and whose `funding_hour` is that hour fixes the
+  hour's rates (`rates`, once; never recomputed) from the traders' book after the liquidation sweep, books the
+  projected funding cut, and books the house's hours since the last booking (`house_hours`, ledger `house_pnl`).
+  `trend` is null for ~15 s after mark.py's own hour close: nothing changes, and new orders are refused ("price
+  updating") until the hour's rates are fixed. A producer without `trend` has its `funding_rate` used instead. `sigma_24h`,
   `sigma_1h` and `ch1` drive the leverage cap and the pause; `sigma_24h` ≤ 0 or missing, or `sigma_1h` < 0 or
   missing, is unknown and refuses orders the same way.
 - Orders pause while `base_pending` and for 60 s after `base_step_ts`.
@@ -78,7 +88,15 @@ time", shown as "Close your long first" / "Close your short first"; the fill bat
 
 Routes: `POST|GET /api/index/mark`, `GET|POST|DELETE /api/pilot/auth`, `GET /api/pilot/account`,
 `POST /api/pilot/order` (202, pending) + `GET /api/pilot/order?id=`, `POST /api/pilot/close` (202),
-`GET /api/pilot/positions`, `GET /api/pilot/history`, `GET /api/pilot/leaderboard`.
+`GET /api/pilot/positions`, `GET /api/pilot/history`, `GET /api/pilot/leaderboard`, `GET /api/pilot/funding`
+(the last 24 hourly rates, edge-cached 60 s), `GET /api/pilot/economy` (skew, funding, the house, the fee pool by
+source, insurance, the weekly split; edge-cached 30 s, about 40 rows read per miss).
+
+Ledger: every point that leaves a balance or a position lands in `ledger` (fees, borrow, the funding cut, the house,
+liquidation margin, insurance draws, the split) in the same batch, under a guard only the owning batch passes, so
+sum(balance − start) + sum(ledger) = 0 once every position is settled and every hour booked. The house's hourly row
+is houseHour() − cut; a second row (`hour:<h>:adj`) and a row at each settlement (`settle:<id>`) true it up to the
+exact counterparty result of every position (per-position `booked` / `booked_cut` / `booked_to`).
 
 ### D1 load
 
@@ -98,7 +116,8 @@ What keeps it there:
   re-sent minute is unchanged.
 - The liquidation sweep runs inside the ingest batch over the bars it stores, so it reads the open positions about
   once a minute. It records `swept_minute`, and lazy liquidation reads no bars while that watermark is current.
-- The ingest reads the mark row and probes for pending orders and open gaps in one statement. The funding rate is
+- The ingest reads the mark row and probes for pending orders, open gaps, this hour's rates, the last split and the
+  last booked hour in one statement. The rates, the house's hour and one booking update per open position are
   written once per hour. Pruning runs once an hour, on the first post of a new hour.
 - An account poll (every 15 s, only while the page is visible) is one query for the account and open positions,
   plus the mark row, the pending orders and the funding rates since the oldest open position. The funding list is
