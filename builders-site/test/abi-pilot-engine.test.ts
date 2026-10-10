@@ -5,16 +5,22 @@ import { describe, expect, test } from "vitest";
 import * as Port from "../../src/lib/abi-pilot";
 
 /**
- * R2 parity, economy v2: src/lib/abi-pilot.ts must give exactly the reference engine's results. The reference
- * (research/arc-builders-index/pilot/pilot.js and pilot.test.js, outside this repo) is vendored at
- * test/reference/pilot.cjs and pilot.test.cjs; the first tests check both copies are unchanged when the
- * research tree is next to this checkout. Its node:test cases are transcribed below and run on both engines.
+ * R1 parity, economy v3: src/lib/abi-pilot.ts must give exactly the reference engine's results. The reference
+ * (research/arc-builders-index/pilot/pilot.js, pilot.test.js and fixtures-v3.json, outside this repo) is vendored
+ * at test/reference/ (pilot.cjs, pilot.test.cjs, fixtures-v3.json minified); the first tests check the copies are
+ * unchanged when the research tree is next to this checkout. Every fixture vector runs against the port (and the
+ * reference) at full double precision; the node:test cases are transcribed below and run on both engines.
  */
 type Api = typeof Port;
 const REF = createRequire(import.meta.url)("./reference/pilot.cjs") as Api;
+interface Fixtures {
+  rules: unknown;
+  cases: Record<string, { input: Record<string, unknown>; output: unknown }[]>;
+}
+const FIX = JSON.parse(readFileSync(resolve(__dirname, "reference/fixtures-v3.json"), "utf8")) as Fixtures;
 
 describe("the vendored reference", () => {
-  const dir = ["../../research", "../../../research"].map((p) => resolve(__dirname, "..", p, "arc-builders-index/pilot")).find((d) => existsSync(`${d}/pilot.js`));
+  const dir = ["../../research", "../../../research", "../../../../research"].map((p) => resolve(__dirname, "..", p, "arc-builders-index/pilot")).find((d) => existsSync(`${d}/pilot.js`));
   test.skipIf(!dir)("pilot.cjs matches research/arc-builders-index/pilot/pilot.js", () => {
     expect(readFileSync(resolve(__dirname, "reference/pilot.cjs"), "utf8")).toBe(readFileSync(`${dir}/pilot.js`, "utf8"));
   });
@@ -22,116 +28,139 @@ describe("the vendored reference", () => {
     const ours = readFileSync(resolve(__dirname, "reference/pilot.test.cjs"), "utf8");
     expect(ours.replace('require("./pilot.cjs")', 'require("./pilot.js")')).toBe(readFileSync(`${dir}/pilot.test.js`, "utf8"));
   });
-  test("RULES are identical", () => {
+  test.skipIf(!dir || !existsSync(`${dir}/fixtures-v3.json`))("fixtures-v3.json matches the research vectors", () => {
+    expect(FIX).toEqual(JSON.parse(readFileSync(`${dir}/fixtures-v3.json`, "utf8")));
+  });
+  test("RULES are identical (port, reference, fixtures)", () => {
     expect(Port.RULES).toEqual(REF.RULES);
+    expect(Port.RULES).toEqual(FIX.rules);
   });
 });
 
-// pilot.test.js (v2), run against both engines
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const CALLS: Record<string, (P: Api, i: any) => unknown> = {
+  fundingRates: (P, i) => P.fundingRates(i),
+  fundingPaid: (P, i) => P.fundingPaid(i.pos, i.rates, i.to),
+  borrowPaid: (P, i) => P.borrowPaid(i.pos, i.to),
+  liqPrice: (P, i) => P.liqPrice(i.pos, i.costs),
+  close: (P, i) => P.close(i.pos, i.mark, i.now, i.rates),
+  liquidation: (P, i) => P.liquidation(i.pos, i.bars, i.rates),
+  equity: (P, i) => P.equity(i.balance, i.positions, i.mark, i.now, i.rates),
+  open: (P, i) => P.open(i.account, i.args),
+  maxLeverage: (P, i) => P.maxLeverage(i),
+  risk: (P, i) => P.risk(i.closes, i.steps),
+  houseHour: (P, i) => P.houseHour(i),
+  splitFees: (P, i) => P.splitFees(i.pool),
+};
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+const asJson = (x: unknown) => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
+
+describe("fixtures-v3.json: every vector, exact", () => {
+  test("every case function is covered", () => {
+    expect(Object.keys(FIX.cases).sort()).toEqual(Object.keys(CALLS).sort());
+  });
+  describe.each(Object.keys(CALLS))("%s", (fn) => {
+    test.each([["port", Port as Api], ["reference", REF]])("%s", (_n, P) => {
+      const cases = FIX.cases[fn];
+      expect(cases.length).toBeGreaterThan(0);
+      // through JSON like the vectors themselves: doubles round-trip exactly; only −0 becomes 0 (JSON has no −0)
+      for (const c of cases) expect(asJson(CALLS[fn](P, structuredClone(c.input)))).toEqual(c.output);
+    });
+  });
+});
+
+// pilot.test.js (v3), run against both engines
 describe.each([["reference", REF], ["port", Port as Api]])("pilot.test.js cases (%s)", (_n, P) => {
-  const R = P.RULES;
   const acct = (balance = 10000) => ({ balance, open: 0 });
-  const calm = { sigma24: 0.002, sigma1h: 0.0004, ch1: 0 };
+  const calm = { sigma24: 0.0005, sigma1h: 0.0001, ch1: 0 };
   const near = (a: number, b: number, e = 1e-9) => expect(Math.abs(a - b)).toBeLessThan(e);
   const opened = (r: Port.OpenResult) => { if (!r.ok) throw new Error(r.error); return r; };
 
-  test("risk: funding = mean hourly return over the funding window, sigma over 24 h scaled by √24", () => {
-    const closes = [1000]; for (let i = 0; i < 30; i++) closes.push(closes[closes.length - 1] * (i % 2 ? 0.999 : 1.0005));
-    const rk = P.risk(closes);
-    const r6 = P.returns(closes).slice(-R.window);
-    near(rk.funding!, r6.reduce((a, b) => a + b) / r6.length);
-    near(rk.sigma24!, rk.sigma1h! * Math.sqrt(24));
+  test("risk: trend over 6 h with milestone steps divided out; σ over 24 h", () => {
+    const closes = [1000]; for (let i = 0; i < 30; i++) closes.push(closes[i] * (1 - 0.0002));
+    near(P.risk(closes).trend!, -0.0002, 1e-12);
+    const jumped = closes.slice(); for (let i = 28; i < jumped.length; i++) jumped[i] *= 1.025;
+    near(P.risk(jumped, { 28: 1.025 }).trend!, -0.0002, 1e-12);
+    expect(P.risk(jumped).trend!).toBeGreaterThan(0.003);
+    expect(P.risk([1000])).toEqual({ trend: null, funding: null, sigma1h: null, sigma24: null });
   });
 
-  test("dynamic leverage from volatility, snapped to allowed levels, and the pause", () => {
-    expect(P.maxLeverage({ sigma24: 0.002, sigma1h: 0.0004, ch1: 0 }).max).toBe(20);
+  test("leverage: jump cap 30× even when volatility allows more", () => {
+    expect(P.maxLeverage({ sigma24: 0.0005, sigma1h: 0.0001, ch1: 0 }).max).toBe(30);
     expect(P.maxLeverage({ sigma24: 0.012, sigma1h: 0.002, ch1: 0 }).max).toBe(5);
-    expect(P.maxLeverage({ sigma24: 0.04, sigma1h: 0.008, ch1: 0 }).max).toBe(2);
-    expect(P.maxLeverage({ sigma24: 0.5, sigma1h: 0.1, ch1: 0 }).max).toBe(1);
-    expect(P.maxLeverage({ sigma24: 0, sigma1h: 0, ch1: 0 }).max).toBe(20);
-    expect(P.maxLeverage({ sigma24: 0.002, sigma1h: 0.0004, ch1: 0.006 }).paused).toBe(true);
-    expect(P.maxLeverage({ sigma24: 0.002, sigma1h: 0.0004, ch1: 0.004 }).paused).toBe(false);
-    expect(P.maxLeverage({ sigma24: 0.05, sigma1h: 0.002, ch1: 0.009 }).paused).toBe(false);
+    expect(P.open(acct(), { side: "long", margin: 100, lev: 50, mark: 1000, now: 0, risk: calm }).error).toBe("leverage not allowed");
+    const { position } = opened(P.open(acct(), { side: "short", margin: 1000, lev: 30, mark: 1000, now: 0, risk: calm }));
+    expect(P.pnl(position, 1025)).toBeGreaterThan(-position.margin);
   });
 
-  test("open: fee, notional, liquidation price at 20x", () => {
-    const r = opened(P.open(acct(), { side: "long", margin: 1000, lev: 20, mark: 1000, now: 0, risk: calm }));
-    expect(r.position.notional).toBe(20000);
-    near(r.fee, 20000 * R.feeRate);
-    near(r.balance, 10000 - 1000 - r.fee);
-    near(r.position.liq, 1000 * (1 - (1 / 20 - R.mm)));
+  test("funding: trend term on everyone, skew term heavy pays |r|, light (incl. house) receives 90%", () => {
+    const fr = P.fundingRates({ L: 70000, S: 30000, trend: -0.0002, sigma1h: 0.0001 });
+    near(fr.skew, 0.4); near(fr.rMax, 0.00015); near(fr.r, 0.00006);
+    expect(fr.heavy).toBe("long");
+    near(fr.long, -0.0002 + 0.00006);
+    near(fr.short, 0.0002 - 0.9 * 0.00006);
+    near(fr.houseExposure, -40000);
+    near(fr.cut, 0.1 * 0.00006 * 70000);
   });
 
-  test("open: refusals", () => {
-    const base = { side: "long", margin: 1000, lev: 2, mark: 1000, now: 1, risk: calm };
-    expect(P.open(acct(500), base).error).toBe("insufficient balance");
-    expect(P.open(acct(), { ...base, margin: 5 }).error).toBe("margin below minimum");
-    expect(P.open(acct(), { ...base, lev: 4 }).error).toBe("leverage not allowed");
-    expect(P.open(acct(), { ...base, lev: 20, risk: { sigma24: 0.04, sigma1h: 0.008, ch1: 0 } }).error).toBe("leverage above the current cap");
-    expect(P.open(acct(), { ...base, risk: { ...calm, ch1: 0.01 } }).error).toBe("trading paused");
-    expect(P.open({ balance: 10000, open: 5 }, base).error).toBe("too many open positions");
+  test("conservation: traders' funding + the house's receipts = 0", () => {
+    for (const [L, S, tr] of [[70000, 30000, -0.0002], [10000, 90000, 0.0003], [0, 50000, -0.0001], [5e5, 5e5, 0.0001]]) {
+      const fr = P.fundingRates({ L, S, trend: tr, sigma1h: 0.0001 });
+      near(fr.long * L + fr.short * S - fr.houseFunding, 0, 1e-9);
+    }
   });
 
-  test("funding: longs receive when the trend is down, pro rata to time held", () => {
+  test("the house is drift-neutral: trend receipts offset the drift on its exposure", () => {
+    const tr = -0.00028, L = 200000, S = 900000;
+    const h = P.houseHour({ L, S, open: 1000, close: 1000 * (1 + tr), trend: tr, sigma1h: 0.00005 });
+    near(h.pricePnl + P.fundingRates({ L, S, trend: tr, sigma1h: 0.00005 }).houseTrend, 0, 1e-6);
+    expect(h.total).toBeGreaterThan(0);
+  });
+
+  test("light side empty: heavy pays, the house (whole light side) and the cut take it", () => {
+    const fr = P.fundingRates({ L: 0, S: 50000, trend: 0, sigma1h: 0.0001 });
+    expect(fr.heavy).toBe("short");
+    near(fr.houseFunding, fr.paid);
+  });
+
+  test("funding and borrow accrue pro rata and move the liquidation price", () => {
     const { position: L } = opened(P.open(acct(), { side: "long", margin: 1000, lev: 10, mark: 1000, now: 1800, risk: calm }));
-    const { position: S } = opened(P.open(acct(), { side: "short", margin: 1000, lev: 10, mark: 1000, now: 1800, risk: calm }));
-    const rates = [{ t: 0, rate: -0.0004 }, { t: 3600, rate: -0.0004 }];
-    near(P.fundingAccrued(L, rates, 7200), 0.0004 * 10000 * 1.5);
-    near(P.fundingAccrued(S, rates, 7200), -0.0004 * 10000 * 1.5);
-    near(P.fundingAccrued(L, rates, 1800), 0);
+    const rates = [{ t: 0, long: 0.0002, short: -0.00018 }, { t: 3600, long: 0.0002, short: -0.00018 }];
+    near(P.fundingPaid(L, rates, 7200), 0.0002 * 10000 * 1.5);
+    near(P.fundingAccrued(L, rates, 7200), -3);
+    expect(P.liqPrice(L, P.fundingPaid(L, rates, 7200) + P.borrowPaid(L, 7200))).toBeGreaterThan(P.liqPrice(L, 0));
+    near(P.fundingPaid(L, [{ t: 0, rate: 0.0001 }], 3600), 0.0001 * 10000 * 0.5);
   });
 
-  test("funding cancels a steady trend: long and short both break even before fees", () => {
-    const closes = [1000]; for (let i = 0; i < 24; i++) closes.push(closes[i] * (1 - 0.0004));
-    const rates = Array.from({ length: 24 }, (_, i) => ({ t: i * 3600, rate: -0.0004 }));
-    for (const side of ["long", "short"]) {
-      const { position } = opened(P.open(acct(), { side, margin: 1000, lev: 5, mark: 1000, now: 0, risk: calm }));
-      const c = P.close(position, closes[24], 24 * 3600, rates);
-      near(c.pnl + c.funding, 0, 0.6);
-    }
+  test("close: payout = margin + PnL − funding − borrow − fee, never below 0", () => {
+    const { position } = opened(P.open(acct(), { side: "short", margin: 1000, lev: 10, mark: 1000, now: 0, risk: calm }));
+    const c = P.close(position, 990, 3600, [{ t: 0, long: 0.0003, short: -0.0002 }]);
+    near(c.pnl, 100); near(c.funding, 2); near(c.borrow, 9000 * 0.1 / 8760);
+    near(c.payout, 1000 + 100 + 2 - c.borrow - c.fee);
+    const { position: p2 } = opened(P.open(acct(), { side: "long", margin: 100, lev: 30, mark: 1000, now: 0, risk: calm }));
+    expect(P.close(p2, 900, 3600, []).payout).toBe(0);
   });
 
-  test("close: payout never negative, funding and fee included", () => {
-    const { position } = opened(P.open(acct(), { side: "long", margin: 100, lev: 20, mark: 1000, now: 0, risk: calm }));
-    expect(P.close(position, 900, 3600, []).payout).toBe(0);
-    const { position: p2 } = opened(P.open(acct(), { side: "short", margin: 1000, lev: 2, mark: 1000, now: 0, risk: calm }));
-    const c = P.close(p2, 990, 3600, [{ t: 0, rate: 0.001 }]);
-    near(c.pnl, 20); near(c.funding, 2); near(c.fee, 1980 * R.feeRate);
-    near(c.payout, 1000 + 20 + 2 - 1980 * R.feeRate);
+  test("liquidation reports a gap shortfall for the insurance pool", () => {
+    const { position } = opened(P.open(acct(), { side: "short", margin: 1000, lev: 30, mark: 1000, now: 0, risk: calm }));
+    expect(P.liquidation(position, [{ t: 60, h: 1040, l: 1000, c: 1040 }], [])!.shortfall).toBeGreaterThan(0);
+    expect(P.liquidation(position, [{ t: 60, h: 1030, l: 1000, c: 1030 }], [])!.shortfall).toBe(0);
+    expect(P.liquidation(position, [{ t: 60, h: 1010, l: 1000, c: 1010 }], [])).toBeNull();
   });
 
-  test("liquidation uses bars after the open and moves with funding", () => {
-    const { position } = opened(P.open(acct(), { side: "long", margin: 1000, lev: 20, mark: 1000, now: 600, risk: calm }));
-    const bars = [{ t: 540, h: 1000, l: 900, c: 1000 }, { t: 600, h: 1001, l: 999, c: 1000 }, { t: 660, h: 1000, l: 954, c: 960 }];
-    const hit = P.liquidation(position, bars, []);
-    expect(hit?.t).toBe(660); near(hit!.price, 955);
-    const { position: s } = opened(P.open(acct(), { side: "short", margin: 1000, lev: 20, mark: 1000, now: 0, risk: calm }));
-    const rates = [{ t: 0, rate: 0.002 }];
-    expect(P.liqPrice(s, P.fundingAccrued(s, rates, 3600))).toBeGreaterThan(P.liqPrice(s, 0));
-    const { position: l2 } = opened(P.open(acct(), { side: "long", margin: 1000, lev: 20, mark: 1000, now: 0, risk: calm }));
-    expect(P.liqPrice(l2, P.fundingAccrued(l2, rates, 3600))).toBeGreaterThan(P.liqPrice(l2, 0));
-    expect(P.liquidation(position, bars.slice(0, 2), [])).toBeNull();
+  test("one direction per wallet; a hedged pair across two wallets loses the cut + borrow", () => {
+    expect(P.open({ balance: 1e4, open: 1, side: "long" }, { side: "short", margin: 100, lev: 2, mark: 1000, now: 0, risk: calm }).error).toBe("one direction at a time");
+    const fr = P.fundingRates({ L: 80000, S: 20000, trend: 0, sigma1h: 0.0002 });
+    const rates = [{ t: 0, long: fr.long, short: fr.short }];
+    const { position: a } = opened(P.open(acct(), { side: "long", margin: 1000, lev: 20, mark: 1000, now: 0, risk: calm }));
+    const { position: b } = opened(P.open(acct(), { side: "short", margin: 1000, lev: 20, mark: 1000, now: 0, risk: calm }));
+    for (const px of [995, 1000, 1005]) expect(P.close(a, px, 3600, rates).payout + P.close(b, px, 3600, rates).payout).toBeLessThan(2000);
   });
 
-  test("one direction per wallet: no hedging", () => {
-    const base = { margin: 100, lev: 2, mark: 1000, now: 0, risk: calm };
-    expect(P.open({ balance: 10000, open: 1, side: "long" }, { ...base, side: "short" }).error).toBe("one direction at a time");
-    expect(P.open({ balance: 10000, open: 1, side: "long" }, { ...base, side: "long" }).ok).toBe(true);
-    expect(P.open({ balance: 10000, open: 0, side: "long" }, { ...base, side: "short" }).ok).toBe(true);
-  });
-
-  test("risk with fewer than 2 closes is unknown, not zero", () => {
-    expect(P.risk([1000])).toEqual({ funding: null, sigma1h: null, sigma24: null });
-  });
-
-  test("a hedged pair (across two wallets) cannot mint points", () => {
-    const rates = [{ t: 0, rate: -0.0005 }, { t: 3600, rate: 0.0003 }];
-    const { position: L } = opened(P.open(acct(), { side: "long", margin: 1000, lev: 20, mark: 1000, now: 0, risk: calm }));
-    const { position: S } = opened(P.open(acct(), { side: "short", margin: 1000, lev: 20, mark: 1000, now: 0, risk: calm }));
-    for (const px of [990, 1000, 1010]) {
-      const a = P.close(L, px, 7200, rates), b = P.close(S, px, 7200, rates);
-      expect(a.payout + b.payout).toBeLessThan(2000);
-    }
+  test("fee split", () => {
+    const s = P.splitFees(1000);
+    near(s.insurance, 200); near(s.treasury, 800); near(s.buyback, 400);
   });
 });
 
@@ -145,51 +174,62 @@ describe("port = reference on random inputs (exact)", () => {
   };
   const pick = <T,>(xs: T[]) => xs[Math.floor(rnd() * xs.length)];
 
-  test("returns, risk, maxLeverage, open, pnl, liqPrice, fundingAccrued, close, liquidation, equity: 10000 cases", () => {
+  test("every exported function: 10000 cases", () => {
     let opens = 0, liqs = 0;
     for (let i = 0; i < 10000; i++) {
       const closes = Array.from({ length: Math.floor(rnd() * 32) }, () => 900 + rnd() * 200);
-      expect(Port.returns(closes)).toEqual(REF.returns(closes));
-      expect(Port.risk(closes)).toEqual(REF.risk(closes));
+      const steps = rnd() < 0.3 && closes.length > 2 ? { [1 + Math.floor(rnd() * (closes.length - 1))]: 1 + (rnd() - 0.5) * 0.05 } : {};
+      expect(Port.returns(closes, steps)).toEqual(REF.returns(closes, steps));
+      expect(Port.risk(closes, steps)).toEqual(REF.risk(closes, steps));
       const rk = {
-        sigma24: pick([0, null, undefined, NaN, rnd() * 0.2, 0.005, 0.1, 0.0125]),
+        sigma24: pick([0, null, undefined, NaN, rnd() * 0.2, 0.005, 0.1, 0.0125, 0.0005]),
         sigma1h: pick([0, null, undefined, rnd() * 0.01, 0.001]),
         ch1: pick([0, null, undefined, (rnd() - 0.5) * 0.03, 0.005, -0.005]),
       };
       expect(Port.maxLeverage(rk)).toEqual(REF.maxLeverage(rk));
+      const book = { L: pick([0, Math.round(rnd() * 2e6), 50000]), S: pick([0, Math.round(rnd() * 2e6), 50000]), trend: pick([0, null, undefined, (rnd() - 0.5) * 0.001]), sigma1h: pick([0, null, undefined, rnd() * 0.0005]) };
+      expect(Port.fundingRates(book)).toEqual(REF.fundingRates(book));
+      const hh = { ...book, open: 900 + rnd() * 200, close: 900 + rnd() * 200 };
+      expect(Port.houseHour(hh)).toEqual(REF.houseHour(hh));
+      const pool = rnd() * 1e6;
+      expect(Port.splitFees(pool)).toEqual(REF.splitFees(pool));
       const side = pick(["long", "short", "long", "short", "up", ""]);
-      const lev = pick([1, 2, 3, 5, 10, 20, 4, 0, 2.5]);
+      const lev = pick([1, 2, 3, 5, 10, 20, 30, 4, 0, 2.5, 50]);
       const mark = pick([800 + rnd() * 400, 0, -1, NaN, 1000]);
       const margin = pick([rnd() * 12000, rnd() * 3000, 10, 9.99, NaN, 1000]);
       const account = { balance: pick([10000, rnd() * 10000, 0]), open: Math.floor(rnd() * 7), side: pick(["long", "short", undefined, null]) };
       const now = Math.floor(rnd() * 1e6);
-      const input = { side, margin, lev, mark, now, risk: pick([rk, undefined, { sigma24: 0.002, sigma1h: 0.0004, ch1: 0 }, { sigma24: 0.002, sigma1h: 0.0004, ch1: 0 }]) };
+      const input = { side, margin, lev, mark, now, risk: pick([rk, undefined, { sigma24: 0.0005, sigma1h: 0.0001, ch1: 0 }, { sigma24: 0.0005, sigma1h: 0.0001, ch1: 0 }]) };
       const a = Port.open(account, input), b = REF.open(account, input);
       expect(a).toEqual(b);
       if (!a.ok) continue;
       opens++;
       const pos = a.position;
       const h0 = Math.floor(now / 3600) * 3600;
-      const rates = Array.from({ length: 1 + Math.floor(rnd() * 6) }, (_, k) => ({ t: h0 - 3600 + k * 3600, rate: (rnd() - 0.5) * 0.004 }));
+      const rates = Array.from({ length: 1 + Math.floor(rnd() * 6) }, (_, k) => (rnd() < 0.15
+        ? { t: h0 - 3600 + k * 3600, rate: (rnd() - 0.5) * 0.004 }
+        : { t: h0 - 3600 + k * 3600, long: (rnd() - 0.5) * 0.004, short: (rnd() - 0.5) * 0.004 }));
       const at = 800 + rnd() * 400, to = now + Math.floor(rnd() * 5 * 3600);
       expect(Port.pnl(pos, at)).toBe(REF.pnl(pos, at));
+      expect(Port.fundingPaid(pos, rates, to)).toBe(REF.fundingPaid(pos, rates, to));
       expect(Port.fundingAccrued(pos, rates, to)).toBe(REF.fundingAccrued(pos, rates, to));
-      const f = (rnd() - 0.5) * pos.margin;
-      expect(Port.liqPrice(pos, f)).toBe(REF.liqPrice(pos, f));
+      expect(Port.borrowPaid(pos, to)).toBe(REF.borrowPaid(pos, to));
+      const c = rnd() * pos.margin;
+      expect(Port.liqPrice(pos, c)).toBe(REF.liqPrice(pos, c));
       expect(Port.liqPrice(pos)).toBe(REF.liqPrice(pos));
       expect(Port.close(pos, at, to, rates)).toEqual(REF.close(pos, at, to, rates));
       expect(Port.close(pos, at, to)).toEqual(REF.close(pos, at, to));
       expect(Port.equity(a.balance, [pos, pos], at, to, rates)).toBe(REF.equity(a.balance, [pos, pos], at, to, rates));
       const bars = Array.from({ length: 8 }, (_, k) => {
-        const c = pos.entry * (0.9 + rnd() * 0.2);
-        return { t: Math.floor(now / 60) * 60 - 120 + k * 60, h: c * (1 + rnd() * 0.06), l: c * (1 - rnd() * 0.08), c };
+        const cl = pos.entry * (0.9 + rnd() * 0.2);
+        return { t: Math.floor(now / 60) * 60 - 120 + k * 60, h: cl * (1 + rnd() * 0.06), l: cl * (1 - rnd() * 0.08), c: cl };
       });
       const hit = Port.liquidation(pos, bars, rates);
       if (hit) liqs++;
       expect(hit).toEqual(REF.liquidation(pos, bars, rates));
       expect(Port.liquidation(pos, bars)).toEqual(REF.liquidation(pos, bars));
     }
-    expect(opens).toBeGreaterThan(300); // the comparisons past open() really ran
+    expect(opens).toBeGreaterThan(300);
     expect(liqs).toBeGreaterThan(30);
   });
 });
