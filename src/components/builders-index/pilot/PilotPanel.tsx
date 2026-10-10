@@ -1,0 +1,173 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useWallet } from "@/components/WalletProvider";
+import type { Side } from "@/lib/abi-pilot";
+import {
+  PILOT_PATHS,
+  pilotLoginMessage,
+  shortWallet,
+  type ClosedPositionView,
+  type LeaderboardRow,
+  type PilotAccountView,
+} from "@/lib/abi-pilot-api";
+import { PILOT_COPY } from "@/lib/abi-pilot-copy";
+import { PilotTables, type PilotTab } from "./PilotTables";
+import { Ticket } from "./Ticket";
+import "./pilot.css";
+
+const POLL_MS = 5000;
+const BOARD_MS = 30_000;
+
+type Res<T> = { status: number; body: T & { error?: string } };
+
+async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<Res<T>> {
+  try {
+    const r = await fetch(path, {
+      method: init.method ?? "GET",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: init.body !== undefined ? { "content-type": "application/json" } : undefined,
+      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+    });
+    let body = {} as T & { error?: string };
+    try { body = (await r.json()) as T & { error?: string }; } catch { /* empty body */ }
+    return { status: r.status, body };
+  } catch {
+    return { status: 0, body: { error: "Network error. Try again." } as T & { error?: string } };
+  }
+}
+
+const userError = (e: unknown) => {
+  const msg = (e as { shortMessage?: string; message?: string })?.shortMessage ?? (e as Error)?.message ?? "";
+  return /reject|denied|cancel/i.test(msg) ? "Signature cancelled in your wallet." : msg || "Something went wrong. Try again.";
+};
+
+/**
+ * The ABI points pilot on the terminal page: ticket, positions, history, leaderboard.
+ * Renders nothing until mounted in the browser, and nothing at all where the pilot API is not
+ * deployed (the static page stays data only). Sign-in is a personal_sign message; no transactions.
+ */
+export function PilotPanel() {
+  const { address, connect, isConnecting, walletClient, error: walletError } = useWallet();
+  const [view, setView] = useState<PilotAccountView | null>(null);
+  const [tab, setTab] = useState<PilotTab>("positions");
+  const [history, setHistory] = useState<ClosedPositionView[] | null>(null);
+  const [board, setBoard] = useState<LeaderboardRow[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
+  const [closing, setClosing] = useState<number | null>(null);
+  const [error, setError] = useState<string>();
+  const live = useRef(true);
+
+  const refresh = useCallback(async () => {
+    const r = await api<PilotAccountView>(PILOT_PATHS.account);
+    if (!live.current) return;
+    if (r.status === 200) setView(r.body);
+  }, []);
+  const loadHistory = useCallback(async () => {
+    const r = await api<{ history: ClosedPositionView[] }>(PILOT_PATHS.history);
+    if (live.current && r.status === 200) setHistory(r.body.history);
+  }, []);
+  const loadBoard = useCallback(async () => {
+    const r = await api<{ rows: LeaderboardRow[] }>(PILOT_PATHS.leaderboard);
+    if (live.current && r.status === 200) setBoard(r.body.rows);
+  }, []);
+
+  useEffect(() => {
+    live.current = true;
+    void refresh();
+    return () => { live.current = false; };
+  }, [refresh]);
+
+  // signed in: follow the account every 5 s while the tab is visible
+  const signedIn = Boolean(view?.address);
+  useEffect(() => {
+    if (!signedIn) return;
+    const t = setInterval(() => { if (!document.hidden) void refresh(); }, POLL_MS);
+    return () => clearInterval(t);
+  }, [signedIn, refresh]);
+
+  useEffect(() => {
+    if (tab === "history" && signedIn) void loadHistory();
+    if (tab !== "leaderboard") return;
+    void loadBoard();
+    const t = setInterval(() => { if (!document.hidden) void loadBoard(); }, BOARD_MS);
+    return () => clearInterval(t);
+  }, [tab, signedIn, loadHistory, loadBoard]);
+
+  async function signIn() {
+    setError(undefined);
+    if (!address || !walletClient) { await connect(); return; }
+    setSigningIn(true);
+    try {
+      const n = await api<{ nonce?: string }>(PILOT_PATHS.auth);
+      if (!n.body.nonce) throw new Error(n.body.error ?? "Sign-in is not available right now.");
+      const message = pilotLoginMessage({ origin: window.location.origin, nonce: n.body.nonce, issued: new Date().toISOString() });
+      const signature = await walletClient.signMessage({ account: address, message });
+      const r = await api<{ address?: string }>(PILOT_PATHS.auth, { method: "POST", body: { message, signature } });
+      if (r.status !== 200) throw new Error(r.body.error ?? `Sign-in failed (${r.status}).`);
+      await refresh();
+    } catch (e) {
+      setError(userError(e));
+    } finally {
+      setSigningIn(false);
+    }
+  }
+
+  async function signOut() {
+    await api(PILOT_PATHS.auth, { method: "DELETE", body: {} });
+    setHistory(null);
+    setError(undefined);
+    await refresh();
+  }
+
+  async function order(o: { side: Side; margin: number; lev: number }) {
+    setBusy(true);
+    setError(undefined);
+    const r = await api(PILOT_PATHS.order, { method: "POST", body: o });
+    if (r.status !== 200) setError(r.body.error ?? `Refused (${r.status}).`);
+    else setTab("positions");
+    await refresh();
+    setBusy(false);
+  }
+
+  async function close(id: number) {
+    setClosing(id);
+    setError(undefined);
+    const r = await api(PILOT_PATHS.close, { method: "POST", body: { id } });
+    if (r.status !== 200 && r.status !== 409) setError(r.body.error ?? `Refused (${r.status}).`);
+    await refresh();
+    if (tab === "history") await loadHistory();
+    else setHistory(null);
+    setClosing(null);
+  }
+
+  if (!view) return null; // not mounted yet, or the pilot API is not deployed here
+  const signInLabel = isConnecting ? PILOT_COPY.signingIn : address ? `${PILOT_COPY.signIn} as ${shortWallet(address)}` : PILOT_COPY.signIn;
+  return (
+    <div className="abi-row abi-pt-row-wrap">
+      <PilotTables
+        tab={tab}
+        onTab={setTab}
+        address={view.address}
+        positions={view.positions}
+        mark={view.mark ? view.mark.mark : null}
+        history={history}
+        board={board}
+        closing={closing}
+        onClose={(id) => void close(id)}
+      />
+      <Ticket
+        view={view}
+        busy={busy}
+        error={error ?? walletError}
+        signInLabel={signInLabel}
+        signingIn={signingIn || isConnecting}
+        onSignIn={() => void signIn()}
+        onSignOut={() => void signOut()}
+        onOrder={(o) => void order(o)}
+      />
+    </div>
+  );
+}

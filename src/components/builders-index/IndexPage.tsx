@@ -11,6 +11,7 @@ import {
   status, tapeRows, freshKeys, rowKey, rowKeys, tickerItems, ts, usdFmt, why, type Bar, type ChartModel, type RangeKey, type SortKey,
 } from "@/lib/abi-terminal";
 import { ABI_COPY, abiPath, abiSeenPath, abiState, baseTip, decayTip, type AbiState } from "@/lib/builders-index-page";
+import { PilotPanel } from "./pilot/PilotPanel";
 import "./terminal.css";
 
 async function load(path = abiPath): Promise<{ status: number; body: unknown }> {
@@ -310,7 +311,7 @@ function SidePanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
   );
 }
 
-export function Terminal({ d, R, closedLocal, st }: { d: AbiData; R: LiveResult | null; closedLocal: Candle[]; st: { kind: string; text: string } }) {
+export function Terminal({ d, R, closedLocal, st, pilot }: { d: AbiData; R: LiveResult | null; closedLocal: Candle[]; st: { kind: string; text: string }; pilot?: React.ReactNode }) {
   const bars = useMemo(() => candleList(d, closedLocal, R), [d, closedLocal, R]);
   return (
     <div className="abi-t">
@@ -320,6 +321,7 @@ export function Terminal({ d, R, closedLocal, st }: { d: AbiData; R: LiveResult 
         <ChartPanel d={d} bars={bars} />
         <div className="abi-side"><WhyPanel d={d} R={R} /><TapePanel d={d} R={R} /></div>
       </div>
+      {pilot}
       <div className="abi-row bot">
         <MembersPanel d={d} R={R} />
         <SidePanel d={d} R={R} />
@@ -400,7 +402,7 @@ export function IndexPage() {
     return () => { live = false; clearInterval(t1); clearInterval(t2); document.removeEventListener("visibilitychange", vis); };
   }, []);
 
-  if (state.kind === "ready") return <Terminal d={state.data} R={res} closedLocal={closedLocal} st={status(state.data, res, failures, engineOn, now, stale)} />;
+  if (state.kind === "ready") return <Terminal d={state.data} R={res} closedLocal={closedLocal} st={status(state.data, res, failures, engineOn, now, stale)} pilot={<PilotPanel />} />;
   return (
     <>
       <header className="mb-6"><h1 className="pa-h1">{ABI_COPY.heading}</h1></header>

@@ -21,6 +21,29 @@ export interface KV {
   }>;
 }
 
+/** The subset of Cloudflare D1 used here (the points pilot). Ordered `?` parameters only. */
+export interface D1Meta {
+  changes: number;
+  last_row_id: number;
+  [k: string]: unknown;
+}
+export interface D1Result<T = Record<string, unknown>> {
+  results: T[];
+  success: boolean;
+  meta: D1Meta;
+}
+export interface D1PreparedStatement {
+  bind(...values: unknown[]): D1PreparedStatement;
+  first<T = Record<string, unknown>>(): Promise<T | null>;
+  all<T = Record<string, unknown>>(): Promise<D1Result<T>>;
+  run<T = Record<string, unknown>>(): Promise<D1Result<T>>;
+}
+export interface D1Database {
+  prepare(sql: string): D1PreparedStatement;
+  /** One transaction: every statement or none; results in order. */
+  batch<T = Record<string, unknown>>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]>;
+}
+
 /** Pages' static assets binding (the packaged dist-builders files). */
 export interface AssetsFetcher {
   fetch(input: Request | string): Promise<Response>;
@@ -46,6 +69,12 @@ export interface Env {
   RADAR_PUBLISH_SECRET?: string;
   /** Pages SECRET: the Arc Builders Index producer's bearer for POST /api/index. Under 32 characters = that route fails closed (503). */
   ABI_PUSH_TOKEN?: string;
+  /** D1 "registrai-pilot" (builders-site/migrations): the ABI points pilot's accounts, positions, minute bars and latest mark. Unset = /api/pilot/* and /api/index/mark answer 503. */
+  PILOT_DB?: D1Database;
+  /** Kill switch: "1" accepts new pilot orders; anything else (the default) refuses them with 403 {error:"pilot closed"}. Closes and reads always work. */
+  PILOT_OPEN?: string;
+  /** Pages SECRET: the HMAC key of the pilot session cookie. Under 32 characters = pilot sign-in fails closed (503). */
+  PILOT_SESSION_SECRET?: string;
   /** https://app.registrai.cc — the only origin /api/market-proposals accepts submissions from (CORS). */
   PROPOSALS_ALLOWED_ORIGIN?: string;
 }

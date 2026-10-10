@@ -16,9 +16,16 @@ if grep -q REPLACE_WITH_KV_ID wrangler.toml; then
   echo "  npx wrangler kv namespace create registrai-builders-invites   # then paste the id" >&2
   exit 1
 fi
+if grep -q REPLACE_WITH_D1_ID wrangler.toml; then
+  echo "builders-site/wrangler.toml: the PILOT_DB D1 database id is still the placeholder." >&2
+  echo "  (from builders-site/) npx wrangler d1 create registrai-pilot   # then paste the database_id" >&2
+  echo "  npx wrangler d1 migrations apply registrai-pilot --remote" >&2
+  exit 1
+fi
 [ -f ../dist-builders/builders/index.html ] || { echo "no ../dist-builders: run scripts/build-builders-site.sh first" >&2; exit 1; }
 if grep -Eq '^ADMIN_ADDRESSES = ""' wrangler.toml; then
   echo "note: ADMIN_ADDRESSES is empty in builders-site/wrangler.toml: nobody can sign in to /admin." >&2
 fi
 echo "reminder: /admin sign-in needs the Pages secret NONCE_SECRET on registrai-builders (see builders-site/wrangler.toml)." >&2
+echo "reminder: the ABI points pilot sign-in needs the Pages secret PILOT_SESSION_SECRET (see builders-site/wrangler.toml); PILOT_OPEN=\"1\" opens orders." >&2
 exec npx wrangler pages deploy --branch=main

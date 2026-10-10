@@ -30,17 +30,27 @@ describe("data only: no order-entry words anywhere in the page source", () => {
   const walk = (dir: string): string[] =>
     readdirSync(resolve(root, dir), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(`${dir}/${e.name}`) : [`${dir}/${e.name}`]));
   const isTest = (f: string) => /\.test\.(ts|tsx)$/.test(f);
-  const files = [
+  // R7: the points pilot (ticket, positions, leaderboard and its rules engine) is exempt from this ban;
+  // its own copy lint is src/lib/abi-pilot-copy.test.ts.
+  const isPilot = (f: string) => /\/builders-index\/pilot\//.test(f) || /\/abi-pilot[^/]*$/.test(f);
+  const all = [
     ...walk("src/app/builders-index"),
     ...walk("src/components/builders-index"),
     ...walk("src/lib").filter((f) => /\/(abi-[^/]*|builders-index[^/]*)\.(ts|css)$/.test(f)),
     ...walk("builders-site/lib").filter((f) => /\/builders-index\.ts$/.test(f) || /\/bot-auth\.ts$/.test(f)),
     ...walk("builders-site/functions/api/index"),
   ].filter((f) => !isTest(f));
+  const files = all.filter((f) => !isPilot(f));
   // the CSS property names `position` (sticky bar, bubbles) are layout, not a word of the copy
   const text = (f: string) => readFileSync(resolve(root, f), "utf8").replace(/\bposition\s*:/g, "pos:");
   const WORDS = /\b(trade|trades|trading|trader|traders|long|short|leverage|leveraged|perp|perps|perpetual|perpetuals|buy|buys|sell|sells|bet|bets|betting|wager|wagers|odds|position|positions|swap|swaps|futures|order|orders|wallet|connect)\b/i;
   test("the glob finds the sources, the stylesheet included", () => {
+    // the exemption covers exactly the pilot's own files
+    expect(all.filter(isPilot).sort()).toEqual([
+      "src/components/builders-index/pilot/PilotPanel.tsx", "src/components/builders-index/pilot/PilotTables.tsx",
+      "src/components/builders-index/pilot/Ticket.tsx", "src/components/builders-index/pilot/pilot.css",
+      "src/lib/abi-pilot-api.ts", "src/lib/abi-pilot-copy.ts", "src/lib/abi-pilot.ts",
+    ]);
     for (const f of ["src/app/builders-index/page.tsx", "src/components/builders-index/IndexPage.tsx", "src/components/builders-index/terminal.css", "src/lib/abi-live.ts", "src/lib/abi-terminal.ts", "src/lib/builders-index.ts", "builders-site/functions/api/index/seen.ts"]) expect(files).toContain(f);
   });
   test.each(files)("%s", (f) => {
