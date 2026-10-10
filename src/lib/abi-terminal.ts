@@ -181,10 +181,10 @@ export function openHour(R: LiveResult | null): { span: string; o: number; h: nu
 }
 
 /** Roll-off from the file's params; the per-hour factor comes from live.decay_h when present. Nothing is a constant here. */
-export function rollOff(d: AbiData): { halfLife: string; perHour: string } {
+export function rollOff(d: AbiData, code = "ABI"): { halfLife: string; perHour: string } {
   const decayH = d.live?.decay_h ?? 1 - d.params.decay_per_hour_pct / 100;
   const pts = (1 - decayH) * 100, abi = (1 - Math.sqrt(decayH)) * 100;
-  return { halfLife: `half-life ${fmtDays(d.params.half_life_days)} d`, perHour: `pts −${pts.toFixed(3)}%/h · ABI −${abi.toFixed(3)}%/h` };
+  return { halfLife: `half-life ${fmtDays(d.params.half_life_days)} d`, perHour: `pts −${pts.toFixed(3)}%/h · ${code} −${abi.toFixed(3)}%/h` };
 }
 const fmtDays = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 

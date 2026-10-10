@@ -5,6 +5,9 @@ import { dayLab, fmt, hm, ts } from "./abi-terminal";
 export const abiPath = "/api/index";
 export const abiSeenPath = "/api/index/seen";
 
+/** The copy is written for ABI; the other indices (spec §17) show their own code. */
+export const forIndex = (text: string, code: string): string => text.replace(/\bABI\b/g, code);
+
 /** Plain labels only (owner copy rules): every explanation sits behind an "i" bubble. */
 export const ABI_COPY = {
   heading: "Arc Builders Index",
@@ -17,9 +20,9 @@ export const ABI_COPY = {
   inputs: "USDC (system emitter 0xffff…fffe) and registered fiat stablecoins, converted to USD at the ECB reference rate, into contracts Tabula Radar watches; a project's own deployers and contracts don't count. Arc base layer: every stablecoin sender per hour, from the first window of blocks of each hour.",
   milestones: "Verified events multiply the points of the member they belong to: Arc network upgrade ×1.25 and Circle product on Arc ×1.15 (Arc base layer), a new fiat stablecoin's first mint on Arc ×1.10 (base layer), a company going live on Arc ×1.00–1.10 by annual revenue, 1 + 0.025 · log10(revenue / $1M) (base layer), a member's mainnet release ×1.10. Each needs on-chain or official evidence. A milestone counts from the moment it is recorded and is not held back by the rise limit. Like all points, the lift rolls off unless activity follows.",
   noMilestones: "None recorded yet.",
-  integrations: "Companies that announced an Arc integration, from Circle, Arc and company announcements. Live: an official statement that customers can use it on Arc mainnet. Deployed: verifiable on Arc mainnet, not yet announced as available. Announced: announced, including testnet only. Member: its Arc contracts count toward ABI. × marks a recorded milestone. 24h on Arc: USDC and stablecoin flows of the last 24 closed hours, into a member's contracts, or in and out of addresses attributed by public explorer labels (tracking only, not scored).",
+  integrations: "Companies that announced an Arc integration, from Circle, Arc and company announcements. Live: an official statement that customers can use it on Arc mainnet. Deployed: verifiable on Arc mainnet, not yet announced as available. Announced: announced, including testnet only. Member: its Arc contracts count toward the Integrations and Ecosystem indices. × marks a recorded milestone. 24h on Arc: USDC and stablecoin flows of the last 24 closed hours, into a member's contracts, or in and out of addresses attributed by public explorer labels (tracking only, not scored).",
   noIntegrations: "None tracked yet.",
-  labelledWallets: "Addresses attributed by public explorer name tags (Etherscan, Basescan), not by the company. Tracking only; not part of ABI.",
+  labelledWallets: "Addresses attributed by public explorer name tags (Etherscan, Basescan), not by the company. Tracking only; not part of any index.",
   openHour: "The last closed hour comes from the server; the open hour is computed in this browser from Arc RPC. Every input is public Arc chain data.",
 } as const;
 

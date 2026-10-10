@@ -159,3 +159,6 @@
 .abi-st-live { color: var(--abi-up); }
 .abi-st-deployed { color: var(--abi-fg); }
 @media (max-width: 640px) { .abi-ig-n { display: none; } }
+
+/* §17 index switcher under the name */
+.abi-sym .abi-seg { margin-top: 4px; display: flex; }

@@ -1,11 +1,11 @@
 /**
- * Arc Builders Index (contract: src/lib/builders-index.ts). Two KV values on INVITES:
- *   abi:index  the validated index file (series, members, events, and the `live` block the browser replays from)
- *   abi:seen   the wallets seen before the open hour (same hour_start as the index file's live block)
- *   POST /api/index, POST /api/index/seen   producer (Bearer ABI_PUSH_TOKEN): validates, one KV write each
- *   GET  the same paths                     public; reads one key, never writes; edge-cached 30 s; 404 {error:"no data"} when empty
+ * Arc indices (contract: src/lib/builders-index.ts; spec §17: ABI, AII, AEI). Two KV values per index on INVITES:
+ *   <id>:index  the validated index file (series, members, events, and the `live` block the browser replays from)
+ *   <id>:seen   the wallets seen before the open hour (same hour_start as the index file's live block)
+ *   POST /api/index[/aii|/aei], POST …/seen   producer (Bearer ABI_PUSH_TOKEN): validates, one KV write each
+ *   GET  the same paths                       public; reads one key, never writes; edge-cached 30 s; 404 {error:"no data"} when empty
  */
-import { ABI_KEY, ABI_LIMITS, ABI_SEEN_KEY, validateIndex, validateSeen } from "../../src/lib/builders-index";
+import { ABI_INDICES, ABI_LIMITS, validateIndex, validateSeen, type AbiIndexId } from "../../src/lib/builders-index";
 import { bearerGuard } from "./bot-auth";
 import type { Env } from "./env";
 import { edgeCachedGet, errorJson, json, type EdgeCacheDeps } from "./http";
@@ -59,11 +59,11 @@ async function push<D>(req: Request, env: Env, key: string, maxBytes: number, va
   return json({ ok: true, ...summary(v.data) });
 }
 
-export const handlePushIndex = (req: Request, env: Env) =>
-  push(req, env, ABI_KEY, ABI_LIMITS.bytes, validateIndex, (d) => ({ updated: d.updated, points: d.series.length }));
+export const handlePushIndex = (req: Request, env: Env, id: AbiIndexId = "abi") =>
+  push(req, env, ABI_INDICES[id].key, ABI_LIMITS.bytes, validateIndex, (d) => ({ index: id, updated: d.updated, points: d.series.length }));
 
-export const handlePushSeen = (req: Request, env: Env) =>
-  push(req, env, ABI_SEEN_KEY, ABI_LIMITS.seenBytes, validateSeen, (d) => ({ hour_start: d.hour_start, sources: Object.keys(d.seen).length }));
+export const handlePushSeen = (req: Request, env: Env, id: AbiIndexId = "abi") =>
+  push(req, env, ABI_INDICES[id].seenKey, ABI_INDICES[id].seenBytes, validateSeen, (d) => ({ index: id, hour_start: d.hour_start, sources: Object.keys(d.seen).length }));
 
 async function publicGet(req: Request, env: Env, key: string, deps: EdgeCacheDeps): Promise<Response> {
   if (req.method.toUpperCase() !== "GET") return errorJson(405, "method not allowed");
@@ -77,5 +77,5 @@ async function publicGet(req: Request, env: Env, key: string, deps: EdgeCacheDep
   }, ABI_CACHE_S);
 }
 
-export const handlePublicIndex = (req: Request, env: Env, deps: EdgeCacheDeps = {}) => publicGet(req, env, ABI_KEY, deps);
-export const handlePublicSeen = (req: Request, env: Env, deps: EdgeCacheDeps = {}) => publicGet(req, env, ABI_SEEN_KEY, deps);
+export const handlePublicIndex = (req: Request, env: Env, deps: EdgeCacheDeps = {}, id: AbiIndexId = "abi") => publicGet(req, env, ABI_INDICES[id].key, deps);
+export const handlePublicSeen = (req: Request, env: Env, deps: EdgeCacheDeps = {}, id: AbiIndexId = "abi") => publicGet(req, env, ABI_INDICES[id].seenKey, deps);

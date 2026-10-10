@@ -230,7 +230,7 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
       a.payments++; a.wallets.add(e.w); if (isNew) a.new_payers++; a.points += pts; a.usdc += counted;
       tape.push({ ts: e.ts, src: e.src, v: e.v, pts, isNew });
     }
-    if (withBase && basePts != null) p[L.base] = (p[L.base] || 0) + basePts;
+    if (withBase && basePts != null && L.base_k > 0) p[L.base] = (p[L.base] || 0) + basePts;
     const prevTotal = Object.values(rootsPrev).reduce((x, y) => x + y, 0);
     const cut = upto === Infinity ? headTs : upto, mm: Record<string, number> = {};
     for (const m of milestones) if (m.t >= hourStart && m.t < hourStart + 3600 && m.t <= cut) mm[m.target] = (mm[m.target] || 1) * m.mult;
@@ -254,7 +254,7 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
 
   async function roll(): Promise<{ t: number; index: number; candle: Candle }> {
     // the open hour has ended: close it locally, open the next one
-    if (basePts == null) basePts = await sampleBase();
+    if (basePts == null && L.base_k > 0) basePts = await sampleBase();
     walkPath(Infinity);
     const fin = evaluate(1);
     for (const e of events) if (e.ts < hourStart + 3600) {
@@ -287,7 +287,7 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
     }
     const closedHours: { t: number; index: number; candle: Candle }[] = [];
     while (headTs >= hourStart + 3600) closedHours.push(await roll());
-    if (basePts == null && lastBlock >= hourBlock + L.base_window - 1) basePts = await sampleBase();
+    if (basePts == null && L.base_k > 0 && lastBlock >= hourBlock + L.base_window - 1) basePts = await sampleBase(); // no base layer (AII): skip
     const f = Math.min(1, Math.max(0, (headTs - hourStart) / 3600));
     // candle path: the value after each payment and milestone of the open hour
     walkPath(headTs);

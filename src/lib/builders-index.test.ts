@@ -316,3 +316,17 @@ describe("milestones, stablecoins, volume_24h, live_fx (spec §12, §13)", () =>
     for (const [day, row] of Object.entries(r.data.live_fx)) for (const c of kept) if (ref.live_fx[day][c as string] !== undefined) expect(row[c as string]).toBe(ref.live_fx[day][c as string]);
   });
 });
+
+const SAMPLES = "/Users/tobiasd/Desktop/arc/research/arc-builders-index/samples";
+describe.skipIf(!existsSync(SAMPLES))("§17 producer samples (AII, AEI)", () => {
+  test.each(["aii", "aei"])("%s: index and seen validate and share the open hour", (id) => {
+    const ix = validateIndex(JSON.parse(readFileSync(`${SAMPLES}/${id}-index.json`, "utf8")));
+    const seen = validateSeen(JSON.parse(readFileSync(`${SAMPLES}/${id}-seen.json`, "utf8")));
+    expect(ix.ok ? "ok" : ix.error).toBe("ok");
+    expect(seen.ok ? "ok" : seen.error).toBe("ok");
+    if (!ix.ok || !seen.ok) return;
+    expect(seen.data.hour_start).toBe(ix.data.live!.hour_start);
+    expect(ix.data.projects.some((p) => p.kind === "integration")).toBe(true);
+    if (id === "aii") expect(ix.data.live!.base_k).toBe(0);
+  });
+});

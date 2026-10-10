@@ -5,7 +5,11 @@ import type { Env } from "../lib/env";
 import { handlePublicIndex, handlePublicSeen, handlePushIndex, handlePushSeen } from "../lib/builders-index";
 import { onRequest as seenRoute } from "../functions/api/index/seen";
 import { onRequest as route } from "../functions/api/index/index";
-import { ABI_KEY, ABI_LIMITS, ABI_SEEN_KEY } from "../../src/lib/builders-index";
+import { ABI_INDICES, ABI_KEY, ABI_LIMITS, ABI_SEEN_KEY } from "../../src/lib/builders-index";
+import { onRequest as aiiRoute } from "../functions/api/index/aii/index";
+import { onRequest as aiiSeenRoute } from "../functions/api/index/aii/seen";
+import { onRequest as aeiRoute } from "../functions/api/index/aei/index";
+import { onRequest as aeiSeenRoute } from "../functions/api/index/aei/seen";
 import { indexFixture } from "../../src/lib/builders-index-fixture";
 import { MemoryCache } from "./memory-cache";
 import { MemoryKV } from "./memory-kv";
@@ -246,5 +250,36 @@ describe("body size is enforced while reading", () => {
     const fake = (cl: string) => ({ method: "POST", body: null, text: async () => "{}", headers: new Headers({ authorization: `Bearer ${TOKEN}`, "content-length": cl }) }) as unknown as Request;
     expect((await handlePushIndex(fake("NaN"), s.env)).status).toBe(400);
     expect((await handlePushIndex(fake(String(ABI_LIMITS.bytes + 1)), s.env)).status).toBe(413);
+  });
+});
+
+describe("§17: AII and AEI endpoints", () => {
+  const routes = {
+    aii: { index: aiiRoute, seen: aiiSeenRoute },
+    aei: { index: aeiRoute, seen: aeiSeenRoute },
+  };
+  const ctx = (env: Env, r: Request) => ({ request: r, env, params: {}, data: {}, waitUntil: () => undefined, next: async () => new Response() }) as never;
+  const post = (path: string, body: unknown) => new Request(`${ORIGIN}${path}`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` }, body: JSON.stringify(body) });
+  test.each(["aii", "aei"] as const)("%s: stored under its own keys, served on its own path; ABI untouched", async (id) => {
+    const s = setup();
+    const ix = ABI_INDICES[id];
+    expect((await routes[id].index(ctx(s.env, post(ix.path, indexFixture())))).status).toBe(200);
+    expect(await s.kv.get(ix.key)).not.toBeNull();
+    expect(await s.kv.get(ABI_KEY)).toBeNull();
+    const g = await routes[id].index(ctx(s.env, new Request(`${ORIGIN}${ix.path}`)));
+    expect(g.status).toBe(200);
+    expect(((await g.json()) as { index: number }).index).toBe(indexFixture().index);
+    expect((await route(ctx(s.env, new Request(`${ORIGIN}/api/index`)))).status).toBe(404);
+    const seen = { hour_start: 1791558000, seen: { "integration:uniswap": "0123456789" } };
+    expect((await routes[id].seen(ctx(s.env, post(ix.seenPath, seen)))).status).toBe(200);
+    expect(JSON.parse((await s.kv.get(ix.seenKey))!)).toEqual(seen);
+    expect(await s.kv.get(ABI_SEEN_KEY)).toBeNull();
+  });
+  test("seen size: AII/AEI take up to 6 MB, ABI stays at 1 MB", async () => {
+    const s = setup();
+    const mb = (n: number) => ({ hour_start: 1, seen: { a: "0".repeat(Math.floor(n * 1024 * 1024 / 10) * 10) } });
+    expect((await handlePushSeen(post("/api/index/aii/seen", mb(3.7)), s.env, "aii")).status).toBe(200);
+    expect((await handlePushSeen(post("/api/index/aei/seen", mb(6.1)), s.env, "aei")).status).toBe(413);
+    expect((await handlePushSeen(post("/api/index/seen", mb(1.1)), s.env)).status).toBe(413);
   });
 });

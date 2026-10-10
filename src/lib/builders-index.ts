@@ -8,9 +8,12 @@ import { evidenceItem } from "./facts";
 
 export const ABI_KEY = "abi:index";
 export const ABI_SEEN_KEY = "abi:seen";
+
 export const ABI_LIMITS = {
   bytes: 256 * 1024,
   seenBytes: 1024 * 1024,
+  /** AII/AEI: ~350k integration payers in the 30-day window */
+  seenBytesWide: 6 * 1024 * 1024,
   contracts: 5_000,
   deployersPer: 50,
   seenSources: 200,
@@ -36,6 +39,18 @@ export const ABI_LIMITS = {
   fxDates: 10,
   fxCurrencies: 20,
 } as const;
+
+/** Spec §17: three indices with one method and one file shape. ABI = builders + base layer (the points pilot runs on it);
+ * AII = integrated products only; AEI = everything. Each has its own KV keys and endpoints. */
+export const ABI_INDEX_IDS = ["abi", "aii", "aei"] as const;
+export type AbiIndexId = (typeof ABI_INDEX_IDS)[number];
+export type AbiIndexDef = { id: AbiIndexId; name: string; code: string; label: string; key: string; seenKey: string; path: string; seenPath: string; seenBytes: number };
+export const ABI_INDICES: Record<AbiIndexId, AbiIndexDef> = {
+  abi: { id: "abi", name: "Arc Builders Index", code: "ABI", label: "Builders", key: ABI_KEY, seenKey: ABI_SEEN_KEY, path: "/api/index", seenPath: "/api/index/seen", seenBytes: ABI_LIMITS.seenBytes },
+  aii: { id: "aii", name: "Arc Integrations Index", code: "AII", label: "Integrations", key: "aii:index", seenKey: "aii:seen", path: "/api/index/aii", seenPath: "/api/index/aii/seen", seenBytes: ABI_LIMITS.seenBytesWide },
+  aei: { id: "aei", name: "Arc Ecosystem Index", code: "AEI", label: "Ecosystem", key: "aei:index", seenKey: "aei:seen", path: "/api/index/aei", seenPath: "/api/index/aei/seen", seenBytes: ABI_LIMITS.seenBytesWide },
+};
+export const isIndexId = (v: unknown): v is AbiIndexId => typeof v === "string" && (ABI_INDEX_IDS as readonly string[]).includes(v);
 
 /** Milestone tiers (spec §12, §14): the multiplier on the target member's points (for `integration` the maximum:
  * 1 + 0.025 · log10(revenue / $1M)), and whether the target is the Arc base layer. */

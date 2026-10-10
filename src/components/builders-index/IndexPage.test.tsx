@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import { ARGUS, INDEX, HB, HS, mockRpc, scIndex, SEEN } from "@/lib/abi-live-mock";
 import { createEngine } from "@/lib/abi-live";
 import { Terminal } from "./IndexPage";
+import { ABI_INDICES } from "@/lib/builders-index";
 
 const st = { kind: "idle", text: "closed 21:00 UTC" };
 const html = (props: Partial<Parameters<typeof Terminal>[0]> = {}) => renderToStaticMarkup(createElement(Terminal, { d: INDEX, R: null, closedLocal: [], st, ...props }));
@@ -102,5 +103,14 @@ describe("the terminal markup", () => {
     expect(h).toMatch(/MoonPay.*Kraken/s);
     expect(h).toContain(">moonpay.com</a>");
     expect(html()).toContain("None tracked yet.");
+  });
+  test("§17: the terminal speaks for the index on screen; the switcher shows only with a picker", () => {
+    const h = html({ ix: ABI_INDICES.aii, pick: () => undefined });
+    for (const t of ["Arc Integrations Index", "AII · Arc mainnet · Tabula", "AII · 1H", "Why AII moved", 'aria-label="AII price"', "AII −"]) expect(h).toContain(t);
+    expect(h).not.toMatch(/\bABI\b/);
+    expect(h).toContain('aria-label="Index"');
+    expect(h).toMatch(/aria-pressed="true">Integrations</);
+    expect(html()).not.toContain('aria-label="Index"'); // no picker (tests, prerender): no switcher
+    expect(html()).toContain("Why ABI moved");
   });
 });
