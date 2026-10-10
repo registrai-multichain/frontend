@@ -40,7 +40,7 @@ CREATE TABLE positions (
   returned  REAL,
   reason    TEXT CHECK (reason IS NULL OR reason IN ('close', 'liquidation'))
 );
-CREATE INDEX positions_wallet ON positions (wallet, closed_at);
+CREATE INDEX positions_wallet ON positions (wallet, closed_at, id);   -- a wallet's open positions / last 100 closed, no sort
 CREATE INDEX positions_open ON positions (closed_at);
 
 -- Order intents. An order fills at the first mark posted after it arrived (at most RULES.markMaxAgeS later),
@@ -61,10 +61,10 @@ CREATE TABLE orders (
   filled_at   INTEGER
 );
 CREATE INDEX orders_pending ON orders (status, arrived_ms);
-CREATE INDEX orders_wallet ON orders (wallet, id);
+CREATE INDEX orders_wallet ON orders (wallet, status, id);
 
--- One-minute ABI bars from the mark producer (7 days kept). The l / h indexes make the liquidation
--- lookups read only the bars that cross a liquidation price.
+-- One-minute ABI bars from the mark producer, finished minutes only (the open minute lives in each post), 7 days
+-- kept. The l / h indexes make the liquidation lookups read only the bars that cross a liquidation price.
 CREATE TABLE bars (
   minute INTEGER PRIMARY KEY,
   h      REAL NOT NULL,
@@ -87,8 +87,10 @@ CREATE TABLE funding (
   rate       REAL NOT NULL
 );
 
--- The latest mark (one row). post: a random id per accepted post; that post's bars and funding are written
--- only while the row carries its id (a duplicate or older post changes nothing).
+-- The latest mark (one row). post: a random id per accepted post; that post's bars, funding, gaps and liquidations
+-- are written only while the row carries its id (a duplicate or older post changes nothing).
+-- funding_rate: the rate stored for hour_start (null: none yet). bars_minute: the newest stored bar.
+-- swept_minute: every stored bar up to it has been checked against every open position (in the same batch).
 CREATE TABLE mark (
   id           INTEGER PRIMARY KEY CHECK (id = 1),
   px           REAL    NOT NULL,
@@ -101,6 +103,9 @@ CREATE TABLE mark (
   sigma_1h     REAL,
   sigma_24h    REAL,
   funding_known INTEGER NOT NULL DEFAULT 0,
+  funding_rate REAL,
+  bars_minute  INTEGER,
+  swept_minute INTEGER,
   base_pending INTEGER NOT NULL DEFAULT 0,
   base_step_ts INTEGER,
   candle       TEXT    NOT NULL,

@@ -53,8 +53,9 @@ sigma_24h, base_pending, base_step_ts, bars:[[minute,h,l,c] …]}`.
 - `ts` within 30 s of server time and newer than the stored mark (else 409, with `last_minute`).
 - `bars`: 1–60, ascending, `l ≤ c ≤ h`, minutes ≤ `ts`. When the batch ends at the minute of `ts`, the mark lies
   in that bar; a full 60-bar catch-up batch may end earlier. The mark lies in the candle.
-- 200 answers `{"last_minute": …}`: the newest stored minute that is already finished. The producer sends every
-  bar after it, so the open minute is re-sent until it closes.
+- 200 answers `{"last_minute": …, "rows": {"read", "written"}, …}`. `last_minute` is the newest stored minute;
+  only finished minutes are stored. The producer sends every bar after it, so the open minute is re-sent until it
+  closes, and is stored once it has.
 - Any missing minute between the stored bars and a post gets a gap bar: for the open hour at the posted candle's
   low and high, for an earlier hour at that hour's closed candle from the index file in KV (`abi:index`
   `candles`). An earlier hour with no candle yet is kept in `gaps`; until a later post closes it, nothing fills
@@ -75,5 +76,33 @@ time", shown as "Close your long first" / "Close your short first"; the fill bat
 Routes: `POST|GET /api/index/mark`, `GET|POST|DELETE /api/pilot/auth`, `GET /api/pilot/account`,
 `POST /api/pilot/order` (202, pending) + `GET /api/pilot/order?id=`, `POST /api/pilot/close` (202),
 `GET /api/pilot/positions`, `GET /api/pilot/history`, `GET /api/pilot/leaderboard`.
+
+### D1 load
+
+The D1 account is shared with live projects (free plan: 100k row writes and 5M row reads a day, account-wide).
+Measured on workerd's D1 (`meta.rows_read` / `rows_written`), every 5 s post, a week of bars stored:
+
+| Source | Reads / day | Writes / day |
+|---|---|---|
+| Producer, no open positions | ~65k (3.75 per post) | ~21.6k (1.25 per post) |
+| Producer, per open position | +1.4k (the once-a-minute sweep reads it) | 0 |
+| Producer, 100 open positions | ~209k | ~21.6k |
+| Active user (4 h visible: 960 account polls × 8 rows; 10 open + close round trips × ~50 reads / 27 writes; REGI refresh) | ~8k | ~300 |
+| Leaderboard (edge-cached 60 s; only while someone views it) | ≤ 1,440 × (accounts with positions + open positions) per edge location | 0 |
+
+What keeps it there:
+- The mark row is written every post. A bar is written only when its minute has finished, and not again if a
+  re-sent minute is unchanged.
+- The liquidation sweep runs inside the ingest batch over the bars it stores, so it reads the open positions about
+  once a minute. It records `swept_minute`, and lazy liquidation reads no bars while that watermark is current.
+- The ingest reads the mark row and probes for pending orders and open gaps in one statement. The funding rate is
+  written once per hour. Pruning runs once an hour, on the first post of a new hour.
+- An account poll (every 15 s, only while the page is visible) is one query for the account and open positions,
+  plus the mark row, the pending orders and the funding rates since the oldest open position. The funding list is
+  `GET /api/pilot/funding`, edge-cached 60 s.
+- History is the caller's last 100 rows through `positions_wallet (wallet, closed_at, id)`, with no sort.
+
+Every ingest response carries `rows: {read, written}`, D1's totals for that request, so the owner can watch usage
+(Cloudflare dashboard: D1, then Metrics).
 
 Tests run offline: the D1 double (`test/memory-d1.ts`) is Node's built-in SQLite (Node ≥ 22.13).

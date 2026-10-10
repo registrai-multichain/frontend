@@ -34,7 +34,7 @@ export const PILOT_COPY = {
     `Each hour's funding rate is ABI's mean hourly move over the last ${RULES.window} closed hours. ` +
     "Longs accrue −rate × size per hour held and shorts +rate × size, pro rata, so a steady trend is paid back to the side it runs against. " +
     "Funding counts toward equity, closing and liquidation.",
-  leaderboardTip: "Balance plus open positions (with funding) at the latest mark. Top 50, refreshed every 30 s.",
+  leaderboardTip: "Balance plus open positions (with funding) at the latest mark. Top 50, refreshed every minute.",
   priceUpdating: "Price updating",
   paused: `Paused: ABI moved more than max(${RULES.pauseSigmas}σ_1h, ${pct(RULES.pauseFloor)}) in the last hour.`,
   basePaused: "Paused for a minute around the hour's base sample.",

@@ -4,10 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useWallet } from "@/components/WalletProvider";
 import type { Side } from "@/lib/abi-pilot";
 import {
+  accountPollMs,
+  BOARD_POLL_MS,
   PILOT_PATHS,
   pilotLoginMessage,
   shortWallet,
   type ClosedPositionView,
+  type FundingView,
   type LeaderboardRow,
   type OrderView,
   type PilotAccountView,
@@ -17,8 +20,6 @@ import { PilotTables, type PilotTab } from "./PilotTables";
 import { Ticket } from "./Ticket";
 import "./pilot.css";
 
-const POLL_MS = 5000;
-const BOARD_MS = 30_000;
 const FILL_POLL_MS = 1000;
 /** The server refuses an order with no mark within RULES.markMaxAgeS (10 s); stop asking a little later. */
 const FILL_WAIT_MS = 14_000;
@@ -58,6 +59,7 @@ export function PilotPanel() {
   const [tab, setTab] = useState<PilotTab>("positions");
   const [history, setHistory] = useState<ClosedPositionView[] | null>(null);
   const [board, setBoard] = useState<LeaderboardRow[] | null>(null);
+  const [funding, setFunding] = useState<FundingView | null>(null);
   const [busy, setBusy] = useState(false);
   const [filling, setFilling] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
@@ -78,6 +80,10 @@ export function PilotPanel() {
     const r = await api<{ rows: LeaderboardRow[] }>(PILOT_PATHS.leaderboard);
     if (live.current && r.status === 200) setBoard(r.body.rows);
   }, []);
+  const loadFunding = useCallback(async () => {
+    const r = await api<FundingView>(PILOT_PATHS.funding);
+    if (live.current && r.status === 200) setFunding(r.body);
+  }, []);
 
   useEffect(() => {
     live.current = true;
@@ -85,21 +91,30 @@ export function PilotPanel() {
     return () => { live.current = false; };
   }, [refresh]);
 
-  // signed in: follow the account every 5 s while the tab is visible
+  // signed in: refresh every 15 s while the page is visible (2 s while an order is pending); a hidden tab polls
+  // nothing and refreshes once when it is shown again
   const signedIn = Boolean(view?.address);
+  const pollMs = accountPollMs(view);
+  useEffect(() => {
+    if (pollMs === null) return;
+    const t = setTimeout(() => { if (document.visibilityState === "visible") void refresh(); }, pollMs);
+    return () => clearTimeout(t);
+  }, [view, pollMs, refresh]);
   useEffect(() => {
     if (!signedIn) return;
-    const t = setInterval(() => { if (!document.hidden) void refresh(); }, POLL_MS);
-    return () => clearInterval(t);
+    const shown = () => { if (document.visibilityState === "visible") void refresh(); };
+    document.addEventListener("visibilitychange", shown);
+    return () => document.removeEventListener("visibilitychange", shown);
   }, [signedIn, refresh]);
 
   useEffect(() => {
     if (tab === "history" && signedIn) void loadHistory();
+    if (tab === "funding") void loadFunding();
     if (tab !== "leaderboard") return;
     void loadBoard();
-    const t = setInterval(() => { if (!document.hidden) void loadBoard(); }, BOARD_MS);
+    const t = setInterval(() => { if (document.visibilityState === "visible") void loadBoard(); }, BOARD_POLL_MS);
     return () => clearInterval(t);
-  }, [tab, signedIn, loadHistory, loadBoard]);
+  }, [tab, signedIn, loadHistory, loadBoard, loadFunding]);
 
   async function signIn() {
     setError(undefined);
@@ -179,7 +194,7 @@ export function PilotPanel() {
         mark={view.mark ? view.mark.mark : null}
         history={history}
         board={board}
-        funding={view.funding}
+        funding={funding}
         closing={closing}
         onClose={(id) => void close(id)}
       />

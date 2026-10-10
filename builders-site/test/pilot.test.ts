@@ -5,7 +5,7 @@ import * as Engine from "../../src/lib/abi-pilot";
 import { pilotLoginMessage, PILOT_SESSION_COOKIE, REGI_ADDRESS } from "../../src/lib/abi-pilot-api";
 import type { Env } from "../lib/env";
 import {
-  handleAccount, handleClose, handleHistory, handleLeaderboard, handleOrder, handlePositions, handlePublicMark, handlePushMark, validateMark,
+  handleAccount, handleClose, handleFunding, handleHistory, handleLeaderboard, handleOrder, handlePositions, handlePublicMark, handlePushMark, validateMark, HISTORY_SQL,
 } from "../lib/pilot";
 import { handlePilotLogin, handlePilotLogout, handlePilotNonce, makePilotSession, verifyPilotSession, type PilotDeps } from "../lib/pilot-auth";
 import { MemoryCache } from "./memory-cache";
@@ -104,7 +104,8 @@ function setup(o: { open?: boolean; db?: boolean; secret?: string; snapshot?: st
   async function mark(px: number, x: Partial<MarkExtra> = {}) {
     const ts = x.ts ?? nowS();
     const minute = Math.floor(ts / 60) * 60;
-    const bars = x.bars ?? [[minute, px, px, px]];
+    // like mark.py: every bar after the acknowledged (finished) minute, so the minute before plus the open one
+    const bars = x.bars ?? [[minute - 60, px, px, px], [minute, px, px, px]];
     const lo = Math.min(px, ...bars.map((b) => b[2])), hi = Math.max(px, ...bars.map((b) => b[1]));
     const body: Json = {
       mark: px, ts, head: 1000 + ts, hour_start: Math.floor(ts / 3600) * 3600, candle: x.candle ?? [px, hi, lo, px, 3, 12.5],
@@ -165,21 +166,33 @@ describe("mark ingest (R4, spec §8.5)", () => {
     expect((await handlePushMark(t.req("/api/index/mark", "POST", {}, { authorization: `Bearer ${PUSH}` }), { ...t.env, ABI_PUSH_TOKEN: "short" }, t.deps)).status).toBe(503);
   });
 
-  test("mark.py v2 payload: stored in one batch; 200 {last_minute} acknowledges up to the last finished minute", async () => {
+  test("mark.py v2 payload: one batch; finished minutes stored, the open minute not; 200 {last_minute, rows}", async () => {
     const t = setup();
     const ts = t.nowS(), m = Math.floor(ts / 60) * 60;
     const r = await t.markJson(982.25, { bars: [[m - 120, 983, 981, 982], [m - 60, 984, 980.5, 983.1], [m, 983.5, 982, 982.25]], funding_rate: -0.0003, base_step_ts: ts - 100 });
     expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({ ok: true, last_minute: m - 60, ts, bars: 3, gapBars: 0, gaps: 0, liquidated: 0, filled: 0, refused: 0 });
+    expect(r.body).toMatchObject({ ok: true, last_minute: m - 60, ts, bars: 3, stored: 2, gapBars: 0, gaps: 0, liquidated: 0, filled: 0, refused: 0, pruned: true });
+    expect(r.body.rows.written).toBeGreaterThan(0);
     expect(t.db.batches).toBe(1);
-    expect(t.db.q("SELECT px, ts, ch24, ch1, sigma_1h, sigma_24h, base_pending, base_step_ts FROM mark")).toEqual([{ px: 982.25, ts, ch24: 0.001, ch1: 0.0001, sigma_1h: 0.0004, sigma_24h: 0.002, base_pending: 0, base_step_ts: ts - 100 }]);
+    expect(t.db.q("SELECT px, ts, ch24, ch1, sigma_1h, sigma_24h, base_pending, base_step_ts, funding_rate, bars_minute, swept_minute FROM mark")).toEqual([
+      { px: 982.25, ts, ch24: 0.001, ch1: 0.0001, sigma_1h: 0.0004, sigma_24h: 0.002, base_pending: 0, base_step_ts: ts - 100, funding_rate: -0.0003, bars_minute: m - 60, swept_minute: m - 60 },
+    ]);
     expect(t.db.q("SELECT hour_start, rate FROM funding")).toEqual([{ hour_start: Math.floor(ts / 3600) * 3600, rate: -0.0003 }]);
-    expect(t.db.q("SELECT COUNT(*) AS n FROM bars")[0]).toEqual({ n: 3 });
-    // the producer re-sends the open minute: it is never acknowledged while ts is inside it
+    expect(t.db.q("SELECT minute FROM bars ORDER BY minute")).toEqual([{ minute: m - 120 }, { minute: m - 60 }]);
+    // the next post in the same minute: only the open minute is new; nothing but the mark row is written
     t.tick(5000);
-    expect((await t.markJson(982.3, { bars: [[m, 983.5, 981, 982.3]], funding_rate: -0.0002 })).body.last_minute).toBe(m - 60);
-    expect(t.db.q("SELECT l FROM bars WHERE minute = ?", m)).toEqual([{ l: 981 }]);
+    const again = await t.markJson(982.3, { bars: [[m, 983.5, 981, 982.3]], funding_rate: -0.0002 });
+    expect(again.body).toMatchObject({ last_minute: m - 60, stored: 0, pruned: false, rows: { written: 1 } });
     expect(t.db.q("SELECT rate FROM funding")).toEqual([{ rate: -0.0003 }]); // written once per hour: the first rate stands
+    expect(t.db.q("SELECT funding_rate FROM mark")).toEqual([{ funding_rate: -0.0003 }]);
+    // the minute finishes: stored once with its final high / low; re-sending it changes nothing
+    t.tick(60_000);
+    const done = await t.markJson(982, { bars: [[m, 983.5, 980, 982.1], [m + 60, 982, 982, 982]] });
+    expect(done.body).toMatchObject({ last_minute: m, stored: 1 });
+    expect(t.db.q("SELECT h, l, c FROM bars WHERE minute = ?", m)).toEqual([{ h: 983.5, l: 980, c: 982.1 }]);
+    t.tick(5000);
+    const resent = await t.markJson(982, { bars: [[m, 983.5, 980, 982.1], [m + 60, 982, 981.9, 982]] });
+    expect(resent.body).toMatchObject({ stored: 1, rows: { written: 1 } }); // the bar statement ran, wrote nothing
   });
 
   test("ts: within 30 s of server time, strictly newer than the stored one (409 carries last_minute)", async () => {
@@ -235,12 +248,12 @@ describe("mark ingest (R4, spec §8.5)", () => {
     const before = t.db.batches;
     const prevHour = Math.floor(t.nowS() / 3600) * 3600 - 3600; // an hour nobody has written a rate for yet
     const [a, b] = await Promise.all([
-      t.mark(1000, { bars: [[m, 1001, 999, 1000]], funding_rate: 0.001, funding_hour: prevHour }),
-      t.mark(1000, { bars: [[m, 1001, 600, 1000]], funding_rate: 0.009, funding_hour: prevHour }),
+      t.mark(1000, { bars: [[m - 60, 1001, 999, 1000], [m, 1000, 1000, 1000]], funding_rate: 0.001, funding_hour: prevHour }),
+      t.mark(1000, { bars: [[m - 60, 1001, 600, 1000], [m, 1000, 1000, 1000]], funding_rate: 0.009, funding_hour: prevHour }),
     ]);
     expect(t.db.batches - before).toBe(2);
     expect([a.status, b.status].sort()).toEqual([200, 409]);
-    expect(t.db.q("SELECT l FROM bars WHERE minute = ?", m)).toEqual([{ l: 999 }]);
+    expect(t.db.q("SELECT l FROM bars WHERE minute = ?", m - 60)).toEqual([{ l: 999 }]);
     expect(t.db.q("SELECT rate FROM funding WHERE hour_start = ?", prevHour)).toEqual([{ rate: 0.001 }]);
   });
 
@@ -254,10 +267,12 @@ describe("mark ingest (R4, spec §8.5)", () => {
     const m1 = Math.floor(t.nowS() / 60) * 60;
     // restarted producer (last_minute None): only its newest bars, here the open minute
     const r = await t.markJson(1000, { bars: [[m1, 1000, 1000, 1000]], candle: [1000, 1040, 960, 1000, 9, 9] });
-    expect(r.body).toMatchObject({ gapBars: 1, gaps: 0 });
-    expect(t.db.q("SELECT minute, h, l, c FROM bars WHERE minute > ? AND minute < ?", m0, m1)).toEqual([{ minute: m0 + 60, h: 1040, l: 960, c: 1000 }]);
+    expect(r.body).toMatchObject({ gapBars: 1, gaps: 0, last_minute: m1 - 60 });
+    // one gap bar for the minutes from the one open when the producer stopped (never finished) through m1 − 60,
+    // at the segment's last minute so every position open during the gap is checked
+    expect(t.db.q("SELECT minute, h, l, c FROM bars WHERE minute >= ? AND minute < ?", m0, m1)).toEqual([{ minute: m1 - 60, h: 1040, l: 960, c: 1000 }]);
     t.tick(1000);
-    expect((await t.markJson(1000, { bars: [[m1, 1000, 1000, 1000]] })).body.gapBars).toBe(0); // m1 + 0: contiguous
+    expect((await t.markJson(1000, { bars: [[m1, 1000, 1000, 1000]] })).body.gapBars).toBe(0); // covered: no second gap bar
   });
 
   test("a gap reaching into an earlier hour: that hour's closed index candle, the open hour's posted candle", async () => {
@@ -271,9 +286,9 @@ describe("mark ingest (R4, spec §8.5)", () => {
     const m1 = Math.floor(t.nowS() / 60) * 60;
     const r = await t.markJson(1000, { bars: [[m1, 1000, 1000, 1000]], candle: [1000, 1020, 990, 1000, 1, 1] });
     expect(r.body).toMatchObject({ gapBars: 2, gaps: 0 });
-    expect(t.db.q("SELECT minute, h, l, c FROM bars WHERE minute > ? AND minute < ? ORDER BY minute", m0, m1)).toEqual([
-      { minute: m0 + 60, h: 1100, l: 900, c: 1000 },
-      { minute: hs + 3600, h: 1020, l: 990, c: 1000 },
+    expect(t.db.q("SELECT minute, h, l, c FROM bars WHERE minute >= ? AND minute < ? ORDER BY minute", m0, m1)).toEqual([
+      { minute: hs + 3540, h: 1100, l: 900, c: 1000 }, // 12:50–12:59: the closed 12:00 candle
+      { minute: m1 - 60, h: 1020, l: 990, c: 1000 }, // 13:00–13:09: the open hour's posted candle
     ]);
   });
 
@@ -304,17 +319,21 @@ describe("mark ingest (R4, spec §8.5)", () => {
     expect((await t.open(alice, LONG2)).body.order.status).toBe("filled");
   });
 
-  test("bars, nonces, rate windows and old orders are pruned in ~1 of 100 posts", async () => {
+  test("bars, nonces, rate windows and old orders are pruned once an hour (the first post of a new hour)", async () => {
     const t = setup();
     await t.mark(1000);
     t.db.q("INSERT INTO bars (minute, h, l, c) VALUES (?, 1, 1, 1)", Math.floor(t.nowS() / 60) * 60 - 8 * 86400);
     t.db.q("INSERT INTO orders (wallet, kind, arrived_ms, status) VALUES ('0x1', 'open', ?, 'refused')", T0 - 8 * 86400_000);
-    expect(t.db.q("SELECT COUNT(*) AS n FROM bars")[0]).toEqual({ n: 2 });
-    t.setRandom(0.001);
     t.tick(5000);
+    expect((await t.markJson(1000)).body.pruned).toBe(false);
+    expect(t.db.q("SELECT COUNT(*) AS n FROM orders")[0]).toEqual({ n: 1 });
+    const toNextHour = (Math.floor(t.nowS() / 3600) + 1) * 3600 - t.nowS() + 5;
+    t.tick(toNextHour * 1000);
     expect((await t.markJson(1000)).body.pruned).toBe(true);
-    expect(t.db.q("SELECT COUNT(*) AS n FROM bars")[0]).toEqual({ n: 1 });
+    expect(t.db.q("SELECT COUNT(*) AS n FROM bars WHERE minute < ?", t.nowS() - 7 * 86400)[0]).toEqual({ n: 0 });
     expect(t.db.q("SELECT COUNT(*) AS n FROM orders")[0]).toEqual({ n: 0 });
+    t.tick(5000);
+    expect((await t.markJson(1000)).body.pruned).toBe(false);
   });
 
   test("GET /api/index/mark: the latest mark, the cap from σ_24h and the pauses; 404 before the first post", async () => {
@@ -413,7 +432,9 @@ describe("sign-in and session (R6)", () => {
     expect(a.body).toMatchObject({ open: true, address: null, regi: null, account: null, positions: [], pending: [] });
     expect(a.body.mark.mark).toBe(1000);
     const hour = Math.floor(t.nowS() / 3600) * 3600;
-    expect(a.body.funding).toEqual({ recent: [{ t: hour, rate: -0.0002 }], current: -0.0002, next: hour + 3600 });
+    expect(a.body.funding).toEqual({ current: -0.0002, next: hour + 3600 }); // from the mark row: no funding read
+    const pub = await t.call(handleFunding, t.req("/api/pilot/funding"));
+    expect(pub.body).toEqual({ recent: [{ t: hour, rate: -0.0002 }], current: -0.0002, next: hour + 3600 });
   });
 });
 
@@ -805,10 +826,12 @@ describe("liquidation (R5, funding-aware)", () => {
     const lpAt = (t2: number) => Engine.liqPrice(pos, Engine.fundingAccrued(pos, [{ t: h0, rate: 0.005 }, { t: h0 + 3600, rate: 0.005 }], t2 + 60));
     const lpThen = lpAt(tb);
     expect(lpThen).toBeGreaterThan(p.liq + 5);
-    t.db.q("INSERT INTO bars (minute, h, l, c) VALUES (?, 1000, ?, 1000)", h0 - 60, p.liq - 100); // before the open: ignored
+    t.db.q("INSERT OR REPLACE INTO bars (minute, h, l, c) VALUES (?, 1000, ?, 1000)", h0 - 60, p.liq - 100); // before the open: ignored
     t.db.q("INSERT INTO bars (minute, h, l, c) VALUES (?, 1000, ?, 1000)", tb - 1800, lpAt(tb - 1800) + 0.5); // just above the price then
     t.db.q("INSERT INTO bars (minute, h, l, c) VALUES (?, 1000, ?, 1000)", tb, lpThen - 1); // crosses only with funding
     expect(lpThen - 1).toBeGreaterThan(p.liq);
+    // written behind the ingest's back: the sweep watermark lags the stored bars, so the lazy check reads them
+    t.db.q("UPDATE mark SET bars_minute = ?, swept_minute = ?", tb, Math.floor(p.openedAt / 60) * 60);
     t.tick(2 * 3600_000);
     const a = await t.account(alice);
     expect(a.body.positions).toEqual([]);
@@ -840,6 +863,7 @@ describe("liquidation (R5, funding-aware)", () => {
       const l = i === 610 ? lp - 0.01 : lp + 0.01; // each bar just above its own liquidation price, then one below
       t.db.q("INSERT OR REPLACE INTO bars (minute, h, l, c) VALUES (?, 1000, ?, 1000)", tm, l);
     }
+    t.db.q("UPDATE mark SET bars_minute = ?, swept_minute = ?", m0 + 619 * 60, m0 - 60); // unswept bars
     t.tick(11 * 3600_000);
     const all = t.db.q<Engine.MinuteBar>("SELECT minute AS t, h, l, c FROM bars ORDER BY minute");
     const want = Engine.liquidation(pos, all, rates)!;
@@ -867,8 +891,11 @@ describe("liquidation (R5, funding-aware)", () => {
     const b = await t.open(bob, { side: "short", margin: 500, lev: 20 });
     const keep = await t.open(alice, { side: "long", margin: 100, lev: 1 });
     t.tick(70_000);
-    const m = Math.floor(t.nowS() / 60) * 60;
-    const r = await t.markJson(1000, { bars: [[m, 1060, 940, 1000]] });
+    const m = Math.floor(t.nowS() / 60) * 60; // the minute after the opens
+    await t.markJson(1000, { bars: [[m - 60, 1000, 1000, 1000], [m, 1060, 940, 1000]] });
+    expect(t.db.q("SELECT COUNT(*) AS n FROM positions WHERE closed_at IS NULL")[0]).toEqual({ n: 3 }); // the open minute is not swept yet
+    t.tick(60_000);
+    const r = await t.markJson(1000, { bars: [[m, 1060, 940, 1000], [m + 60, 1000, 1000, 1000]] }); // m has finished
     expect(r.body.liquidated).toBe(2);
     const rows = t.db.q<Json>("SELECT id, closed_at, exit, pnl, returned, reason FROM positions ORDER BY id");
     for (const x of [a, b]) {
@@ -889,6 +916,58 @@ describe("liquidation (R5, funding-aware)", () => {
     const r = await t.markJson(1000, { candle: [1000, 1001, 950, 1000, 1, 1] });
     expect(r.body).toMatchObject({ gapBars: 2, gaps: 0, liquidated: 1 });
     expect(t.db.q("SELECT reason FROM positions WHERE id = ?", o.body.order.positionId)).toEqual([{ reason: "liquidation" }]);
+  });
+});
+
+describe("D1 usage", () => {
+  test("an account poll: one query for the account + open positions, the mark row, pending orders, rates; no bars, no funding list", async () => {
+    const t = setup();
+    const alice = await t.signIn();
+    await t.mark(1000);
+    await t.open(alice, LONG2);
+    await t.open(alice, { side: "long", margin: 50, lev: 1 });
+    t.tick(5000);
+    await t.mark(1000);
+    const before = t.db.log.length;
+    const a = await t.account(alice);
+    expect(a.body.positions).toHaveLength(2);
+    const sql = t.db.log.slice(before);
+    expect(sql.filter((x) => /FROM accounts a LEFT JOIN positions p/.test(x))).toHaveLength(1);
+    expect(sql.filter((x) => /FROM positions/.test(x) && !/LEFT JOIN/.test(x))).toEqual([]);
+    expect(sql.filter((x) => /FROM bars/.test(x))).toEqual([]);
+    expect(sql.filter((x) => /FROM funding ORDER BY hour_start DESC/.test(x))).toEqual([]);
+    expect(sql.filter((x) => /^\s*(INSERT|UPDATE|DELETE)/i.test(x))).toEqual([]); // a poll writes nothing (REGI cached)
+    expect(sql.length).toBeLessThanOrEqual(4);
+  });
+
+  test("history, a wallet's open positions and its pending orders read through their indexes (no sort, no scan)", () => {
+    const t = setup();
+    const plan = (q: string, ...p: unknown[]) => t.db.q<{ detail: string }>(`EXPLAIN QUERY PLAN ${q}`, ...p).map((r) => r.detail).join(" | ");
+    const h = plan(HISTORY_SQL, "0x1", 100);
+    expect(h).toMatch(/USING INDEX positions_wallet/);
+    expect(h).not.toMatch(/TEMP B-TREE|SCAN positions/);
+    const o = plan("SELECT * FROM accounts a LEFT JOIN positions p ON p.wallet = a.wallet AND p.closed_at IS NULL WHERE a.wallet = ? ORDER BY p.id", "0x1");
+    expect(o).toMatch(/positions_wallet/);
+    expect(o).not.toMatch(/SCAN p\b|SCAN positions/);
+    const pend = plan("SELECT * FROM orders WHERE wallet = ? AND status = 'pending' ORDER BY id DESC LIMIT 10", "0x1");
+    expect(pend).toMatch(/orders_wallet/);
+    expect(pend).not.toMatch(/TEMP B-TREE/);
+  });
+
+  test("a close in a minute whose (open, not yet stored) bar crosses the liquidation price is liquidated, not closed", async () => {
+    const t = setup();
+    const alice = await t.signIn();
+    await t.mark(1000);
+    const o = await t.open(alice, { side: "long", margin: 1000, lev: 20 });
+    const liq = o.body.position.liq as number;
+    t.tick(60_000);
+    await t.mark(1000);
+    const s = await t.submitClose(alice, o.body.order.positionId);
+    t.tick(1000);
+    const m = Math.floor(t.nowS() / 60) * 60;
+    await t.markJson(1000, { bars: [[m - 60, 1000, 1000, 1000], [m, 1000, liq - 1, 1000]] }); // the low crossed earlier this minute
+    expect((await t.status(alice, s.body.order.id)).body.order).toMatchObject({ status: "refused", error: "already closed" });
+    expect(t.db.q("SELECT reason, returned FROM positions")).toEqual([{ reason: "liquidation", returned: 0 }]);
   });
 });
 
@@ -913,7 +992,7 @@ describe("rate limits (R8)", () => {
 });
 
 describe("leaderboard and history (R8)", () => {
-  test("top 50 by equity (funding included) at the latest mark, shortened addresses only, cached 30 s", async () => {
+  test("top 50 by equity (funding included) at the latest mark, shortened addresses only, cached 60 s", async () => {
     const t = setup();
     const alice = await t.signIn();
     const bob = await t.signIn(BOB);
@@ -937,7 +1016,7 @@ describe("leaderboard and history (R8)", () => {
     expect(body.rows[0].equity).toBeCloseTo(10000 - 3000 * Engine.RULES.feeRate + 300, 6);
     expect(text).not.toContain(lc(ALICE));
     expect(text).not.toContain("99999");
-    expect(res.headers.get("cache-control")).toBe("public, max-age=30");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=60");
     t.db.q("UPDATE accounts SET balance = 1e9 WHERE wallet = ?", lc(BOB));
     const again = (await (await handleLeaderboard(t.req("/api/pilot/leaderboard"), t.env, { ...t.deps, cache: cache as unknown as Cache })).json()) as Json;
     expect(again.rows[0].address).toBe(body.rows[0].address);

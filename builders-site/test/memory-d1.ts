@@ -44,7 +44,9 @@ export class MemoryD1 implements D1Database {
     const rows = this.sqlite.prepare(sql).all(...values).map((r) => ({ ...r }));
     const isWrite = /^\s*(insert|update|delete|replace)\b/i.test(sql);
     const info = this.sqlite.prepare("SELECT changes() AS c, last_insert_rowid() AS id").all()[0] as { c: number; id: number };
-    return { results: rows, success: true, meta: { changes: isWrite ? Number(info.c) : 0, last_row_id: Number(info.id) } };
+    // rows_read / rows_written approximate D1's counters (rows returned / changed) so the metering can be tested
+    const changes = isWrite ? Number(info.c) : 0;
+    return { results: rows, success: true, meta: { changes, last_row_id: Number(info.id), rows_read: rows.length, rows_written: changes } };
   }
 
   prepare(sql: string): D1PreparedStatement {

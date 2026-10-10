@@ -15,7 +15,8 @@ export interface PilotTablesProps {
   mark: number | null;
   history: ClosedPositionView[] | null;
   board: LeaderboardRow[] | null;
-  funding: FundingView;
+  /** GET /api/pilot/funding (loaded when the Funding tab opens); null while loading. */
+  funding: FundingView | null;
   closing: number | null;
   onClose: (id: number) => void;
 }
@@ -98,7 +99,8 @@ function Leaderboard({ rows, me }: { rows: LeaderboardRow[] | null; me: string |
   );
 }
 
-function Funding({ f }: { f: FundingView }) {
+function Funding({ f }: { f: FundingView | null }) {
+  if (!f) return <p className="abi-pt-empty dim">Loading…</p>;
   return (
     <table>
       <thead><tr><th>Hour (UTC)</th><th>Rate</th><th className="abi-x">Longs</th><th className="abi-x">Shorts</th></tr></thead>

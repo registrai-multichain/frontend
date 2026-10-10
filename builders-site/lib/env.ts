@@ -25,6 +25,9 @@ export interface KV {
 export interface D1Meta {
   changes: number;
   last_row_id: number;
+  /** D1's billing counters (rows scanned / written, indexes included). */
+  rows_read?: number;
+  rows_written?: number;
   [k: string]: unknown;
 }
 export interface D1Result<T = Record<string, unknown>> {

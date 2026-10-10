@@ -38,23 +38,35 @@ export const SQL = {
   refuse: "UPDATE orders SET status = 'refused', error = ? WHERE id = ? AND status = 'pending'",
   /** Liquidation at the liquidation price, nothing returned — bind: closed_at, exit, pnl, accrued, positionId. */
   liquidate: "UPDATE positions SET closed_at = ?, exit = ?, pnl = ?, accrued = ?, returned = 0, reason = 'liquidation' WHERE id = ? AND closed_at IS NULL",
+  /** The ingest's in-batch liquidation: only if this post won the mark row — bind: closed_at, exit, pnl, accrued, positionId, post. */
+  liquidateIfPost:
+    "UPDATE positions SET closed_at = ?, exit = ?, pnl = ?, accrued = ?, returned = 0, reason = 'liquidation' " +
+    "WHERE id = ? AND closed_at IS NULL AND (SELECT post FROM mark WHERE id = 1) = ?",
   /** bind: nonce, exp. changes = 1 only for the first use. */
   nonceUse: "INSERT INTO used_nonces (nonce, exp) VALUES (?, ?) ON CONFLICT (nonce) DO NOTHING",
   /** bind: key, slot. RETURNING the count in this window. */
   rateHit:
     "INSERT INTO ratelimit (k, slot, n) VALUES (?, ?, 1) ON CONFLICT (k) DO UPDATE SET " +
     "n = CASE WHEN ratelimit.slot = excluded.slot THEN ratelimit.n + 1 ELSE 1 END, slot = excluded.slot RETURNING n",
-  /** bind: px, ts, received_ms, head, hour_start, ch24, ch1, sigma_1h, sigma_24h, funding_known, base_pending, base_step_ts, candle, post. Moves forward only. */
+  /**
+   * bind: px, ts, received_ms, head, hour_start, ch24, ch1, sigma_1h, sigma_24h, funding_known, funding_rate, base_pending,
+   * base_step_ts, bars_minute, swept_minute, candle, post. Moves forward only.
+   */
   markUpsert:
-    "INSERT INTO mark (id, px, ts, received_ms, head, hour_start, ch24, ch1, sigma_1h, sigma_24h, funding_known, base_pending, base_step_ts, candle, post) " +
-    "VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET px = excluded.px, ts = excluded.ts, " +
+    "INSERT INTO mark (id, px, ts, received_ms, head, hour_start, ch24, ch1, sigma_1h, sigma_24h, funding_known, funding_rate, base_pending, " +
+    "base_step_ts, bars_minute, swept_minute, candle, post) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET px = excluded.px, ts = excluded.ts, " +
     "received_ms = excluded.received_ms, head = excluded.head, hour_start = excluded.hour_start, ch24 = excluded.ch24, ch1 = excluded.ch1, " +
-    "sigma_1h = excluded.sigma_1h, sigma_24h = excluded.sigma_24h, funding_known = excluded.funding_known, base_pending = excluded.base_pending, base_step_ts = excluded.base_step_ts, " +
+    "sigma_1h = excluded.sigma_1h, sigma_24h = excluded.sigma_24h, funding_known = excluded.funding_known, funding_rate = excluded.funding_rate, base_pending = excluded.base_pending, " +
+    "base_step_ts = excluded.base_step_ts, bars_minute = excluded.bars_minute, swept_minute = excluded.swept_minute, " +
     "candle = excluded.candle, post = excluded.post WHERE excluded.ts > mark.ts",
-  /** bind: minute, h, l, c, post. Written only by the post that won the mark row; merges (high and low only widen). */
+  /**
+   * bind: minute, h, l, c, post. Written only by the post that won the mark row; merges (high and low only widen), and
+   * an unchanged bar (a re-sent minute) is not rewritten: no row write.
+   */
   barUpsert:
     "INSERT INTO bars (minute, h, l, c) SELECT ?, ?, ?, ? WHERE (SELECT post FROM mark WHERE id = 1) = ? " +
-    "ON CONFLICT (minute) DO UPDATE SET h = max(bars.h, excluded.h), l = min(bars.l, excluded.l), c = excluded.c",
+    "ON CONFLICT (minute) DO UPDATE SET h = max(bars.h, excluded.h), l = min(bars.l, excluded.l), c = excluded.c " +
+    "WHERE excluded.h > bars.h OR excluded.l < bars.l OR excluded.c <> bars.c",
   /** bind: hour_start, rate, post. Written once per hour: the first rate posted for an hour stands. */
   fundingInsert:
     "INSERT INTO funding (hour_start, rate) SELECT ?, ? WHERE (SELECT post FROM mark WHERE id = 1) = ? " +

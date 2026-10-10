@@ -6,7 +6,7 @@ import { describe, expect, test } from "vitest";
 import { PilotTables, type PilotTablesProps } from "@/components/builders-index/pilot/PilotTables";
 import { Ticket, type TicketProps } from "@/components/builders-index/pilot/Ticket";
 import { liqPrice } from "./abi-pilot";
-import type { PilotAccountView } from "./abi-pilot-api";
+import { accountPollMs, type PilotAccountView } from "./abi-pilot-api";
 import { fmtSigned, fmtWhen, openLabel, PILOT_COPY, PILOT_DISCLAIMER, PILOT_DISCLAIMERS, PILOT_LIQ_NOTE } from "./abi-pilot-copy";
 
 /**
@@ -187,3 +187,16 @@ describe("positions, history, leaderboard, funding", () => {
     expect(banned(visible(h))).toBeUndefined();
   });
 });
+
+describe("account polling (D1 budget)", () => {
+  test("15 s while signed in, 2 s only while an order is pending, never signed out", () => {
+    expect(accountPollMs(null)).toBeNull();
+    expect(accountPollMs({ address: null, pending: [] })).toBeNull();
+    expect(accountPollMs({ address: ME, pending: [] })).toBe(15_000);
+    expect(accountPollMs({ address: ME, pending: [{ id: 1, kind: "open", status: "pending", side: "long", margin: 10, lev: 1, positionId: null, arrivedMs: 0, fillPx: null, error: null }] })).toBe(2_000);
+  });
+  test("the Funding tab waits for the edge-cached endpoint", () => {
+    expect(tables({ tab: "funding", funding: null })).toContain("Loading…");
+  });
+});
+

@@ -108,7 +108,7 @@ const clearPilotCookie = () => `${PILOT_SESSION_COOKIE}=; Path=/; HttpOnly; Secu
 
 const secretOk = (env: Env) => (env.PILOT_SESSION_SECRET ?? "").length >= SECRET_MIN;
 
-async function sessionOf(req: Request, env: Env, nowS: number): Promise<{ wallet: string; epoch: number } | null> {
+export async function sessionOf(req: Request, env: Env, nowS: number): Promise<{ wallet: string; epoch: number } | null> {
   if (!secretOk(env)) return null;
   const token = getCookie(req, PILOT_SESSION_COOKIE);
   if (!token || token.length > 200) return null;

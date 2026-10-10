@@ -72,6 +72,8 @@ export const PILOT_PATHS = {
   positions: "/api/pilot/positions",
   history: "/api/pilot/history",
   leaderboard: "/api/pilot/leaderboard",
+  /** Public: the last 24 hourly funding rates (edge-cached 60 s). */
+  funding: "/api/pilot/funding",
 } as const;
 
 export const PILOT_LIMITS = {
@@ -80,7 +82,8 @@ export const PILOT_LIMITS = {
   loginsPerMin: 10,
   leaderboard: 50,
   history: 100,
-  leaderboardCacheS: 30,
+  leaderboardCacheS: 60,
+  fundingCacheS: 60,
   /** REGI RPC back-off after a failure. */
   regiRetryS: 30,
   /** Orders pause this long after the hour's base sample lands (base_step_ts). */
@@ -165,13 +168,17 @@ export interface RegiView {
   now: boolean | null;
 }
 
-export interface FundingView {
-  /** Newest first: the rate in force during [t, t + 1h). */
-  recent: { t: number; rate: number }[];
+export interface FundingNow {
   /** The rate in force now (null: none posted for this hour). */
   current: number | null;
   /** When the next hour's rate takes over (unix s). */
   next: number;
+}
+
+/** GET /api/pilot/funding (public, edge-cached). */
+export interface FundingView extends FundingNow {
+  /** Newest first: the rate in force during [t, t + 1h). */
+  recent: { t: number; rate: number }[];
 }
 
 export interface PilotAccountView {
@@ -183,7 +190,7 @@ export interface PilotAccountView {
   positions: OpenPositionView[];
   pending: OrderView[];
   mark: PilotMark | null;
-  funding: FundingView;
+  funding: FundingNow;
 }
 
 export interface LeaderboardRow {
@@ -191,6 +198,18 @@ export interface LeaderboardRow {
   /** 0x1234…abcd */
   address: string;
   equity: number;
+}
+
+/** Account refresh while signed in and the page is visible (D1 budget: one cheap read per poll). */
+export const ACCOUNT_POLL_MS = 15_000;
+/** While one of the wallet's orders is pending (it fills or is refused within ~10 s). */
+export const PENDING_POLL_MS = 2_000;
+export const BOARD_POLL_MS = 60_000;
+
+/** The next account refresh: none signed out; faster only while an order is pending. */
+export function accountPollMs(view: Pick<PilotAccountView, "address" | "pending"> | null): number | null {
+  if (!view?.address) return null;
+  return view.pending.length ? PENDING_POLL_MS : ACCOUNT_POLL_MS;
 }
 
 /** 0x1234…abcd */
