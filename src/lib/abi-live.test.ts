@@ -92,9 +92,9 @@ describe("golden values (from the reference live.js)", () => {
 });
 
 describe.skipIf(!existsSync(REF))("equivalence with the reference live.js", () => {
-  async function ref(head: number, index: LiveData = INDEX) {
+  async function ref(head: number, index: LiveData = INDEX, extra: Parameters<typeof mockRpc>[2] = []) {
     const mod = createRequire(import.meta.url)(REF) as { createEngine: (o: object) => { load: (a: unknown, b: unknown) => void; tick: () => Promise<any> } };
-    const inner = mockRpc(head);
+    const inner = mockRpc(head, undefined, extra);
     let id = 0;
     vi.stubGlobal("fetch", async (_u: string, o: { body: string }) => {
       const b = JSON.parse(o.body);
@@ -107,11 +107,12 @@ describe.skipIf(!existsSync(REF))("equivalence with the reference live.js", () =
     vi.unstubAllGlobals();
     return out;
   }
-  const cases = [10, 100, 300, 1000, 4100, 5450, 7300].flatMap((off) => [[off, "USDC only"], [off, "stablecoins + milestones"]] as const);
+  const cases = [10, 100, 300, 1000, 4100, 5450, 7300].flatMap((off) => [[off, "USDC only"], [off, "stablecoins + milestones"], [off, "integrated products"]] as const);
   test.each(cases)("head +%i blocks, %s: identical numbers", async (off, kind) => {
-    const index = kind === "USDC only" ? INDEX : scIndex();
-    const a = await ref(HB + off, index);
-    const e = createEngine({ call: mockRpc(HB + off) as never });
+    const index = kind === "USDC only" ? INDEX : kind === "integrated products" ? integIndex() : scIndex();
+    const extra = kind === "integrated products" ? INTEG_LOGS : [];
+    const a = await ref(HB + off, index, extra);
+    const e = createEngine({ call: mockRpc(HB + off, undefined, extra) as never });
     e.load(index, SEEN);
     const b = await e.tick();
     expect(b.index).toBe(a.index);
