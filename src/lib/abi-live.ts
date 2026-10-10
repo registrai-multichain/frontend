@@ -199,7 +199,8 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
 
   async function sampleBase(): Promise<number> {
     // first base_window blocks of the hour, all USDC transfers, per-sender totals
-    const logs = await call("eth_getLogs", [{ fromBlock: hex(hourBlock), toBlock: hex(hourBlock + L.base_window - 1), address: EMITTER, topics: [TRANSFER] }]);
+    // split on an RPC error or a full page (audit OPS-1: 20,001 dust transfers in the window broke one big request)
+    const logs = await getLogsSafe({ address: EMITTER, topics: [TRANSFER] }, hourBlock, hourBlock + L.base_window - 1);
     const agg = new Map<string, number>();
     for (const l of logs) {
       const fr = "0x" + l.topics[1].slice(26), to = "0x" + l.topics[2].slice(26);

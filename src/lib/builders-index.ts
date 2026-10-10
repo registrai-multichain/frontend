@@ -226,7 +226,8 @@ function validateIntegrations(v: unknown): AbiIntegration[] {
     if (!isObj(r) || !line(r.company, ABI_LIMITS.integrationCompany) || !line(r.category, ABI_LIMITS.integrationCategory)) continue;
     if (typeof r.status !== "string" || !(ABI_INTEGRATION_STATUSES as readonly string[]).includes(r.status)) continue;
     if (typeof r.first_announced !== "string" || !DAY.test(r.first_announced)) continue;
-    const link = r.link == null ? null : evidenceItem(r.link);
+    // the tracker's evidence lines read "<url> — note (date)": keep the URL (audit L11: 65 links 404'd with the note)
+    const link = r.link == null ? null : evidenceItem(typeof r.link === "string" ? r.link.trim().split(/\s/)[0] : r.link);
     if (r.link != null && !link) continue;
     const member = typeof r.member === "string" && str(r.member) ? r.member : null;
     const milestone_id = typeof r.milestone_id === "string" && MS_ID.test(r.milestone_id) ? r.milestone_id : null;

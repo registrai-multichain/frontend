@@ -209,8 +209,10 @@ export function validateMark(raw: unknown, nowS: number): { ok: true; data: Mark
   }
   let milestoneTs: number | null = null;
   if (b.milestone_ts !== undefined && b.milestone_ts !== null) {
-    if (!int(b.milestone_ts) || b.milestone_ts > ts || b.milestone_ts < ts - MILESTONE_MAX_AGE_S) return bad("milestone_ts must be unix seconds at or before ts and at most 7 days old, or null");
-    milestoneTs = b.milestone_ts;
+    if (!int(b.milestone_ts) || b.milestone_ts > ts) return bad("milestone_ts must be unix seconds at or before ts, or null");
+    // the producer sends the latest milestone however old (audit PE-1): an old one is ignored, not a refusal of the
+    // whole post, which froze the mark, bars, rates and liquidations 7 days after each milestone
+    milestoneTs = b.milestone_ts >= ts - MILESTONE_MAX_AGE_S ? b.milestone_ts : null;
   }
   return {
     ok: true,

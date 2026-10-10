@@ -100,7 +100,9 @@ describe("mark ingest (R4, spec §8.5)", () => {
     expect(validateMark({ ...ok, milestone_ts: null }, now)).toMatchObject({ ok: true, data: { milestoneTs: null } });
     expect(validateMark(ok, now)).toMatchObject({ ok: true, data: { milestoneTs: null } });
     expect(err({ milestone_ts: now + 1 })).toMatch(/milestone_ts/); // after ts
-    expect(err({ milestone_ts: now - 7 * 86400 - 1 })).toMatch(/milestone_ts/); // older than 7 days
+    // audit PE-1: the producer always sends the latest milestone; an old one is ignored, never a refused post
+    expect(validateMark({ ...ok, milestone_ts: now - 7 * 86400 - 1 }, now)).toMatchObject({ ok: true, data: { milestoneTs: null } });
+    expect(validateMark({ ...ok, milestone_ts: now - 8 * 86400 }, now)).toMatchObject({ ok: true, data: { milestoneTs: null } });
     expect(err({ milestone_ts: now - 0.5 })).toMatch(/milestone_ts/);
     expect(err({ milestone_ts: "x" })).toMatch(/milestone_ts/);
     expect(validateMark({ ...ok, sigma_1h: undefined, sigma_24h: null }, now)).toMatchObject({ ok: true, data: { sigma1h: null, sigma24h: null } });

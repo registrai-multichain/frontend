@@ -369,3 +369,21 @@ describe('"close the gaps": the member map in its own document, a wide member li
     for (const k of ["index", "roots", "P", "tape"] as const) expect(got[k]).toEqual(want[k]);
   });
 });
+
+describe("audit OPS-1: the base-layer sample survives a window that one request cannot return", () => {
+  test("a refused or full page for the 240-block sample is split; the base points are unchanged", async () => {
+    const run = async (call: unknown) => { const e = createEngine({ call: call as never }); e.load(INDEX, SEEN); return e.tick(); };
+    const want = await run(mockRpc(HB + 300));
+    const inner = mockRpc(HB + 300);
+    let refused = 0;
+    const capped = async (m: string, p: unknown[]) => {
+      const f = p[0] as { fromBlock: string; toBlock: string; topics: unknown[] } | undefined;
+      if (m === "eth_getLogs" && f && f.topics.length === 1 && parseInt(f.toBlock, 16) - parseInt(f.fromBlock, 16) + 1 > 60) { refused++; throw new Error("query exceeds max results 20000"); }
+      return inner(m, p);
+    };
+    const got = await run(capped);
+    expect(refused).toBeGreaterThan(0);
+    expect(got.baseSampled).toBe(true);
+    for (const k of ["index", "roots", "P"] as const) expect(got[k]).toEqual(want[k]);
+  });
+});

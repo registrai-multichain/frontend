@@ -368,3 +368,10 @@ describe('"close the gaps": the separate contract map', () => {
     }
   });
 });
+
+test("audit L11: an integration link written as '<url> — note (date)' keeps only the URL", () => {
+  const d = JSON.parse(JSON.stringify(real));
+  d.integrations = [{ company: "Kraken", category: "exchange", status: "live", first_announced: "2025-10-28", link: "https://blog.kraken.com/news/arc — Kraken blog: USDC on Arc (2026-09-16)", member: null, milestone_id: null }];
+  const r = validateIndex(d);
+  expect(r.ok && r.data.integrations[0].link).toBe("https://blog.kraken.com/news/arc");
+});
