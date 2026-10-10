@@ -5,7 +5,7 @@ import Link from "next/link";
 import { InfoBubble } from "@/components/InfoBubble";
 import { projectHref } from "@/lib/project-page";
 import { createEngine, StaleError, type Candle, type LiveResult } from "@/lib/abi-live";
-import { ABI_INDEX_IDS, ABI_INDICES, isIndexId, validateSeen, type AbiData, type AbiIndexDef, type AbiIndexId } from "@/lib/builders-index";
+import { ABI_INDEX_IDS, ABI_INDICES, ABI_SUMMARY_PATH, isIndexId, validateSeen, type AbiData, type AbiIndexDef, type AbiIndexId, type AbiIndexSummary } from "@/lib/builders-index";
 import {
   barAt, candleList, chartModel, cls, coinRows, fmt, hm, hms, members, integrationRows, methodRows, milestoneRows, nameOf, ohlcLine, openHour, pct, quote, RANGE_BARS, RANGE_KEYS, rollOff, sgn,
   status, tapeRows, freshKeys, rowKey, rowKeys, tickerItems, ts, usdFmt, why, type Bar, type ChartModel, type RangeKey, type SortKey,
@@ -16,13 +16,24 @@ import { PilotPanel } from "./pilot/PilotPanel";
 import "./terminal.css";
 
 /** The index on screen (spec §17) and how to switch it; ABI when rendered outside the page (tests, prerender). */
-const IndexCtx = createContext<{ ix: AbiIndexDef; pick?: (id: AbiIndexId) => void }>({ ix: ABI_INDICES.abi });
-const INDEX_OPTIONS = ABI_INDEX_IDS.map((id) => ({ v: id, label: ABI_INDICES[id].label }));
+const IndexCtx = createContext<{ ix: AbiIndexDef }>({ ix: ABI_INDICES.abi });
 
-function IndexSwitch() {
-  const { ix, pick } = useContext(IndexCtx);
-  if (!pick) return null;
-  return <Seg label="Index" value={ix.id} options={INDEX_OPTIONS} onChange={pick} />;
+/** The index tabs (§17): full width, first under the site nav, sticky; each tab shows that index's value
+ * (the live value for the one on screen, the last close for the others). */
+export function IndexTabs({ active, values, pick }: { active: AbiIndexId; values: Partial<Record<AbiIndexId, number | null>>; pick: (id: AbiIndexId) => void }) {
+  return (
+    <nav className="abi-tabs" aria-label="Index">
+      {ABI_INDEX_IDS.map((id) => {
+        const x = ABI_INDICES[id], v = values[id];
+        return (
+          <button key={id} type="button" aria-pressed={id === active} aria-label={x.name} onClick={() => pick(id)}>
+            <span className="nm"><span className="nm-label">{x.label}</span><span className="nm-full">{x.name}</span><span className="cd">{x.code}</span></span>
+            <span className="v">{v == null ? "–" : fmt(v, 1)}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
 }
 
 async function load(path: string): Promise<{ status: number; body: unknown }> {
@@ -67,7 +78,7 @@ function QuoteBar({ d, bars, st }: { d: AbiData; bars: Bar[]; st: { kind: string
   );
   return (
     <header className="abi-quote">
-      <div className="abi-sym"><h1 style={{ margin: 0 }}><b>{ix.name}</b></h1><small>{ix.code} · Arc mainnet · Tabula</small><IndexSwitch /></div>
+      <div className="abi-sym"><h1 style={{ margin: 0 }}><b>{ix.name}</b></h1><small>{ix.code} · Arc mainnet · Tabula</small></div>
       <div className="abi-px">
         <span className={`v ${flash}`} aria-label={`${ix.code} price`}>{q ? fmt(q.px) : "–"}</span>
         {q && <span className={`ch ${cls(q.d24)}`}>{sgn(q.chg24)} ({pct(q.d24)}) 24h</span>}
@@ -412,11 +423,12 @@ function SidePanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
   );
 }
 
-export function Terminal({ d, R, closedLocal, st, pilot, ix = ABI_INDICES.abi, pick }: { d: AbiData; R: LiveResult | null; closedLocal: Candle[]; st: { kind: string; text: string }; pilot?: React.ReactNode; ix?: AbiIndexDef; pick?: (id: AbiIndexId) => void }) {
+export function Terminal({ d, R, closedLocal, st, pilot, ix = ABI_INDICES.abi, tabs }: { d: AbiData; R: LiveResult | null; closedLocal: Candle[]; st: { kind: string; text: string }; pilot?: React.ReactNode; ix?: AbiIndexDef; tabs?: React.ReactNode }) {
   const bars = useMemo(() => candleList(d, closedLocal, R), [d, closedLocal, R]);
   return (
-    <IndexCtx.Provider value={{ ix, pick }}>
+    <IndexCtx.Provider value={{ ix }}>
     <div className="abi-t">
+      {tabs}
       <QuoteBar d={d} bars={bars} st={st} />
       <Ticker d={d} />
       <div className="abi-row top">
@@ -453,6 +465,7 @@ function indexFromUrl(): AbiIndexId {
 
 export function IndexPage() {
   const [id, setId] = useState<AbiIndexId | null>(null); // read from the URL after mount (the page is prerendered)
+  const [summary, setSummary] = useState<Partial<AbiIndexSummary>>({});
   const [state, setState] = useState<AbiState>({ kind: "loading" });
   const [res, setRes] = useState<LiveResult | null>(null);
   const [closedLocal, setClosedLocal] = useState<Candle[]>([]);
@@ -465,6 +478,13 @@ export function IndexPage() {
   const busy = useRef(false);
 
   useEffect(() => { setId(indexFromUrl()); }, []);
+  useEffect(() => {
+    let live = true;
+    const get = async () => { const r = await load(ABI_SUMMARY_PATH); if (live && r.status === 200) setSummary(r.body as AbiIndexSummary); };
+    void get();
+    const t = setInterval(() => void get(), POLL_MS);
+    return () => { live = false; clearInterval(t); };
+  }, []);
   const ix = ABI_INDICES[id ?? "abi"];
   const pick = (next: AbiIndexId) => {
     if (next === id) return;
@@ -534,17 +554,20 @@ export function IndexPage() {
     return () => { live = false; clearInterval(t1); clearInterval(t2); document.removeEventListener("visibilitychange", vis); };
   }, [id]);
 
+  const values: Partial<Record<AbiIndexId, number | null>> = Object.fromEntries(ABI_INDEX_IDS.map((k) => [k, summary[k]?.index ?? null]));
+  if (state.kind === "ready") values[ix.id] = res ? res.index : state.data.index;
+  const tabs = id ? <IndexTabs active={ix.id} values={values} pick={pick} /> : null;
+
   if (state.kind === "ready") {
-    return (
-      <Terminal d={state.data} R={res} closedLocal={closedLocal} st={status(state.data, res, failures, engineOn, now, stale)} pilot={ix.id === "abi" ? <PilotPanel /> : null} ix={ix} pick={pick} />
-    );
+    return <Terminal d={state.data} R={res} closedLocal={closedLocal} st={status(state.data, res, failures, engineOn, now, stale)} pilot={ix.id === "abi" ? <PilotPanel /> : null} ix={ix} tabs={tabs} />;
   }
   return (
-    <IndexCtx.Provider value={{ ix, pick }}>
-      <header className="mb-6"><h1 className="pa-h1">{ix.name}</h1>{id && <IndexSwitch />}</header>
+    <>
+      {tabs && <div className="abi-t">{tabs}</div>}
+      <header className="mb-6"><h1 className="pa-h1">{ix.name}</h1></header>
       {state.kind === "loading" && <p className="pa-muted">Loading…</p>}
       {state.kind === "empty" && <div className="pa-card"><p>{ABI_COPY.empty}</p></div>}
       {state.kind === "error" && <div className="pa-card"><p>{ABI_COPY.failed}</p></div>}
-    </IndexCtx.Provider>
+    </>
   );
 }

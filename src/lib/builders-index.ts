@@ -50,6 +50,10 @@ export const ABI_INDICES: Record<AbiIndexId, AbiIndexDef> = {
   aii: { id: "aii", name: "Arc Integrations Index", code: "AII", label: "Integrations", key: "aii:index", seenKey: "aii:seen", path: "/api/index/aii", seenPath: "/api/index/aii/seen", seenBytes: ABI_LIMITS.seenBytesWide },
   aei: { id: "aei", name: "Arc Ecosystem Index", code: "AEI", label: "Ecosystem", key: "aei:index", seenKey: "aei:seen", path: "/api/index/aei", seenPath: "/api/index/aei/seen", seenBytes: ABI_LIMITS.seenBytesWide },
 };
+/** GET /api/index/summary: each index's last closed value, for the index tabs. null when that index has no file yet. */
+export type AbiIndexSummary = Record<AbiIndexId, { index: number; index_24h_ago: number | null; data_until: string } | null>;
+export const ABI_SUMMARY_PATH = "/api/index/summary";
+
 export const isIndexId = (v: unknown): v is AbiIndexId => typeof v === "string" && (ABI_INDEX_IDS as readonly string[]).includes(v);
 
 /** Milestone tiers (spec §12, §14): the multiplier on the target member's points (for `integration` the maximum:

@@ -162,3 +162,19 @@
 
 /* §17 index switcher under the name */
 .abi-sym .abi-seg { margin-top: 4px; display: flex; }
+
+/* §17 index tabs: first under the site nav, full width, sticky; equal tabs ≥ 44 px; active = filled + bold */
+.abi-tabs { position: sticky; top: 64px; z-index: 12; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin-inline: -20px; padding: 6px 20px; background: var(--abi-bg); border-bottom: 1px solid var(--abi-line); }
+@media (min-width: 900px) { .abi-tabs { margin-inline: -40px; padding-inline: 40px; } .abi-quote { top: 121px; } }
+.abi-t .abi-tabs button { min-height: 48px; padding: 6px 8px; border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--abi-mute); background: transparent; border: 1px solid var(--abi-line2); }
+.abi-t .abi-tabs button:hover { color: var(--abi-fg); }
+.abi-t .abi-tabs button[aria-pressed="true"] { background: var(--abi-fg); color: var(--abi-bg); border-color: var(--abi-fg); font-weight: 700; }
+.abi-tabs .nm { font-size: 12.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.abi-tabs .v { font-family: var(--abi-mono); font-variant-numeric: tabular-nums; font-size: 12px; }
+.abi-tabs .nm-full, .abi-tabs .cd { display: none; }
+@media (min-width: 900px) {
+  .abi-tabs .nm-label { display: none; }
+  .abi-tabs .nm-full { display: inline; }
+  .abi-tabs .cd { display: inline; margin-left: 6px; font-family: var(--abi-mono); font-size: 11px; opacity: .7; }
+  .abi-tabs button { flex-direction: row; gap: 10px; }
+}

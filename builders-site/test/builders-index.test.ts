@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { Env } from "../lib/env";
-import { handlePublicIndex, handlePublicSeen, handlePushIndex, handlePushSeen } from "../lib/builders-index";
+import { handleIndexSummary, handlePublicIndex, handlePublicSeen, handlePushIndex, handlePushSeen } from "../lib/builders-index";
 import { onRequest as seenRoute } from "../functions/api/index/seen";
 import { onRequest as route } from "../functions/api/index/index";
 import { ABI_INDICES, ABI_KEY, ABI_LIMITS, ABI_SEEN_KEY } from "../../src/lib/builders-index";
@@ -281,5 +281,22 @@ describe("§17: AII and AEI endpoints", () => {
     expect((await handlePushSeen(post("/api/index/aii/seen", mb(3.7)), s.env, "aii")).status).toBe(200);
     expect((await handlePushSeen(post("/api/index/aei/seen", mb(6.1)), s.env, "aei")).status).toBe(413);
     expect((await handlePushSeen(post("/api/index/seen", mb(1.1)), s.env)).status).toBe(413);
+  });
+});
+
+describe("/api/index/summary", () => {
+  test("each index's last close, null where there is no file; GET only", async () => {
+    const s = setup();
+    await s.kv.put(ABI_KEY, JSON.stringify({ ...indexFixture(), index: 981.41, index_24h_ago: 982, data_until: "2026-10-10T18:00:00Z" }));
+    await s.kv.put(ABI_INDICES.aii.key, JSON.stringify({ index: 1034.92, data_until: "2026-10-10T18:00:00Z" }));
+    await s.kv.put(ABI_INDICES.aei.key, "{not json");
+    const r = await handleIndexSummary(new Request(`${ORIGIN}/api/index/summary`), s.env, { cache: null });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({
+      abi: { index: 981.41, index_24h_ago: 982, data_until: "2026-10-10T18:00:00Z" },
+      aii: { index: 1034.92, index_24h_ago: null, data_until: "2026-10-10T18:00:00Z" },
+      aei: null,
+    });
+    expect((await handleIndexSummary(new Request(`${ORIGIN}/api/index/summary`, { method: "POST" }), s.env, { cache: null })).status).toBe(405);
   });
 });

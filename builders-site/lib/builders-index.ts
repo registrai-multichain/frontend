@@ -5,7 +5,7 @@
  *   POST /api/index[/aii|/aei], POST …/seen   producer (Bearer ABI_PUSH_TOKEN): validates, one KV write each
  *   GET  the same paths                       public; reads one key, never writes; edge-cached 30 s; 404 {error:"no data"} when empty
  */
-import { ABI_INDICES, ABI_LIMITS, validateIndex, validateSeen, type AbiIndexId } from "../../src/lib/builders-index";
+import { ABI_INDEX_IDS, ABI_INDICES, ABI_LIMITS, validateIndex, validateSeen, type AbiIndexId, type AbiIndexSummary } from "../../src/lib/builders-index";
 import { bearerGuard } from "./bot-auth";
 import type { Env } from "./env";
 import { edgeCachedGet, errorJson, json, type EdgeCacheDeps } from "./http";
@@ -79,3 +79,24 @@ async function publicGet(req: Request, env: Env, key: string, deps: EdgeCacheDep
 
 export const handlePublicIndex = (req: Request, env: Env, deps: EdgeCacheDeps = {}, id: AbiIndexId = "abi") => publicGet(req, env, ABI_INDICES[id].key, deps);
 export const handlePublicSeen = (req: Request, env: Env, deps: EdgeCacheDeps = {}, id: AbiIndexId = "abi") => publicGet(req, env, ABI_INDICES[id].seenKey, deps);
+
+/** GET /api/index/summary: the last closed value of every index (three KV reads), edge-cached 30 s. The files in KV
+ * were validated on the way in; a missing or unreadable one is null. */
+export async function handleIndexSummary(req: Request, env: Env, deps: EdgeCacheDeps = {}): Promise<Response> {
+  if (req.method.toUpperCase() !== "GET") return errorJson(405, "method not allowed");
+  return edgeCachedGet(req, deps, async () => {
+    const out = {} as AbiIndexSummary;
+    await Promise.all(ABI_INDEX_IDS.map(async (id) => {
+      try {
+        const d = JSON.parse((await env.INVITES.get(ABI_INDICES[id].key)) ?? "null") as { index: number; index_24h_ago?: number | null; data_until: string } | null;
+        out[id] = d ? { index: d.index, index_24h_ago: d.index_24h_ago ?? null, data_until: d.data_until } : null;
+      } catch {
+        out[id] = null;
+      }
+    }));
+    return new Response(JSON.stringify(out), {
+      status: 200,
+      headers: { "content-type": "application/json; charset=utf-8", "x-content-type-options": "nosniff", "cache-control": `public, max-age=${ABI_CACHE_S}` },
+    });
+  }, ABI_CACHE_S);
+}
