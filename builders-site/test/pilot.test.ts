@@ -38,6 +38,7 @@ interface MarkExtra {
   funding_hour: number;
   base_pending: boolean;
   base_step_ts: number | null;
+  milestone_ts: number | null;
 }
 
 function setup(o: { open?: boolean; db?: boolean; secret?: string; snapshot?: string | null } = {}) {
@@ -113,6 +114,7 @@ function setup(o: { open?: boolean; db?: boolean; secret?: string; snapshot?: st
       sigma_24h: x.sigma_24h === undefined ? CALM.sigma_24h : x.sigma_24h, sigma_1h: x.sigma_1h === undefined ? CALM.sigma_1h : x.sigma_1h,
       base_pending: x.base_pending ?? false, base_step_ts: x.base_step_ts ?? null,
     };
+    if (x.milestone_ts !== undefined) body.milestone_ts = x.milestone_ts;
     // like mark.py: funding_rate every post (default 0 here), null while fewer than 2 closed hours exist
     body.funding_rate = x.funding_rate === undefined ? 0 : x.funding_rate;
     body.funding_hour = x.funding_hour ?? body.hour_start;
@@ -237,6 +239,13 @@ describe("mark ingest (R4, spec §8.5)", () => {
     expect(err({ sigma_24h: -1 })).toMatch(/sigma/);
     expect(err({ base_pending: "yes" })).toMatch(/base_pending/);
     expect(err({ base_step_ts: now + 60 })).toMatch(/base_step_ts/);
+    expect(validateMark({ ...ok, milestone_ts: now - 3600 }, now)).toMatchObject({ ok: true, data: { milestoneTs: now - 3600 } });
+    expect(validateMark({ ...ok, milestone_ts: null }, now)).toMatchObject({ ok: true, data: { milestoneTs: null } });
+    expect(validateMark(ok, now)).toMatchObject({ ok: true, data: { milestoneTs: null } });
+    expect(err({ milestone_ts: now + 1 })).toMatch(/milestone_ts/); // after ts
+    expect(err({ milestone_ts: now - 7 * 86400 - 1 })).toMatch(/milestone_ts/); // older than 7 days
+    expect(err({ milestone_ts: now - 0.5 })).toMatch(/milestone_ts/);
+    expect(err({ milestone_ts: "x" })).toMatch(/milestone_ts/);
     expect(validateMark({ ...ok, sigma_1h: undefined, sigma_24h: null }, now)).toMatchObject({ ok: true, data: { sigma1h: null, sigma24h: null } });
   });
 
@@ -646,6 +655,29 @@ describe("fills at the next mark (spec §8.3)", () => {
     t.tick(30_000);
     await t.mark(1000, { base_step_ts: t.nowS() - 65 });
     expect((await t.open(alice, LONG2, 1000, { base_step_ts: t.nowS() - 64 })).body.order.status).toBe("filled");
+  });
+
+  test("a recorded index milestone pauses new orders (not closes) for 60 s after milestone_ts", async () => {
+    const t = setup();
+    const alice = await t.signIn();
+    await t.mark(1000);
+    const o = await t.open(alice, LONG2);
+    const queued = await t.submit(alice, LONG2);
+    t.tick(1000);
+    const ms = t.nowS() - 2;
+    await t.mark(1000, { milestone_ts: ms }); // the milestone lands: the queued open is refused at the fill
+    expect(t.db.q("SELECT milestone_ts FROM mark")).toEqual([{ milestone_ts: ms }]);
+    expect((await t.status(alice, queued.body.order.id)).body.order).toMatchObject({ status: "refused", error: "Paused: index milestone" });
+    const r = await t.submit(alice, LONG2);
+    expect(r.status).toBe(409);
+    expect(r.body.error).toBe("Paused: index milestone");
+    expect((await t.account(alice)).body.mark).toMatchObject({ milestonePaused: true, basePaused: false });
+    // closes still fill during the pause
+    expect((await t.close(alice, o.body.order.positionId, 1000, { milestone_ts: ms })).body.order.status).toBe("filled");
+    t.tick(58_000);
+    await t.mark(1000, { milestone_ts: ms }); // 60 s after the milestone: open again
+    expect((await t.account(alice)).body.mark.milestonePaused).toBe(false);
+    expect((await t.open(alice, LONG2, 1000, { milestone_ts: ms })).body.order.status).toBe("filled");
   });
 
   test("the engine's cap and pause use the stored σ_24h, σ_1h and ch1", async () => {

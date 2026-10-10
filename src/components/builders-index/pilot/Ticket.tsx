@@ -100,6 +100,7 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
       !m || !m.fresh ? PILOT_COPY.priceUpdating
         : m.paused ? PILOT_COPY.paused
           : m.basePaused ? PILOT_COPY.basePaused
+            : m.milestonePaused ? PILOT_COPY.milestonePaused
             : !(margin >= RULES.minMargin) ? `Minimum margin ${RULES.minMargin} pts`
               : margin + fee > balance ? "Not enough balance"
                 : full ? `Up to ${RULES.maxOpen} open positions`
@@ -140,7 +141,12 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
         </dl>
         <div className="abi-pt-disc"><p>{PILOT_DISCLAIMER}</p><p>{PILOT_LIQ_NOTE}</p></div>
         <button type="submit" className={`abi-pt-primary ${side}`} disabled={Boolean(problem) || busy}>{filling ? PILOT_COPY.filling : openLabel(side, levUse)}</button>
-        {problem && <p className="abi-pt-note" role="status">{problem}</p>}
+        {problem && (
+          <p className="abi-pt-note" role="status">
+            {problem}
+            {problem === PILOT_COPY.milestonePaused && <> <InfoBubble label="About the milestone pause">{PILOT_COPY.milestoneTip}</InfoBubble></>}
+          </p>
+        )}
         {error && <p className="abi-pt-err" role="alert">{error}</p>}
       </form>
     );

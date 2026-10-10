@@ -108,6 +108,7 @@ CREATE TABLE mark (
   swept_minute INTEGER,
   base_pending INTEGER NOT NULL DEFAULT 0,
   base_step_ts INTEGER,
+  milestone_ts INTEGER,   -- the latest recorded index milestone at or before head: new orders pause 60 s after it
   candle       TEXT    NOT NULL,
   post         TEXT    NOT NULL
 );

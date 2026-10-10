@@ -48,7 +48,7 @@ Anything else keeps new orders closed; closes, reads and the mark ingest keep wo
 
 `POST https://builder.registrai.cc/api/index/mark`, `Authorization: Bearer $ABI_PUSH_TOKEN`, every 5 s:
 `{mark, ts, head, hour_start, candle:[o,h,l,c,payments,usdc], ch24, ch1, funding_rate, funding_hour, sigma_1h,
-sigma_24h, base_pending, base_step_ts, bars:[[minute,h,l,c] …]}`.
+sigma_24h, base_pending, base_step_ts, milestone_ts, bars:[[minute,h,l,c] …]}`.
 
 - `ts` within 30 s of server time and newer than the stored mark (else 409, with `last_minute`).
 - `bars`: 1–60, ascending, `l ≤ c ≤ h`, minutes ≤ `ts`. When the batch ends at the minute of `ts`, the mark lies
@@ -65,6 +65,9 @@ sigma_24h, base_pending, base_step_ts, bars:[[minute,h,l,c] …]}`.
   `sigma_1h` and `ch1` drive the leverage cap and the pause; `sigma_24h` ≤ 0 or missing, or `sigma_1h` < 0 or
   missing, is unknown and refuses orders the same way.
 - Orders pause while `base_pending` and for 60 s after `base_step_ts`.
+- `milestone_ts`: the latest recorded index milestone at or before head (integer unix time, at or before `ts`,
+  at most 7 days old), or `null`. It is stored on the mark row. New orders, but not closes, pause for 60 s after
+  it ("Paused: index milestone"): recorded milestones change the index at once.
 
 Orders fill at the first mark whose own `ts` (chain time) is later than the order's arrival, if that mark comes
 within 10 s of server time; otherwise they are refused "price updating". Nothing fills while the producer is

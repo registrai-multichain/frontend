@@ -38,6 +38,8 @@ export const PILOT_COPY = {
   priceUpdating: "Price updating",
   paused: `Paused: ABI moved more than max(${RULES.pauseSigmas}σ_1h, ${pct(RULES.pauseFloor)}) in the last hour.`,
   basePaused: "Paused for a minute around the hour's base sample.",
+  milestonePaused: "Paused: index milestone",
+  milestoneTip: "Recorded milestones change the index at once; orders pause for a minute so nobody trades on stale prices.",
   capped: (max: number) => `Max ${max}× at ABI's current volatility.`,
   closeFirst: (held: "long" | "short") => `Close your ${held} first`,
   filling: "Filling at the next mark…",

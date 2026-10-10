@@ -88,6 +88,8 @@ export const PILOT_LIMITS = {
   regiRetryS: 30,
   /** Orders pause this long after the hour's base sample lands (base_step_ts). */
   basePauseS: 60,
+  /** New orders (not closes) pause this long after a recorded index milestone (milestone_ts). */
+  milestonePauseS: 60,
   /** Funding rates shown on the page. */
   fundingShown: 24,
 } as const;
@@ -106,6 +108,8 @@ export interface PilotMark {
   paused: boolean;
   /** Paused around the hour's base sample (base_pending, or under 60 s after base_step_ts). */
   basePaused: boolean;
+  /** New orders paused: under 60 s after a recorded index milestone (closes go on). */
+  milestonePaused: boolean;
   /** At most RULES.markMaxAgeS old: the producer is live, so an order will fill at the next mark. */
   fresh: boolean;
 }

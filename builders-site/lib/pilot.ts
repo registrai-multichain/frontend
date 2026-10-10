@@ -68,6 +68,7 @@ export const ORDERS_KEEP_MS = 7 * 24 * 3600 * 1000;
 /** A posted bar may be at most this old (the producer keeps 4 h and catches up 60 bars per post). */
 export const BAR_MAX_AGE_S = 6 * 3600;
 export const MAX_FUNDING_RATE = 0.01;
+export const MILESTONE_MAX_AGE_S = 7 * 24 * 3600;
 export const MARK_CACHE_S = 5;
 /** A pending order the status read finds older than this is refused (the ingest refuses after markMaxAgeS). */
 export const ORDER_EXPIRY_MS = (RULES.markMaxAgeS + 2) * 1000;
@@ -78,6 +79,7 @@ export const REGI_UNCHECKED = "Couldn't check REGI right now";
 export const PRICE_UPDATING = "price updating";
 export const PILOT_CLOSED = "pilot closed";
 export const TRADING_PAUSED = "trading paused";
+export const MILESTONE_PAUSED = "Paused: index milestone";
 export const ALREADY_CLOSED = "already closed";
 /** No hedging: one direction at a time per wallet (the engine's refusal, said plainly). */
 export const HEDGE = "one direction at a time";
@@ -104,6 +106,7 @@ export interface MarkPost {
   sigma24h: number | null;
   basePending: boolean;
   baseStepTs: number | null;
+  milestoneTs: number | null;
 }
 
 /** R4 + spec §8.5: the producer's body (live/mark.py v2), checked against the server clock. */
@@ -164,11 +167,16 @@ export function validateMark(raw: unknown, nowS: number): { ok: true; data: Mark
     if (!int(b.base_step_ts) || b.base_step_ts > ts + MARK_MAX_SKEW_S) return bad("base_step_ts must be unix seconds ≤ ts");
     baseStepTs = b.base_step_ts;
   }
+  let milestoneTs: number | null = null;
+  if (b.milestone_ts !== undefined && b.milestone_ts !== null) {
+    if (!int(b.milestone_ts) || b.milestone_ts > ts || b.milestone_ts < ts - MILESTONE_MAX_AGE_S) return bad("milestone_ts must be unix seconds at or before ts and at most 7 days old, or null");
+    milestoneTs = b.milestone_ts;
+  }
   return {
     ok: true,
     data: {
       mark, ts, head: b.head, hour_start: b.hour_start, candle: b.candle as number[], ch24: b.ch24, ch1: b.ch1, bars,
-      funding, sigma1h, sigma24h, basePending: b.base_pending === true, baseStepTs,
+      funding, sigma1h, sigma24h, basePending: b.base_pending === true, baseStepTs, milestoneTs,
     },
   };
 }
@@ -187,12 +195,13 @@ interface MarkRow {
   funding_rate: number | null;
   base_pending: number;
   base_step_ts: number | null;
+  milestone_ts: number | null;
   bars_minute: number | null;
   swept_minute: number | null;
   candle: string;
 }
 
-const MARK_COLS = "px, ts, received_ms, head, hour_start, ch24, ch1, sigma_1h, sigma_24h, funding_known, funding_rate, base_pending, base_step_ts, bars_minute, swept_minute, candle";
+const MARK_COLS = "px, ts, received_ms, head, hour_start, ch24, ch1, sigma_1h, sigma_24h, funding_known, funding_rate, base_pending, base_step_ts, milestone_ts, bars_minute, swept_minute, candle";
 
 async function loadMark(db: D1Database): Promise<MarkRow | null> {
   return db.prepare(`SELECT ${MARK_COLS} FROM mark WHERE id = 1`).first<MarkRow>();
@@ -204,6 +213,8 @@ export const riskKnown = (sigma24h: number | null, sigma1h: number | null) => si
 /** Orders pause while the hour's base sample is pending and for 60 s after it lands (at the mark's clock). */
 export const basePaused = (m: { base_pending: number | boolean; base_step_ts: number | null; ts: number }) =>
   Boolean(m.base_pending) || (m.base_step_ts !== null && m.ts < m.base_step_ts + PILOT_LIMITS.basePauseS);
+/** New orders (not closes) pause for 60 s after a recorded index milestone (it moves the index at once). */
+export const milestonePaused = (m: { milestone_ts: number | null; ts: number }) => m.milestone_ts !== null && m.ts < m.milestone_ts + PILOT_LIMITS.milestonePauseS;
 
 export function markView(m: MarkRow | null, nowS: number): PilotMark | null {
   if (!m) return null;
@@ -213,7 +224,7 @@ export function markView(m: MarkRow | null, nowS: number): PilotMark | null {
   const known = riskKnown(m.sigma_24h, m.sigma_1h) && m.funding_known === 1;
   return {
     mark: m.px, ts: m.ts, age, ch24: m.ch24, ch1: m.ch1, sigma1h: m.sigma_1h, sigma24h: m.sigma_24h,
-    maxLev: known ? cap.max : 1, paused: cap.paused, basePaused: basePaused(m), fresh: known && age <= RULES.markMaxAgeS,
+    maxLev: known ? cap.max : 1, paused: cap.paused, basePaused: basePaused(m), milestonePaused: milestonePaused(m), fresh: known && age <= RULES.markMaxAgeS,
   };
 }
 
@@ -374,7 +385,7 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
   const stmts: D1PreparedStatement[] = [
     db.prepare(SQL.markUpsert).bind(
       d.mark, d.ts, nowMs, d.head, d.hour_start, d.ch24, d.ch1, d.sigma1h, d.sigma24h, d.funding ? 1 : 0, hourRate,
-      d.basePending ? 1 : 0, d.baseStepTs, barsMinute, barsMinute, JSON.stringify(d.candle), post,
+      d.basePending ? 1 : 0, d.baseStepTs, d.milestoneTs, barsMinute, barsMinute, JSON.stringify(d.candle), post,
     ),
   ];
   for (const b of merged) stmts.push(db.prepare(SQL.barUpsert).bind(b.t, b.h, b.l, b.c, post));
@@ -622,6 +633,7 @@ async function fillOrders(db: D1Database, env: Env, d: MarkPost, gapsOpen: boole
     if (paused) { await refuse(o, TRADING_PAUSED); continue; }
     if (o.kind === "open") {
       if (!pilotOpen(env)) { await refuse(o, PILOT_CLOSED); continue; }
+      if (milestonePaused({ milestone_ts: d.milestoneTs, ts: d.ts })) { await refuse(o, MILESTONE_PAUSED); continue; }
       if (!riskKnown(d.sigma24h, d.sigma1h) || !d.funding) { await refuse(o, PRICE_UPDATING); continue; }
       const acct = await getAccount(db, o.wallet);
       const held = await openRows(db, o.wallet);
@@ -785,6 +797,7 @@ export async function handleOrder(req: Request, env: Env, deps: PilotDeps = {}):
   if ((await lazyLiquidate(db, wallet, nowS, m, rows)) > 0) ({ open: rows, acct } = (await accountWithOpen(db, wallet))!);
   const problem = await markProblem(db, m, nowS);
   if (problem) return problem;
+  if (milestonePaused(m!)) return errorJson(409, MILESTONE_PAUSED); // new orders only: closes go on
   // the same checks the fill makes, at the current mark: refuse now what would be refused at the fill
   const pre = Engine.open({ balance: acct.balance, open: rows.length, side: rows[0]?.side ?? null }, { side, margin, lev, mark: m!.px, now: m!.ts, risk: riskOf(m!) });
   if (!pre.ok) return errorJson(["insufficient balance", "too many open positions", HEDGE].includes(pre.error) ? 409 : 400, engineError(pre.error, rows));

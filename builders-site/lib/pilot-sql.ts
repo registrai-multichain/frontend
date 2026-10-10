@@ -50,14 +50,14 @@ export const SQL = {
     "n = CASE WHEN ratelimit.slot = excluded.slot THEN ratelimit.n + 1 ELSE 1 END, slot = excluded.slot RETURNING n",
   /**
    * bind: px, ts, received_ms, head, hour_start, ch24, ch1, sigma_1h, sigma_24h, funding_known, funding_rate, base_pending,
-   * base_step_ts, bars_minute, swept_minute, candle, post. Moves forward only.
+   * base_step_ts, milestone_ts, bars_minute, swept_minute, candle, post. Moves forward only.
    */
   markUpsert:
     "INSERT INTO mark (id, px, ts, received_ms, head, hour_start, ch24, ch1, sigma_1h, sigma_24h, funding_known, funding_rate, base_pending, " +
-    "base_step_ts, bars_minute, swept_minute, candle, post) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET px = excluded.px, ts = excluded.ts, " +
+    "base_step_ts, milestone_ts, bars_minute, swept_minute, candle, post) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET px = excluded.px, ts = excluded.ts, " +
     "received_ms = excluded.received_ms, head = excluded.head, hour_start = excluded.hour_start, ch24 = excluded.ch24, ch1 = excluded.ch1, " +
     "sigma_1h = excluded.sigma_1h, sigma_24h = excluded.sigma_24h, funding_known = excluded.funding_known, funding_rate = excluded.funding_rate, base_pending = excluded.base_pending, " +
-    "base_step_ts = excluded.base_step_ts, bars_minute = excluded.bars_minute, swept_minute = excluded.swept_minute, " +
+    "base_step_ts = excluded.base_step_ts, milestone_ts = excluded.milestone_ts, bars_minute = excluded.bars_minute, swept_minute = excluded.swept_minute, " +
     "candle = excluded.candle, post = excluded.post WHERE excluded.ts > mark.ts",
   /**
    * bind: minute, h, l, c, post. Written only by the post that won the mark row; merges (high and low only widen), and

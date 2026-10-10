@@ -85,7 +85,7 @@ describe("pilot copy lint (R7)", () => {
 // ───────────────────────────── markup ─────────────────────────────
 
 const ME = "0x1234567890abcdef1234567890abcdef12345678";
-const MARK = { mark: 1000, ts: 1_760_097_600, age: 2, ch24: 0.01, ch1: 0.001, sigma1h: 0.0004, sigma24h: 0.002, maxLev: 20, paused: false, basePaused: false, fresh: true };
+const MARK = { mark: 1000, ts: 1_760_097_600, age: 2, ch24: 0.01, ch1: 0.001, sigma1h: 0.0004, sigma24h: 0.002, maxLev: 20, paused: false, basePaused: false, milestonePaused: false, fresh: true };
 const FUNDING = { recent: [{ t: 1_760_094_000, rate: -0.0003 }, { t: 1_760_090_400, rate: 0.0002 }], current: -0.0003, next: 1_760_097_600 };
 const POS_LIQ = liqPrice({ side: "long", margin: 1000, notional: 2000, entry: 990 }, 0);
 const VIEW: PilotAccountView = {
@@ -134,6 +134,11 @@ describe("ticket", () => {
       expect(h).toMatch(/type="submit"[^>]*disabled=""/);
     }
     expect(ticket({ filling: true, busy: true })).toContain(PILOT_COPY.filling);
+    const ms = ticket({ view: { ...VIEW, mark: { ...MARK, milestonePaused: true } } });
+    expect(ms).toContain("Paused: index milestone");
+    expect(ms).toContain('aria-label="About the milestone pause"');
+    expect(ms).toMatch(/type="submit"[^>]*disabled=""/);
+    expect(PILOT_COPY.milestoneTip).toBe("Recorded milestones change the index at once; orders pause for a minute so nobody trades on stale prices.");
     // no hedging: VIEW holds a long, so a short is blocked in the ticket before it is sent
     expect(PILOT_COPY.closeFirst("long")).toBe("Close your long first");
   });
