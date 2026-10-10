@@ -308,7 +308,8 @@ describe("/api/index/…/contracts", () => {
     const s = setup();
     const r = await handlePushContracts(post(body), s.env, "aii");
     expect(r.status).toBe(200);
-    const want = await sha256Hex(canonicalJson(body));
+    const want = await sha256Hex(canonicalJson({ contracts: body.contracts, open_senders: body.open_senders })); // hour_start is not hashed
+    expect(want).not.toBe(await sha256Hex(canonicalJson(body)));
     expect(((await r.json()) as { sha256: string }).sha256).toBe(want);
     const stored = JSON.parse((await s.kv.get(ABI_INDICES.aii.contractsKey))!);
     expect(stored).toEqual({ ...body, sha256: want });

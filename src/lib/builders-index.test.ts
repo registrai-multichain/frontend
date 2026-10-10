@@ -339,7 +339,8 @@ describe('"close the gaps": the separate contract map', () => {
   });
   test("sha256 of the canonical JSON equals Python's json.dumps(sort_keys=True, separators=(',', ':'))", async () => {
     // python3: hashlib.sha256(json.dumps(o, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    expect(await sha256Hex(canonicalJson(doc()))).toBe("b0de634b44cd53c81187d7e65526a899efe69b1c482d371dc8154127cf65f457");
+    const { contracts, open_senders } = doc();
+    expect(await sha256Hex(canonicalJson({ contracts, open_senders }))).toBe("5339ede5ce5319bbb6855ff0cc2eba3d72808bcd4e43f816855e1a5d146ea263");
   });
   test("a valid map passes; open senders must be sorted, unique and in the map", () => {
     expect(validateContracts(doc()).ok).toBe(true);

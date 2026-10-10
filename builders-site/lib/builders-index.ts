@@ -74,7 +74,7 @@ export async function handlePushContracts(req: Request, env: Env, id: AbiIndexId
     const v = validateContracts(raw);
     return v.ok ? { ok: true as const, data: { ...v.data, sha256: "" } } : v;
   }, (d) => ({ index: id, hour_start: d.hour_start, contracts: Object.keys(d.contracts).length, sha256: sha }), async (d) => {
-    sha = await sha256Hex(canonicalJson({ contracts: d.contracts, hour_start: d.hour_start, open_senders: d.open_senders }));
+    sha = await sha256Hex(canonicalJson({ contracts: d.contracts, open_senders: d.open_senders }));
     d.sha256 = sha;
   });
   return r;

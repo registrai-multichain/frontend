@@ -493,7 +493,8 @@ export function validateIndex(raw: unknown): AbiResult {
 }
 
 /** The contract map of one index, published on its own because it is large and changes rarely ("close the gaps").
- * sha256 is over the canonical JSON of {contracts, hour_start, open_senders}: sorted keys, no spaces, exactly
+ * sha256 is over the canonical JSON of {contracts, open_senders} (not hour_start, the hour of the last change, so
+ * an unchanged map keeps its sha): sorted keys, no spaces, exactly
  * Python's json.dumps(obj, sort_keys=True, separators=(",", ":")) on the producer. The index file pins it. */
 export type AbiContracts = { hour_start: number; contracts: Record<string, string>; open_senders: string[]; sha256: string };
 export type AbiContractsResult = { ok: true; data: Omit<AbiContracts, "sha256"> } | { ok: false; error: string };
