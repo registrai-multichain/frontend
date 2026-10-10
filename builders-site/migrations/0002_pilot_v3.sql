@@ -31,15 +31,19 @@ CREATE TABLE rates (
 --   fee              open and close fees                       ref open:<pos> / close:<pos>
 --   borrow           borrow fees, at close or liquidation      ref borrow:<pos>
 --   cut              funding cut: projected at the rate fix    ref hour:<h>, its true-up hour:<h>:adj, settle:<pos>
---   house_pnl        the house: houseHour − cut per hour       ref hour:<h>, true-up hour:<h>:adj, settle:<pos>
---   liq_margin       equity left at a liquidation, to the house ref liq:<pos>
---   insurance_draw   shortfalls (negative)                     ref draw:<pos>
+--   house_pnl        the house: houseHour − cut per hour (price + funding) ref hour:<h>
+--   house_trueup     the house's true-up to the exact counterparty result: per hour ref hour:<h>:adj, at each
+--                    settlement ref settle:<pos>; a negative close's deficit insurance can't cover, ref gap:<pos>
+--   liq_margin       equity left at a liquidation, to the house; below zero (a gap) the part insurance can't
+--                    cover is a house loss                     ref liq:<pos>
+--   insurance_draw   gap losses insurance covers, never more than its balance (negative)  ref draw:<pos>
 --   split_*          the weekly split (insurance; treasury not earmarked; buyback earmark). The split also writes
---                    negative fee / borrow / cut / house_pnl rows (ref split:<week>) that move the week's pool out.
+--                    negative fee / borrow / cut / house_* / liq_margin rows (ref split:<week>) that move the
+--                    week's pool out, so each source's balance is what is left unsplit.
 CREATE TABLE ledger (
   id     INTEGER PRIMARY KEY AUTOINCREMENT,
   ts     INTEGER NOT NULL,
-  kind   TEXT    NOT NULL CHECK (kind IN ('fee', 'borrow', 'cut', 'house_pnl', 'liq_margin', 'insurance_draw', 'split_insurance', 'split_treasury', 'split_buyback')),
+  kind   TEXT    NOT NULL CHECK (kind IN ('fee', 'borrow', 'cut', 'house_pnl', 'house_trueup', 'liq_margin', 'insurance_draw', 'split_insurance', 'split_treasury', 'split_buyback')),
   amount REAL    NOT NULL,
   ref    TEXT    NOT NULL
 );
@@ -54,7 +58,7 @@ CREATE TABLE pools (
   balance REAL NOT NULL DEFAULT 0,
   gross   REAL NOT NULL DEFAULT 0
 );
-INSERT INTO pools (kind) VALUES ('fee'), ('borrow'), ('cut'), ('house_pnl'), ('liq_margin'), ('insurance_draw'), ('split_insurance'), ('split_treasury'), ('split_buyback');
+INSERT INTO pools (kind) VALUES ('fee'), ('borrow'), ('cut'), ('house_pnl'), ('house_trueup'), ('liq_margin'), ('insurance_draw'), ('split_insurance'), ('split_treasury'), ('split_buyback');
 
 -- The weekly split (R5), one row per week (week = Monday 00:00 UTC of the week that ended). pool = fee + borrow +
 -- cut + max(0, house) at the split; insurance / treasury / buyback = splitFees(pool) (buyback is inside treasury).
@@ -74,8 +78,10 @@ CREATE TABLE splits (
 
 -- The house's booked hours (R2): the houseHour figures of the hour (exposure, price_pnl, funding net of the cut,
 -- pnl = total − cut) from the rates row and the hour's candle (open, close); adj = the true-up to the exact
--- counterparty result of the positions open at the hour's end; total = pnl + adj + the house rows settled in the
--- hour; cum = running sum of total.
+-- counterparty result of the positions booked at the hour's end; total = pnl + adj + the house's settlement rows
+-- attributed to the hour. Settlement rows (house_trueup, liq_margin) are attributed once, by ledger id: every row
+-- with id in (previous upto_id, upto_id]. cum_* = running sums (price, funding, true-up incl. adj, liquidations),
+-- cum = their total: the economy's 24 h / week figures are differences of these.
 CREATE TABLE house_hours (
   hour      INTEGER PRIMARY KEY,
   open      REAL    NOT NULL,
@@ -87,6 +93,11 @@ CREATE TABLE house_hours (
   adj       REAL    NOT NULL,
   total     REAL    NOT NULL,
   cum       REAL    NOT NULL,
+  cum_price  REAL   NOT NULL,
+  cum_funding REAL  NOT NULL,
+  cum_trueup REAL   NOT NULL,
+  cum_liq   REAL    NOT NULL,
+  upto_id   INTEGER NOT NULL,
   booked_at INTEGER NOT NULL,
   post      TEXT    NOT NULL
 );

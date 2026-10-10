@@ -24,6 +24,8 @@ const BY_SETTLE = "(SELECT settle FROM positions WHERE id = ?) = ?";
 const BY_RATES = "(SELECT post FROM rates WHERE hour = ?) = ?";
 const BY_HOUR = "(SELECT post FROM house_hours WHERE hour = ?) = ?";
 const BY_SPLIT = "(SELECT post FROM splits WHERE week = ?) = ?";
+/** What insurance can cover of a loss `?`: never more than its balance, never below 0. */
+const COVER = "MIN(?, MAX(0, (SELECT COALESCE(SUM(balance), 0) FROM pools WHERE kind IN ('split_insurance', 'insurance_draw'))))";
 
 export const SQL = {
   /**
@@ -87,11 +89,12 @@ export const SQL = {
   poolByRates: poolUnder(BY_RATES),
   /**
    * The house's booked hour, once, only by the post whose rates insert won — bind: hour, open, close, exposure,
-   * price_pnl, funding, pnl, adj, total, cum, booked_at, post, rates hour, post.
+   * price_pnl, funding, pnl, adj, total, cum, cum_price, cum_funding, cum_trueup, cum_liq, upto_id, booked_at, post,
+   * rates hour, post.
    */
   houseHourInsert:
-    "INSERT INTO house_hours (hour, open, close, exposure, price_pnl, funding, pnl, adj, total, cum, booked_at, post) " +
-    "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT post FROM rates WHERE hour = ?) = ? ON CONFLICT (hour) DO NOTHING",
+    "INSERT INTO house_hours (hour, open, close, exposure, price_pnl, funding, pnl, adj, total, cum, cum_price, cum_funding, cum_trueup, cum_liq, upto_id, booked_at, post) " +
+    "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT post FROM rates WHERE hour = ?) = ? ON CONFLICT (hour) DO NOTHING",
   /** Ledger rows of a booked hour — guard bind: hour, post. */
   ledgerByHour: ledgerUnder(BY_HOUR),
   poolByHour: poolUnder(BY_HOUR),
@@ -107,6 +110,17 @@ export const SQL = {
    * computed from what was read, so a position that moved meanwhile must not be booked half. The post is retried.
    */
   abortUnlessChanged: "INSERT INTO ledger (ts, kind, amount, ref) SELECT NULL, NULL, NULL, NULL WHERE changes() = 0",
+  /**
+   * A gap loss s (> 0) of a settled position: insurance covers C = min(s, its balance, never below 0), the house
+   * takes s − C. Evaluated inside the batch, so concurrent gaps never overdraw insurance. Write in this order (the
+   * insurance balance is unchanged until the last statement, so C is the same in all four):
+   * gapHouseLedger — bind: ts, kind, s, s, ref, positionId, token; gapHousePool — bind: s, s, s, s, kind, positionId, token;
+   * gapCoverLedger — bind: ts, s, ref, positionId, token; gapCoverPool — bind: s, s, positionId, token.
+   */
+  gapHouseLedger: `INSERT INTO ledger (ts, kind, amount, ref) SELECT ?, ?, ${COVER} - ?, ? WHERE ${BY_SETTLE}`,
+  gapHousePool: `UPDATE pools SET balance = balance + (${COVER} - ?), gross = gross + (${COVER} - ?) WHERE kind = ? AND ${BY_SETTLE}`,
+  gapCoverLedger: `INSERT INTO ledger (ts, kind, amount, ref) SELECT ?, 'insurance_draw', -${COVER}, ? WHERE ${BY_SETTLE}`,
+  gapCoverPool: `UPDATE pools SET balance = balance - ${COVER}, gross = gross - ${COVER} WHERE kind = 'insurance_draw' AND ${BY_SETTLE}`,
   /** R5: the week's split, once — bind: week, ts, pool, fee, borrow, cut, house, insurance, treasury, buyback, post. */
   splitInsert:
     "INSERT INTO splits (week, ts, pool, fee, borrow, cut, house, insurance, treasury, buyback, post) " +

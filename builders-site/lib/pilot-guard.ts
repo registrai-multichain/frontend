@@ -123,7 +123,7 @@ export async function runGuardChecks(db: D1Database, migrations: string | readon
     // the house's hour: only by the post whose rates insert won; a position's booking that moved aborts the whole batch
     const hp = (await q("INSERT INTO positions (wallet, side, margin, lev, notional, entry, liq, opened_at, fee, booked_to) VALUES (?, 'short', 100, 2, 200, 1000, 1500, 0, 0, 0) RETURNING id").bind(W).first<{ id: number }>())!.id;
     const book = (id: string, bookedTo: number) => db.batch([
-      q(SQL.houseHourInsert).bind(-3600, 1000, 1001, -1000, -1, 0.4, -0.6, 0.1, -0.5, -0.5, 0, id, 0, id),
+      q(SQL.houseHourInsert).bind(-3600, 1000, 1001, -1000, -1, 0.4, -0.6, 0.1, -0.5, -0.5, -1, 0.4, 0.1, 0, 0, 0, id, 0, id),
       q(SQL.ledgerByHour).bind(-3600, "house_pnl", -0.6, "hour:-3600", -3600, id),
       q(SQL.poolByHour).bind(-0.6, -0.6, "house_pnl", -3600, id),
       q(SQL.bookPosition).bind(-0.5, 0, 0, hp, bookedTo, 0, id),
@@ -134,6 +134,23 @@ export async function runGuardChecks(db: D1Database, migrations: string | readon
     check("house hour: a moved booking aborts the batch", await book("a", 99).then(changes, () => "aborted"), "aborted");
     check("house hour: booked once by the post that fixed the rates", await book("a", 0).then(changes, () => "aborted"), [1, 1, 1, 1, 0]);
     check("house hour: the position's booking moved", await q("SELECT booked, booked_to FROM positions WHERE id = ?").bind(hp).first(), { booked: -0.5, booked_to: 0 });
+
+    // a gap loss: insurance covers at most its balance (never below zero), the house takes the rest; evaluated in the batch
+    const gp = (await q("INSERT INTO positions (wallet, side, margin, lev, notional, entry, liq, opened_at, fee, booked_to, closed_at, settle) VALUES (?, 'long', 10, 30, 300, 1000, 1, 0, 0, 0, 1, 'g1') RETURNING id").bind(W).first<{ id: number }>())!.id;
+    const gapLoss = (s: number, ref: string, token: string) => [
+      q(SQL.gapHouseLedger).bind(5, "liq_margin", s, s, ref, gp, token),
+      q(SQL.gapHousePool).bind(s, s, s, s, "liq_margin", gp, token),
+      q(SQL.gapCoverLedger).bind(5, s, `draw:${ref}`, gp, token),
+      q(SQL.gapCoverPool).bind(s, s, gp, token),
+    ];
+    const insurance = async () => (await q("SELECT SUM(balance) AS b FROM pools WHERE kind IN ('split_insurance', 'insurance_draw')").first<{ b: number }>())!.b;
+    await q("UPDATE pools SET balance = 3 WHERE kind = 'split_insurance'").run();
+    check("gap: a wrong token writes nothing", changes(await db.batch(gapLoss(5, "liq:g0", "nope"))), [0, 0, 0, 0]);
+    check("gap: insurance covers 3 of 5, the house takes 2", [changes(await db.batch(gapLoss(5, "liq:g1", "g1"))), await ledgerOf("liq:g1"), await ledgerOf("draw:liq:g1"), await insurance()],
+      [[1, 1, 1, 1], [{ kind: "liq_margin", amount: -2 }], [{ kind: "insurance_draw", amount: -3 }], 0]);
+    await db.batch(gapLoss(4, "liq:g2", "g1"));
+    check("gap: an empty insurance stays at zero; the house takes it all", [await ledgerOf("liq:g2"), await ledgerOf("draw:liq:g2"), await insurance()], [[{ kind: "liq_margin", amount: -4 }], [{ kind: "insurance_draw", amount: 0 }], 0]);
+    await q("UPDATE pools SET balance = 0 WHERE kind IN ('split_insurance', 'insurance_draw', 'liq_margin')").run();
 
     // the weekly split: once per week; its rows only for the request whose insert won
     const split = (token: string) => db.batch([
