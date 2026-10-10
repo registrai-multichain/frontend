@@ -5,7 +5,7 @@
  *   POST /api/index[/aii|/aei], POST …/seen   producer (Bearer ABI_PUSH_TOKEN): validates, one KV write each
  *   GET  the same paths                       public; reads one key, never writes; edge-cached 30 s; 404 {error:"no data"} when empty
  */
-import { ABI_INDEX_IDS, ABI_INDICES, ABI_LIMITS, validateIndex, validateSeen, type AbiIndexId, type AbiIndexSummary } from "../../src/lib/builders-index";
+import { ABI_INDEX_IDS, ABI_INDICES, ABI_LIMITS, canonicalJson, sha256Hex, validateContracts, validateIndex, validateSeen, type AbiIndexId, type AbiIndexSummary } from "../../src/lib/builders-index";
 import { bearerGuard } from "./bot-auth";
 import type { Env } from "./env";
 import { edgeCachedGet, errorJson, json, type EdgeCacheDeps } from "./http";
@@ -36,7 +36,7 @@ export async function readCapped(req: Request, maxBytes: number): Promise<string
 
 type Checked<D> = { ok: true; data: D } | { ok: false; error: string };
 
-async function push<D>(req: Request, env: Env, key: string, maxBytes: number, validate: (raw: unknown) => Checked<D>, summary: (data: D) => Record<string, unknown>): Promise<Response> {
+async function push<D>(req: Request, env: Env, key: string, maxBytes: number, validate: (raw: unknown) => Checked<D>, summary: (data: D) => Record<string, unknown>, finalize?: (data: D) => Promise<void>): Promise<Response> {
   const refused = bearerGuard(req, env.ABI_PUSH_TOKEN, "POST", "index publishing");
   if (refused) return refused;
   const header = req.headers.get("content-length");
@@ -55,6 +55,7 @@ async function push<D>(req: Request, env: Env, key: string, maxBytes: number, va
   }
   const v = validate(body);
   if (!v.ok) return errorJson(400, v.error);
+  if (finalize) await finalize(v.data);
   await env.INVITES.put(key, JSON.stringify(v.data));
   return json({ ok: true, ...summary(v.data) });
 }
@@ -64,6 +65,21 @@ export const handlePushIndex = (req: Request, env: Env, id: AbiIndexId = "abi") 
 
 export const handlePushSeen = (req: Request, env: Env, id: AbiIndexId = "abi") =>
   push(req, env, ABI_INDICES[id].seenKey, ABI_INDICES[id].seenBytes, validateSeen, (d) => ({ index: id, hour_start: d.hour_start, sources: Object.keys(d.seen).length }));
+
+/** POST …/contracts: the index's contract map. The site stores it with the sha256 of its canonical JSON, which the
+ * index file pins (live.contracts_sha256), so a browser never pairs an index with the wrong map. */
+export async function handlePushContracts(req: Request, env: Env, id: AbiIndexId = "abi"): Promise<Response> {
+  let sha = "";
+  const r = await push(req, env, ABI_INDICES[id].contractsKey, ABI_LIMITS.contractsBytes, (raw) => {
+    const v = validateContracts(raw);
+    return v.ok ? { ok: true as const, data: { ...v.data, sha256: "" } } : v;
+  }, (d) => ({ index: id, hour_start: d.hour_start, contracts: Object.keys(d.contracts).length, sha256: sha }), async (d) => {
+    sha = await sha256Hex(canonicalJson({ contracts: d.contracts, hour_start: d.hour_start, open_senders: d.open_senders }));
+    d.sha256 = sha;
+  });
+  return r;
+}
+export const handlePublicContracts = (req: Request, env: Env, deps: EdgeCacheDeps = {}, id: AbiIndexId = "abi") => publicGet(req, env, ABI_INDICES[id].contractsKey, deps);
 
 async function publicGet(req: Request, env: Env, key: string, deps: EdgeCacheDeps): Promise<Response> {
   if (req.method.toUpperCase() !== "GET") return errorJson(405, "method not allowed");

@@ -2,9 +2,9 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, test, vi } from "vitest";
-import { CHUNK, createEngine, httpRpc, StaleError } from "./abi-live";
+import { CHUNK, createEngine, httpRpc, LOG_CAP, StaleError, WIDE_CHUNK } from "./abi-live";
 import { ARGUS_DEPLOYER, EURC, GBPA, HB, HS, INDEX, JPYC, mockRpc, NOT_REGISTERED, scIndex, SEEN, tsOf } from "./abi-live-mock";
-import { INTEG_LOGS, integIndex, ROUTER, POOL } from "./abi-live-mock";
+import { INTEG_LOGS, integIndex, ROUTER, POOL, wideIntegIndex } from "./abi-live-mock";
 import type { LiveData } from "./abi-live-mock";
 
 const L = INDEX.live!;
@@ -92,8 +92,8 @@ describe("golden values (from the reference live.js)", () => {
 });
 
 describe.skipIf(!existsSync(REF))("equivalence with the reference live.js", () => {
-  async function ref(head: number, index: LiveData = INDEX, extra: Parameters<typeof mockRpc>[2] = []) {
-    const mod = createRequire(import.meta.url)(REF) as { createEngine: (o: object) => { load: (a: unknown, b: unknown) => void; tick: () => Promise<any> } };
+  async function ref(head: number, index: LiveData = INDEX, extra: Parameters<typeof mockRpc>[2] = [], doc?: object) {
+    const mod = createRequire(import.meta.url)(REF) as { createEngine: (o: object) => { load: (a: unknown, b: unknown, c?: unknown) => void; tick: () => Promise<any> } };
     const inner = mockRpc(head, undefined, extra);
     let id = 0;
     vi.stubGlobal("fetch", async (_u: string, o: { body: string }) => {
@@ -102,18 +102,19 @@ describe.skipIf(!existsSync(REF))("equivalence with the reference live.js", () =
       catch (e) { return { ok: true, status: 200, json: async () => ({ error: { message: String(e) } }) }; }
     });
     const e = mod.createEngine({});
-    e.load(JSON.parse(JSON.stringify(index)), SEEN);
+    e.load(JSON.parse(JSON.stringify(index)), SEEN, doc && JSON.parse(JSON.stringify(doc)));
     const out = await e.tick();
     vi.unstubAllGlobals();
     return out;
   }
-  const cases = [10, 100, 300, 1000, 4100, 5450, 7300].flatMap((off) => [[off, "USDC only"], [off, "stablecoins + milestones"], [off, "integrated products"]] as const);
+  const cases = [10, 100, 300, 1000, 4100, 5450, 7300].flatMap((off) => [[off, "USDC only"], [off, "stablecoins + milestones"], [off, "integrated products"], [off, "wide member list"]] as const);
   test.each(cases)("head +%i blocks, %s: identical numbers", async (off, kind) => {
-    const index = kind === "USDC only" ? INDEX : kind === "integrated products" ? integIndex() : scIndex();
-    const extra = kind === "integrated products" ? INTEG_LOGS : [];
-    const a = await ref(HB + off, index, extra);
+    const wide = kind === "wide member list" ? wideIntegIndex() : null;
+    const index = kind === "USDC only" ? INDEX : kind === "integrated products" ? integIndex() : wide ? wide.index : scIndex();
+    const extra = kind === "integrated products" || wide ? INTEG_LOGS : [];
+    const a = await ref(HB + off, index, extra, wide?.doc);
     const e = createEngine({ call: mockRpc(HB + off, undefined, extra) as never });
-    e.load(index, SEEN);
+    e.load(wide ? { ...index, contracts: wide.doc } : index, SEEN);
     const b = await e.tick();
     expect(b.index).toBe(a.index);
     expect(b.total).toBe(a.total);
@@ -321,5 +322,50 @@ describe("integrated products (§15): open senders", () => {
     expect([...C.act["domain:argus.world"].wallets]).not.toContain(ROUTER);
     expect(C.act["domain:peach.ag"]?.wallets ? [...C.act["domain:peach.ag"].wallets] : []).not.toContain(POOL);
     expect(C.act["integration:uniswap"].payments).toBe(1);
+  });
+});
+
+describe('"close the gaps": the member map in its own document, a wide member list', () => {
+  const tick = async (input: Parameters<ReturnType<typeof createEngine>["load"]>[0], call = mockRpc(HB + 300, undefined, INTEG_LOGS)) => {
+    const e = createEngine({ call: call as never });
+    e.load(input, SEEN);
+    return e.tick();
+  };
+  test("a separate map (contracts_sha256) and > WIDE_ABOVE idle contracts give exactly the inline result", async () => {
+    const inline = await tick(integIndex());
+    const { index, doc } = wideIntegIndex();
+    const wide = await tick({ ...index, contracts: doc });
+    for (const k of ["index", "total", "roots", "P", "candle", "tape"] as const) expect(wide[k]).toEqual(inline[k]);
+  });
+  test("wide mode asks for every transfer (no topic list) in chunks of at most WIDE_CHUNK blocks", async () => {
+    const calls: { from: number; to: number; topics: unknown[] }[] = [];
+    const inner = mockRpc(HB + 4100, undefined, INTEG_LOGS);
+    const spy = async (m: string, p: unknown[]) => {
+      if (m === "eth_getLogs") { const f = p[0] as { fromBlock: string; toBlock: string; topics: unknown[] }; calls.push({ from: parseInt(f.fromBlock, 16), to: parseInt(f.toBlock, 16), topics: f.topics }); }
+      return inner(m, p);
+    };
+    const { index, doc } = wideIntegIndex();
+    await tick({ ...index, contracts: doc }, spy as never);
+    const member = calls.filter((c) => c.to - c.from + 1 > 240 || c.from !== HB); // leave out the base-layer sample
+    expect(member.length).toBeGreaterThan(1);
+    for (const c of member) { expect(c.topics.length).toBe(1); expect(c.to - c.from + 1).toBeLessThanOrEqual(WIDE_CHUNK); }
+  });
+  test("a page that errors or comes back at the result cap is split; the numbers are unchanged", async () => {
+    const want = await tick(integIndex(), mockRpc(HB + 4100, undefined, INTEG_LOGS));
+    const inner = mockRpc(HB + 4100, undefined, INTEG_LOGS);
+    let refused = 0;
+    const flaky = async (m: string, p: unknown[]) => {
+      if (m === "eth_getLogs") {
+        const f = p[0] as { fromBlock: string; toBlock: string };
+        const span = parseInt(f.toBlock, 16) - parseInt(f.fromBlock, 16) + 1;
+        if (span > 700) { refused++; throw new Error("range too large"); }
+        if (span > 300) { refused++; return Array.from({ length: LOG_CAP }, () => ({})); } // a full page: maybe cut
+      }
+      return inner(m, p);
+    };
+    const { index, doc } = wideIntegIndex();
+    const got = await tick({ ...index, contracts: doc }, flaky as never);
+    expect(refused).toBeGreaterThan(0);
+    for (const k of ["index", "roots", "P", "tape"] as const) expect(got[k]).toEqual(want[k]);
   });
 });

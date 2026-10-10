@@ -5,7 +5,7 @@ import Link from "next/link";
 import { InfoBubble } from "@/components/InfoBubble";
 import { projectHref } from "@/lib/project-page";
 import { createEngine, StaleError, type Candle, type LiveResult } from "@/lib/abi-live";
-import { ABI_INDEX_IDS, ABI_INDICES, ABI_SUMMARY_PATH, isIndexId, validateSeen, type AbiData, type AbiIndexDef, type AbiIndexId, type AbiIndexSummary } from "@/lib/builders-index";
+import { ABI_INDEX_IDS, ABI_INDICES, ABI_SUMMARY_PATH, isIndexId, validateContracts, validateSeen, type AbiData, type AbiIndexDef, type AbiIndexId, type AbiIndexSummary } from "@/lib/builders-index";
 import {
   barAt, candleList, chartModel, cls, coinRows, fmt, hm, hms, members, integrationRows, methodRows, milestoneRows, nameOf, ohlcLine, openHour, pct, quote, RANGE_BARS, RANGE_KEYS, rollOff, sgn,
   status, tapeRows, freshKeys, rowKey, rowKeys, tickerItems, ts, usdFmt, why, type Bar, type ChartModel, type RangeKey, type SortKey,
@@ -497,7 +497,18 @@ export function IndexPage() {
 
   useEffect(() => {
     if (!id) return;
-    const { path, seenPath } = ABI_INDICES[id];
+    const { path, seenPath, contractsPath } = ABI_INDICES[id];
+    // the member map, when the index publishes it separately: kept across polls while its sha256 is unchanged
+    let doc: { sha: string; contracts: Record<string, string>; open_senders: string[] } | null = null;
+    async function contractsFor(sha: string) {
+      if (doc && doc.sha === sha) return doc;
+      const r = await load(contractsPath);
+      const body = r.body as { sha256?: unknown };
+      const v = r.status === 200 ? validateContracts(r.body) : null;
+      if (!v || !v.ok || body.sha256 !== sha) return null; // the map is changing right now: next poll
+      doc = { sha, contracts: v.data.contracts, open_senders: v.data.open_senders };
+      return doc;
+    }
     server.current = null; engine.current = null;
     setRes(null); setClosedLocal([]); setFailures(0); setEngineOn(false); setStale(false);
     let live = true;
@@ -509,8 +520,10 @@ export function IndexPage() {
       const sr = await load(seenPath);
       const seen = sr.status === 200 ? validateSeen(sr.body) : null;
       if (!live || !seen || !seen.ok || seen.data.hour_start !== d.live.hour_start) return; // server mid-update: next poll
+      const map = d.live.contracts_sha256 ? await contractsFor(d.live.contracts_sha256) : null;
+      if (!live || (d.live.contracts_sha256 && !map)) return;
       const e = createEngine();
-      e.load({ live: d.live, milestones: d.milestones, live_fx: d.live_fx }, seen.data);
+      e.load({ live: d.live, milestones: d.milestones, live_fx: d.live_fx, ...(map ? { contracts: map } : {}) }, seen.data);
       engine.current = e;
       setEngineOn(true);
     }

@@ -129,3 +129,18 @@ export const INTEG_LOGS: Log[] = [
   log(23, ROUTER, ARGUS, 25), // routed payment into a project: counts for Argus
   log(24, POOL, PEACH, 10), // pool paying out to a project: counts for Peach
 ];
+
+/* ---------- "close the gaps": a large member list in its own document ---------- */
+/** The integrated-products index with its contract map moved out (contracts_sha256) and padded past WIDE_ABOVE with
+ * idle pool addresses, so the engine fetches every transfer and filters locally. */
+export function wideIntegIndex(pad = 1200): { index: LiveData; doc: { contracts: Record<string, string>; open_senders: string[] } } {
+  const d = integIndex();
+  const contracts = { ...d.live.contracts };
+  for (let i = 0; i < pad; i++) contracts["0x" + (0xa000000 + i).toString(16).padStart(40, "0")] = "integration:uniswap";
+  const doc = { contracts, open_senders: [...(d.live.open_senders ?? [])].sort() };
+  d.live.contracts = {};
+  delete d.live.open_senders;
+  d.live.contracts_sha256 = "0".repeat(64);
+  d.live.contracts_count = Object.keys(contracts).length;
+  return { index: d, doc };
+}

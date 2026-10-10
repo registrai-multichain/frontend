@@ -13,6 +13,12 @@ const ZERO = "0x0000000000000000000000000000000000000000";
 /** The RPC refuses getLogs ranges of 10,000 blocks or more: stay at half of that. */
 export const CHUNK = 5000;
 export const RPC_URL = "https://rpc.mainnet.arc.io";
+/** Above this many member contracts a topic list is too large for one request: fetch every stablecoin transfer
+ * (topics [TRANSFER]) in chunks of at most WIDE_CHUNK blocks and keep members' locally ("close the gaps"). */
+export const WIDE_ABOVE = 1000;
+export const WIDE_CHUNK = 1000;
+/** A page returning this many rows may have been cut at the RPC's result cap: split it (as an RPC error is). */
+export const LOG_CAP = 9999;
 
 /** The open hour is more than this many seconds behind the chain: the server file is stale, so the browser does not catch up. */
 export const STALE_AFTER_S = 3 * 3600;
@@ -23,7 +29,9 @@ export class StaleError extends Error {
 export type RpcCall = (method: string, params: unknown[]) => Promise<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 export type SeenFile = { hour_start: number; seen: Record<string, string> };
 /** What the engine reads from the index file: the `live` block, recorded milestones and the ECB fixes. */
-export type LiveInput = { live: AbiLive; milestones?: AbiMilestone[]; live_fx?: AbiFx };
+export type LiveInput = { live: AbiLive; milestones?: AbiMilestone[]; live_fx?: AbiFx; contracts?: LiveContracts };
+/** The separate contract map (live.contracts_sha256 pins it); when absent, the inline live.contracts is used. */
+export type LiveContracts = { contracts: Record<string, string>; open_senders: string[] };
 type Ev = { ts: number; b: number; src: string; w: string; v: number };
 type Act = { payments: number; wallets: Set<string>; new_payers: number; points: number; usdc: number };
 export type TapeEntry = { ts: number; src: string; v: number; pts: number; isNew: boolean };
@@ -79,6 +87,8 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
   let L: AbiLive;
   let seen: Map<string, Set<string>>;
   let topic2: string[];
+  let C: Record<string, string> = {}; // member contracts: address -> source
+  let wide = false;
   let hourStart: number, hourBlock: number, lastBlock: number, headTs: number;
   let events: Ev[];
   let basePts: number | null;
@@ -99,14 +109,14 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
   /* An internal hop: a payment between tracked contracts. §15: an integrated product's contract (open_senders) may
    * still pay OTHER members (a routed payment counts for the project it reaches), never its own member. */
   function internal(from: string, src: string): boolean {
-    const owner = L.contracts[from];
+    const owner = C[from];
     return !!owner && (!openSenders.has(from) || owner === src);
   }
   function acceptSc(log: any): Ev | null { // eslint-disable-line @typescript-eslint/no-explicit-any
     const m = coins[log.address.toLowerCase()];
     if (!m || log.topics.length !== 3) return null;
     const to = "0x" + log.topics[2].slice(26), from = "0x" + log.topics[1].slice(26);
-    const src = L.contracts[to], ts = parseInt(log.blockTimestamp, 16);
+    const src = C[to], ts = parseInt(log.blockTimestamp, 16);
     if (!src || ts < m.added || from === ZERO || internal(from, src) || (L.deployers[src] || []).includes(from)) return null;
     const rate = rateFor(m.currency, ts);
     if (rate == null) return null;
@@ -122,8 +132,11 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
       for (let i = 0; i < str.length; i += pl) set.add(str.slice(i, i + pl));
       seen.set(s, set);
     }
-    topic2 = [...new Set(Object.keys(L.contracts))].sort().map((c) => "0x" + "0".repeat(24) + c.slice(2));
-    coins = L.stablecoins || {}; fx = index.live_fx || {}; openSenders = new Set(L.open_senders || []);
+    C = index.contracts ? index.contracts.contracts : L.contracts;
+    wide = Object.keys(C).length > WIDE_ABOVE;
+    topic2 = wide ? [] : [...new Set(Object.keys(C))].sort().map((c) => "0x" + "0".repeat(24) + c.slice(2));
+    coins = L.stablecoins || {}; fx = index.live_fx || {};
+    openSenders = new Set(index.contracts ? index.contracts.open_senders : L.open_senders || []);
     hourStart = L.hour_start; hourBlock = L.hour_start_block; lastBlock = hourBlock - 1;
     events = []; basePts = null; headTs = hourStart;
     P = Object.assign({}, L.P); rootsPrev = Object.assign({}, L.roots_prev);
@@ -138,28 +151,47 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
 
   function accept(log: any): Ev | null { // eslint-disable-line @typescript-eslint/no-explicit-any
     const to = "0x" + log.topics[2].slice(26), from = "0x" + log.topics[1].slice(26);
-    const src = L.contracts[to];
+    const src = C[to];
     if (!src || from === ZERO || internal(from, src) || (L.deployers[src] || []).includes(from)) return null;
     return { ts: parseInt(log.blockTimestamp, 16), b: parseInt(log.blockNumber, 16), src, w: from, v: Number(BigInt(log.data)) / 1e18 };
   }
 
+  /* One getLogs page over [b, e], split in half on an RPC error or a page at the result cap (it may be cut) until
+   * a single block; a single block's error propagates (same as live.js getLogsSafe). */
+  async function getLogsSafe(filter: { address: string | string[]; topics: (string | string[] | null)[] }, b: number, e: number): Promise<any[]> { // eslint-disable-line @typescript-eslint/no-explicit-any
+    try {
+      const logs = await call("eth_getLogs", [{ fromBlock: hex(b), toBlock: hex(e), ...filter }]);
+      if (logs.length < LOG_CAP || b === e) return logs;
+    } catch (err) {
+      if (b === e) throw err;
+    }
+    const m = Math.floor((b + e) / 2);
+    return (await getLogsSafe(filter, b, m)).concat(await getLogsSafe(filter, m + 1, e));
+  }
+  async function getLogs(filter: { address: string | string[]; topics: (string | string[] | null)[] }, from: number, to: number): Promise<any[]> { // eslint-disable-line @typescript-eslint/no-explicit-any
+    const out: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const size = wide ? WIDE_CHUNK : CHUNK;
+    for (let b = from; b <= to; b += size) out.push(...(await getLogsSafe(filter, b, Math.min(to, b + size - 1))));
+    return out;
+  }
+  const memberTo = (l: { topics: string[] }) => l.topics.length === 3 && C["0x" + l.topics[2].slice(26)] !== undefined;
+
   async function fetchLogs(from: number, to: number): Promise<Ev[]> {
     const out: Ev[] = [];
-    for (let b = from; b <= to; b += CHUNK) {
-      const e = Math.min(to, b + CHUNK - 1);
-      const logs = await call("eth_getLogs", [{ fromBlock: hex(b), toBlock: hex(e), address: EMITTER, topics: [TRANSFER, null, topic2] }]);
-      for (const l of logs) {
+    const topics = wide ? [TRANSFER] : [TRANSFER, null, topic2];
+    for (const l of await getLogs({ address: EMITTER, topics }, from, to)) {
+      if (wide && !memberTo(l)) continue; // not into a member: no timestamp lookup
+      if (!l.blockTimestamp) l.blockTimestamp = hex(await blockTs(parseInt(l.blockNumber, 16)));
+      const ev = accept(l);
+      if (ev) out.push(ev);
+    }
+    const sc = Object.keys(coins);
+    if (sc.length) { // other fiat stablecoins into members, in USD (ECB fix)
+      for (const l of await getLogs({ address: sc, topics }, from, to)) {
+        if (wide && !memberTo(l)) continue;
         if (!l.blockTimestamp) l.blockTimestamp = hex(await blockTs(parseInt(l.blockNumber, 16)));
-        const ev = accept(l);
+        const ev = acceptSc(l);
         if (ev) out.push(ev);
-      }
-      const sc = Object.keys(coins);
-      if (sc.length) { // other fiat stablecoins into members, in USD (ECB fix)
-        for (const l of await call("eth_getLogs", [{ fromBlock: hex(b), toBlock: hex(e), address: sc, topics: [TRANSFER, null, topic2] }])) {
-          if (!l.blockTimestamp) l.blockTimestamp = hex(await blockTs(parseInt(l.blockNumber, 16)));
-          const ev = acceptSc(l);
-          if (ev) out.push(ev);
-        }
       }
     }
     return out;

@@ -2,10 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { Env } from "../lib/env";
-import { handleIndexSummary, handlePublicIndex, handlePublicSeen, handlePushIndex, handlePushSeen } from "../lib/builders-index";
+import { handleIndexSummary, handlePublicContracts, handlePushContracts, handlePublicIndex, handlePublicSeen, handlePushIndex, handlePushSeen } from "../lib/builders-index";
 import { onRequest as seenRoute } from "../functions/api/index/seen";
 import { onRequest as route } from "../functions/api/index/index";
-import { ABI_INDICES, ABI_KEY, ABI_LIMITS, ABI_SEEN_KEY } from "../../src/lib/builders-index";
+import { ABI_INDICES, ABI_KEY, ABI_LIMITS, ABI_SEEN_KEY, canonicalJson, sha256Hex } from "../../src/lib/builders-index";
 import { onRequest as aiiRoute } from "../functions/api/index/aii/index";
 import { onRequest as aiiSeenRoute } from "../functions/api/index/aii/seen";
 import { onRequest as aeiRoute } from "../functions/api/index/aei/index";
@@ -298,5 +298,28 @@ describe("/api/index/summary", () => {
       aei: null,
     });
     expect((await handleIndexSummary(new Request(`${ORIGIN}/api/index/summary`, { method: "POST" }), s.env, { cache: null })).status).toBe(405);
+  });
+});
+
+describe("/api/index/…/contracts", () => {
+  const body = { hour_start: 1791666000, open_senders: ["0x1111111111111111111111111111111111111111"], contracts: { "0x1111111111111111111111111111111111111111": "integration:relay", "0x07a688a001f416cc433c68ff56aa26bc5131cc6e": "domain:argus.world" } };
+  const post = (b: unknown, path = "/api/index/aii/contracts", auth = `Bearer ${TOKEN}`) => new Request(`${ORIGIN}${path}`, { method: "POST", headers: { authorization: auth }, body: JSON.stringify(b) });
+  test("stores the map with its canonical sha256 under the index's own key; GET serves it", async () => {
+    const s = setup();
+    const r = await handlePushContracts(post(body), s.env, "aii");
+    expect(r.status).toBe(200);
+    const want = await sha256Hex(canonicalJson(body));
+    expect(((await r.json()) as { sha256: string }).sha256).toBe(want);
+    const stored = JSON.parse((await s.kv.get(ABI_INDICES.aii.contractsKey))!);
+    expect(stored).toEqual({ ...body, sha256: want });
+    expect(await s.kv.get(ABI_INDICES.abi.contractsKey)).toBeNull();
+    const g = await handlePublicContracts(new Request(`${ORIGIN}/api/index/aii/contracts`), s.env, { cache: null }, "aii");
+    expect(await g.json()).toEqual(stored);
+  });
+  test("401 without the token, 400 for a malformed map; nothing written", async () => {
+    const s = setup();
+    expect((await handlePushContracts(post(body, undefined, "Bearer " + "z".repeat(40)), s.env, "aii")).status).toBe(401);
+    expect((await handlePushContracts(post({ ...body, open_senders: ["0x9999999999999999999999999999999999999999"] }), s.env, "aii")).status).toBe(400);
+    expect(s.kv.puts).toBe(0);
   });
 });

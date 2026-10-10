@@ -10,7 +10,8 @@ export const ABI_KEY = "abi:index";
 export const ABI_SEEN_KEY = "abi:seen";
 
 export const ABI_LIMITS = {
-  bytes: 256 * 1024,
+  /** an index file; history is trimmed by the producer (30 days hourly, then daily) and the member map lives apart */
+  bytes: 512 * 1024,
   seenBytes: 1024 * 1024,
   /** AII/AEI: ~350k integration payers in the 30-day window */
   seenBytesWide: 6 * 1024 * 1024,
@@ -31,6 +32,9 @@ export const ABI_LIMITS = {
   company: 60,
   integrations: 400,
   openSenders: 500,
+  /** the separate contracts file (factory pools: Uniswap alone ≈ 11.5k) */
+  contractsFile: 40_000,
+  contractsBytes: 4 * 1024 * 1024,
   integrationCompany: 80,
   integrationCategory: 40,
   evidencePer: 10,
@@ -44,11 +48,11 @@ export const ABI_LIMITS = {
  * AII = integrated products only; AEI = everything. Each has its own KV keys and endpoints. */
 export const ABI_INDEX_IDS = ["abi", "aii", "aei"] as const;
 export type AbiIndexId = (typeof ABI_INDEX_IDS)[number];
-export type AbiIndexDef = { id: AbiIndexId; name: string; code: string; label: string; key: string; seenKey: string; path: string; seenPath: string; seenBytes: number };
+export type AbiIndexDef = { id: AbiIndexId; name: string; code: string; label: string; key: string; seenKey: string; contractsKey: string; path: string; seenPath: string; contractsPath: string; seenBytes: number };
 export const ABI_INDICES: Record<AbiIndexId, AbiIndexDef> = {
-  abi: { id: "abi", name: "Arc Builders Index", code: "ABI", label: "Builders", key: ABI_KEY, seenKey: ABI_SEEN_KEY, path: "/api/index", seenPath: "/api/index/seen", seenBytes: ABI_LIMITS.seenBytes },
-  aii: { id: "aii", name: "Arc Integrations Index", code: "AII", label: "Integrations", key: "aii:index", seenKey: "aii:seen", path: "/api/index/aii", seenPath: "/api/index/aii/seen", seenBytes: ABI_LIMITS.seenBytesWide },
-  aei: { id: "aei", name: "Arc Ecosystem Index", code: "AEI", label: "Ecosystem", key: "aei:index", seenKey: "aei:seen", path: "/api/index/aei", seenPath: "/api/index/aei/seen", seenBytes: ABI_LIMITS.seenBytesWide },
+  abi: { id: "abi", name: "Arc Builders Index", code: "ABI", label: "Builders", key: ABI_KEY, seenKey: ABI_SEEN_KEY, contractsKey: "abi:contracts", path: "/api/index", seenPath: "/api/index/seen", contractsPath: "/api/index/contracts", seenBytes: ABI_LIMITS.seenBytes },
+  aii: { id: "aii", name: "Arc Integrations Index", code: "AII", label: "Integrations", key: "aii:index", seenKey: "aii:seen", contractsKey: "aii:contracts", path: "/api/index/aii", seenPath: "/api/index/aii/seen", contractsPath: "/api/index/aii/contracts", seenBytes: ABI_LIMITS.seenBytesWide },
+  aei: { id: "aei", name: "Arc Ecosystem Index", code: "AEI", label: "Ecosystem", key: "aei:index", seenKey: "aei:seen", contractsKey: "aei:contracts", path: "/api/index/aei", seenPath: "/api/index/aei/seen", contractsPath: "/api/index/aei/contracts", seenBytes: ABI_LIMITS.seenBytesWide },
 };
 /** GET /api/index/summary: each index's last closed value, for the index tabs. null when that index has no file yet. */
 export type AbiIndexSummary = Record<AbiIndexId, { index: number; index_24h_ago: number | null; data_until: string } | null>;
@@ -81,7 +85,10 @@ export type AbiLive = {
   K: number; base_k: number; base: string;
   P: Record<string, number>; roots_prev: Record<string, number>;
   decay_h: number; cap: number; new_payer: number; proj_up: number; rel_up: number; entry: number; base_scale: number; base_window: number;
+  /** inline map (small indices, older files); empty when it is published separately (contracts_sha256) */
   contracts: Record<string, string>; deployers: Record<string, string[]>; seen_prefix: number;
+  /** "close the gaps": the contract map lives in its own file (/api/index/…/contracts); this pins its version */
+  contracts_sha256?: string; contracts_count?: number;
   /** registered fiat stablecoins by lowercase token address (counted from `added`, unix seconds) */
   stablecoins?: Record<string, AbiLiveCoin>;
   /** §15: integrated products' contracts (sorted, lowercase); their payments into OTHER members count */
@@ -305,14 +312,18 @@ function validateLive(v: unknown): AbiLive | null {
   if (!posInt(v.hour_start) || !count(v.hour_start_block) || !str(v.base) || !posInt(v.base_window) || v.base_window > ABI_LIMITS.baseWindow || !posInt(v.seen_prefix) || v.seen_prefix > 40) return null;
   for (const k of ["K", "base_k", "decay_h", "cap", "new_payer", "proj_up", "rel_up", "entry", "base_scale"] as const) if (!num(v[k]) || v[k] < 0) return null;
   const P = numberMap(v.P, ABI_LIMITS.projects), roots = numberMap(v.roots_prev, ABI_LIMITS.projects);
-  if (!P || !roots || !isObj(v.contracts) || !isObj(v.deployers)) return null;
-  const contractKeys = Object.keys(v.contracts);
-  if (contractKeys.length > ABI_LIMITS.contracts) return null;
+  const external = v.contracts_sha256 !== undefined;
+  if (external && (typeof v.contracts_sha256 !== "string" || !SHA.test(v.contracts_sha256) || !count(v.contracts_count) || v.contracts_count > ABI_LIMITS.contractsFile)) return null;
+  if (!P || !roots || (!external && !isObj(v.contracts)) || !isObj(v.deployers)) return null;
   const contracts: Record<string, string> = {};
-  for (const a of contractKeys) {
-    const src = v.contracts[a];
-    if (!ADDR.test(a) || !str(src)) return null;
-    contracts[a] = src;
+  if (!external) {
+    const contractKeys = Object.keys(v.contracts as object);
+    if (contractKeys.length > ABI_LIMITS.contracts) return null;
+    for (const a of contractKeys) {
+      const src = (v.contracts as Record<string, unknown>)[a];
+      if (!ADDR.test(a) || !str(src)) return null;
+      contracts[a] = src;
+    }
   }
   const depKeys = Object.keys(v.deployers);
   if (depKeys.length > ABI_LIMITS.projects) return null;
@@ -335,7 +346,8 @@ function validateLive(v: unknown): AbiLive | null {
   }
   return {
     ...(coins ? { stablecoins: coins } : {}),
-    ...(open ? { open_senders: open } : {}),
+    ...(open && !external ? { open_senders: open } : {}),
+    ...(external ? { contracts_sha256: v.contracts_sha256 as string, contracts_count: v.contracts_count as number } : {}),
     hour_start: v.hour_start, hour_start_block: v.hour_start_block, K: v.K as number, base_k: v.base_k as number, base: v.base, P, roots_prev: roots,
     decay_h: v.decay_h as number, cap: v.cap as number, new_payer: v.new_payer as number, proj_up: v.proj_up as number, rel_up: v.rel_up as number,
     entry: v.entry as number, base_scale: v.base_scale as number, base_window: v.base_window, contracts, deployers, seen_prefix: v.seen_prefix,
@@ -478,4 +490,41 @@ export function validateIndex(raw: unknown): AbiResult {
       milestones, stablecoins, integrations, integration_activity: integrationActivity, volume_24h: volume, live_fx: liveFx,
     },
   };
+}
+
+/** The contract map of one index, published on its own because it is large and changes rarely ("close the gaps").
+ * sha256 is over the canonical JSON of {contracts, hour_start, open_senders}: sorted keys, no spaces, exactly
+ * Python's json.dumps(obj, sort_keys=True, separators=(",", ":")) on the producer. The index file pins it. */
+export type AbiContracts = { hour_start: number; contracts: Record<string, string>; open_senders: string[]; sha256: string };
+export type AbiContractsResult = { ok: true; data: Omit<AbiContracts, "sha256"> } | { ok: false; error: string };
+
+export function validateContracts(raw: unknown): AbiContractsResult {
+  const bad = (error: string): AbiContractsResult => ({ ok: false, error });
+  if (!isObj(raw) || !posInt(raw.hour_start) || !isObj(raw.contracts) || !Array.isArray(raw.open_senders)) return bad("expected { hour_start, contracts, open_senders }");
+  const keys = Object.keys(raw.contracts);
+  if (keys.length > ABI_LIMITS.contractsFile) return bad(`at most ${ABI_LIMITS.contractsFile} contracts`);
+  const contracts: Record<string, string> = {};
+  for (const a of keys) {
+    const src = raw.contracts[a];
+    if (!ADDR.test(a) || !str(src)) return bad("contracts must map lowercase addresses to source ids");
+    contracts[a] = src;
+  }
+  const open = raw.open_senders;
+  if (open.length > ABI_LIMITS.contractsFile || !open.every((a, i) => typeof a === "string" && ADDR.test(a) && a in contracts && (i === 0 || a > (open[i - 1] as string))))
+    return bad("open_senders must be sorted, unique, lowercase addresses that are in contracts");
+  return { ok: true, data: { hour_start: raw.hour_start, contracts, open_senders: open as string[] } };
+}
+
+/** Python json.dumps(sort_keys=True, separators=(",", ":")) for plain JSON (objects, arrays, strings, integers). */
+export function canonicalJson(v: unknown): string {
+  if (Array.isArray(v)) return "[" + v.map(canonicalJson).join(",") + "]";
+  if (v !== null && typeof v === "object") {
+    return "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + canonicalJson((v as Record<string, unknown>)[k])).join(",") + "}";
+  }
+  return JSON.stringify(v);
+}
+
+export async function sha256Hex(text: string): Promise<string> {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }

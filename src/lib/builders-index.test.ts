@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- tests mutate loosely typed JSON */
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
-import { ABI_LIMITS, validateIndex, validateSeen } from "./builders-index";
+import { ABI_LIMITS, canonicalJson, sha256Hex, validateContracts, validateIndex, validateSeen } from "./builders-index";
 import real from "./fixtures/builders-index.json";
 import { indexFixture } from "./builders-index-fixture";
 
@@ -328,5 +328,42 @@ describe.skipIf(!existsSync(SAMPLES))("§17 producer samples (AII, AEI)", () => 
     expect(seen.data.hour_start).toBe(ix.data.live!.hour_start);
     expect(ix.data.projects.some((p) => p.kind === "integration")).toBe(true);
     if (id === "aii") expect(ix.data.live!.base_k).toBe(0);
+  });
+});
+
+describe('"close the gaps": the separate contract map', () => {
+  const doc = () => ({
+    hour_start: 1791666000,
+    open_senders: ["0x1111111111111111111111111111111111111111", "0x7777777777777777777777777777777777777777"],
+    contracts: { "0x7777777777777777777777777777777777777777": "integration:uniswap", "0x07a688a001f416cc433c68ff56aa26bc5131cc6e": "domain:argus.world", "0x1111111111111111111111111111111111111111": "integration:relay" },
+  });
+  test("sha256 of the canonical JSON equals Python's json.dumps(sort_keys=True, separators=(',', ':'))", async () => {
+    // python3: hashlib.sha256(json.dumps(o, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    expect(await sha256Hex(canonicalJson(doc()))).toBe("b0de634b44cd53c81187d7e65526a899efe69b1c482d371dc8154127cf65f457");
+  });
+  test("a valid map passes; open senders must be sorted, unique and in the map", () => {
+    expect(validateContracts(doc()).ok).toBe(true);
+    for (const f of [
+      (d: any) => { d.open_senders.reverse(); },
+      (d: any) => { d.open_senders.push(d.open_senders[1]); },
+      (d: any) => { d.open_senders.push("0x9999999999999999999999999999999999999999"); },
+      (d: any) => { d.contracts["0xABCDEF0000000000000000000000000000000000"] = "x"; },
+      (d: any) => { d.hour_start = 1.5; },
+      (d: any) => { d.contracts = Object.fromEntries(Array.from({ length: ABI_LIMITS.contractsFile + 1 }, (_, i) => ["0x" + i.toString(16).padStart(40, "0"), "x"])); d.open_senders = []; },
+    ]) { const d = doc(); f(d); expect(validateContracts(d).ok).toBe(false); }
+  });
+  test("an index may pin the map instead of carrying it: sha and count required, inline map dropped", () => {
+    const d = JSON.parse(JSON.stringify(real));
+    delete d.live.contracts; delete d.live.open_senders;
+    d.live.contracts_sha256 = "a".repeat(64); d.live.contracts_count = 11604;
+    const r = validateIndex(d);
+    expect(r.ok && [r.data.live!.contracts, r.data.live!.contracts_sha256, r.data.live!.contracts_count]).toEqual([{}, "a".repeat(64), 11604]);
+    for (const bad of [{ contracts_sha256: "xyz" }, { contracts_count: undefined }, { contracts_sha256: undefined }]) {
+      const b = JSON.parse(JSON.stringify(d)); Object.assign(b.live, bad);
+      if (bad.contracts_sha256 === undefined && "contracts_sha256" in bad) delete b.live.contracts_sha256;
+      if ("contracts_count" in bad && bad.contracts_count === undefined) delete b.live.contracts_count;
+      const v = validateIndex(b);
+      expect(v.ok && !!v.data.live).toBe(false);
+    }
   });
 });
