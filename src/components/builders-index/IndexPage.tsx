@@ -7,10 +7,10 @@ import { projectHref } from "@/lib/project-page";
 import { createEngine, StaleError, type Candle, type LiveResult } from "@/lib/abi-live";
 import { validateSeen, type AbiData } from "@/lib/builders-index";
 import {
-  barAt, candleList, chartModel, cls, fmt, hm, hms, members, methodRows, nameOf, ohlcLine, openHour, pct, quote, RANGE_BARS, RANGE_KEYS, rollOff, sgn,
+  barAt, candleList, chartModel, cls, coinRows, fmt, hm, hms, members, methodRows, milestoneRows, nameOf, ohlcLine, openHour, pct, quote, RANGE_BARS, RANGE_KEYS, rollOff, sgn,
   status, tapeRows, freshKeys, rowKey, rowKeys, tickerItems, ts, usdFmt, why, type Bar, type ChartModel, type RangeKey, type SortKey,
 } from "@/lib/abi-terminal";
-import { ABI_COPY, abiPath, abiSeenPath, abiState, baseTip, decayTip, type AbiState } from "@/lib/builders-index-page";
+import { ABI_COPY, abiPath, abiSeenPath, abiState, baseTip, coinsTip, decayTip, type AbiState } from "@/lib/builders-index-page";
 import { PilotPanel } from "./pilot/PilotPanel";
 import "./terminal.css";
 
@@ -67,7 +67,7 @@ function QuoteBar({ d, bars, st }: { d: AbiData; bars: Bar[]; st: { kind: string
           <Q k="24h high" v={fmt(q.hi)} />
           <Q k="24h low" v={fmt(q.lo)} />
           <Q k="24h payments" v={q.pay.toLocaleString("en-US")} />
-          <Q k="24h USDC in" v={fmt(q.usd, 0)} />
+          <Q k="24h USD in" v={fmt(q.usd, 0)} />
           <Q k="Since base" tip={<InfoBubble label="About the base">{baseTip(d)}</InfoBubble>} v={<span className={cls(q.sinceBase)}>{pct(q.sinceBase)}</span>} />
         </div>
       )}
@@ -101,7 +101,7 @@ function ChartPanel({ d, bars }: { d: AbiData; bars: Bar[] }) {
   }, []);
   const n = RANGE_BARS[range];
   const cs = n ? bars.slice(-n) : bars;
-  const m: ChartModel | null = chartModel(cs, size.w, size.h, d.base.level);
+  const m: ChartModel | null = chartModel(cs, size.w, size.h, d.base.level, d.milestones);
   const hi = hover !== null && hover < cs.length ? hover : null;
   const shown = cs[hi ?? cs.length - 1];
   const o = shown ? ohlcLine(shown) : null;
@@ -148,7 +148,7 @@ function ChartPanel({ d, bars }: { d: AbiData; bars: Bar[] }) {
             {m.bars.map((b, i) => (
               <rect key={`v${i}`} x={b.x - m.bw / 2} y={b.vy} width={m.bw} height={b.vh} fill={b.up ? "var(--abi-up)" : "var(--abi-down)"} opacity={b.live ? 0.55 : 0.32} />
             ))}
-            <text x={m.W - m.pad.r + 8} y={m.volTop + 9}>USDC/h</text>
+            <text x={m.W - m.pad.r + 8} y={m.volTop + 9}>USD/h</text>
             {kind === "c" ? m.bars.map((b, i) => {
               const col = b.up ? "var(--abi-up)" : "var(--abi-down)";
               return (
@@ -158,6 +158,9 @@ function ChartPanel({ d, bars }: { d: AbiData; bars: Bar[] }) {
                 </g>
               );
             }) : <path d={m.line} fill="none" stroke="var(--abi-accent)" strokeWidth={1.6} strokeLinejoin="round" />}
+            {m.ms.map((k, i) => (
+              <path key={`m${i}`} className="abi-ms-mark" d={`M${k.x - 5} ${k.y - 12} L${k.x + 5} ${k.y - 12} L${k.x} ${k.y - 4} Z`} fill="var(--abi-accent)"><title>{k.label}</title></path>
+            ))}
             <line x1={m.pad.l} x2={m.W - m.pad.r} y1={m.last.y} y2={m.last.y} stroke={m.last.up ? "var(--abi-up)" : "var(--abi-down)"} strokeDasharray="2 3" opacity={0.7} />
             <rect x={m.W - m.pad.r + 2} y={m.last.y - 9} width={m.pad.r - 4} height={18} rx={2} fill={m.last.up ? "var(--abi-up)" : "var(--abi-down)"} />
             <text x={m.W - m.pad.r + 7} y={m.last.y + 4} style={{ fill: "var(--abi-bg)", fontWeight: 600 }}>{m.last.label}</text>
@@ -231,7 +234,7 @@ function TapePanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
 
 const COLS: { k: SortKey; label: string; x?: boolean }[] = [
   { k: "name", label: "Project" }, { k: "share", label: "Weight" }, { k: "dbase", label: "Δ base", x: true }, { k: "h1", label: "Pts this hour" },
-  { k: "d1", label: "Pts 24h", x: true }, { k: "pace", label: "Pace" }, { k: "pay", label: "Payments 24h", x: true }, { k: "usd", label: "USDC 24h", x: true },
+  { k: "d1", label: "Pts 24h", x: true }, { k: "pace", label: "Pace" }, { k: "pay", label: "Payments 24h", x: true }, { k: "usd", label: "USD 24h", x: true },
 ];
 
 function MembersPanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
@@ -278,6 +281,52 @@ function MembersPanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
   );
 }
 
+function CoinsPanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
+  const rows = coinRows(d, R);
+  return (
+    <section className="abi-panel" aria-label="Stablecoins">
+      <div className="abi-ph"><h2>Stablecoins · 24h</h2><InfoBubble label="About stablecoins">{coinsTip(d)}</InfoBubble></div>
+      <div className="abi-tbl">
+        <table>
+          <thead><tr><th>Coin</th><th>Into members</th><th>Arc (est.)</th></tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.sym}>
+                <td className="n" title={r.issuer || undefined}>{r.sym}<span className="abi-cc">{r.ccy}</span></td>
+                <td>{r.membersUsd ? <>${fmt(r.membersUsd, 0)}<span className="abi-cc">{r.membersPayments.toLocaleString("en-US")}</span></> : <span className="dim">–</span>}</td>
+                <td>{r.baseUsd ? `$${fmt(r.baseUsd, 0)}` : <span className="dim">{r.from ? `from ${r.from}` : "–"}</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function MilestonesPanel({ d }: { d: AbiData }) {
+  const rows = milestoneRows(d);
+  return (
+    <section className="abi-panel" aria-label="Milestones">
+      <div className="abi-ph"><h2>Milestones</h2><InfoBubble label="About milestones">{ABI_COPY.milestones}</InfoBubble></div>
+      <div className="abi-msl">
+        {rows.length === 0 ? <p className="abi-ms-empty">{ABI_COPY.noMilestones}</p> : rows.map((m) => (
+          <div key={m.id} className="abi-ms">
+            <span className="dim mono">{m.day}</span>
+            <span className="t">{m.title}<span className="abi-cc">{m.target}</span></span>
+            <span className="x">{m.mult}</span>
+            <span className="ev">
+              {m.evidence.map((e, i) => (
+                <a key={`${e.href}|${i}`} href={e.href} target="_blank" rel="noopener noreferrer nofollow">{e.text}</a>
+              ))}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function Countdown({ R }: { R: LiveResult | null }) {
   const [now, setNow] = useState(0);
   useEffect(() => { setNow(Date.now() / 1000); const t = setInterval(() => setNow(Date.now() / 1000), 1000); return () => clearInterval(t); }, []);
@@ -289,7 +338,7 @@ function SidePanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
   const oh = openHour(R);
   const ro = rollOff(d);
   return (
-    <aside className="abi-panel" aria-label="Open hour and method">
+    <section className="abi-panel" aria-label="Open hour and method">
       <div className="abi-ph"><h2>Open hour</h2><span className="sp mono dim" style={{ fontSize: 10.5 }}>{oh ? oh.span : "waiting for live data"}</span></div>
       <dl className="abi-kv">
         <dt>Open</dt><dd>{oh ? fmt(oh.o) : "–"}</dd>
@@ -297,7 +346,7 @@ function SidePanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
         <dt>Low</dt><dd>{oh ? fmt(oh.l) : "–"}</dd>
         <dt>Last</dt><dd>{oh ? <span className={cls(oh.c - oh.o)}>{fmt(oh.c)}</span> : "–"}</dd>
         <dt>Payments</dt><dd>{oh ? oh.n.toLocaleString("en-US") : "–"}</dd>
-        <dt>USDC in</dt><dd>{oh ? fmt(oh.u, 2) : "–"}</dd>
+        <dt>USD in</dt><dd>{oh ? fmt(oh.u, 2) : "–"}</dd>
         <dt>Closes in <InfoBubble label="About the hourly close">{ABI_COPY.close}</InfoBubble></dt><dd><Countdown R={R} /></dd>
       </dl>
       <div className="abi-ph abi-sepline"><h2>Method</h2><InfoBubble label="About the inputs">{ABI_COPY.inputs}</InfoBubble></div>
@@ -307,7 +356,7 @@ function SidePanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
         <dt>Snapshot</dt><dd title={d.base.sha256}>{d.base.sha256.slice(0, 8)}…{d.base.sha256.slice(-6)}</dd>
         <dt>Block</dt><dd>{(R ? R.head : d.head_block).toLocaleString("en-US")}</dd>
       </dl>
-    </aside>
+    </section>
   );
 }
 
@@ -324,7 +373,11 @@ export function Terminal({ d, R, closedLocal, st, pilot }: { d: AbiData; R: Live
       {pilot}
       <div className="abi-row bot">
         <MembersPanel d={d} R={R} />
-        <SidePanel d={d} R={R} />
+        <aside className="abi-side" aria-label="Stablecoins, milestones, open hour">
+          <CoinsPanel d={d} R={R} />
+          <MilestonesPanel d={d} />
+          <SidePanel d={d} R={R} />
+        </aside>
       </div>
       <footer className="abi-foot">
         <span>Closed by Tabula through {hm(ts(d.data_until))} UTC{R ? " · open hour computed in this browser from Arc RPC" : ""}</span>
@@ -360,7 +413,7 @@ export function IndexPage() {
       const seen = sr.status === 200 ? validateSeen(sr.body) : null;
       if (!live || !seen || !seen.ok || seen.data.hour_start !== d.live.hour_start) return; // server mid-update: next poll
       const e = createEngine();
-      e.load(d.live, seen.data);
+      e.load({ live: d.live, milestones: d.milestones, live_fx: d.live_fx }, seen.data);
       engine.current = e;
       setEngineOn(true);
     }
@@ -369,7 +422,9 @@ export function IndexPage() {
       if (!live) return;
       const s = abiState(r);
       if (s.kind !== "ready") { setState((cur) => (cur.kind === "ready" ? cur : s)); return; }
-      const changed = !server.current || server.current.data_until !== s.data.data_until;
+      // a newer closed hour, or a milestone recorded since: restart the engine from the server's state
+      const msKey = (x: AbiData) => x.milestones.map((m) => `${m.id}@${m.t}`).join(",");
+      const changed = !server.current || server.current.data_until !== s.data.data_until || msKey(server.current) !== msKey(s.data);
       server.current = s.data;
       setState(s);
       setNow(Date.now());

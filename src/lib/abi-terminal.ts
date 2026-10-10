@@ -4,7 +4,8 @@
  * server file (`params`, `live`, `roots_24h`, `candles`, `tape`) and the browser's live result.
  */
 import type { Candle, LiveResult } from "./abi-live";
-import type { AbiData } from "./builders-index";
+import type { AbiData, AbiMilestone } from "./builders-index";
+import { evidenceHref } from "./facts";
 
 export const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export const ts = (iso: string): number => Date.parse(iso) / 1000;
@@ -204,9 +205,11 @@ export type ChartModel = {
   grid: { y: number; label: string }[]; marks: { x: number; label: string }[]; baseY: number | null;
   bars: { x: number; yH: number; yL: number; yTop: number; body: number; up: boolean; live: boolean; vy: number; vh: number }[];
   line: string; last: { y: number; up: boolean; label: string }; volTop: number; bars_n: number;
+  /** milestone markers above their candle */
+  ms: { x: number; y: number; label: string }[];
 };
 
-export function chartModel(cs: Bar[], W: number, H: number, base = 1000): ChartModel | null {
+export function chartModel(cs: Bar[], W: number, H: number, base = 1000, milestones: Pick<AbiMilestone, "t" | "title" | "mult">[] = []): ChartModel | null {
   if (cs.length === 0) return null;
   const pad = { l: 8, r: 70, t: 12, b: 24 }, volH = Math.round((H - pad.t - pad.b) * 0.18), gap = 8;
   const pH = H - pad.t - pad.b - volH - gap;
@@ -238,7 +241,13 @@ export function chartModel(cs: Bar[], W: number, H: number, base = 1000): ChartM
     return { x: x(i), yH: y(c.h), yL: y(c.l), yTop, body: Math.max(1, yBot - yTop), up: c.c >= c.o, live: !!c.live, vy: vy(c.u), vh: H - pad.b - vy(c.u) };
   });
   const lastBar = cs[cs.length - 1];
+  const ms: ChartModel["ms"] = [];
+  for (const m of milestones) {
+    const i = cs.findIndex((c) => m.t >= c.t && m.t < c.t + 3600);
+    if (i >= 0) ms.push({ x: x(i), y: y(cs[i].h), label: `${m.title} ×${m.mult}` });
+  }
   return {
+    ms,
     W, H, pad, slot, bw, grid, marks, baseY: base > lo && base < hi ? y(base) : null, bars,
     line: cs.map((c, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(c.c).toFixed(1)}`).join(""),
     last: { y: y(lastBar.c), up: lastBar.c >= lastBar.o, label: fmt(lastBar.c) }, volTop: H - pad.b - volH, bars_n: cs.length,
@@ -250,4 +259,43 @@ export const barAt = (m: ChartModel, px: number): number => Math.max(0, Math.min
 
 export function ohlcLine(b: Bar): { when: string; o: string; h: string; l: string; c: string; chg: number; n: string; usd: string } {
   return { when: `${dayLab(b.t)} ${hm(b.t)}${b.live ? " · open" : ""}`, o: fmt(b.o), h: fmt(b.h), l: fmt(b.l), c: fmt(b.c), chg: b.c - b.o, n: `${b.n} payments`, usd: `${usdFmt(b.u)} USDC` };
+}
+
+/* ---------- stablecoins and milestones ---------- */
+export type CoinRow = { sym: string; ccy: string; issuer: string; membersUsd: number; membersPayments: number; baseUsd: number; from: string | null };
+
+/** USDC, then every registered coin; a coin not counted yet shows when it starts (chain time: the open hour's head, else the file's head). */
+export function coinRows(d: AbiData, R: LiveResult | null): CoinRow[] {
+  const now = R ? R.headTs : ts(d.head_time);
+  const reg = d.stablecoins.filter((c) => c.symbol !== "USDC");
+  return [{ symbol: "USDC", currency: "USD", issuer: "Circle", added: 0 }, ...reg].map((c) => {
+    const v = d.volume_24h[c.symbol];
+    return {
+      sym: c.symbol, ccy: c.currency, issuer: c.issuer,
+      membersUsd: v?.members_usd ?? 0, membersPayments: v?.members_payments ?? 0, baseUsd: v?.base_usd_est ?? 0,
+      from: now < c.added ? (dayLab(c.added) === dayLab(now) ? hm(c.added) : `${dayLab(c.added)} ${hm(c.added)}`) : null,
+    };
+  });
+}
+
+export type EvidenceLink = { text: string; href: string };
+const abbr = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`;
+/** Evidence as plain-text links: an address or tx hash opens the Arc explorer, a URL opens itself (https only, validated with the file). */
+export function evidenceLinks(evidence: string[]): EvidenceLink[] {
+  return evidence.map((e) => {
+    const href = evidenceHref(e);
+    if (/^0x[0-9a-fA-F]{64}$/.test(e)) return { text: `tx ${abbr(e)}`, href };
+    if (/^0x[0-9a-fA-F]{40}$/.test(e)) return { text: abbr(e), href };
+    let text = e;
+    try { text = new URL(e).hostname.replace(/^www\./, ""); } catch { /* validated already */ }
+    return { text, href };
+  });
+}
+
+export type MilestoneRow = { id: string; day: string; title: string; mult: string; target: string; evidence: EvidenceLink[] };
+/** The latest milestones first. */
+export function milestoneRows(d: AbiData, max = 6): MilestoneRow[] {
+  return d.milestones.slice().sort((a, b) => b.t - a.t).slice(0, max).map((m) => ({
+    id: m.id, day: dayLab(m.t), title: m.title, mult: `×${m.mult.toFixed(2)}`, target: nameOf(d, m.target), evidence: evidenceLinks(m.evidence),
+  }));
 }

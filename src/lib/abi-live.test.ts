@@ -3,14 +3,15 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, test, vi } from "vitest";
 import { CHUNK, createEngine, httpRpc, StaleError } from "./abi-live";
-import { HB, HS, INDEX, mockRpc, SEEN } from "./abi-live-mock";
+import { ARGUS_DEPLOYER, EURC, GBPA, HB, HS, INDEX, JPYC, mockRpc, NOT_REGISTERED, scIndex, SEEN, tsOf } from "./abi-live-mock";
+import type { LiveData } from "./abi-live-mock";
 
 const L = INDEX.live!;
 const REF = "/Users/tobiasd/Desktop/arc/research/arc-builders-index/terminal/live.js";
 
 function engine(head: number, stats?: { calls: string[] }) {
   const e = createEngine({ call: mockRpc(head, stats) as never });
-  e.load(L, SEEN);
+  e.load(INDEX, SEEN);
   return e;
 }
 
@@ -64,7 +65,7 @@ describe("hour roll", () => {
         return inner(m, p);
       }) as never,
     });
-    e.load(L, SEEN);
+    e.load(INDEX, SEEN);
     const r = await e.tick();
     expect(r.closedHours).toHaveLength(1);
     expect(r.closedHours[0].t).toBe(HS + 3600);
@@ -90,7 +91,7 @@ describe("golden values (from the reference live.js)", () => {
 });
 
 describe.skipIf(!existsSync(REF))("equivalence with the reference live.js", () => {
-  async function ref(head: number) {
+  async function ref(head: number, index: LiveData = INDEX) {
     const mod = createRequire(import.meta.url)(REF) as { createEngine: (o: object) => { load: (a: unknown, b: unknown) => void; tick: () => Promise<any> } };
     const inner = mockRpc(head);
     let id = 0;
@@ -100,14 +101,18 @@ describe.skipIf(!existsSync(REF))("equivalence with the reference live.js", () =
       catch (e) { return { ok: true, status: 200, json: async () => ({ error: { message: String(e) } }) }; }
     });
     const e = mod.createEngine({});
-    e.load(JSON.parse(JSON.stringify(INDEX)), SEEN);
+    e.load(JSON.parse(JSON.stringify(index)), SEEN);
     const out = await e.tick();
     vi.unstubAllGlobals();
     return out;
   }
-  test.each([10, 100, 300, 4100, 7300])("head +%i blocks: identical numbers", async (off) => {
-    const a = await ref(HB + off);
-    const b = await engine(HB + off).tick();
+  const cases = [10, 100, 300, 1000, 4100, 5450, 7300].flatMap((off) => [[off, "USDC only"], [off, "stablecoins + milestones"]] as const);
+  test.each(cases)("head +%i blocks, %s: identical numbers", async (off, kind) => {
+    const index = kind === "USDC only" ? INDEX : scIndex();
+    const a = await ref(HB + off, index);
+    const e = createEngine({ call: mockRpc(HB + off) as never });
+    e.load(index, SEEN);
+    const b = await e.tick();
     expect(b.index).toBe(a.index);
     expect(b.total).toBe(a.total);
     expect(b.roots).toEqual(a.roots);
@@ -121,6 +126,116 @@ describe.skipIf(!existsSync(REF))("equivalence with the reference live.js", () =
     expect(b.f).toBe(a.f);
     expect(Object.keys(b.act)).toEqual(Object.keys(a.act));
     for (const k of Object.keys(a.act)) expect({ ...b.act[k], wallets: [...b.act[k].wallets] }).toEqual({ ...a.act[k], wallets: [...a.act[k].wallets] });
+  });
+});
+
+describe("fiat stablecoins (registry coins, ECB fix of the day before)", () => {
+  const scEngine = (head: number, stats?: { calls: string[]; ranges?: unknown[] }) => {
+    const inner = mockRpc(head, stats);
+    const e = createEngine({ call: (async (m: string, p: unknown[]) => { if (m === "eth_getLogs") stats?.ranges?.push(p[0]); return inner(m, p); }) as never });
+    e.load(scIndex(), SEEN);
+    return e;
+  };
+  test("member inflows score like USDC, in USD at the 8 Oct fix; deployers, mints and coins before `added` do not count", async () => {
+    const r = await scEngine(HB + 300).tick();
+    const tape = r.tape.filter((t) => t.ts === tsOf(HB + 25) || t.ts === tsOf(HB + 45));
+    const eur = (Number(BigInt(100_000_000)) / 10 ** 6) * 1.1186;
+    const jpy = (Number(10n ** 21n) / 10 ** 18) * 0.0063179893;
+    expect(tape).toEqual([
+      { ts: tsOf(HB + 25), src: "domain:argus.world", v: eur, pts: Math.log2(1 + eur) + 1, isNew: true },
+      { ts: tsOf(HB + 45), src: "domain:peach.ag", v: jpy, pts: Math.log2(1 + jpy) + 1, isNew: true },
+    ]);
+    // Argus: USDC from A (5, 1500) and B (12), EURC from C; the deployer's EURC, the EURC mint and GBPA (added next hour) are dropped
+    expect(r.act["domain:argus.world"].payments).toBe(4);
+    expect(r.act["domain:argus.world"].usdc).toBeCloseTo(5 + 995 + 12 + eur, 9);
+    expect([...r.act["domain:argus.world"].wallets]).not.toContain(ARGUS_DEPLOYER);
+  });
+  test("the per-wallet cap applies to the USD value", async () => {
+    const r = await scEngine(HB + 4100).tick();
+    const big = r.tape.find((t) => t.ts === tsOf(HB + 4050))!;
+    expect(big.v).toBeCloseTo(2500 * 1.1186, 9);
+    expect(big.pts).toBeCloseTo(Math.log2(1 + 1000) + 1, 12);
+  });
+  test("one extra getLogs per chunk for the registry coins, member topics only, ranges within the chunk", async () => {
+    const stats = { calls: [] as string[], ranges: [] as unknown[] };
+    await scEngine(HB + 4100, stats).tick();
+    const q = stats.ranges as { fromBlock: string; toBlock: string; address: string | string[]; topics: unknown[] }[];
+    const coinQs = q.filter((x) => Array.isArray(x.address));
+    expect(coinQs.filter((x) => x.topics.length === 3)).toHaveLength(1); // one chunk (4,101 blocks)
+    expect(coinQs[0].address).toEqual([EURC, JPYC, GBPA]);
+    expect(coinQs[0].address).not.toContain(NOT_REGISTERED);
+    expect((coinQs[0].topics[2] as string[]).every((t) => t.length === 66)).toBe(true);
+    for (const x of q) expect(parseInt(x.toBlock, 16) - parseInt(x.fromBlock, 16) + 1).toBeLessThanOrEqual(CHUNK);
+    const r2 = { calls: [] as string[], ranges: [] as unknown[] };
+    await scEngine(HB + 7300, r2).tick();
+    expect((r2.ranges as { address: unknown; topics: unknown[] }[]).filter((x) => Array.isArray(x.address) && x.topics.length === 3)).toHaveLength(2); // two chunks
+  });
+  test("the base sample adds each sender's stablecoin USD after their USDC, coins added by the hour's start only", async () => {
+    // rise limits lifted so P[base] = decayed P + the sample exactly
+    const open = (d: LiveData) => { d.live!.proj_up = 1e9; d.live!.rel_up = 0; return d; };
+    const run = async (d: LiveData) => { const e = createEngine({ call: mockRpc(HB + 300) as never }); e.load(open(d), SEEN); return e.tick(); };
+    const plainIdx = open(JSON.parse(JSON.stringify(INDEX))), scIdx = scIndex();
+    const plain = await run(plainIdx), withSc = await run(scIdx);
+    const L2 = scIdx.live;
+    const usd = (v: number, rate: number, dec: number) => (Number(BigInt(Math.round(v * 1e6)) * 10n ** BigInt(dec - 6)) / 10 ** dec) * rate;
+    // USDC per sender in the first 240 blocks: A 1505, B 12, Argus's deployer 40, Peach 40, d 120, e 7.5.
+    // Coins: deployer + 500 EURC, d + 50 EURC (merged after their USDC), C 100 EURC, 9 1,000 JPYC, 8 30,000 JPYC;
+    // the self-transfer, the mints and GBPA (added after the hour's start) do not count
+    const pts = (vals: number[]) => L2.base_scale * vals.reduce((a, v) => a + Math.log2(1 + Math.min(Math.round(v * 1e6) / 1e6, L2.cap)), 0);
+    const decayed = L2.P[L2.base] * Math.pow(L2.decay_h, plain.f);
+    expect(plain.capped).toEqual([]);
+    const eur = (v: number) => usd(v, 1.1186, 6), jpy = (v: number) => usd(v, 0.0063179893, 18);
+    expect(plain.P[L2.base]).toBeCloseTo(decayed + pts([1505, 12, 40, 40, 120, 7.5]), 6);
+    expect(withSc.P[L2.base]).toBeCloseTo(decayed + pts([1505, 12, 40 + eur(500), 40, 120 + eur(50), 7.5, eur(100), jpy(1000), jpy(30000)]), 6);
+  });
+  test("a coin added after the open hour starts counts from the next hour (after the roll)", async () => {
+    const r = await scEngine(HB + 7300).tick();
+    const g = r.tape.find((t) => t.ts === tsOf(HB + 7260))!;
+    expect(g).toMatchObject({ src: "domain:argus.world", isNew: false });
+    expect(g.v).toBeCloseTo(20 * 1.3206923422, 12);
+  });
+});
+
+describe("milestones (after the rise limit, exempt from it)", () => {
+  const run = async (off: number, index: LiveData) => { const e = createEngine({ call: mockRpc(HB + off) as never }); e.load(index, SEEN); return e.tick(); };
+  const noMs = () => { const d = scIndex(); d.milestones = []; return d; };
+  test("before its time a milestone changes nothing", async () => {
+    const a = await run(1000, scIndex()), b = await run(1000, noMs()); // head ts = HS + 500
+    expect(a.index).toBe(b.index);
+    expect(a.candle).toEqual(b.candle);
+  });
+  test("once t ≤ head: the target's √P is multiplied by √mult after the limit", async () => {
+    const a = await run(4100, scIndex()), b = await run(4100, noMs()); // head ts = HS + 2050: the base-layer upgrade only
+    const base = INDEX.live.base;
+    expect(a.roots[base]).toBeCloseTo(b.roots[base] * Math.sqrt(1.25), 9);
+    expect(a.roots["domain:argus.world"]).toBe(b.roots["domain:argus.world"]);
+    const c = await run(5450, scIndex()), d0 = await run(5450, noMs()); // HS + 2725: the Argus release too
+    expect(c.roots["domain:argus.world"]).toBeCloseTo(d0.roots["domain:argus.world"] * Math.sqrt(1.1), 9);
+    expect(c.P["domain:argus.world"]).toBeCloseTo(d0.P["domain:argus.world"] * 1.1, 6);
+  });
+  test("the milestone is its own path point: the candle's high includes the jump", async () => {
+    const a = await run(4100, scIndex());
+    expect(a.candle[2]).toBeGreaterThanOrEqual(a.index);
+    expect(a.index).toBeGreaterThan((await run(4100, noMs())).index * 1.01);
+  });
+  test("the hour closes with its milestones; the next hour's milestone applies once its time passes", async () => {
+    const a = await run(7300, scIndex()), b = await run(7300, noMs());
+    expect(a.closedHours[0].index).toBeGreaterThan(b.closedHours[0].index);
+    expect(a.rootsPrev[INDEX.live.base]).toBeCloseTo(b.rootsPrev[INDEX.live.base] * Math.sqrt(1.25), 6);
+    expect(a.closedHours[0].candle[2]).toBeGreaterThanOrEqual(a.closedHours[0].index);
+  });
+});
+
+// produced by the reference live.js on the stablecoin + milestone scenario
+const GOLD_SC = { open4100: 1006.1994645145858, closed7300: 1015.0371904744302, open7300: 1022.9113151469047 };
+
+describe("golden values, stablecoins + milestones (from the reference live.js)", () => {
+  test("open hour and roll", async () => {
+    const run = async (off: number) => { const e = createEngine({ call: mockRpc(HB + off) as never }); e.load(scIndex(), SEEN); return e.tick(); };
+    const a = await run(4100), b = await run(7300);
+    expect(a.index).toBeCloseTo(GOLD_SC.open4100, 9);
+    expect(b.closedHours[0].index).toBeCloseTo(GOLD_SC.closed7300, 9);
+    expect(b.index).toBeCloseTo(GOLD_SC.open7300, 9);
   });
 });
 
@@ -154,13 +269,13 @@ describe("stale server data", () => {
   test("more than 3 hours behind the chain: no catch-up, no log fetch", async () => {
     const calls: string[] = [];
     const e = createEngine({ call: mockRpc(HB + 2 * (3 * 3600 + 60), { calls }) as never });
-    e.load(L, SEEN);
+    e.load(INDEX, SEEN);
     await expect(e.tick()).rejects.toBeInstanceOf(StaleError);
     expect(calls).toEqual(["eth_getBlockByNumber"]);
   });
   test("exactly 3 hours behind still catches up", async () => {
     const e = createEngine({ call: mockRpc(HB + 2 * 3 * 3600) as never });
-    e.load(L, SEEN);
+    e.load(INDEX, SEEN);
     await expect(e.tick()).resolves.toMatchObject({ closedHours: expect.any(Array) });
   });
 });

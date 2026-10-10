@@ -5,7 +5,7 @@
  * finished hour (the index file's `live` block + the seen file). Read-only RPC: eth_getBlockByNumber, eth_getLogs.
  * Pure of the DOM: the RPC transport and the sleep are injectable.
  */
-import type { AbiLive } from "./builders-index";
+import type { AbiFx, AbiLive, AbiLiveCoin, AbiMilestone } from "./builders-index";
 
 export const EMITTER = "0xfffffffffffffffffffffffffffffffffffffffe";
 export const TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
@@ -22,6 +22,8 @@ export class StaleError extends Error {
 
 export type RpcCall = (method: string, params: unknown[]) => Promise<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 export type SeenFile = { hour_start: number; seen: Record<string, string> };
+/** What the engine reads from the index file: the `live` block, recorded milestones and the ECB fixes. */
+export type LiveInput = { live: AbiLive; milestones?: AbiMilestone[]; live_fx?: AbiFx };
 type Ev = { ts: number; b: number; src: string; w: string; v: number };
 type Act = { payments: number; wallets: Set<string>; new_payers: number; points: number; usdc: number };
 export type TapeEntry = { ts: number; src: string; v: number; pts: number; isNew: boolean };
@@ -81,10 +83,31 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
   let events: Ev[];
   let basePts: number | null;
   let P: Record<string, number>, rootsPrev: Record<string, number>;
+  let coins: Record<string, AbiLiveCoin> = {}, fx: AbiFx = {};
   let cOpen: number, cHi: number, cLo: number, pathDone: number; // the open hour's candle
+  let milestones: AbiMilestone[] = [], msDone = new Set<string>(); // recorded milestones; applied after the rise limit
 
-  function load(live: AbiLive, seenJson: SeenFile) {
-    L = live;
+  // fx.py rate_for: USD per unit, latest ECB fix dated before the UTC day of ts
+  function rateFor(ccy: string, ts: number): number | null {
+    if (ccy === "USD") return 1;
+    const day = new Date(ts * 1000).toISOString().slice(0, 10);
+    let best: string | null = null;
+    for (const d in fx) if (d < day && (best === null || d > best) && fx[d][ccy] != null) best = d;
+    return best ? fx[best][ccy] : null;
+  }
+  function acceptSc(log: any): Ev | null { // eslint-disable-line @typescript-eslint/no-explicit-any
+    const m = coins[log.address.toLowerCase()];
+    if (!m || log.topics.length !== 3) return null;
+    const to = "0x" + log.topics[2].slice(26), from = "0x" + log.topics[1].slice(26);
+    const src = L.contracts[to], ts = parseInt(log.blockTimestamp, 16);
+    if (!src || ts < m.added || from === ZERO || L.contracts[from] || (L.deployers[src] || []).includes(from)) return null;
+    const rate = rateFor(m.currency, ts);
+    if (rate == null) return null;
+    return { ts, b: parseInt(log.blockNumber, 16), src, w: from, v: (Number(BigInt(log.data)) / 10 ** m.decimals) * rate };
+  }
+
+  function load(index: LiveInput, seenJson: SeenFile) {
+    L = index.live;
     seen = new Map();
     const pl = L.seen_prefix;
     for (const [s, str] of Object.entries(seenJson.seen)) {
@@ -93,9 +116,11 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
       seen.set(s, set);
     }
     topic2 = [...new Set(Object.keys(L.contracts))].sort().map((c) => "0x" + "0".repeat(24) + c.slice(2));
+    coins = L.stablecoins || {}; fx = index.live_fx || {};
     hourStart = L.hour_start; hourBlock = L.hour_start_block; lastBlock = hourBlock - 1;
     events = []; basePts = null; headTs = hourStart;
     P = Object.assign({}, L.P); rootsPrev = Object.assign({}, L.roots_prev);
+    milestones = (index.milestones || []).slice(); msDone = new Set();
     resetCandle();
   }
 
@@ -121,6 +146,14 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
         const ev = accept(l);
         if (ev) out.push(ev);
       }
+      const sc = Object.keys(coins);
+      if (sc.length) { // other fiat stablecoins into members, in USD (ECB fix)
+        for (const l of await call("eth_getLogs", [{ fromBlock: hex(b), toBlock: hex(e), address: sc, topics: [TRANSFER, null, topic2] }])) {
+          if (!l.blockTimestamp) l.blockTimestamp = hex(await blockTs(parseInt(l.blockNumber, 16)));
+          const ev = acceptSc(l);
+          if (ev) out.push(ev);
+        }
+      }
     }
     return out;
   }
@@ -134,6 +167,17 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
       if (fr === ZERO || to === ZERO || fr === to) continue;
       agg.set(fr, (agg.get(fr) || 0) + Number(BigInt(l.data)) / 1e18);
     }
+    const sc = Object.keys(coins).filter((a) => coins[a].added <= hourStart);
+    if (sc.length) { // same window, other fiat stablecoins, merged per sender after USDC
+      for (const l of await call("eth_getLogs", [{ fromBlock: hex(hourBlock), toBlock: hex(hourBlock + L.base_window - 1), address: sc, topics: [TRANSFER] }])) {
+        if (l.topics.length !== 3) continue;
+        const m = coins[l.address.toLowerCase()];
+        const fr = "0x" + l.topics[1].slice(26), to = "0x" + l.topics[2].slice(26);
+        const rate = m ? rateFor(m.currency, hourStart) : null;
+        if (!m || rate == null || fr === ZERO || to === ZERO || fr === to) continue;
+        agg.set(fr, (agg.get(fr) || 0) + (Number(BigInt(l.data)) / 10 ** m.decimals) * rate);
+      }
+    }
     let pts = 0;
     for (const v of agg.values()) pts += Math.log2(1 + Math.min(Math.round(v * 1e6) / 1e6, L.cap));
     return L.base_scale * pts;
@@ -143,13 +187,18 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
     events.filter((e) => e.ts >= hourStart && e.ts < hourStart + 3600)
       .sort((a, b) => a.ts - b.ts || (a.src < b.src ? -1 : a.src > b.src ? 1 : 0) || (a.w < b.w ? -1 : a.w > b.w ? 1 : 0) || a.v - b.v);
 
-  // advance the candle's high and low through the open hour's payments (the value after each one)
-  function walkPath() {
+  // advance the candle's high and low through the open hour's payments (the value after each one), then through
+  // its milestones up to `until` (each is its own path point)
+  function walkPath(until: number) {
     const evs = hourEvents();
     for (; pathDone < evs.length; pathDone++) {
       const e = evs[pathDone];
       const v = evaluate((e.ts - hourStart) / 3600, e.ts, e.ts - hourStart >= 120).index;
       cHi = Math.max(cHi, v); cLo = Math.min(cLo, v);
+    }
+    for (const m of milestones) if (!msDone.has(m.id) && m.t >= hourStart && m.t < hourStart + 3600 && m.t <= until) {
+      const v = evaluate((m.t - hourStart) / 3600, m.t, m.t - hourStart >= 120).index;
+      cHi = Math.max(cHi, v); cLo = Math.min(cLo, v); msDone.add(m.id);
     }
   }
   const isoHour = (sec: number) => `${new Date(sec * 1000).toISOString().slice(0, 19)}Z`;
@@ -176,6 +225,8 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
     }
     if (withBase && basePts != null) p[L.base] = (p[L.base] || 0) + basePts;
     const prevTotal = Object.values(rootsPrev).reduce((x, y) => x + y, 0);
+    const cut = upto === Infinity ? headTs : upto, mm: Record<string, number> = {};
+    for (const m of milestones) if (m.t >= hourStart && m.t < hourStart + 3600 && m.t <= cut) mm[m.target] = (mm[m.target] || 1) * m.mult;
     const roots: Record<string, number> = {}, capped: string[] = [];
     for (const s in p) {
       const sc = s === L.base ? L.base_k : 1;
@@ -186,6 +237,8 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
         if (L.rel_up > 0) lim = Math.min(lim, prev > 0 ? Math.max(prev * (1 + L.rel_up), L.entry * prevTotal) : L.entry * prevTotal);
         if (r > lim) { r = lim; p[s] = (r / sc) ** 2; capped.push(s); }
       }
+      // milestones: after the rise limit, exempt from it
+      if (mm[s] && r > 0 && (s !== L.base || L.base_k > 0)) { r *= Math.sqrt(mm[s]); p[s] = (r / sc) ** 2; }
       roots[s] = r;
     }
     const total = Object.values(roots).reduce((x, y) => x + y, 0);
@@ -195,7 +248,7 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
   async function roll(): Promise<{ t: number; index: number; candle: Candle }> {
     // the open hour has ended: close it locally, open the next one
     if (basePts == null) basePts = await sampleBase();
-    walkPath();
+    walkPath(Infinity);
     const fin = evaluate(1);
     for (const e of events) if (e.ts < hourStart + 3600) {
       let s = seen.get(e.src);
@@ -229,8 +282,8 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
     while (headTs >= hourStart + 3600) closedHours.push(await roll());
     if (basePts == null && lastBlock >= hourBlock + L.base_window - 1) basePts = await sampleBase();
     const f = Math.min(1, Math.max(0, (headTs - hourStart) / 3600));
-    // candle path: the value after each payment of the open hour
-    walkPath();
+    // candle path: the value after each payment and milestone of the open hour
+    walkPath(headTs);
     const now = evaluate(f);
     cHi = Math.max(cHi, now.index); cLo = Math.min(cLo, now.index);
     const candle: Candle = [isoHour(hourStart), cOpen, cHi, cLo, now.index, now.tape.length, sum(now.act, "usdc"), sum(now.act, "points")];

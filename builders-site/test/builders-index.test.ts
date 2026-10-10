@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { Env } from "../lib/env";
@@ -128,6 +128,47 @@ describe("/api/index with the real producer file", () => {
     const stored = JSON.parse((await s.kv.get(ABI_KEY))!);
     expect(stored.live.hour_start).toBe(real.live.hour_start);
     expect(stored.method).toBeUndefined();
+  });
+  const REF_FILE = "/Users/tobiasd/Desktop/arc/research/arc-builders-index/terminal/data/index.json";
+  test.skipIf(!existsSync(REF_FILE))("the reference file with stablecoins and fx fits the 256 KB cap and keeps them", async () => {
+    const s = setup();
+    const text = readFileSync(REF_FILE, "utf8");
+    expect(new TextEncoder().encode(text).byteLength).toBeLessThan(ABI_LIMITS.bytes);
+    const ref = JSON.parse(text);
+    const r = await s.push(text);
+    expect(r.status).toBe(200);
+    const stored = JSON.parse((await s.kv.get(ABI_KEY))!);
+    expect(stored.stablecoins).toHaveLength(ref.stablecoins.length);
+    expect(stored.volume_24h).toEqual(ref.volume_24h);
+    expect(Object.keys(stored.live.stablecoins)).toEqual(Object.keys(ref.live.stablecoins));
+    expect(Object.keys(stored.live_fx)).toEqual(Object.keys(ref.live_fx));
+  });
+});
+
+describe("/api/index milestones and stablecoins", () => {
+  const withMs = (evidence: string[]) => ({
+    ...indexFixture(),
+    milestones: [{ id: "20261010-063000-arc-upgrade", t: 1791613800, target: "base:arc", tier: "arc-upgrade", mult: 1.25, title: "Arc network upgrade", evidence }],
+    stablecoins: [{ symbol: "EURC", currency: "EUR", issuer: "Circle", address: "0xbef5f6d51cb62b58e6a8f77868681825c6fe21c1", decimals: 6, added: 1791619200 }],
+    volume_24h: { EURC: { members_usd: 10, members_payments: 1, base_usd_est: 0, base_transfers_est: 0 } },
+    live_fx: { "2026-10-09": { EUR: 1.1206, GBP: 1.322 } },
+  });
+  test("stored in one write and served back", async () => {
+    const s = setup();
+    const r = await s.push(withMs(["https://docs.arc.io/", "0x" + "ab".repeat(32)]));
+    expect(r.status).toBe(200);
+    expect(s.kv.puts).toBe(1);
+    const res = await handlePublicIndex(new Request(`${ORIGIN}/api/index`), s.env);
+    const got = (await res.json()) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(got.milestones[0]).toMatchObject({ tier: "arc-upgrade", mult: 1.25, evidence: ["https://docs.arc.io/", "0x" + "ab".repeat(32)] });
+    expect(got.live_fx).toEqual({ "2026-10-09": { EUR: 1.1206 } });
+  });
+  test.each([["javascript:alert(1)"], ["http://docs.arc.io/"], ["docs.arc.io"]])("400 for evidence %s; nothing written", async (e) => {
+    const s = setup();
+    const r = await s.push(withMs([e]));
+    expect(r.status).toBe(400);
+    expect(String(r.body.error)).toMatch(/evidence/);
+    expect(s.kv.puts).toBe(0);
   });
 });
 
