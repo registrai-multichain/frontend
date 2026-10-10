@@ -12,7 +12,7 @@ describe("validateIndex", () => {
     const r = validateIndex(indexFixture());
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(Object.keys(r.data).sort()).toEqual(["base", "events", "head_block", "head_time", "index", "index_24h_ago", "params", "projects", "series", "updated", "data_until", "candles", "tape", "roots_24h", "milestones", "stablecoins", "volume_24h", "live_fx"].sort());
+      expect(Object.keys(r.data).sort()).toEqual(["base", "events", "head_block", "head_time", "index", "index_24h_ago", "params", "projects", "series", "updated", "data_until", "candles", "tape", "roots_24h", "milestones", "stablecoins", "integrations", "volume_24h", "live_fx"].sort());
       expect(r.data.series).toHaveLength(200);
     }
   });
@@ -186,6 +186,23 @@ describe("milestones, stablecoins, volume_24h, live_fx (spec §12, §13)", () =>
     if (!r.ok) return;
     expect(r.data.live!.stablecoins![EURC]).toEqual({ symbol: "EURC", currency: "EUR", decimals: 6, added: 1791619200 });
     expect(Object.keys(r.data.live_fx["2026-10-09"]).sort()).toEqual(["EUR", "JPY"]);
+  });
+  test("integrations (§14): valid rows kept, malformed rows dropped without failing the push, absent = []", () => {
+    const ok = { company: "MoonPay", category: "on/off-ramp", status: "live", first_announced: "2025-10-28", link: "https://www.moonpay.com/newsroom", member: "domain:moonpay.com", milestone_id: "20261010-120000-integration" };
+    const r = run((d) => {
+      d.integrations = [ok, { ...ok, company: "Kraken", status: "announced", link: null, member: null, milestone_id: null, extra: 1 },
+        { ...ok, company: "Bad status", status: "rumoured" }, { ...ok, company: "Bad date", first_announced: "Oct 2025" },
+        { ...ok, company: "Bad link", link: "javascript:alert(1)" }, { ...ok, company: "x".repeat(81) }, { ...ok, company: "Bad\nline" }, "junk", null];
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.integrations).toEqual([ok, { ...ok, company: "Kraken", status: "announced", link: null, member: null, milestone_id: null }]);
+    const big = run((d) => { d.integrations = Array.from({ length: ABI_LIMITS.integrations + 5 }, (_, i) => ({ ...ok, company: `C${i}` })); });
+    expect(big.ok && big.data.integrations.length).toBe(ABI_LIMITS.integrations);
+    for (const v of ["nope", undefined]) {
+      const n = run((d) => { d.integrations = v; });
+      expect(n.ok && n.data.integrations).toEqual([]);
+    }
   });
   const moonpay = () => ({ id: "20261010-120000-integration", t: 1791633600, target: "base:arc", tier: "integration", mult: 1.0508, title: "MoonPay live on Arc", evidence: ["https://www.moonpay.com/newsroom"], company: "MoonPay", revenue_usd: 108e6, revenue_kind: "estimate" });
   test("integration milestones (§14) keep company and revenue", () => {

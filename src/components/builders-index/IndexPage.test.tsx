@@ -85,4 +85,18 @@ describe("the terminal markup", () => {
     expect(html()).not.toMatch(/\b(trade|buy|sell|long|short|leverage|perp|wager|bet)\b/i);
     expect(html()).not.toMatch(/<input|type="submit"/i);
   });
+  test("integrations panel: counts, status filter, rows; empty state", () => {
+    const integrations = [
+      { company: "MoonPay", category: "on/off-ramp", status: "live", first_announced: "2025-10-28", link: "https://www.moonpay.com/newsroom", member: null, milestone_id: "m1" },
+      { company: "Kraken", category: "exchange", status: "announced", first_announced: "2025-10-28", link: null, member: null, milestone_id: null },
+    ] as typeof INDEX.integrations;
+    const h = html({ d: { ...INDEX, integrations } });
+    expect(h).toContain("Integrations");
+    expect(h).toContain("1 live · 0 deployed · 1 announced");
+    expect(h).toContain('aria-label="Integration status"');
+    expect(h).toContain('aria-label="About integrations"');
+    expect(h).toMatch(/MoonPay.*Kraken/s);
+    expect(h).toContain(">moonpay.com</a>");
+    expect(html()).toContain("None tracked yet.");
+  });
 });

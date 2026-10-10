@@ -150,3 +150,12 @@
   .abi-dup { display: none; }
   .abi-px .v { transition: none; }
 }
+
+/* Integrations (§14): full width under the members row; the list scrolls */
+.abi-ig { max-height: 420px; overflow-y: auto; }
+.abi-ig thead th { position: sticky; top: 0; background: var(--abi-panel, var(--abi-bg)); }
+.abi-ig-n { font-size: 10.5px; margin-left: auto; margin-right: 8px; }
+.abi-st { font-family: var(--abi-mono); font-size: 10.5px; padding: 1px 6px; border-radius: 3px; background: var(--abi-raise); color: var(--abi-mute); }
+.abi-st-live { color: var(--abi-up); }
+.abi-st-deployed { color: var(--abi-fg); }
+@media (max-width: 640px) { .abi-ig-n { display: none; } }

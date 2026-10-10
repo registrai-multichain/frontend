@@ -26,6 +26,9 @@ export const ABI_LIMITS = {
   milestones: 500,
   milestoneTitle: 120,
   company: 60,
+  integrations: 400,
+  integrationCompany: 80,
+  integrationCategory: 40,
   evidencePer: 10,
   stablecoins: 50,
   volumeCoins: 50,
@@ -63,6 +66,10 @@ export type AbiLiveCoin = { symbol: string; currency: string; decimals: number; 
 export type AbiMilestone = { id: string; t: number; target: string; tier: AbiMilestoneTier; mult: number; title: string; evidence: string[];
   /** integration milestones (§14): the company and its annual revenue, from a filing or a published estimate */
   company?: string; revenue_usd?: number; revenue_kind?: "filing" | "estimate" };
+/** A company that announced an Arc integration (spec §14). link: the live evidence when live, else the first announcement. */
+export type AbiIntegration = { company: string; category: string; status: AbiIntegrationStatus; first_announced: string; link: string | null; member: string | null; milestone_id: string | null };
+export const ABI_INTEGRATION_STATUSES = ["live", "deployed", "announced"] as const;
+export type AbiIntegrationStatus = (typeof ABI_INTEGRATION_STATUSES)[number];
 export type AbiStablecoin = { symbol: string; currency: string; issuer: string; address: string; decimals: number; added: number };
 export type AbiVolume = { members_usd: number; members_payments: number; base_usd_est: number; base_transfers_est: number };
 /** ECB fixes: date (YYYY-MM-DD) -> currency -> USD per unit */
@@ -88,6 +95,7 @@ export type AbiData = {
   tape: AbiTapeRow[];
   milestones: AbiMilestone[];
   stablecoins: AbiStablecoin[];
+  integrations: AbiIntegration[];
   volume_24h: Record<string, AbiVolume>;
   live_fx: AbiFx;
   live?: AbiLive;
@@ -167,6 +175,23 @@ function validateMilestones(v: unknown): AbiMilestone[] | string {
     if (m.company !== undefined) ms.company = m.company as string;
     if (m.revenue_usd !== undefined) { ms.revenue_usd = m.revenue_usd as number; ms.revenue_kind = m.revenue_kind as "filing" | "estimate"; }
     out.push(ms);
+  }
+  return out;
+}
+
+/** integrations (§14): malformed rows are dropped, not fatal, so one bad row can't hold back the hourly push. */
+function validateIntegrations(v: unknown): AbiIntegration[] {
+  if (!Array.isArray(v)) return [];
+  const out: AbiIntegration[] = [];
+  for (const r of v.slice(0, ABI_LIMITS.integrations)) {
+    if (!isObj(r) || !line(r.company, ABI_LIMITS.integrationCompany) || !line(r.category, ABI_LIMITS.integrationCategory)) continue;
+    if (typeof r.status !== "string" || !(ABI_INTEGRATION_STATUSES as readonly string[]).includes(r.status)) continue;
+    if (typeof r.first_announced !== "string" || !DAY.test(r.first_announced)) continue;
+    const link = r.link == null ? null : evidenceItem(r.link);
+    if (r.link != null && !link) continue;
+    const member = typeof r.member === "string" && str(r.member) ? r.member : null;
+    const milestone_id = typeof r.milestone_id === "string" && MS_ID.test(r.milestone_id) ? r.milestone_id : null;
+    out.push({ company: r.company, category: r.category, status: r.status as AbiIntegrationStatus, first_announced: r.first_announced, link: link || null, member, milestone_id });
   }
   return out;
 }
@@ -367,6 +392,7 @@ export function validateIndex(raw: unknown): AbiResult {
     if (!c) return bad(`stablecoins must be at most ${ABI_LIMITS.stablecoins} of { symbol, currency, issuer, address, decimals, added }`);
     stablecoins = c;
   }
+  const integrations = validateIntegrations(raw.integrations);
   let volume: Record<string, AbiVolume> = {};
   if (raw.volume_24h !== undefined) {
     const vv = validateVolume(raw.volume_24h);
@@ -389,7 +415,7 @@ export function validateIndex(raw: unknown): AbiResult {
       index: raw.index, index_24h_ago: (raw.index_24h_ago as number | null | undefined) ?? null,
       base: { time: b.time, level: b.level, sha256: b.sha256 },
       series, projects, events, candles, tape, roots_24h: roots24, params: params as AbiData["params"],
-      milestones, stablecoins, volume_24h: volume, live_fx: liveFx,
+      milestones, stablecoins, integrations, volume_24h: volume, live_fx: liveFx,
     },
   };
 }

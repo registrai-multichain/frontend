@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { createEngine, type LiveResult } from "./abi-live";
 import { HB, INDEX, mockRpc, SEEN } from "./abi-live-mock";
-import { barAt, candleList, freshKeys, rowKeys, chartModel, members, methodRows, milestoneRows, openHour, paceAll, quote, rollOff, status, tapeRows, tickerItems, ts, usdShort, why } from "./abi-terminal";
+import { barAt, candleList, freshKeys, rowKeys, chartModel, members, methodRows, integrationRows, milestoneRows, openHour, paceAll, quote, rollOff, status, tapeRows, tickerItems, ts, usdShort, why } from "./abi-terminal";
 import type { AbiData } from "./builders-index";
 
 const L = INDEX.live!;
@@ -262,5 +262,25 @@ describe("milestone rows", () => {
       { ...base, id: "c", t: 1791620000, tier: "arc-upgrade", mult: 1.25, title: "Arc upgrade" },
     ] } as unknown as AbiData;
     expect(milestoneRows(d).map((r) => r.detail)).toEqual(["MoonPay · revenue ≈ $108M (estimate)", "Acme · revenue $6.3B (filing)", undefined]);
+  });
+});
+
+describe("integration rows", () => {
+  const row = (company: string, status: string, first_announced: string, extra = {}) => ({ company, category: "exchange", status, first_announced, link: null, member: null, milestone_id: null, ...extra });
+  const d = { ...INDEX, integrations: [
+    row("Kraken", "announced", "2025-10-28"), row("MoonPay", "live", "2025-10-28", { link: "https://www.moonpay.com/newsroom", milestone_id: "m1", member: "domain:argus.world" }),
+    row("Coinbase", "announced", "2026-09-16"), row("Juno", "live", "2025-10-28"), row("Uniswap", "deployed", "2025-08-05"),
+  ] } as unknown as AbiData;
+  test("live first, then deployed, then announced; newest first; counts over all rows", () => {
+    const r = integrationRows(d);
+    expect(r.rows.map((x) => x.company)).toEqual(["Juno", "MoonPay", "Uniswap", "Coinbase", "Kraken"]);
+    expect(r.counts).toEqual({ live: 2, deployed: 1, announced: 2 });
+    const m = r.rows[1];
+    expect([m.milestone, m.member, m.link?.text]).toEqual([true, "Argus", "moonpay.com"]);
+  });
+  test("a filter keeps the counts", () => {
+    const r = integrationRows(d, "announced");
+    expect(r.rows.map((x) => x.company)).toEqual(["Coinbase", "Kraken"]);
+    expect(r.total).toBe(5);
   });
 });

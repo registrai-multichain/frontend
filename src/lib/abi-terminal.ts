@@ -4,7 +4,7 @@
  * server file (`params`, `live`, `roots_24h`, `candles`, `tape`) and the browser's live result.
  */
 import type { Candle, LiveResult } from "./abi-live";
-import type { AbiData, AbiMilestone } from "./builders-index";
+import { ABI_INTEGRATION_STATUSES, type AbiData, type AbiIntegrationStatus, type AbiMilestone } from "./builders-index";
 import { evidenceHref } from "./facts";
 
 export const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -306,4 +306,22 @@ export function milestoneRows(d: AbiData, max = 6): MilestoneRow[] {
     const detail = [m.company, rev].filter(Boolean).join(" · ");
     return { id: m.id, day: dayLab(m.t), title: m.title, mult: `×${m.mult.toFixed(2)}`, target: nameOf(d, m.target), evidence: evidenceLinks(m.evidence), ...(detail ? { detail } : {}) };
   });
+}
+
+export type IntegrationFilter = "all" | AbiIntegrationStatus;
+export type IntegrationRow = { company: string; category: string; status: AbiIntegrationStatus; since: string; link: EvidenceLink | null; member: string | null; milestone: boolean };
+/** Live first, then deployed, then announced; newest announcement first within each; counts are over all rows. */
+export function integrationRows(d: AbiData, filter: IntegrationFilter = "all"): { counts: Record<AbiIntegrationStatus, number>; total: number; rows: IntegrationRow[] } {
+  const counts: Record<AbiIntegrationStatus, number> = { live: 0, deployed: 0, announced: 0 };
+  for (const i of d.integrations) counts[i.status]++;
+  const rank = (s: AbiIntegrationStatus) => ABI_INTEGRATION_STATUSES.indexOf(s);
+  const rows = d.integrations
+    .filter((i) => filter === "all" || i.status === filter)
+    .slice()
+    .sort((a, b) => rank(a.status) - rank(b.status) || b.first_announced.localeCompare(a.first_announced) || a.company.localeCompare(b.company))
+    .map((i) => ({
+      company: i.company, category: i.category, status: i.status, since: i.first_announced,
+      link: i.link ? evidenceLinks([i.link])[0] : null, member: i.member ? nameOf(d, i.member) : null, milestone: !!i.milestone_id,
+    }));
+  return { counts, total: d.integrations.length, rows };
 }

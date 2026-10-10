@@ -7,8 +7,9 @@ import { projectHref } from "@/lib/project-page";
 import { createEngine, StaleError, type Candle, type LiveResult } from "@/lib/abi-live";
 import { validateSeen, type AbiData } from "@/lib/builders-index";
 import {
-  barAt, candleList, chartModel, cls, coinRows, fmt, hm, hms, members, methodRows, milestoneRows, nameOf, ohlcLine, openHour, pct, quote, RANGE_BARS, RANGE_KEYS, rollOff, sgn,
+  barAt, candleList, chartModel, cls, coinRows, fmt, hm, hms, members, integrationRows, methodRows, milestoneRows, nameOf, ohlcLine, openHour, pct, quote, RANGE_BARS, RANGE_KEYS, rollOff, sgn,
   status, tapeRows, freshKeys, rowKey, rowKeys, tickerItems, ts, usdFmt, why, type Bar, type ChartModel, type RangeKey, type SortKey,
+  type IntegrationFilter,
 } from "@/lib/abi-terminal";
 import { ABI_COPY, abiPath, abiSeenPath, abiState, baseTip, coinsTip, decayTip, type AbiState } from "@/lib/builders-index-page";
 import { PilotPanel } from "./pilot/PilotPanel";
@@ -334,6 +335,42 @@ function Countdown({ R }: { R: LiveResult | null }) {
   return <>{oh && now ? oh.left(now) : "–"}</>;
 }
 
+const INTEGRATION_FILTERS: { v: IntegrationFilter; label: string }[] = [
+  { v: "all", label: "All" }, { v: "live", label: "Live" }, { v: "deployed", label: "Deployed" }, { v: "announced", label: "Announced" },
+];
+
+function IntegrationsPanel({ d }: { d: AbiData }) {
+  const [filter, setFilter] = useState<IntegrationFilter>("all");
+  const { counts, total, rows } = integrationRows(d, filter);
+  return (
+    <section className="abi-panel" aria-label="Integrations">
+      <div className="abi-ph">
+        <h2>Integrations</h2><InfoBubble label="About integrations">{ABI_COPY.integrations}</InfoBubble>
+        <span className="sp mono dim abi-ig-n">{counts.live} live · {counts.deployed} deployed · {counts.announced} announced</span>
+        <Seg label="Integration status" value={filter} options={INTEGRATION_FILTERS} onChange={setFilter} />
+      </div>
+      {total === 0 ? <p className="abi-ms-empty">{ABI_COPY.noIntegrations}</p> : (
+        <div className="abi-tbl abi-ig">
+          <table>
+            <thead><tr><th>Company</th><th>Category</th><th>Status</th><th>Since</th><th>Evidence</th></tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.company}>
+                  <td className="n">{r.company}{r.milestone && <span className="x" title="Milestone recorded"> ×</span>}{r.member && <span className="abi-cc" title="ABI member">{r.member}</span>}</td>
+                  <td className="dim">{r.category}</td>
+                  <td><span className={`abi-st abi-st-${r.status}`}>{r.status}</span></td>
+                  <td className="mono dim">{r.since}</td>
+                  <td>{r.link ? <a href={r.link.href} target="_blank" rel="noopener noreferrer nofollow">{r.link.text}</a> : <span className="dim">–</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function SidePanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
   const oh = openHour(R);
   const ro = rollOff(d);
@@ -379,6 +416,7 @@ export function Terminal({ d, R, closedLocal, st, pilot }: { d: AbiData; R: Live
           <SidePanel d={d} R={R} />
         </aside>
       </div>
+      <IntegrationsPanel d={d} />
       <footer className="abi-foot">
         <span>Closed by Tabula through {hm(ts(d.data_until))} UTC{R ? " · open hour computed in this browser from Arc RPC" : ""}</span>
         <span>Index data <InfoBubble label="About the data">{ABI_COPY.openHour}</InfoBubble></span>
