@@ -91,6 +91,18 @@ test("one direction per wallet; a hedged pair across two wallets loses the cut +
   }
 });
 
+test("time-weighted book: a position closed 1 min before the close still counts for its 59 minutes", () => {
+  const h = 1791600000, pos = [
+    { side: "long", notional: 60000, openedAt: h - 7200 },                          // open all hour
+    { side: "short", notional: 36000, openedAt: h, closedAt: h + 3540 },             // dodges the snapshot
+    { side: "short", notional: 36000, openedAt: h + 3660 },                          // reopened after the close
+    { side: "long", notional: 7200, openedAt: h + 1800, closedAt: h + 2700 },        // a quarter hour
+  ];
+  const b = P.bookTW(pos, h, h + 3600);
+  near(b.L, 60000 + 1800); near(b.S, 35400);
+  assert.deepEqual(P.bookTW(pos, h + 7200, h + 10800), { L: 60000, S: 36000 });
+});
+
 test("fee split", () => {
   const s = P.splitFees(1000);
   near(s.insurance, 200); near(s.treasury, 800); near(s.buyback, 400);

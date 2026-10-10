@@ -50,6 +50,7 @@ const CALLS: Record<string, (P: Api, i: any) => unknown> = {
   maxLeverage: (P, i) => P.maxLeverage(i),
   risk: (P, i) => P.risk(i.closes, i.steps),
   houseHour: (P, i) => P.houseHour(i),
+  bookTW: (P, i) => P.bookTW(i.positions, i.from, i.to),
   splitFees: (P, i) => P.splitFees(i.pool),
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -158,6 +159,18 @@ describe.each([["reference", REF], ["port", Port as Api]])("pilot.test.js cases 
     for (const px of [995, 1000, 1005]) expect(P.close(a, px, 3600, rates).payout + P.close(b, px, 3600, rates).payout).toBeLessThan(2000);
   });
 
+  test("time-weighted book: a position closed 1 min before the close still counts for its 59 minutes", () => {
+    const h = 1791600000, pos = [
+      { side: "long", notional: 60000, openedAt: h - 7200 },
+      { side: "short", notional: 36000, openedAt: h, closedAt: h + 3540 },
+      { side: "short", notional: 36000, openedAt: h + 3660 },
+      { side: "long", notional: 7200, openedAt: h + 1800, closedAt: h + 2700 },
+    ];
+    const b = P.bookTW(pos, h, h + 3600);
+    near(b.L, 60000 + 1800); near(b.S, 35400);
+    expect(P.bookTW(pos, h + 7200, h + 10800)).toEqual({ L: 60000, S: 36000 });
+  });
+
   test("fee split", () => {
     const s = P.splitFees(1000);
     near(s.insurance, 200); near(s.treasury, 800); near(s.buyback, 400);
@@ -193,6 +206,8 @@ describe("port = reference on random inputs (exact)", () => {
       expect(Port.houseHour(hh)).toEqual(REF.houseHour(hh));
       const pool = rnd() * 1e6;
       expect(Port.splitFees(pool)).toEqual(REF.splitFees(pool));
+      const tw = Array.from({ length: Math.floor(rnd() * 6) }, () => ({ side: pick(["long", "short"]), notional: rnd() * 1e5, openedAt: Math.floor(rnd() * 7200), closedAt: pick([undefined, null, Math.floor(rnd() * 9000)]) }));
+      expect(Port.bookTW(tw, 3600, 7200)).toEqual(REF.bookTW(tw, 3600, 7200));
       const side = pick(["long", "short", "long", "short", "up", ""]);
       const lev = pick([1, 2, 3, 5, 10, 20, 30, 4, 0, 2.5, 50]);
       const mark = pick([800 + rnd() * 400, 0, -1, NaN, 1000]);

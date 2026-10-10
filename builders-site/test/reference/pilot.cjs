@@ -81,6 +81,20 @@
              houseFunding: houseSkew + houseTrend + cut };   // per hour, points, to the house / fee pool
   }
 
+  /* §9.14a: the book that fixes the next hour's rates is time-weighted over the closing hour [from, to), not a
+   * snapshot at the close, so closing just before and reopening just after doesn't lower the skew. positions:
+   * { side, notional, openedAt, closedAt? } (closedAt: close or liquidation time; absent = still open). */
+  function bookTW(positions, from, to) {
+    let L = 0, S = 0;
+    for (const p of positions) {
+      const a = Math.max(from, p.openedAt), b = Math.min(to, p.closedAt != null ? p.closedAt : to);
+      if (b <= a) continue;
+      const w = p.notional * (b - a) / (to - from);
+      if (p.side === "long") L += w; else S += w;
+    }
+    return { L, S };
+  }
+
   /* The house's hour: PnL of its exposure over the hour plus its funding receipts (points). */
   function houseHour({ L, S, open, close, trend, sigma1h }) {
     const fr = fundingRates({ L, S, trend, sigma1h });
@@ -171,7 +185,7 @@
   }
 
   const api = { RULES, returns, risk, maxLeverage, fundingRates, fundingPaid, fundingAccrued, borrowPaid, pnl, liqPrice,
-                open, close, liquidation, equity, houseHour, splitFees };
+                open, close, liquidation, equity, bookTW, houseHour, splitFees };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.ABIPilot = api;
 })(typeof window !== "undefined" ? window : globalThis);

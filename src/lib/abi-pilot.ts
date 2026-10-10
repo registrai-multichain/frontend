@@ -173,6 +173,21 @@ export function fundingRates({ L, S, trend, sigma1h }: { L: number; S: number; t
   return { skew, rMax, r, heavy, long, short, cut, paid, houseExposure, houseSkew, houseTrend, houseFunding: houseSkew + houseTrend + cut };
 }
 
+/**
+ * §9.14a: the book that fixes the next hour's rates, time-weighted over the closing hour [from, to): each side's
+ * notional × overlap / (to − from), closed positions included (closedAt: close or liquidation time; absent = open).
+ */
+export function bookTW(positions: readonly { side: Side | string; notional: number; openedAt: number; closedAt?: number | null }[], from: number, to: number): { L: number; S: number } {
+  let L = 0, S = 0;
+  for (const p of positions) {
+    const a = Math.max(from, p.openedAt), b = Math.min(to, p.closedAt != null ? p.closedAt : to);
+    if (b <= a) continue;
+    const w = p.notional * (b - a) / (to - from);
+    if (p.side === "long") L += w; else S += w;
+  }
+  return { L, S };
+}
+
 /** The house's hour: PnL of its exposure over the hour plus its funding receipts (points; cut included). */
 export function houseHour({ L, S, open, close, trend, sigma1h }: { L: number; S: number; open: number; close: number; trend?: number | null; sigma1h?: number | null }): {
   pricePnl: number; funding: number; total: number; exposure: number;
