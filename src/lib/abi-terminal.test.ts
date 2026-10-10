@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { createEngine, type LiveResult } from "./abi-live";
 import { HB, INDEX, mockRpc, SEEN } from "./abi-live-mock";
-import { barAt, candleList, freshKeys, rowKeys, chartModel, members, methodRows, integrationRows, milestoneRows, openHour, paceAll, quote, rollOff, status, tapeRows, tickerItems, ts, usdShort, why } from "./abi-terminal";
+import { barAt, candleList, freshKeys, rowKeys, chartModel, members, methodRows, activityCell, integrationRows, milestoneRows, openHour, paceAll, quote, rollOff, status, tapeRows, tickerItems, ts, usdShort, why } from "./abi-terminal";
 import type { AbiData } from "./builders-index";
 
 const L = INDEX.live!;
@@ -282,5 +282,21 @@ describe("integration rows", () => {
     const r = integrationRows(d, "announced");
     expect(r.rows.map((x) => x.company)).toEqual(["Coinbase", "Kraken"]);
     expect(r.total).toBe(5);
+  });
+});
+
+describe("integration activity", () => {
+  test("cells: wallets show in/out and counterparties (labelled); contracts show inflow and payments", () => {
+    expect(activityCell({ source: "wallets", wallets: 15, out_usd: 28.3e6, out_transfers: 2682, recipients: 727, in_usd: 28.5e6, in_transfers: 900, senders: 40 }))
+      .toEqual({ usd: 56.8e6, main: "in $29M · out $28M", sub: "40 senders · 727 recipients · 15 addresses", labelled: true });
+    expect(activityCell({ source: "wallets", wallets: 1, out_usd: 22600, out_transfers: 44, recipients: 44, in_usd: 0, in_transfers: 0, senders: 0 })!.main).toBe("in $0 · out $23k");
+    expect(activityCell({ source: "contracts", payments: 1200, usd_in: 4.2e6, points: 3, payers_hourly_sum: 8 })).toEqual({ usd: 4.2e6, main: "in $4.2M", sub: "1,200 payments", labelled: false });
+    expect(activityCell(undefined)).toBeNull();
+  });
+  test("within a status, the most active first", () => {
+    const row = (company: string) => ({ company, category: "x", status: "live", first_announced: "2025-10-28", link: null, member: null, milestone_id: null });
+    const w = (usd: number) => ({ source: "wallets", wallets: 1, out_usd: usd, out_transfers: 1, recipients: 1, in_usd: 0, in_transfers: 0, senders: 0 });
+    const d = { ...INDEX, integrations: [row("Gate"), row("Quiet"), row("Relay")], integration_activity: { Gate: w(22600), Relay: w(28e6) } } as unknown as AbiData;
+    expect(integrationRows(d).rows.map((r) => r.company)).toEqual(["Relay", "Gate", "Quiet"]);
   });
 });

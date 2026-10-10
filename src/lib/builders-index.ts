@@ -75,6 +75,11 @@ export type AbiMilestone = { id: string; t: number; target: string; tier: AbiMil
   company?: string; revenue_usd?: number; revenue_kind?: "filing" | "estimate" };
 /** A company that announced an Arc integration (spec §14). link: the live evidence when live, else the first announcement. */
 export type AbiIntegration = { company: string; category: string; status: AbiIntegrationStatus; first_announced: string; link: string | null; member: string | null; milestone_id: string | null };
+/** Last 24 closed hours of a company's Arc activity (§14 tracking; not scored). wallets: wallets known only from
+ * public explorer labels; contracts: the company's member contracts. */
+export type AbiIntegrationActivity =
+  | { source: "wallets"; wallets: number; out_usd: number; out_transfers: number; recipients: number; in_usd: number; in_transfers: number; senders: number }
+  | { source: "contracts"; payments: number; usd_in: number; points: number; payers_hourly_sum: number };
 export const ABI_INTEGRATION_STATUSES = ["live", "deployed", "announced"] as const;
 export type AbiIntegrationStatus = (typeof ABI_INTEGRATION_STATUSES)[number];
 export type AbiStablecoin = { symbol: string; currency: string; issuer: string; address: string; decimals: number; added: number };
@@ -103,6 +108,7 @@ export type AbiData = {
   milestones: AbiMilestone[];
   stablecoins: AbiStablecoin[];
   integrations: AbiIntegration[];
+  integration_activity: Record<string, AbiIntegrationActivity>;
   volume_24h: Record<string, AbiVolume>;
   live_fx: AbiFx;
   live?: AbiLive;
@@ -199,6 +205,24 @@ function validateIntegrations(v: unknown): AbiIntegration[] {
     const member = typeof r.member === "string" && str(r.member) ? r.member : null;
     const milestone_id = typeof r.milestone_id === "string" && MS_ID.test(r.milestone_id) ? r.milestone_id : null;
     out.push({ company: r.company, category: r.category, status: r.status as AbiIntegrationStatus, first_announced: r.first_announced, link: link || null, member, milestone_id });
+  }
+  return out;
+}
+
+const ACTIVITY_FIELDS = {
+  wallets: ["wallets", "out_usd", "out_transfers", "recipients", "in_usd", "in_transfers", "senders"],
+  contracts: ["payments", "usd_in", "points", "payers_hourly_sum"],
+} as const;
+/** integration_activity (§14): company -> last-24h activity; malformed entries are dropped, not fatal. */
+function validateActivity(v: unknown): Record<string, AbiIntegrationActivity> {
+  const out: Record<string, AbiIntegrationActivity> = {};
+  if (!isObj(v)) return out;
+  for (const k of Object.keys(v).slice(0, ABI_LIMITS.integrations)) {
+    const a = v[k];
+    if (!line(k, ABI_LIMITS.integrationCompany) || !isObj(a) || (a.source !== "wallets" && a.source !== "contracts")) continue;
+    const fields = ACTIVITY_FIELDS[a.source];
+    if (!fields.every((f) => num(a[f]) && (a[f] as number) >= 0)) continue;
+    out[k] = Object.fromEntries([["source", a.source], ...fields.map((f) => [f, a[f]])]) as AbiIntegrationActivity;
   }
   return out;
 }
@@ -409,6 +433,7 @@ export function validateIndex(raw: unknown): AbiResult {
     stablecoins = c;
   }
   const integrations = validateIntegrations(raw.integrations);
+  const integrationActivity = validateActivity(raw.integration_activity);
   let volume: Record<string, AbiVolume> = {};
   if (raw.volume_24h !== undefined) {
     const vv = validateVolume(raw.volume_24h);
@@ -431,7 +456,7 @@ export function validateIndex(raw: unknown): AbiResult {
       index: raw.index, index_24h_ago: (raw.index_24h_ago as number | null | undefined) ?? null,
       base: { time: b.time, level: b.level, sha256: b.sha256 },
       series, projects, events, candles, tape, roots_24h: roots24, params: params as AbiData["params"],
-      milestones, stablecoins, integrations, volume_24h: volume, live_fx: liveFx,
+      milestones, stablecoins, integrations, integration_activity: integrationActivity, volume_24h: volume, live_fx: liveFx,
     },
   };
 }

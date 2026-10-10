@@ -12,7 +12,7 @@ describe("validateIndex", () => {
     const r = validateIndex(indexFixture());
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(Object.keys(r.data).sort()).toEqual(["base", "events", "head_block", "head_time", "index", "index_24h_ago", "params", "projects", "series", "updated", "data_until", "candles", "tape", "roots_24h", "milestones", "stablecoins", "integrations", "volume_24h", "live_fx"].sort());
+      expect(Object.keys(r.data).sort()).toEqual(["base", "events", "head_block", "head_time", "index", "index_24h_ago", "params", "projects", "series", "updated", "data_until", "candles", "tape", "roots_24h", "milestones", "stablecoins", "integrations", "integration_activity", "volume_24h", "live_fx"].sort());
       expect(r.data.series).toHaveLength(200);
     }
   });
@@ -227,6 +227,19 @@ describe("milestones, stablecoins, volume_24h, live_fx (spec §12, §13)", () =>
     const d = JSON.parse(JSON.stringify(real)); f(d);
     const r = validateIndex(d);
     expect(r.ok && !!r.data.live).toBe(false);
+  });
+  test("integration_activity (§14): wallets and contracts shapes kept; malformed dropped; absent = {}", () => {
+    const relay = { source: "wallets", wallets: 15, out_usd: 28.3e6, out_transfers: 2682, recipients: 727, in_usd: 28.5e6, in_transfers: 900, senders: 40 };
+    const uni = { source: "contracts", payments: 1200, usd_in: 4.2e6, points: 310.5, payers_hourly_sum: 800 };
+    const r = run((d) => {
+      d.integration_activity = { Relay: { ...relay, extra: 1 }, Uniswap: uni, Neg: { ...uni, usd_in: -1 }, Str: { ...uni, payments: "5" }, Missing: { source: "wallets", wallets: 1 },
+        Other: { ...uni, source: "guess" }, "Bad\nname": uni, Junk: 5 };
+    });
+    expect(r.ok && r.data.integration_activity).toEqual({ Relay: relay, Uniswap: uni });
+    for (const v of [undefined, [], "x"]) {
+      const n = run((d) => { d.integration_activity = v; });
+      expect(n.ok && n.data.integration_activity).toEqual({});
+    }
   });
   const moonpay = () => ({ id: "20261010-120000-integration", t: 1791633600, target: "base:arc", tier: "integration", mult: 1.0508, title: "MoonPay live on Arc", evidence: ["https://www.moonpay.com/newsroom"], company: "MoonPay", revenue_usd: 108e6, revenue_kind: "estimate" });
   test("integration milestones (§14) keep company and revenue", () => {

@@ -90,7 +90,11 @@ describe("the terminal markup", () => {
       { company: "MoonPay", category: "on/off-ramp", status: "live", first_announced: "2025-10-28", link: "https://www.moonpay.com/newsroom", member: null, milestone_id: "m1" },
       { company: "Kraken", category: "exchange", status: "announced", first_announced: "2025-10-28", link: null, member: null, milestone_id: null },
     ] as typeof INDEX.integrations;
-    const h = html({ d: { ...INDEX, integrations } });
+    const integration_activity = { MoonPay: { source: "wallets", wallets: 2, out_usd: 5.1e6, out_transfers: 300, recipients: 209, in_usd: 9.2e6, in_transfers: 80, senders: 70 } } as typeof INDEX.integration_activity;
+    const h = html({ d: { ...INDEX, integrations, integration_activity } });
+    expect(h).toContain("24h on Arc");
+    expect(h).toContain("in $9.2M · out $5.1M");
+    expect(h).toContain(">explorer label</span>");
     expect(h).toContain("Integrations");
     expect(h).toContain("1 live · 0 deployed · 1 announced");
     expect(h).toContain('aria-label="Integration status"');

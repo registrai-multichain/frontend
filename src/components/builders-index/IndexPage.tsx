@@ -352,13 +352,14 @@ function IntegrationsPanel({ d }: { d: AbiData }) {
       {total === 0 ? <p className="abi-ms-empty">{ABI_COPY.noIntegrations}</p> : (
         <div className="abi-tbl abi-ig">
           <table>
-            <thead><tr><th>Company</th><th>Category</th><th>Status</th><th>Since</th><th>Evidence</th></tr></thead>
+            <thead><tr><th>Company</th><th>Category</th><th>Status</th><th>24h on Arc</th><th>Since</th><th>Evidence</th></tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.company}>
                   <td className="n">{r.company}{r.milestone && <span className="x" title="Milestone recorded"> ×</span>}{r.member && <span className="abi-cc" title="ABI member">{r.member}</span>}</td>
                   <td className="dim">{r.category}</td>
                   <td><span className={`abi-st abi-st-${r.status}`}>{r.status}</span></td>
+                  <td>{r.activity ? <>{r.activity.main}{r.activity.labelled && <span className="abi-tag" title={ABI_COPY.labelledWallets}>explorer label</span>}<span className="abi-cc">{r.activity.sub}</span></> : <span className="dim">–</span>}</td>
                   <td className="mono dim">{r.since}</td>
                   <td>{r.link ? <a href={r.link.href} target="_blank" rel="noopener noreferrer nofollow">{r.link.text}</a> : <span className="dim">–</span>}</td>
                 </tr>

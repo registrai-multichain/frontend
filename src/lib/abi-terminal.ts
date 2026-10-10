@@ -4,7 +4,7 @@
  * server file (`params`, `live`, `roots_24h`, `candles`, `tape`) and the browser's live result.
  */
 import type { Candle, LiveResult } from "./abi-live";
-import { ABI_INTEGRATION_STATUSES, type AbiData, type AbiIntegrationStatus, type AbiMilestone } from "./builders-index";
+import { ABI_INTEGRATION_STATUSES, type AbiData, type AbiIntegrationActivity, type AbiIntegrationStatus, type AbiMilestone } from "./builders-index";
 import { evidenceHref } from "./facts";
 
 export const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -309,8 +309,22 @@ export function milestoneRows(d: AbiData, max = 6): MilestoneRow[] {
 }
 
 export type IntegrationFilter = "all" | AbiIntegrationStatus;
-export type IntegrationRow = { company: string; category: string; status: AbiIntegrationStatus; since: string; link: EvidenceLink | null; member: string | null; milestone: boolean };
-/** Live first, then deployed, then announced; newest announcement first within each; counts are over all rows. */
+/** 24h activity cell: main line "in $28.5M · out $28.3M", sub line counterparties; labelled = wallets known from explorer labels */
+export type ActivityCell = { usd: number; main: string; sub: string; labelled: boolean };
+export function activityCell(a: AbiIntegrationActivity | undefined): ActivityCell | null {
+  if (!a) return null;
+  const n = (v: number) => v.toLocaleString("en-US");
+  const usd = (v: number) => (v >= 1000 ? usdShort(v) : `$${fmt(v, 0)}`);
+  if (a.source === "contracts") return { usd: a.usd_in, main: `in ${usd(a.usd_in)}`, sub: `${n(a.payments)} payments`, labelled: false };
+  return {
+    usd: a.in_usd + a.out_usd, main: `in ${usd(a.in_usd)} · out ${usd(a.out_usd)}`,
+    sub: `${n(a.senders)} senders · ${n(a.recipients)} recipients · ${n(a.wallets)} address${a.wallets === 1 ? "" : "es"}`, labelled: true,
+  };
+}
+
+export type IntegrationRow = { company: string; category: string; status: AbiIntegrationStatus; since: string; link: EvidenceLink | null; member: string | null; milestone: boolean; activity: ActivityCell | null };
+/** Live first, then deployed, then announced; within each the most 24h activity first, then the newest announcement;
+ * counts are over all rows. */
 export function integrationRows(d: AbiData, filter: IntegrationFilter = "all"): { counts: Record<AbiIntegrationStatus, number>; total: number; rows: IntegrationRow[] } {
   const counts: Record<AbiIntegrationStatus, number> = { live: 0, deployed: 0, announced: 0 };
   for (const i of d.integrations) counts[i.status]++;
@@ -318,10 +332,11 @@ export function integrationRows(d: AbiData, filter: IntegrationFilter = "all"): 
   const rows = d.integrations
     .filter((i) => filter === "all" || i.status === filter)
     .slice()
-    .sort((a, b) => rank(a.status) - rank(b.status) || b.first_announced.localeCompare(a.first_announced) || a.company.localeCompare(b.company))
-    .map((i) => ({
+    .map((i) => ({ i, act: activityCell(d.integration_activity?.[i.company]) }))
+    .sort((x, y) => rank(x.i.status) - rank(y.i.status) || (y.act?.usd ?? -1) - (x.act?.usd ?? -1) || y.i.first_announced.localeCompare(x.i.first_announced) || x.i.company.localeCompare(y.i.company))
+    .map(({ i, act }) => ({
       company: i.company, category: i.category, status: i.status, since: i.first_announced,
-      link: i.link ? evidenceLinks([i.link])[0] : null, member: i.member ? nameOf(d, i.member) : null, milestone: !!i.milestone_id,
+      link: i.link ? evidenceLinks([i.link])[0] : null, member: i.member ? nameOf(d, i.member) : null, milestone: !!i.milestone_id, activity: act,
     }));
   return { counts, total: d.integrations.length, rows };
 }
