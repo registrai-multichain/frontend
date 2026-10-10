@@ -7,7 +7,7 @@ import { PilotTables, type PilotTablesProps } from "@/components/builders-index/
 import { Ticket, type TicketProps } from "@/components/builders-index/pilot/Ticket";
 import { borrowPaid, liqPrice, RULES } from "./abi-pilot";
 import { accountPollMs, type EconomyView, type PilotAccountView, type RateView } from "./abi-pilot-api";
-import { borrowPerDay, fmtPts, fmtPx, fmtSideRate, fmtSigned, fmtWhen, openLabel, PILOT_COPY, PILOT_DISCLAIMER, PILOT_DISCLAIMERS, PILOT_LIQ_NOTE } from "./abi-pilot-copy";
+import { borrowPerDay, fmtBook, fmtPts, fmtPx, fmtSideRate, fmtSigned, fmtWhen, openLabel, PILOT_COPY, PILOT_DISCLAIMER, PILOT_DISCLAIMERS, PILOT_LIQ_NOTE } from "./abi-pilot-copy";
 
 /**
  * R7 copy lint for the points pilot: no prize-type words anywhere in pilot copy (UI strings, server
@@ -86,8 +86,8 @@ describe("pilot copy lint (R7)", () => {
 
 const ME = "0x1234567890abcdef1234567890abcdef12345678";
 const MARK = { mark: 1000, ts: 1_760_097_600, age: 2, ch24: 0.01, ch1: 0.001, sigma1h: 0.0004, sigma24h: 0.002, maxLev: 30, paused: false, basePaused: false, milestonePaused: false, fresh: true };
-const rate = (t: number, long: number, short: number, skew: number): RateView => ({ t, long, short, skew, trend: 0, r: 0, cut: 0, L: 0, S: 0, houseExposure: 0 });
-const FUNDING = { recent: [rate(1_760_094_000, 0.0003, -0.00027, 0.5), rate(1_760_090_400, -0.0002, 0.0002, 0)], current: rate(1_760_094_000, 0.0003, -0.00027, 0.5), next: 1_760_097_600 };
+const rate = (t: number, long: number, short: number, L: number, S: number): RateView => ({ t, long, short, skew: (L - S) / (L + S || 1), trend: 0, r: 0, cut: 0, L, S, houseExposure: S - L });
+const FUNDING = { recent: [rate(1_760_094_000, 0.0003, -0.00027, 75000, 25000), rate(1_760_090_400, -0.0002, 0.0002, 0, 0)], current: rate(1_760_094_000, 0.0003, -0.00027, 75000, 25000), next: 1_760_097_600 };
 const NOW = { hour: 1_760_094_000, long: 0.0003, short: -0.00027, skew: 0.5, next: 1_760_097_600 };
 const POS_LIQ = liqPrice({ side: "long", margin: 1000, notional: 2000, entry: 990 }, 0);
 const VIEW: PilotAccountView = {
@@ -101,9 +101,13 @@ const ECONOMY: EconomyView = {
   ts: 1_760_097_600,
   rates: { current: { ...FUNDING.current, L: 70000, S: 30000, houseExposure: -40000, cut: 0.42 }, recent: FUNDING.recent },
   borrowApr: 0.1,
-  house: { exposure: -40000, pnl24h: 12.5, pnlWeek: -3.25, pnlAll: 40 },
+  house: {
+    exposure: -40000, realized: 37.5, unrealized: -6.25,
+    price: { h24: 10, week: -5, all: 30 }, funding: { h24: 2, week: 1.5, all: 9 }, trueup: { h24: 0.5, week: 0.25, all: 1 }, liquidations: { h24: 0, week: 0, all: 0 },
+    total: { h24: 12.5, week: -3.25, all: 40 },
+  },
   pool: { fee: 10, borrow: 5, cut: 1, house: 40, total: 56 },
-  insurance: -2.5,
+  insurance: 2.5,
   treasury: 80, buyback: 40,
   week: { start: 1_759_708_800, pool: 56, insurance: 11.2, treasury: 44.8, buyback: 22.4 },
   lastSplit: { week: 1_759_104_000, ts: 1_759_708_900, pool: 100, insurance: 20, treasury: 80, buyback: 40 },
@@ -210,18 +214,22 @@ describe("positions, history, leaderboard, funding", () => {
   });
   test("funding: the recent hourly rates per side with who pays, the skew, and an i bubble", () => {
     const h = tables({ tab: "funding", address: null });
-    for (const t of ["Skew", "50% long", "0%", fmtSideRate(0.0003), fmtSideRate(-0.00027), "receives 0.0200%/h", "pays 0.0200%/h", 'aria-label="About funding"']) expect(h).toContain(t);
+    expect(fmtBook(75000, 25000)).toBe("75% long · 25% short"); // review S4: not "50% long" (skew 0.5)
+    expect(fmtBook(30000, 70000)).toBe("30% long · 70% short");
+    expect(fmtBook(0, 0)).toBe("No positions");
+    for (const t of ["Book", "75% long · 25% short", "No positions", fmtSideRate(0.0003), fmtSideRate(-0.00027), "receives 0.0200%/h", "pays 0.0200%/h", 'aria-label="About funding"']) expect(h).toContain(t);
     expect(banned(visible(h))).toBeUndefined();
   });
   test("economy (R8): skew, funding per side, the house, the fee pool by source, insurance and the split in points; the disclaimer", () => {
     const h = tables({ tab: "economy", address: null, economy: ECONOMY });
     for (const t of [
-      "Skew", "50% long", "Funding long", "pays 0.0300%/h", "Funding short", "receives 0.0270%/h",
-      "House position", "Short 40,000.00 pts", "House P&amp;L 24 h", "+12.50 pts", "−3.25 pts", "+40.00 pts",
+      "Book", "70% long · 30% short", "Funding long", "pays 0.0300%/h", "Funding short", "receives 0.0270%/h",
+      "House position", "Short 40,000.00 pts", "House, open positions", "−6.25 pts", "House, realized not split", "+37.50 pts",
+      "House P&amp;L", "24 h", "Week", "All", "Price", "+10.00", "−5.00", "+30.00", "True-up", "+0.50", "Liquidations", "Total", "+12.50", "−3.25", "+40.00",
       "Fee pool since the last split", "56.00 pts", "Trading fees", "10.00 pts", "Borrow", "5.00 pts", "Funding cut", "1.00 pts", "House",
-      "Insurance", "−2.50 pts", "Split this week", "11.20 insurance · 44.80 treasury pts", "Buyback (in treasury)", "22.40 pts",
+      "Insurance", "2.50 pts", "Split this week", "11.20 insurance · 44.80 treasury pts", "Buyback (in treasury)", "22.40 pts",
       "Last split", "100.00 pts", "Treasury, all splits", "80.00 pts", "Buyback, all splits", "40.00 pts",
-      'aria-label="About the economy"', 'aria-label="About insurance"', PILOT_DISCLAIMER,
+      'aria-label="About the economy"', 'aria-label="About insurance"', 'aria-label="About the book"', 'aria-label="About the house lines"', PILOT_DISCLAIMER,
     ]) expect(h).toContain(t);
     expect(h).not.toMatch(/REGI\b[^<]*\d/); // points only: no REGI amount anywhere
     expect(PILOT_COPY.economyTip).toContain("All in points; nothing is bought during the pilot.");

@@ -2,7 +2,7 @@
 
 import { InfoBubble } from "@/components/InfoBubble";
 import { shortWallet, type ClosedPositionView, type EconomyView, type FundingView, type LeaderboardRow, type OpenPositionView } from "@/lib/abi-pilot-api";
-import { fmtHour, fmtPts, fmtSideRate, fmtPx, fmtSigned, fmtSkew, fmtWhen, PILOT_COPY, PILOT_DISCLAIMER } from "@/lib/abi-pilot-copy";
+import { fmtBook, fmtHour, fmtPts, fmtSideRate, fmtPx, fmtSigned, fmtWhen, PILOT_COPY, PILOT_DISCLAIMER } from "@/lib/abi-pilot-copy";
 
 export type PilotTab = "positions" | "history" | "leaderboard" | "funding" | "economy";
 
@@ -110,13 +110,13 @@ function Funding({ f }: { f: FundingView | null }) {
   if (!f) return <p className="abi-pt-empty dim">Loading…</p>;
   return (
     <table>
-      <thead><tr><th>Hour (UTC)</th><th>Skew</th><th>Longs</th><th>Shorts</th></tr></thead>
+      <thead><tr><th>Hour (UTC)</th><th>Book</th><th>Longs</th><th>Shorts</th></tr></thead>
       <tbody>
         {f.recent.length === 0 && <Empty cols={4} text={PILOT_COPY.noFunding} />}
         {f.recent.map((r) => (
           <tr key={r.t}>
             <td className="n">{fmtWhen(r.t)}–{fmtHour(r.t + 3600)}</td>
-            <td>{fmtSkew(r.skew)}</td>
+            <td>{fmtBook(r.L, r.S)}</td>
             <td className={rateCls(r.long)}>{fmtSideRate(r.long)}</td>
             <td className={rateCls(r.short)}>{fmtSideRate(r.short)}</td>
           </tr>
@@ -132,17 +132,32 @@ function Economy({ e }: { e: EconomyView | null | undefined }) {
   const r = e.rates.current;
   const pts = (n: number) => `${fmtSigned(n)} pts`;
   const s = e.lastSplit;
+  const lines: [string, EconomyView["house"]["price"]][] = [
+    ["Price", e.house.price], ["Funding", e.house.funding], ["True-up", e.house.trueup], ["Liquidations", e.house.liquidations], ["Total", e.house.total],
+  ];
   return (
     <div className="abi-pt-eco">
       <dl className="abi-kv">
-        <dt>Skew</dt><dd>{r ? fmtSkew(r.skew) : "–"}</dd>
+        <dt>Book <InfoBubble label="About the book">{PILOT_COPY.bookTip}</InfoBubble></dt><dd>{r ? fmtBook(r.L, r.S) : "–"}</dd>
         <dt>Funding long</dt><dd className={r ? rateCls(r.long) : ""}>{r ? fmtSideRate(r.long) : "–"}</dd>
         <dt>Funding short</dt><dd className={r ? rateCls(r.short) : ""}>{r ? fmtSideRate(r.short) : "–"}</dd>
         <dt>House position</dt><dd>{e.house.exposure === null ? "–" : e.house.exposure === 0 ? "flat" : `${e.house.exposure > 0 ? "Long" : "Short"} ${fmtPts(Math.abs(e.house.exposure))} pts`}</dd>
-        <dt>House P&amp;L 24 h</dt><dd className={cls(e.house.pnl24h)}>{pts(e.house.pnl24h)}</dd>
-        <dt>House P&amp;L this week</dt><dd className={cls(e.house.pnlWeek)}>{pts(e.house.pnlWeek)}</dd>
-        <dt>House P&amp;L all</dt><dd className={cls(e.house.pnlAll)}>{pts(e.house.pnlAll)}</dd>
+        <dt>House, open positions</dt><dd className={cls(e.house.unrealized)}>{pts(e.house.unrealized)}</dd>
+        <dt>House, realized not split</dt><dd className={cls(e.house.realized)}>{pts(e.house.realized)}</dd>
       </dl>
+      <table className="abi-pt-house">
+        <thead><tr><th>House P&amp;L <InfoBubble label="About the house lines">{PILOT_COPY.houseLinesTip}</InfoBubble></th><th>24 h</th><th>Week</th><th>All</th></tr></thead>
+        <tbody>
+          {lines.map(([label, w]) => (
+            <tr key={label}>
+              <td className="n">{label}</td>
+              <td className={cls(w.h24)}>{fmtSigned(w.h24)}</td>
+              <td className={cls(w.week)}>{fmtSigned(w.week)}</td>
+              <td className={cls(w.all)}>{fmtSigned(w.all)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <dl className="abi-kv">
         <dt>Fee pool since the last split</dt><dd>{fmtPts(e.pool.total)} pts</dd>
         <dt>Trading fees</dt><dd>{fmtPts(e.pool.fee)} pts</dd>

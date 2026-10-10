@@ -27,7 +27,7 @@ export const PILOT_COPY = {
   rulesTip:
     `Market orders fill at the first ABI mark posted after the order (the mark updates every 5 s); with no mark within ${RULES.markMaxAgeS} s the order is refused. ` +
     `Leverage ${RULES.levels.join(", ")}×, capped at the lower of ${RULES.volTarget} ÷ σ_24h and 1 ÷ (${pct(RULES.jump)} + ${pct(RULES.mm)}), so a ${pct(RULES.jump)} milestone step stays inside the margin; from 1× to ${top}×. ` +
-    `New orders pause while the last hour moved more than max(${RULES.pauseSigmas}σ_1h, ${pct(RULES.pauseFloor)}), for a minute around each hour's base sample, and until the hour's funding is set. ` +
+    `New orders pause while the last hour moved more than max(${RULES.pauseSigmas}σ_1h, ${pct(RULES.pauseFloor)}), for a minute around each hour's base sample. Orders and closes wait for each hour's funding to be set (about 15 s); liquidation checks don't. ` +
     `Fee ${(RULES.feeRate * 100).toFixed(2)}% of size per side. Borrow ${pct(RULES.borrowApr)} a year on size − margin, per hour held. ` +
     `Maintenance margin ${pct(RULES.mm)}; liquidation is checked on one-minute bars and moves with funding and borrow. ` +
     "One direction at a time: close your longs before opening a short, and the reverse. " +
@@ -40,12 +40,18 @@ export const PILOT_COPY = {
     "Funding counts toward equity, closing and liquidation.",
   borrowTip: `${pct(RULES.borrowApr)} a year on the borrowed part (size − margin), charged per hour held and settled at close.`,
   liqTip: "Funding and borrow paid move the liquidation price toward the mark. The second figure assumes 24 h at this hour's rates.",
+  bookTip: "Each side's share of open size, averaged over the hour before the rates were set. The larger side pays the skew rate.",
+  houseLinesTip:
+    "Price: the house's side of the book times the index move. Funding: what positions paid and received, less the pilot's cut. " +
+    "True-up: the difference to the exact result of each position, booked every hour and when it closes. " +
+    "Liquidations: equity left at a liquidation, less gaps insurance could not cover.",
   economyTip:
     "The house takes the other side of the net imbalance between longs and shorts, under the same funding rules. " +
-    "Trading fees, borrow, the funding cut and the house's positive result form the fee pool. " +
+    "Trading fees, borrow, the funding cut and the house's realized result (from closed and liquidated positions) form the fee pool; " +
+    "its result on open positions stays in its book until they close, and a loss carries over. " +
     `Each Monday 00:00 UTC the pool splits: ${pct(RULES.split.insurance)} to insurance and ${pct(RULES.split.treasury)} to the treasury, ` +
     `${pct(RULES.split.buybackOfTreasury)} of which is set aside for a REGI buyback. All in points; nothing is bought during the pilot.`,
-  insuranceTip: "Covers losses beyond a position's margin when the index jumps past its liquidation price. It can run below zero until the next split.",
+  insuranceTip: "Covers losses beyond a position's margin when the index jumps past its liquidation price, up to its balance; the house carries the rest. No position loses more than its margin.",
   noEconomy: "No economy data yet.",
   leaderboardTip: "Balance plus open positions (with funding and borrow) at the latest mark. Top 50, refreshed every minute.",
   priceUpdating: "Price updating",
@@ -69,8 +75,13 @@ export const PILOT_COPY = {
 export const fmtRate = (r: number) => `${r > 0 ? "+" : r < 0 ? "−" : ""}${(Math.abs(r) * 100).toFixed(4)}%/h`;
 /** A side's rate with its direction: "pays 0.0123%/h", "receives 0.0110%/h" (+ = pays). */
 export const fmtSideRate = (r: number) => (r > 0 ? `pays ${fmtRate(r).slice(1)}` : r < 0 ? `receives ${fmtRate(r).slice(1)}` : fmtRate(0));
-/** "+0.42" → skew as a signed share: "+42% long" / "−30% short" / "0%". */
-export const fmtSkew = (s: number) => (s > 0 ? `${Math.round(s * 100)}% long` : s < 0 ? `${Math.round(-s * 100)}% short` : "0%");
+/** The book as each side's share of open notional (review S4): a 75/25 book is "75% long · 25% short", not skew 0.5. */
+export const fmtBook = (L: number, S: number) => {
+  const oi = L + S;
+  if (!(oi > 0)) return "No positions";
+  const l = Math.round((L / oi) * 100);
+  return `${l}% long · ${100 - l}% short`;
+};
 /** Borrow per day at a size: (size − margin) × APR / 365. */
 export const borrowPerDay = (notional: number, margin: number) => (notional - margin) * RULES.borrowApr / 365;
 /** "14:00" (UTC) */
