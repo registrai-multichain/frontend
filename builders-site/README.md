@@ -55,12 +55,22 @@ sigma_24h, base_pending, base_step_ts, bars:[[minute,h,l,c] …]}`.
   in that bar; a full 60-bar catch-up batch may end earlier. The mark lies in the candle.
 - 200 answers `{"last_minute": …}`: the newest stored minute that is already finished. The producer sends every
   bar after it, so the open minute is re-sent until it closes.
-- A gap longer than 60 min between the stored bars and a post gets one gap bar at the candle's low and high.
-- `funding_rate` is stored for `funding_hour` (last value wins). `sigma_24h`, `sigma_1h` and `ch1` drive the
-  leverage cap and the pause; with `sigma_24h` missing, orders are refused ("price updating").
+- Any missing minute between the stored bars and a post gets a gap bar: for the open hour at the posted candle's
+  low and high, for an earlier hour at that hour's closed candle from the index file in KV (`abi:index`
+  `candles`). An earlier hour with no candle yet is kept in `gaps`; until a later post closes it, nothing fills
+  and no order is accepted ("price updating").
+- `funding_rate` is stored for `funding_hour`, written once per hour (the first rate stands). `null` (fewer than
+  2 closed hours) means unknown: nothing is stored and orders are refused ("price updating"). `sigma_24h`,
+  `sigma_1h` and `ch1` drive the leverage cap and the pause; `sigma_24h` ≤ 0 or missing, or `sigma_1h` < 0 or
+  missing, is unknown and refuses orders the same way.
 - Orders pause while `base_pending` and for 60 s after `base_step_ts`.
 
-Orders fill at the first mark posted after they arrive (at most 10 s later, else refused "price updating").
+Orders fill at the first mark whose own `ts` (chain time) is later than the order's arrival, if that mark comes
+within 10 s of server time; otherwise they are refused "price updating". Nothing fills while the producer is
+catching up (bars behind the mark) or a gap is open.
+
+No hedging: a wallet holds open positions in one direction at a time (the engine refuses "one direction at a
+time", shown as "Close your long first" / "Close your short first"; the fill batch re-checks it atomically).
 
 Routes: `POST|GET /api/index/mark`, `GET|POST|DELETE /api/pilot/auth`, `GET /api/pilot/account`,
 `POST /api/pilot/order` (202, pending) + `GET /api/pilot/order?id=`, `POST /api/pilot/close` (202),

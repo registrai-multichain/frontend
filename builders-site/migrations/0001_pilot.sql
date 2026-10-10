@@ -74,7 +74,14 @@ CREATE TABLE bars (
 CREATE INDEX bars_l ON bars (l);
 CREATE INDEX bars_h ON bars (h);
 
--- Funding: the rate in force during [hour_start, hour_start + 1h), as posted by the producer (last value wins).
+-- Missing minutes in an earlier (closed) hour that no closed candle covered yet: until a later post fills them
+-- from the index candles with a gap bar (that hour's high and low), nothing fills and no order is accepted.
+CREATE TABLE gaps (
+  minute_from INTEGER PRIMARY KEY,
+  minute_to   INTEGER NOT NULL
+);
+
+-- Funding: the rate in force during [hour_start, hour_start + 1h), as posted by the producer (written once per hour).
 CREATE TABLE funding (
   hour_start INTEGER PRIMARY KEY,
   rate       REAL NOT NULL
@@ -93,6 +100,7 @@ CREATE TABLE mark (
   ch1          REAL    NOT NULL,
   sigma_1h     REAL,
   sigma_24h    REAL,
+  funding_known INTEGER NOT NULL DEFAULT 0,
   base_pending INTEGER NOT NULL DEFAULT 0,
   base_step_ts INTEGER,
   candle       TEXT    NOT NULL,

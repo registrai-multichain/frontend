@@ -39,8 +39,8 @@ describe.each([["reference", REF], ["port", Port as Api]])("pilot.test.js cases 
     const closes = [1000]; for (let i = 0; i < 30; i++) closes.push(closes[closes.length - 1] * (i % 2 ? 0.999 : 1.0005));
     const rk = P.risk(closes);
     const r6 = P.returns(closes).slice(-R.window);
-    near(rk.funding, r6.reduce((a, b) => a + b) / r6.length);
-    near(rk.sigma24, rk.sigma1h * Math.sqrt(24));
+    near(rk.funding!, r6.reduce((a, b) => a + b) / r6.length);
+    near(rk.sigma24!, rk.sigma1h! * Math.sqrt(24));
   });
 
   test("dynamic leverage from volatility, snapped to allowed levels, and the pause", () => {
@@ -113,7 +113,18 @@ describe.each([["reference", REF], ["port", Port as Api]])("pilot.test.js cases 
     expect(P.liquidation(position, bars.slice(0, 2), [])).toBeNull();
   });
 
-  test("a hedged pair cannot mint points", () => {
+  test("one direction per wallet: no hedging", () => {
+    const base = { margin: 100, lev: 2, mark: 1000, now: 0, risk: calm };
+    expect(P.open({ balance: 10000, open: 1, side: "long" }, { ...base, side: "short" }).error).toBe("one direction at a time");
+    expect(P.open({ balance: 10000, open: 1, side: "long" }, { ...base, side: "long" }).ok).toBe(true);
+    expect(P.open({ balance: 10000, open: 0, side: "long" }, { ...base, side: "short" }).ok).toBe(true);
+  });
+
+  test("risk with fewer than 2 closes is unknown, not zero", () => {
+    expect(P.risk([1000])).toEqual({ funding: null, sigma1h: null, sigma24: null });
+  });
+
+  test("a hedged pair (across two wallets) cannot mint points", () => {
     const rates = [{ t: 0, rate: -0.0005 }, { t: 3600, rate: 0.0003 }];
     const { position: L } = opened(P.open(acct(), { side: "long", margin: 1000, lev: 20, mark: 1000, now: 0, risk: calm }));
     const { position: S } = opened(P.open(acct(), { side: "short", margin: 1000, lev: 20, mark: 1000, now: 0, risk: calm }));
@@ -150,7 +161,7 @@ describe("port = reference on random inputs (exact)", () => {
       const lev = pick([1, 2, 3, 5, 10, 20, 4, 0, 2.5]);
       const mark = pick([800 + rnd() * 400, 0, -1, NaN, 1000]);
       const margin = pick([rnd() * 12000, rnd() * 3000, 10, 9.99, NaN, 1000]);
-      const account = { balance: pick([10000, rnd() * 10000, 0]), open: Math.floor(rnd() * 7) };
+      const account = { balance: pick([10000, rnd() * 10000, 0]), open: Math.floor(rnd() * 7), side: pick(["long", "short", undefined, null]) };
       const now = Math.floor(rnd() * 1e6);
       const input = { side, margin, lev, mark, now, risk: pick([rk, undefined, { sigma24: 0.002, sigma1h: 0.0004, ch1: 0 }, { sigma24: 0.002, sigma1h: 0.0004, ch1: 0 }]) };
       const a = Port.open(account, input), b = REF.open(account, input);

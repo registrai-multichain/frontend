@@ -60,6 +60,7 @@ describe("pilot copy lint (R7)", () => {
     expect(PILOT_LIQ_NOTE).toBe("Liquidation only takes the position's margin.");
     expect(PILOT_COPY.closed).toBe("The points pilot is not open yet.");
     expect(PILOT_COPY.holdRegi).toBe("Hold REGI to join the points pilot.");
+    expect(PILOT_COPY.rulesTip).toContain("One direction at a time: close your longs before opening a short, and the reverse.");
   });
   test("the lint catches what it should", () => {
     expect(banned("Win up to 500 pts")).toBe("Win");
@@ -133,6 +134,8 @@ describe("ticket", () => {
       expect(h).toMatch(/type="submit"[^>]*disabled=""/);
     }
     expect(ticket({ filling: true, busy: true })).toContain(PILOT_COPY.filling);
+    // no hedging: VIEW holds a long, so a short is blocked in the ticket before it is sent
+    expect(PILOT_COPY.closeFirst("long")).toBe("Close your long first");
   });
   test("every state shows the disclaimer: kill switch, visitor, no REGI, not at the snapshot, REGI unknown", () => {
     const states: [PilotAccountView, string][] = [

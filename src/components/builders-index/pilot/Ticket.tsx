@@ -95,6 +95,7 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
     const liq = m && margin > 0 ? liqPrice({ side, margin, notional, entry: m.mark }, 0) : null;
     const balance = acct?.balance ?? 0;
     const full = view.positions.length >= RULES.maxOpen;
+    const held = view.positions[0]?.side;
     const problem =
       !m || !m.fresh ? PILOT_COPY.priceUpdating
         : m.paused ? PILOT_COPY.paused
@@ -102,7 +103,8 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
             : !(margin >= RULES.minMargin) ? `Minimum margin ${RULES.minMargin} pts`
               : margin + fee > balance ? "Not enough balance"
                 : full ? `Up to ${RULES.maxOpen} open positions`
-                  : null;
+                  : held && held !== side ? PILOT_COPY.closeFirst(held)
+                    : null;
     const maxMargin = Math.max(0, Math.floor((balance / (1 + levUse * RULES.feeRate)) * 100) / 100);
     body = (
       <form className="abi-pt" onSubmit={(e) => { e.preventDefault(); if (!problem && !busy) onOrder({ side, margin, lev: levUse }); }}>

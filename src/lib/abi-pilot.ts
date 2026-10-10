@@ -79,10 +79,11 @@ export function returns(closes: readonly number[]): number[] {
   return r;
 }
 
-export function risk(closes: readonly number[]): { funding: number; sigma1h: number; sigma24: number } {
+/** Fewer than 2 closes: everything unknown (null), not zero; callers refuse orders. */
+export function risk(closes: readonly number[]): { funding: number | null; sigma1h: number | null; sigma24: number | null } {
   const all = returns(closes);
   const rf = all.slice(-RULES.window), rs = all.slice(-RULES.sigmaWindow);
-  if (!rs.length) return { funding: 0, sigma1h: 0, sigma24: 0 };
+  if (!rs.length) return { funding: null, sigma1h: null, sigma24: null };
   const funding = rf.reduce((a, b) => a + b, 0) / rf.length;
   const mean = rs.reduce((a, b) => a + b, 0) / rs.length;
   const sd = Math.sqrt(rs.reduce((a, b) => a + (b - mean) ** 2, 0) / rs.length);
@@ -119,9 +120,12 @@ export function liqPrice(pos: PosM, funding = 0): number {
   return pos.side === "long" ? pos.entry * (1 - d) : pos.entry * (1 + d);
 }
 
-/** account: { balance, open } (open = number of open positions). */
+/**
+ * account: { balance, open, side } — open = number of open positions, side = their direction, if any (one direction
+ * per wallet at a time: no hedging).
+ */
 export function open(
-  account: { balance: number; open: number },
+  account: { balance: number; open: number; side?: Side | string | null },
   { side, margin, lev, mark, now, risk: rk = {} }: { side: string; margin: number; lev: number; mark: number; now: number; risk?: Risk },
 ): OpenResult {
   if (side !== "long" && side !== "short") return { error: "bad side" };
@@ -132,6 +136,7 @@ export function open(
   if (cap.paused) return { error: "trading paused" };
   if (lev > cap.max) return { error: "leverage above the current cap" };
   if (account.open >= RULES.maxOpen) return { error: "too many open positions" };
+  if (account.open > 0 && account.side && account.side !== side) return { error: "one direction at a time" };
   const notional = margin * lev, fee = notional * RULES.feeRate;
   if (margin + fee > account.balance) return { error: "insufficient balance" };
   const position = { side, margin, lev, notional, entry: mark, openedAt: now } as PilotPosition;

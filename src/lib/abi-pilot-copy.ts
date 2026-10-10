@@ -28,6 +28,7 @@ export const PILOT_COPY = {
     `Leverage ${RULES.levels.join(", ")}×, capped from ABI's volatility: max = ${RULES.volTarget} ÷ σ_24h, from 1× to 20×. ` +
     `New orders pause while the last hour moved more than max(${RULES.pauseSigmas}σ_1h, ${pct(RULES.pauseFloor)}), and for a minute around each hour's base sample. ` +
     `Fee ${(RULES.feeRate * 100).toFixed(2)}% of size per side. Maintenance margin ${pct(RULES.mm)}; liquidation is checked on one-minute bars and moves with funding. ` +
+    "One direction at a time: close your longs before opening a short, and the reverse. " +
     `Minimum margin ${RULES.minMargin} pts, up to ${RULES.maxOpen} open positions. Starting balance ${RULES.startBalance.toLocaleString("en-US")} pts, once per wallet.`,
   fundingTip:
     `Each hour's funding rate is ABI's mean hourly move over the last ${RULES.window} closed hours. ` +
@@ -38,6 +39,7 @@ export const PILOT_COPY = {
   paused: `Paused: ABI moved more than max(${RULES.pauseSigmas}σ_1h, ${pct(RULES.pauseFloor)}) in the last hour.`,
   basePaused: "Paused for a minute around the hour's base sample.",
   capped: (max: number) => `Max ${max}× at ABI's current volatility.`,
+  closeFirst: (held: "long" | "short") => `Close your ${held} first`,
   filling: "Filling at the next mark…",
   signInForPositions: "Sign in to see your positions.",
   noPositions: "No open positions.",

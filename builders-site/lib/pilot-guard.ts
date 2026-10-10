@@ -43,15 +43,19 @@ export async function runGuardChecks(db: D1Database, migration: string): Promise
     const balance = async () => (await q("SELECT balance FROM accounts WHERE wallet = ?").bind(W).first<{ balance: number }>())!.balance;
 
     // open fill: debit → insert → order filled, each only after the one before changed a row
-    const fill = (orderId: number) => db.batch([
-      q(SQL.openDebit).bind(1001, W, 1001, W, 5, orderId),
-      q(SQL.openInsert).bind(W, "long", 1000, 2, 2000, 1000, 505, 100, 1),
+    const fill = (orderId: number, side = "long") => db.batch([
+      q(SQL.openDebit).bind(1001, W, 1001, W, 5, W, side, orderId),
+      q(SQL.openInsert).bind(W, side, 1000, 2, 2000, 1000, 505, 100, 1),
       q(SQL.openFilled).bind(1000, 100, orderId),
     ]);
     const o1 = await order("open"), o2 = await order("open");
     const f1 = await fill(o1);
     check("open fill: debit, insert (RETURNING id), order filled", [changes(f1), f1[1].results.length], [[1, 1, 1], 1]);
     check("open fill: the same order again changes nothing", changes(await fill(o1)), [0, 0, 0]);
+    await q("UPDATE accounts SET balance = balance + 5000 WHERE wallet = ?").bind(W).run();
+    const oShort = await order("open");
+    check("open fill: no hedging (a short while a long is open)", changes(await fill(oShort, "short")), [0, 0, 0]);
+    await q("UPDATE accounts SET balance = balance - 5000 WHERE wallet = ?").bind(W).run();
     check("open fill: a second order cannot overspend", changes(await fill(o2)), [0, 0, 0]);
     check("open fill: balance debited once", await balance(), 499);
     const pos = (await q("SELECT position_id FROM orders WHERE id = ?").bind(o1).first<{ position_id: number }>())!.position_id;
@@ -76,15 +80,21 @@ export async function runGuardChecks(db: D1Database, migration: string): Promise
 
     // the mark row moves forward only, and only the winning post writes bars and funding
     const post = (ts: number, id: string) => db.batch([
-      q(SQL.markUpsert).bind(1000, ts, 0, 1, 0, 0, 0, 0.0004, 0.002, 0, null, "[]", id),
+      q(SQL.markUpsert).bind(1000, ts, 0, 1, 0, 0, 0, 0.0004, 0.002, 1, 0, null, "[]", id),
       q(SQL.barUpsert).bind(60, 1001, 999, 1000, id),
-      q(SQL.fundingUpsert).bind(0, 0.001, id),
+      q(SQL.fundingInsert).bind(0, 0.001, id),
     ]);
     check("mark: a newer post writes the row, its bar and its funding", changes(await post(100, "a")), [1, 1, 1]);
     check("mark: a post with the same ts writes nothing", changes(await post(100, "b")), [0, 0, 0]);
     check("mark: an older post writes nothing", changes(await post(99, "c")), [0, 0, 0]);
-    const merged = await db.batch([q(SQL.markUpsert).bind(1000, 101, 0, 1, 0, 0, 0, 0.0004, 0.002, 0, null, "[]", "d"), q(SQL.barUpsert).bind(60, 1000.5, 990, 1000, "d")]);
+    const merged = await db.batch([q(SQL.markUpsert).bind(1000, 101, 0, 1, 0, 0, 0, 0.0004, 0.002, 1, 0, null, "[]", "d"), q(SQL.barUpsert).bind(60, 1000.5, 990, 1000, "d")]);
     check("bars: a re-posted minute merges (high and low only widen)", [changes(merged), await q("SELECT h, l, c FROM bars WHERE minute = 60").first()], [[1, 1], { h: 1001, l: 990, c: 1000 }]);
+    check("funding: written once per hour (a later accepted post does not change it)", [changes(await post(102, "e")), await q("SELECT rate FROM funding").first()], [[1, 1, 0], { rate: 0.001 }]);
+    const gap = (id: string) => db.batch([q(SQL.markUpsert).bind(1000, 103 + gapN++, 0, 1, 0, 0, 0, 0.0004, 0.002, 1, 0, null, "[]", id), q(SQL.gapOpen).bind(120, 180, id)]);
+    let gapN = 0;
+    check("gaps: opened by the accepted post only, once", [changes(await gap("g1")), changes(await gap("g2"))], [[1, 1], [1, 0]]);
+    const closeGap = await db.batch([q(SQL.markUpsert).bind(1000, 200, 0, 1, 0, 0, 0, 0.0004, 0.002, 1, 0, null, "[]", "h"), q(SQL.gapClose).bind(120, "h"), q(SQL.gapClose).bind(120, "zz")]);
+    check("gaps: closed by the accepted post", changes(closeGap), [1, 1, 0]);
     check("liquidation candidates: INDEXED BY runs", (await q(SQL.liqCandidatesLong).bind(995, 0).all()).results.length, 1);
     check("sign-out: session epoch bumped", (await q(SQL.sessionBump).bind(W).run()).meta.changes, 1);
   } catch (e) {

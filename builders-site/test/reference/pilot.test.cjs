@@ -89,7 +89,18 @@ test("liquidation uses bars after the open and moves with funding", () => {
   assert.equal(P.liquidation(position, bars.slice(0, 2), []), null);
 });
 
-test("a hedged pair cannot mint points", () => {
+test("one direction per wallet: no hedging", () => {
+  const base = { margin: 100, lev: 2, mark: 1000, now: 0, risk: calm };
+  assert.equal(P.open({ balance: 10000, open: 1, side: "long" }, { ...base, side: "short" }).error, "one direction at a time");
+  assert.equal(P.open({ balance: 10000, open: 1, side: "long" }, { ...base, side: "long" }).ok, true);
+  assert.equal(P.open({ balance: 10000, open: 0, side: "long" }, { ...base, side: "short" }).ok, true);
+});
+
+test("risk with fewer than 2 closes is unknown, not zero", () => {
+  assert.deepEqual(P.risk([1000]), { funding: null, sigma1h: null, sigma24: null });
+});
+
+test("a hedged pair (across two wallets) cannot mint points", () => {
   const rates = [{ t: 0, rate: -0.0005 }, { t: 3600, rate: 0.0003 }];
   const { position: L } = P.open(acct(), { side: "long", margin: 1000, lev: 20, mark: 1000, now: 0, risk: calm });
   const { position: S } = P.open(acct(), { side: "short", margin: 1000, lev: 20, mark: 1000, now: 0, risk: calm });

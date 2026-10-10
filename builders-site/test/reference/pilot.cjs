@@ -30,7 +30,7 @@
   function risk(closes) {
     const all = returns(closes);
     const rf = all.slice(-RULES.window), rs = all.slice(-RULES.sigmaWindow);
-    if (!rs.length) return { funding: 0, sigma1h: 0, sigma24: 0 };
+    if (!rs.length) return { funding: null, sigma1h: null, sigma24: null };   // no data: callers refuse orders
     const funding = rf.reduce((a, b) => a + b, 0) / rf.length;
     const mean = rs.reduce((a, b) => a + b, 0) / rs.length;
     const sd = Math.sqrt(rs.reduce((a, b) => a + (b - mean) ** 2, 0) / rs.length);
@@ -68,7 +68,8 @@
     return pos.side === "long" ? pos.entry * (1 - d) : pos.entry * (1 + d);
   }
 
-  /* account: { balance, open }. Returns { ok, position, fee, balance } or { error }. */
+  /* account: { balance, open, side } (side = the direction of the wallet's open positions, if any; one direction
+   * per wallet at a time, owner 2026-10-10: no hedging). Returns { ok, position, fee, balance } or { error }. */
   function open(account, { side, margin, lev, mark, now, risk: rk = {} }) {
     if (side !== "long" && side !== "short") return { error: "bad side" };
     if (!RULES.levels.includes(lev)) return { error: "leverage not allowed" };
@@ -78,6 +79,7 @@
     if (cap.paused) return { error: "trading paused" };
     if (lev > cap.max) return { error: "leverage above the current cap" };
     if (account.open >= RULES.maxOpen) return { error: "too many open positions" };
+    if (account.open > 0 && account.side && account.side !== side) return { error: "one direction at a time" };
     const notional = margin * lev, fee = notional * RULES.feeRate;
     if (margin + fee > account.balance) return { error: "insufficient balance" };
     const position = { side, margin, lev, notional, entry: mark, openedAt: now };

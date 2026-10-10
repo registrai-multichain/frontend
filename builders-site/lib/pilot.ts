@@ -38,6 +38,7 @@ import {
   type PilotAccountView,
   type PilotMark,
 } from "../../src/lib/abi-pilot-api";
+import { ABI_KEY } from "../../src/lib/builders-index";
 import { bearerGuard } from "./bot-auth";
 import { readCapped } from "./builders-index";
 import type { D1Database, D1PreparedStatement, Env } from "./env";
@@ -55,7 +56,7 @@ import {
   tooMany,
   type PilotDeps,
 } from "./pilot-auth";
-import { SQL } from "./pilot-sql";
+import { LIQ_PAGE, SQL } from "./pilot-sql";
 
 export const MARK_MAX_SKEW_S = 30;
 export const MARK_BODY_BYTES = 16384;
@@ -64,8 +65,6 @@ export const BARS_KEEP_S = 7 * 24 * 3600;
 export const ORDERS_KEEP_MS = 7 * 24 * 3600 * 1000;
 /** A posted bar may be at most this old (the producer keeps 4 h and catches up 60 bars per post). */
 export const BAR_MAX_AGE_S = 6 * 3600;
-/** A gap longer than this between the stored bars and a post gets one gap bar at the candle's low / high. */
-export const GAP_S = 3600;
 export const MAX_FUNDING_RATE = 0.01;
 export const MARK_CACHE_S = 5;
 export const PRUNE_EVERY = 100;
@@ -79,6 +78,10 @@ export const PRICE_UPDATING = "price updating";
 export const PILOT_CLOSED = "pilot closed";
 export const TRADING_PAUSED = "trading paused";
 export const ALREADY_CLOSED = "already closed";
+/** No hedging: one direction at a time per wallet (the engine's refusal, said plainly). */
+export const HEDGE = "one direction at a time";
+export const closeFirst = (held: Side) => `Close your ${held} first`;
+const engineError = (error: string, held: readonly { side: Side }[]) => (error === HEDGE && held[0] ? closeFirst(held[0].side) : error);
 
 const finite = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
 const int = (x: unknown): x is number => finite(x) && Number.isInteger(x);
@@ -179,6 +182,7 @@ interface MarkRow {
   ch1: number;
   sigma_1h: number | null;
   sigma_24h: number | null;
+  funding_known: number;
   base_pending: number;
   base_step_ts: number | null;
   candle: string;
@@ -186,11 +190,13 @@ interface MarkRow {
 
 async function loadMark(db: D1Database): Promise<MarkRow | null> {
   return db
-    .prepare("SELECT px, ts, received_ms, head, hour_start, ch24, ch1, sigma_1h, sigma_24h, base_pending, base_step_ts, candle FROM mark WHERE id = 1")
+    .prepare("SELECT px, ts, received_ms, head, hour_start, ch24, ch1, sigma_1h, sigma_24h, funding_known, base_pending, base_step_ts, candle FROM mark WHERE id = 1")
     .first<MarkRow>();
 }
 
 const riskOf = (m: { sigma_24h: number | null; sigma_1h: number | null; ch1: number }) => ({ sigma24: m.sigma_24h, sigma1h: m.sigma_1h, ch1: m.ch1 });
+/** σ is usable: σ_24h > 0 and σ_1h ≥ 0. Anything else (missing, 0, negative) is unknown: orders are refused. */
+export const riskKnown = (sigma24h: number | null, sigma1h: number | null) => sigma24h !== null && sigma24h > 0 && sigma1h !== null && sigma1h >= 0;
 /** Orders pause while the hour's base sample is pending and for 60 s after it lands (at the mark's clock). */
 export const basePaused = (m: { base_pending: number | boolean; base_step_ts: number | null; ts: number }) =>
   Boolean(m.base_pending) || (m.base_step_ts !== null && m.ts < m.base_step_ts + PILOT_LIMITS.basePauseS);
@@ -199,7 +205,8 @@ export function markView(m: MarkRow | null, nowS: number): PilotMark | null {
   if (!m) return null;
   const cap = Engine.maxLeverage(riskOf(m));
   const age = nowS - m.ts;
-  const known = m.sigma_24h !== null;
+  // σ and the funding rate must both be known (mark.py posts null before 2 closed hours exist)
+  const known = riskKnown(m.sigma_24h, m.sigma_1h) && m.funding_known === 1;
   return {
     mark: m.px, ts: m.ts, age, ch24: m.ch24, ch1: m.ch1, sigma1h: m.sigma_1h, sigma24h: m.sigma_24h,
     maxLev: known ? cap.max : 1, paused: cap.paused, basePaused: basePaused(m), fresh: known && age <= RULES.markMaxAgeS,
@@ -238,32 +245,83 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
 
   const post = randomHex(16);
   const stmts: D1PreparedStatement[] = [
-    db.prepare(SQL.markUpsert).bind(d.mark, d.ts, nowMs, d.head, d.hour_start, d.ch24, d.ch1, d.sigma1h, d.sigma24h, d.basePending ? 1 : 0, d.baseStepTs, JSON.stringify(d.candle), post),
+    db.prepare(SQL.markUpsert).bind(d.mark, d.ts, nowMs, d.head, d.hour_start, d.ch24, d.ch1, d.sigma1h, d.sigma24h, d.funding ? 1 : 0, d.basePending ? 1 : 0, d.baseStepTs, JSON.stringify(d.candle), post),
   ];
-  // spec §8.5: a gap the producer could not fill gets the posted candle's low and high, so no liquidation is skipped
-  let gap: number | null = null;
+  // spec §8.5: every minute missing between the stored bars and this post gets a gap bar, so no liquidation is skipped:
+  // the open hour's from the posted candle, an earlier (closed) hour's from its index candle. An earlier hour with no
+  // candle yet stays open in `gaps` (nothing fills meanwhile) until a later post can close it.
   const first = d.bars[0][0];
-  if (stored?.m != null && first - stored.m > GAP_S) {
-    gap = stored.m + 60;
-    const [, ch, cl, cc] = d.candle;
-    stmts.push(db.prepare(SQL.barUpsert).bind(gap, ch, cl, Math.min(ch, Math.max(cl, cc)), post));
+  const [, ch, cl, cc] = d.candle;
+  const gapBars: number[][] = [];
+  const opened: [number, number][] = [];
+  if (stored?.m != null && first > stored.m + 60) {
+    for (const [from, to] of hourSegments(stored.m + 60, first - 60)) {
+      if (from >= d.hour_start) gapBars.push([from, ch, cl, Math.min(ch, Math.max(cl, cc))]);
+      else opened.push([from, to]);
+    }
   }
+  const pendingGaps = (await db.prepare("SELECT minute_from, minute_to FROM gaps ORDER BY minute_from").all<{ minute_from: number; minute_to: number }>()).results;
+  const closed: number[] = [];
+  const unresolved: [number, number][] = [];
+  if (opened.length || pendingGaps.length) {
+    const candles = await indexCandles(env);
+    for (const [from, to, known] of [...pendingGaps.map((g) => [g.minute_from, g.minute_to, true] as const), ...opened.map(([a, b]) => [a, b, false] as const)]) {
+      const k = candles.get(Math.floor(from / 3600) * 3600);
+      if (k) { gapBars.push([from, k.h, k.l, k.c]); if (known) closed.push(from); }
+      else if (!known) unresolved.push([from, to]);
+    }
+  }
+  for (const [m, h, l, c] of gapBars) stmts.push(db.prepare(SQL.barUpsert).bind(m, h, l, c, post));
+  for (const [from, to] of unresolved) stmts.push(db.prepare(SQL.gapOpen).bind(from, to, post));
+  for (const from of closed) stmts.push(db.prepare(SQL.gapClose).bind(from, post));
   for (const [m, h, l, c] of d.bars) stmts.push(db.prepare(SQL.barUpsert).bind(m, h, l, c, post));
-  if (d.funding) stmts.push(db.prepare(SQL.fundingUpsert).bind(d.funding.hour, d.funding.rate, post));
+  if (d.funding) stmts.push(db.prepare(SQL.fundingInsert).bind(d.funding.hour, d.funding.rate, post));
   const pruned = (deps.random ?? Math.random)() < 1 / PRUNE_EVERY;
   if (pruned) {
     stmts.push(db.prepare("DELETE FROM bars WHERE minute < ?").bind(nowS - BARS_KEEP_S));
     stmts.push(db.prepare("DELETE FROM used_nonces WHERE exp < ?").bind(nowS));
     stmts.push(db.prepare("DELETE FROM ratelimit WHERE slot < ?").bind(Math.floor(nowS / 60) - 1));
     stmts.push(db.prepare("DELETE FROM orders WHERE status <> 'pending' AND arrived_ms < ?").bind(nowMs - ORDERS_KEEP_MS));
+    stmts.push(db.prepare("DELETE FROM gaps WHERE minute_to < ?").bind(nowS - BARS_KEEP_S)); // older than any kept bar
   }
   const res = await db.batch(stmts);
   if (res[0].meta.changes !== 1) return errorJson(409, "ts is not newer than the stored mark", { last_minute: await lastMinute(db, d.ts) });
 
-  const liquidated = await sweep(db, gap ?? first, d.bars[d.bars.length - 1][0]);
-  const fills = await fillOrders(db, env, d, nowMs);
-  return json({ ok: true, last_minute: await lastMinute(db, d.ts), ts: d.ts, bars: d.bars.length, gap: gap !== null, liquidated, ...fills, pruned });
+  const liquidated = await sweep(db, Math.min(first, ...gapBars.map((g) => g[0])), d.bars[d.bars.length - 1][0]);
+  const gaps = await openGaps(db);
+  const fills = await fillOrders(db, env, d, gaps > 0, nowMs);
+  return json({ ok: true, last_minute: await lastMinute(db, d.ts), ts: d.ts, bars: d.bars.length, gapBars: gapBars.length, gaps, liquidated, ...fills, pruned });
 }
+
+/** [from, to] split at hour starts (minute starts, inclusive). */
+export function hourSegments(from: number, to: number): [number, number][] {
+  const out: [number, number][] = [];
+  for (let a = from; a <= to; ) {
+    const end = Math.min(to, Math.floor(a / 3600) * 3600 + 3540);
+    out.push([a, end]);
+    a = end + 60;
+  }
+  return out;
+}
+
+/** The closed hourly candles of the index file in KV (abi:index), by hour start: high, low, close. Empty when unreadable. */
+export async function indexCandles(env: Env): Promise<Map<number, { h: number; l: number; c: number }>> {
+  const out = new Map<number, { h: number; l: number; c: number }>();
+  try {
+    const raw = await env.INVITES.get(ABI_KEY);
+    const candles = raw ? (JSON.parse(raw) as { candles?: unknown }).candles : null;
+    if (!Array.isArray(candles)) return out;
+    for (const x of candles) {
+      if (!Array.isArray(x) || typeof x[0] !== "string") continue;
+      const t = Date.parse(x[0]) / 1000, [h, l, c] = [x[2], x[3], x[4]];
+      if (!Number.isInteger(t) || t % 3600 !== 0 || ![h, l, c].every(finite) || !(l > 0 && l <= h)) continue;
+      out.set(t, { h, l, c: Math.min(h, Math.max(l, c)) });
+    }
+  } catch { /* unreadable: the gap stays open */ }
+  return out;
+}
+
+const openGaps = async (db: D1Database) => (await db.prepare("SELECT COUNT(*) AS n FROM gaps").first<{ n: number }>())?.n ?? 0;
 
 export async function handlePublicMark(req: Request, env: Env, deps: PilotDeps = {}): Promise<Response> {
   if (req.method.toUpperCase() !== "GET") return errorJson(405, "method not allowed");
@@ -358,9 +416,14 @@ export async function lazyLiquidate(db: D1Database, wallet: string, nowS: number
     const fmin = Math.min(0, ...pts.map((t) => Engine.fundingAccrued(pos, rates, t)));
     const bound = Engine.liqPrice(pos, fmin);
     const sql = r.side === "long" ? SQL.liqCandidatesLong : SQL.liqCandidatesShort;
-    const cands = (await db.prepare(sql).bind(bound, r.opened_at).all<MinuteBar>()).results;
-    const hit = Engine.liquidation(pos, cands, rates);
-    if (hit) stmts.push(liquidateStmt(db, r, hit, rates));
+    // page through every candidate (ascending): the first page with a hit decides, as over the whole list
+    for (let from = r.opened_at; ;) {
+      const cands = (await db.prepare(sql).bind(bound, from).all<MinuteBar>()).results;
+      const hit = Engine.liquidation(pos, cands, rates);
+      if (hit) { stmts.push(liquidateStmt(db, r, hit, rates)); break; }
+      if (cands.length < LIQ_PAGE) break;
+      from = cands[cands.length - 1].t + 60;
+    }
   }
   return settle(db, stmts);
 }
@@ -410,13 +473,15 @@ const orderView = (o: OrderRow): OrderView => ({
 const refuseStmt = (db: D1Database, id: number, error: string) => db.prepare(SQL.refuse).bind(error, id);
 
 /** Ingest: fill (or refuse) every order that arrived before this post, at this post's mark. */
-async function fillOrders(db: D1Database, env: Env, d: MarkPost, nowMs: number): Promise<{ filled: number; refused: number }> {
-  const pending = (await db.prepare(`SELECT ${ORDER_COLS} FROM orders WHERE status = 'pending' AND arrived_ms < ? ORDER BY id`).bind(nowMs).all<OrderRow>()).results;
+/** nowMs: the server's ingest time (an order waits at most RULES.markMaxAgeS of it). */
+async function fillOrders(db: D1Database, env: Env, d: MarkPost, gapsOpen: boolean, nowMs: number): Promise<{ filled: number; refused: number }> {
+  // only orders this mark is newer than, by the mark's own chain time (the mark must postdate the order)
+  const pending = (await db.prepare(`SELECT ${ORDER_COLS} FROM orders WHERE status = 'pending' AND arrived_ms < ? ORDER BY id`).bind(d.ts * 1000).all<OrderRow>()).results;
   let filled = 0, refused = 0;
   if (!pending.length) return { filled, refused };
   const paused = basePaused({ base_pending: d.basePending, base_step_ts: d.baseStepTs, ts: d.ts });
-  // a catch-up batch (bars behind the mark): older bars may still liquidate, so nothing fills at this mark
-  const catchingUp = d.bars[d.bars.length - 1][0] < Math.floor(d.ts / 60) * 60;
+  // a catch-up batch (bars behind the mark) or an open gap: older bars may still liquidate, so nothing fills now
+  const catchingUp = gapsOpen || d.bars[d.bars.length - 1][0] < Math.floor(d.ts / 60) * 60;
   const risk = { sigma24: d.sigma24h, sigma1h: d.sigma1h, ch1: d.ch1 };
   const refuse = async (o: OrderRow, error: string) => { refused += (await refuseStmt(db, o.id, error).run()).meta.changes; };
 
@@ -425,21 +490,22 @@ async function fillOrders(db: D1Database, env: Env, d: MarkPost, nowMs: number):
     if (paused) { await refuse(o, TRADING_PAUSED); continue; }
     if (o.kind === "open") {
       if (!pilotOpen(env)) { await refuse(o, PILOT_CLOSED); continue; }
-      if (d.sigma24h === null) { await refuse(o, PRICE_UPDATING); continue; }
+      if (!riskKnown(d.sigma24h, d.sigma1h) || !d.funding) { await refuse(o, PRICE_UPDATING); continue; }
       const acct = await getAccount(db, o.wallet);
-      const n = (await openRows(db, o.wallet)).length;
-      const r = Engine.open({ balance: acct?.balance ?? 0, open: n }, { side: o.side!, margin: o.margin!, lev: o.lev!, mark: d.mark, now: d.ts, risk });
-      if (!r.ok) { await refuse(o, r.error); continue; }
+      const held = await openRows(db, o.wallet);
+      const r = Engine.open({ balance: acct?.balance ?? 0, open: held.length, side: held[0]?.side ?? null }, { side: o.side!, margin: o.margin!, lev: o.lev!, mark: d.mark, now: d.ts, risk });
+      if (!r.ok) { await refuse(o, engineError(r.error, held)); continue; }
       const p = r.position, cost = p.margin + r.fee;
       const res = await db.batch([
-        db.prepare(SQL.openDebit).bind(cost, o.wallet, cost, o.wallet, RULES.maxOpen, o.id),
+        db.prepare(SQL.openDebit).bind(cost, o.wallet, cost, o.wallet, RULES.maxOpen, o.wallet, p.side, o.id),
         db.prepare(SQL.openInsert).bind(o.wallet, p.side, p.margin, p.lev, p.notional, p.entry, p.liq, p.openedAt, r.fee),
         db.prepare(SQL.openFilled).bind(d.mark, d.ts, o.id),
       ]);
       if (res[2].meta.changes === 1) filled++;
       else {
-        const left = (await openRows(db, o.wallet)).length >= RULES.maxOpen ? "too many open positions" : "insufficient balance";
-        await refuse(o, left);
+        const now = await openRows(db, o.wallet);
+        const opp = now.find((x) => x.side !== p.side);
+        await refuse(o, opp ? closeFirst(opp.side) : now.length >= RULES.maxOpen ? "too many open positions" : "insufficient balance");
       }
     } else {
       const row = await db.prepare(`SELECT ${POS_COLS} FROM positions WHERE id = ? AND wallet = ?`).bind(o.position_id, o.wallet).first<PositionRow>();
@@ -478,7 +544,7 @@ async function markProblem(db: D1Database, m: MarkRow | null, nowS: number): Pro
   const v = markView(m, nowS);
   if (!m || !v || !v.fresh) return errorJson(503, PRICE_UPDATING);
   const last = await db.prepare("SELECT MAX(minute) AS m FROM bars").first<{ m: number | null }>();
-  if (last?.m == null || last.m < Math.floor(m.ts / 60) * 60) return errorJson(503, PRICE_UPDATING);
+  if (last?.m == null || last.m < Math.floor(m.ts / 60) * 60 || (await openGaps(db)) > 0) return errorJson(503, PRICE_UPDATING);
   if (v.basePaused) return errorJson(409, TRADING_PAUSED);
   return null;
 }
@@ -575,8 +641,8 @@ export async function handleOrder(req: Request, env: Env, deps: PilotDeps = {}):
   // the same checks the fill makes, at the current mark: refuse now what would be refused at the fill
   const rows = await openRows(db, wallet);
   const now = (await getAccount(db, wallet))!;
-  const pre = Engine.open({ balance: now.balance, open: rows.length }, { side, margin, lev, mark: m!.px, now: m!.ts, risk: riskOf(m!) });
-  if (!pre.ok) return errorJson(pre.error === "insufficient balance" || pre.error === "too many open positions" ? 409 : 400, pre.error);
+  const pre = Engine.open({ balance: now.balance, open: rows.length, side: rows[0]?.side ?? null }, { side, margin, lev, mark: m!.px, now: m!.ts, risk: riskOf(m!) });
+  if (!pre.ok) return errorJson(["insufficient balance", "too many open positions", HEDGE].includes(pre.error) ? 409 : 400, engineError(pre.error, rows));
   const o = await insertOrder(db, wallet, "open", { side, margin, lev }, nowMs);
   return json({ order: orderView(o) }, 202);
 }
