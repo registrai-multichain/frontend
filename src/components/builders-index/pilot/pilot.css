@@ -37,3 +37,4 @@
 .abi-t .abi-pt-empty { padding: 14px 12px; margin: 0; text-align: left; font-family: var(--abi-sans); }
 .abi-t tr.abi-pt-me td { background: var(--abi-accent-soft); }
 .abi-t .abi-seg button[role="tab"][aria-selected="true"] { background: var(--abi-raise); color: var(--abi-fg); }
+.abi-t .abi-pt-foot { margin: 0; padding: 8px 12px 10px; font-size: 11.5px; color: var(--abi-mute); border-top: 1px solid var(--abi-line); }

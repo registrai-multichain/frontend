@@ -27,5 +27,5 @@ if grep -Eq '^ADMIN_ADDRESSES = ""' wrangler.toml; then
   echo "note: ADMIN_ADDRESSES is empty in builders-site/wrangler.toml: nobody can sign in to /admin." >&2
 fi
 echo "reminder: /admin sign-in needs the Pages secret NONCE_SECRET on registrai-builders (see builders-site/wrangler.toml)." >&2
-echo "reminder: the ABI points pilot sign-in needs the Pages secret PILOT_SESSION_SECRET (see builders-site/wrangler.toml); PILOT_OPEN=\"1\" opens orders." >&2
+echo "reminder: the ABI points pilot sign-in needs the Pages secret PILOT_SESSION_SECRET (see builders-site/wrangler.toml); PILOT_OPEN=\"1\" plus PILOT_REGI_SNAPSHOT_BLOCK opens orders; run builders-site/scripts/d1-guard-check.mjs first." >&2
 exec npx wrangler pages deploy --branch=main

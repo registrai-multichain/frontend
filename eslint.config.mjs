@@ -16,5 +16,6 @@ export default defineConfig([
       "react-hooks/static-components": "off",
     },
   },
-  globalIgnores([".next/**", "out/**", "dist-builders/**", "node_modules/**", "**/.wrangler/**", "next-env.d.ts"]),
+  // builders-site/test/reference: the vendored pilot.js engine and its node tests, kept byte-identical for the parity tests
+  globalIgnores([".next/**", "out/**", "dist-builders/**", "node_modules/**", "**/.wrangler/**", "next-env.d.ts", "builders-site/test/reference/**"]),
 ]);

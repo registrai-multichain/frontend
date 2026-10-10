@@ -73,6 +73,8 @@ export interface Env {
   PILOT_DB?: D1Database;
   /** Kill switch: "1" accepts new pilot orders; anything else (the default) refuses them with 403 {error:"pilot closed"}. Closes and reads always work. */
   PILOT_OPEN?: string;
+  /** The pilot's REGI snapshot block (spec §8.4): a wallet trades only if it held ≥ 1 REGI at this Arc block and still does. Unset = the pilot is closed, like PILOT_OPEN "0". */
+  PILOT_REGI_SNAPSHOT_BLOCK?: string;
   /** Pages SECRET: the HMAC key of the pilot session cookie. Under 32 characters = pilot sign-in fails closed (503). */
   PILOT_SESSION_SECRET?: string;
   /** https://app.registrai.cc — the only origin /api/market-proposals accepts submissions from (CORS). */

@@ -84,85 +84,103 @@ describe("pilot copy lint (R7)", () => {
 // ───────────────────────────── markup ─────────────────────────────
 
 const ME = "0x1234567890abcdef1234567890abcdef12345678";
-const MARK = { mark: 1000, ts: 1_760_097_600, age: 2, ch24: 0.01, ch1: 0.001, maxLev: 3, paused: false, fresh: true };
+const MARK = { mark: 1000, ts: 1_760_097_600, age: 2, ch24: 0.01, ch1: 0.001, sigma1h: 0.0004, sigma24h: 0.002, maxLev: 20, paused: false, basePaused: false, fresh: true };
+const FUNDING = { recent: [{ t: 1_760_094_000, rate: -0.0003 }, { t: 1_760_090_400, rate: 0.0002 }], current: -0.0003, next: 1_760_097_600 };
+const POS_LIQ = liqPrice({ side: "long", margin: 1000, notional: 2000, entry: 990 }, 0);
 const VIEW: PilotAccountView = {
-  open: true, address: ME, regi: true, account: { balance: 9000, equity: 9998.8, season: 1 },
-  positions: [{ id: 7, side: "long", margin: 1000, lev: 2, notional: 2000, entry: 990, liq: liqPrice("long", 990, 2), openedAt: 1_760_097_000, fee: 1.2, pnl: 20.2 }],
+  open: true, address: ME, regi: { ok: true, snapshot: true, now: true }, account: { balance: 9000, equity: 9998.8, season: 1 },
+  positions: [{ id: 7, side: "long", margin: 1000, lev: 2, notional: 2000, entry: 990, liq: POS_LIQ, openedAt: 1_760_097_000, fee: 0.2, funding: 0.6, pnl: 20.2 }],
+  pending: [],
   mark: MARK,
+  funding: FUNDING,
 };
+const VISITOR: PilotAccountView = { ...VIEW, address: null, regi: null, account: null, positions: [] };
 const noop = () => undefined;
 const ticket = (p: Partial<TicketProps> = {}) => renderToStaticMarkup(createElement(Ticket, { view: VIEW, signInLabel: "Sign in", onSignIn: noop, onSignOut: noop, onOrder: noop, ...p }));
 const tables = (p: Partial<PilotTablesProps> = {}) =>
   renderToStaticMarkup(createElement(PilotTables, {
-    tab: "positions", onTab: noop, address: ME, positions: VIEW.positions, mark: 1000, closing: null, onClose: noop,
-    history: [{ id: 3, side: "short", margin: 500, lev: 3, notional: 1500, entry: 1000, liq: 1470, openedAt: 1, closedAt: 1_760_090_000, exit: 1470, pnl: -705, fee: 0.9, returned: 0, net: -500.9, reason: "liquidation" }],
+    tab: "positions", onTab: noop, address: ME, positions: VIEW.positions, mark: 1000, closing: null, onClose: noop, funding: FUNDING,
+    history: [{ id: 3, side: "short", margin: 500, lev: 3, notional: 1500, entry: 1000, openedAt: 1, closedAt: 1_760_090_000, exit: 1470, pnl: -705, funding: -1.5, fee: 0.3, returned: 0, net: -500.15, reason: "liquidation" }],
     board: [{ rank: 1, address: "0x1234…5678", equity: 10500 }, { rank: 2, address: "0xabcd…ef01", equity: 9000 }],
     ...p,
   }));
+const esc = (s: string) => s.replace(/'/g, "&#x27;");
 /** Visible text plus the attribute copy a screen reader reads. */
 const visible = (html: string) => html.replace(/<[^>]*?(?:aria-label|title)="([^"]*)"[^>]*>/g, " $1 ").replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&amp;/g, "&");
 
 describe("ticket", () => {
-  test("signed-in holder: Long / Short, margin, leverage, liquidation price, fee; disclaimers visible above the button", () => {
+  test("signed-in holder: Long / Short, margin, leverage 1–20×, liquidation price, fee, funding; both disclaimers above the button", () => {
     const h = ticket();
-    for (const t of ["Long", "Short", "Margin", "Leverage", "Liquidation price", "Fee", "Size", "Balance", "1×", "2×", "3×"]) expect(h).toContain(t);
+    for (const t of ["Long", "Short", "Margin", "Leverage", "Liquidation price", "Fee", "Size", "Balance", "Funding", "−0.0300%/h", "1×", "2×", "3×", "5×", "10×", "20×"]) expect(h).toContain(t);
     expect(h).toContain(`>${openLabel("long", 1)}</button>`);
     const button = h.indexOf('type="submit"');
-    expect(h.indexOf(PILOT_DISCLAIMER.replace("'", "&#x27;"))).toBeGreaterThan(-1);
+    expect(h.indexOf(PILOT_DISCLAIMER)).toBeGreaterThan(-1);
     expect(h.indexOf(PILOT_DISCLAIMER)).toBeLessThan(button);
-    expect(h.indexOf(PILOT_LIQ_NOTE.replace("'", "&#x27;"))).toBeLessThan(button);
-    expect(h.indexOf(PILOT_LIQ_NOTE.replace("'", "&#x27;"))).toBeGreaterThan(-1);
-    expect(h).toContain('aria-label="About the points pilot"'); // the rules sit behind an i bubble
+    expect(h.indexOf(esc(PILOT_LIQ_NOTE))).toBeGreaterThan(-1);
+    expect(h.indexOf(esc(PILOT_LIQ_NOTE))).toBeLessThan(button);
+    for (const l of ["About the points pilot", "About funding"]) expect(h).toContain(`aria-label="${l}"`);
     expect(banned(visible(h))).toBeUndefined();
   });
-  test("leverage above the dynamic cap is disabled; paused and stale marks block the button", () => {
-    const capped = ticket({ view: { ...VIEW, mark: { ...MARK, maxLev: 2 } } });
-    expect(capped).toMatch(/disabled="">3×<\/button>/);
-    expect(capped).toContain(PILOT_COPY.capped(2).replace("'", "&#x27;"));
-    const paused = ticket({ view: { ...VIEW, mark: { ...MARK, paused: true } } });
-    expect(paused).toContain(PILOT_COPY.paused);
-    expect(paused).toMatch(/type="submit"[^>]*disabled=""/);
-    const stale = ticket({ view: { ...VIEW, mark: { ...MARK, fresh: false } } });
-    expect(stale).toContain(PILOT_COPY.priceUpdating);
-    expect(stale).toMatch(/type="submit"[^>]*disabled=""/);
-  });
-  test("kill switch: 'The points pilot is not open yet.' and no order button, signed in or not", () => {
-    for (const v of [{ ...VIEW, open: false }, { ...VIEW, open: false, address: null, regi: null, account: null, positions: [] }]) {
-      const h = ticket({ view: v });
-      expect(h).toContain(PILOT_COPY.closed);
-      expect(h).not.toContain('type="submit"');
+  test("leverage above the volatility cap is disabled; paused, base-paused and stale marks block the button; a queued order says so", () => {
+    const capped = ticket({ view: { ...VIEW, mark: { ...MARK, maxLev: 5 } } });
+    expect(capped).toMatch(/disabled="">10×<\/button>/);
+    expect(capped).toMatch(/disabled="">20×<\/button>/);
+    expect(capped).not.toMatch(/disabled="">5×<\/button>/);
+    expect(capped).toContain(esc(PILOT_COPY.capped(5)));
+    for (const [mark, text] of [[{ ...MARK, paused: true }, PILOT_COPY.paused], [{ ...MARK, basePaused: true }, PILOT_COPY.basePaused], [{ ...MARK, fresh: false }, PILOT_COPY.priceUpdating]] as const) {
+      const h = ticket({ view: { ...VIEW, mark } });
+      expect(h).toContain(esc(text));
+      expect(h).toMatch(/type="submit"[^>]*disabled=""/);
     }
+    expect(ticket({ filling: true, busy: true })).toContain(PILOT_COPY.filling);
   });
-  test("visitors and non-holders: 'Hold REGI to join the points pilot.'; visitors get the sign-in button", () => {
-    const visitor = ticket({ view: { ...VIEW, address: null, regi: null, account: null, positions: [] } });
-    expect(visitor).toContain(PILOT_COPY.holdRegi);
-    expect(visitor).toContain(">Sign in</button>");
-    expect(visitor).toContain('aria-label="About sign-in"');
-    const holder = ticket({ view: { ...VIEW, regi: false } });
-    expect(holder).toContain(PILOT_COPY.holdRegi);
-    expect(holder).not.toContain('type="submit"');
-    for (const h of [visitor, holder]) expect(banned(visible(h))).toBeUndefined();
+  test("every state shows the disclaimer: kill switch, visitor, no REGI, not at the snapshot, REGI unknown", () => {
+    const states: [PilotAccountView, string][] = [
+      [{ ...VIEW, open: false }, PILOT_COPY.closed],
+      [{ ...VISITOR, open: false }, PILOT_COPY.closed],
+      [VISITOR, PILOT_COPY.holdRegi],
+      [{ ...VIEW, regi: { ok: false, snapshot: true, now: false } }, PILOT_COPY.holdRegi],
+      [{ ...VIEW, regi: { ok: false, snapshot: false, now: true } }, PILOT_COPY.notAtSnapshot],
+      [{ ...VIEW, regi: { ok: null, snapshot: true, now: null } }, PILOT_COPY.regiUnchecked],
+    ];
+    for (const [view, line] of states) {
+      const h = ticket({ view });
+      expect(h).toContain(esc(line));
+      expect(h).toContain(PILOT_DISCLAIMER);
+      expect(h).not.toContain('type="submit"');
+      expect(banned(visible(h))).toBeUndefined();
+    }
+    // a possible holder whose check failed is never told to hold REGI
+    expect(ticket({ view: { ...VIEW, regi: { ok: null, snapshot: null, now: null } } })).not.toContain(PILOT_COPY.holdRegi);
+    expect(ticket({ view: VISITOR })).toContain(">Sign in</button>");
+    expect(ticket({ view: VISITOR })).toContain('aria-label="About sign-in"');
   });
 });
 
-describe("positions, history, leaderboard", () => {
-  test("positions: entry, mark, PnL, liquidation price and Close", () => {
+describe("positions, history, leaderboard, funding", () => {
+  test("positions: entry, mark, PnL, funding, liquidation price and Close", () => {
     const h = tables();
-    for (const t of ["Positions (1)", "History", "Leaderboard", "Long 2×", "990.00", "1,000.00", "+20.20", "Liq. price", ">Close</button>"]) expect(h).toContain(t);
+    for (const t of ["Positions (1)", "History", "Leaderboard", "Funding", "Long 2×", "990.00", "1,000.00", "+20.20", "+0.60", "Liq. price", ">Close</button>"]) expect(h).toContain(t);
     expect(banned(visible(h))).toBeUndefined();
   });
-  test("history: net result and liquidations", () => {
+  test("history: funding, net result and liquidations", () => {
     const h = tables({ tab: "history" });
-    for (const t of ["Short 3×", fmtWhen(1_760_090_000), fmtSigned(-500.9), "Liquidated"]) expect(h).toContain(t);
+    for (const t of ["Short 3×", fmtWhen(1_760_090_000), fmtSigned(-1.5), fmtSigned(-500.15), "Liquidated"]) expect(h).toContain(t);
     expect(banned(visible(h))).toBeUndefined();
   });
-  test("leaderboard: shortened addresses, own row marked; visible signed out", () => {
+  test("leaderboard: shortened addresses, own row marked, the disclaimer under it; visible signed out", () => {
     const h = tables({ tab: "leaderboard" });
     expect(h).toContain("0x1234…5678");
     expect(h).toContain('class="abi-pt-me"');
     expect(h).not.toContain(ME);
+    expect(h.indexOf(PILOT_DISCLAIMER)).toBeGreaterThan(h.indexOf("</table>"));
     expect(tables({ tab: "leaderboard", address: null })).toContain("0xabcd…ef01");
     expect(tables({ tab: "positions", address: null })).toContain(PILOT_COPY.signInForPositions);
+    expect(banned(visible(h))).toBeUndefined();
+  });
+  test("funding: the recent hourly rates with who pays, and an i bubble", () => {
+    const h = tables({ tab: "funding", address: null });
+    for (const t of ["−0.0300%/h", "+0.0200%/h", "receive", "pay", 'aria-label="About funding"']) expect(h).toContain(t);
     expect(banned(visible(h))).toBeUndefined();
   });
 });

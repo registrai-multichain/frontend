@@ -49,6 +49,9 @@ PROPOSALS_ALLOWED_ORIGIN = "https://app.registrai.cc"
 # with 403 {error:"pilot closed"} and the ticket says "The points pilot is not open yet."
 # Sign-in, closes, reads and the mark ingest work either way.
 PILOT_OPEN = "0"
+# The REGI holding window (spec §8.4): a wallet may open positions only if it held ≥ 1 REGI at this Arc
+# block AND still does. Set it (a past block number) when opening; empty = the pilot stays closed.
+PILOT_REGI_SNAPSHOT_BLOCK = ""
 
 # ── Secrets (NOT here: set once per project, they survive deploys) ──────────
 # NONCE_SECRET   HMAC key of the stateless /admin sign-in nonces

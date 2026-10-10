@@ -15,32 +15,37 @@ export const PILOT_SESSION_COOKIE = "__Host-rb_pilot";
 export const PILOT_SESSION_TTL_S = 12 * 60 * 60;
 
 export interface PilotLogin {
+  /** The signing wallet, lowercase: the server checks the signature recovers to it. */
+  address: string;
   origin: string;
   nonce: string;
   /** ISO 8601 UTC, e.g. 2026-10-10T12:00:00.000Z */
   issued: string;
 }
 
+const ADDRESS_RE = /^0x[0-9a-f]{40}$/;
 const NONCE_RE = /^[A-Za-z0-9_-]{16,128}$/;
 const ORIGIN_RE = /^https?:\/\/[a-z0-9.-]+(?::\d{1,5})?$/;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 
 /** The exact bytes a wallet signs (EIP-191 personal_sign). */
 export function pilotLoginMessage(p: PilotLogin): string {
-  return [PILOT_LOGIN_TITLE, PILOT_LOGIN_NOTE, `origin: ${p.origin}`, `nonce: ${p.nonce}`, `issued: ${p.issued}`].join("\n");
+  return [PILOT_LOGIN_TITLE, PILOT_LOGIN_NOTE, `address: ${p.address.toLowerCase()}`, `origin: ${p.origin}`, `nonce: ${p.nonce}`, `issued: ${p.issued}`].join("\n");
 }
 
 /** A sign-in message back into its fields; null unless it is exactly the canonical form. */
 export function parsePilotLoginMessage(message: string): PilotLogin | null {
   const lines = message.split("\n");
-  if (lines.length !== 5 || lines[0] !== PILOT_LOGIN_TITLE || lines[1] !== PILOT_LOGIN_NOTE) return null;
-  const origin = /^origin: (.+)$/.exec(lines[2])?.[1];
-  const nonce = /^nonce: (.+)$/.exec(lines[3])?.[1];
-  const issued = /^issued: (.+)$/.exec(lines[4])?.[1];
+  if (lines.length !== 6 || lines[0] !== PILOT_LOGIN_TITLE || lines[1] !== PILOT_LOGIN_NOTE) return null;
+  const address = /^address: (.+)$/.exec(lines[2])?.[1];
+  const origin = /^origin: (.+)$/.exec(lines[3])?.[1];
+  const nonce = /^nonce: (.+)$/.exec(lines[4])?.[1];
+  const issued = /^issued: (.+)$/.exec(lines[5])?.[1];
+  if (!address || !ADDRESS_RE.test(address)) return null;
   if (!origin || !ORIGIN_RE.test(origin)) return null;
   if (!nonce || !NONCE_RE.test(nonce)) return null;
   if (!issued || !ISO_RE.test(issued) || !Number.isFinite(Date.parse(issued))) return null;
-  const parsed = { origin, nonce, issued };
+  const parsed = { address, origin, nonce, issued };
   return pilotLoginMessage(parsed) === message ? parsed : null;
 }
 
@@ -60,7 +65,9 @@ export const REGI_CACHE_S = 10 * 60;
 export const PILOT_PATHS = {
   auth: "/api/pilot/auth",
   account: "/api/pilot/account",
+  /** POST an open order; GET ?id= its status. */
   order: "/api/pilot/order",
+  /** POST a close order (status: GET /api/pilot/order?id=). */
   close: "/api/pilot/close",
   positions: "/api/pilot/positions",
   history: "/api/pilot/history",
@@ -74,6 +81,12 @@ export const PILOT_LIMITS = {
   leaderboard: 50,
   history: 100,
   leaderboardCacheS: 30,
+  /** REGI RPC back-off after a failure. */
+  regiRetryS: 30,
+  /** Orders pause this long after the hour's base sample lands (base_step_ts). */
+  basePauseS: 60,
+  /** Funding rates shown on the page. */
+  fundingShown: 24,
 } as const;
 
 export interface PilotMark {
@@ -83,9 +96,14 @@ export interface PilotMark {
   age: number;
   ch24: number;
   ch1: number;
+  sigma1h: number | null;
+  sigma24h: number | null;
   maxLev: number;
+  /** The engine's pause (the last hour moved more than max(5σ_1h, 0.5%)). */
   paused: boolean;
-  /** At most RULES.markMaxAgeS old: orders and closes are accepted. */
+  /** Paused around the hour's base sample (base_pending, or under 60 s after base_step_ts). */
+  basePaused: boolean;
+  /** At most RULES.markMaxAgeS old: the producer is live, so an order will fill at the next mark. */
   fresh: boolean;
 }
 
@@ -96,9 +114,12 @@ export interface OpenPositionView {
   lev: number;
   notional: number;
   entry: number;
+  /** Liquidation price now (funding accrued so far moves it). */
   liq: number;
   openedAt: number;
   fee: number;
+  /** Funding accrued so far (positive = credited). */
+  funding: number;
   /** At the latest mark (null without one). */
   pnl: number | null;
 }
@@ -110,11 +131,11 @@ export interface ClosedPositionView {
   lev: number;
   notional: number;
   entry: number;
-  liq: number;
   openedAt: number;
   closedAt: number;
   exit: number;
   pnl: number;
+  funding: number;
   /** Open fee + close fee. */
   fee: number;
   /** Points returned to the balance at close (0 when liquidated). */
@@ -124,15 +145,45 @@ export interface ClosedPositionView {
   reason: "close" | "liquidation";
 }
 
+export interface OrderView {
+  id: number;
+  kind: "open" | "close";
+  status: "pending" | "filled" | "refused";
+  side: Side | null;
+  margin: number | null;
+  lev: number | null;
+  positionId: number | null;
+  arrivedMs: number;
+  fillPx: number | null;
+  error: string | null;
+}
+
+export interface RegiView {
+  /** Eligible: held ≥ 1 REGI at the snapshot block and now. null = couldn't check. */
+  ok: boolean | null;
+  snapshot: boolean | null;
+  now: boolean | null;
+}
+
+export interface FundingView {
+  /** Newest first: the rate in force during [t, t + 1h). */
+  recent: { t: number; rate: number }[];
+  /** The rate in force now (null: none posted for this hour). */
+  current: number | null;
+  /** When the next hour's rate takes over (unix s). */
+  next: number;
+}
+
 export interface PilotAccountView {
-  /** PILOT_OPEN: new orders accepted. */
+  /** PILOT_OPEN = "1" and a REGI snapshot block is set: new orders accepted. */
   open: boolean;
   address: string | null;
-  /** The cached REGI check (null: not signed in). */
-  regi: boolean | null;
+  regi: RegiView | null;
   account: { balance: number; equity: number | null; season: number } | null;
   positions: OpenPositionView[];
+  pending: OrderView[];
   mark: PilotMark | null;
+  funding: FundingView;
 }
 
 export interface LeaderboardRow {

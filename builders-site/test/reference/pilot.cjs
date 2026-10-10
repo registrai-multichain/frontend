@@ -1,44 +1,60 @@
-/* ABI points pilot: trading rules (spec docs/superpowers/specs/2026-10-10-abi-points-pilot.md).
- * Pure functions, no I/O: the builder site's /api/pilot handlers call these with the stored account,
- * positions and the latest signed mark. Points only; nothing here moves money. */
+/* ABI points pilot: trading rules, economy v2 (spec docs/superpowers/specs/2026-10-10-abi-points-pilot.md §8).
+ * Pure functions, no I/O: the builder site's /api/pilot handlers call these with the stored account, positions,
+ * the published hourly closes / funding rates and minute bars. Points only; nothing here moves money.
+ *
+ * Funding: the rate in force during hour [t, t+1h) is F = mean hourly return of the 6 closed hours ending at t
+ * (RULES.window; σ for the leverage cap and the pause uses the last 24 closed hours, RULES.sigmaWindow).
+ * A long accrues −F × notional per hour held, a short +F × notional (pro rata to the time held), so a steady
+ * trend is paid back to the side it runs against and only beating or missing the trend earns points. */
 (function (root) {
   const RULES = {
     startBalance: 10000,
-    levels: [1, 2, 3],
-    feeRate: 0.0006,          // on notional, at open and at close
-    mm: 0.02,                 // maintenance margin, share of notional
+    levels: [1, 2, 3, 5, 10, 20],
+    feeRate: 0.0001,          // per side, on notional at open and on exit notional at close (§8.6: half a typical day's move at 20×, 2× the leftover drift edge)
+    mm: 0.005,                // maintenance margin, share of notional
     minMargin: 10,
     maxOpen: 5,
-    markMaxAgeS: 15,
-    capSteps: [[0.10, 3], [0.25, 2], [Infinity, 1]],   // |24h move| below → max leverage
-    pauseHourMove: 0.04,
+    markMaxAgeS: 10,          // fills use the first mark after the order, at most this late
+    volTarget: 0.10,          // max_lev = clamp(floor(volTarget / σ_24h), 1, 20)
+    pauseSigmas: 5, pauseFloor: 0.005,
+    window: 6,                // funding = mean hourly return of the last 6 closed hours (24 h lagged a falling trend: §8.6 table)
+    sigmaWindow: 24,          // σ for the leverage cap and the pause: last 24 closed hours
   };
 
-  function maxLeverage({ ch24, ch1 }) {
-    const a = Math.abs(ch24 || 0);
-    const max = RULES.capSteps.find(([lim]) => a < lim)[1];
-    return { max, paused: Math.abs(ch1 || 0) > RULES.pauseHourMove };
+  /* closes: hourly closes, ascending (last = latest closed hour). */
+  function returns(closes) {
+    const r = [];
+    for (let i = 1; i < closes.length; i++) r.push(closes[i] / closes[i - 1] - 1);
+    return r;
+  }
+  function risk(closes) {
+    const all = returns(closes);
+    const rf = all.slice(-RULES.window), rs = all.slice(-RULES.sigmaWindow);
+    if (!rs.length) return { funding: 0, sigma1h: 0, sigma24: 0 };
+    const funding = rf.reduce((a, b) => a + b, 0) / rf.length;
+    const mean = rs.reduce((a, b) => a + b, 0) / rs.length;
+    const sd = Math.sqrt(rs.reduce((a, b) => a + (b - mean) ** 2, 0) / rs.length);
+    return { funding, sigma1h: sd, sigma24: sd * Math.sqrt(24) };
   }
 
-  function liqPrice(side, entry, lev) {
-    const d = 1 / lev - RULES.mm;
-    return side === "long" ? entry * (1 - d) : entry * (1 + d);
+  function maxLeverage({ sigma24, sigma1h, ch1 }) {
+    const raw = sigma24 > 0 ? Math.floor(RULES.volTarget / sigma24) : RULES.levels[RULES.levels.length - 1];
+    const cap = Math.max(1, Math.min(20, raw));
+    const max = RULES.levels.filter(l => l <= cap).pop();
+    const limit = Math.max(RULES.pauseSigmas * (sigma1h || 0), RULES.pauseFloor);
+    return { max, paused: Math.abs(ch1 || 0) > limit };
   }
 
-  /* account: { balance, open } (open = number of open positions). Returns { ok, position, fee, balance } or { error }. */
-  function open(account, { side, margin, lev, mark, now, ch24, ch1 }) {
-    if (side !== "long" && side !== "short") return { error: "bad side" };
-    if (!RULES.levels.includes(lev)) return { error: "leverage not allowed" };
-    if (!(margin >= RULES.minMargin)) return { error: "margin below minimum" };
-    if (!(mark > 0)) return { error: "no mark price" };
-    const cap = maxLeverage({ ch24, ch1 });
-    if (cap.paused) return { error: "trading paused" };
-    if (lev > cap.max) return { error: "leverage above the current cap" };
-    if (account.open >= RULES.maxOpen) return { error: "too many open positions" };
-    const notional = margin * lev, fee = notional * RULES.feeRate;
-    if (margin + fee > account.balance) return { error: "insufficient balance" };
-    const position = { side, margin, lev, notional, entry: mark, liq: liqPrice(side, mark, lev), openedAt: now };
-    return { ok: true, position, fee, balance: account.balance - margin - fee };
+  /* Funding accrued by a position from openedAt to `to` (unix s). rates: [{ t: hour start, rate }] (rate in force
+   * during [t, t+3600)). Positive = credited to the position. */
+  function fundingAccrued(pos, rates, to) {
+    const dir = pos.side === "long" ? -1 : 1;
+    let f = 0;
+    for (const { t, rate } of rates) {
+      const a = Math.max(t, pos.openedAt), b = Math.min(t + 3600, to);
+      if (b > a) f += dir * rate * pos.notional * (b - a) / 3600;
+    }
+    return f;
   }
 
   function pnl(pos, mark) {
@@ -46,27 +62,52 @@
     return pos.notional * (pos.side === "long" ? r : -r);
   }
 
-  /* Closing at `mark`: what returns to the balance (margin + PnL − close fee, never below 0). */
-  function close(pos, mark) {
-    const p = pnl(pos, mark), fee = (pos.notional + p) * RULES.feeRate;
-    return { pnl: p, fee, payout: Math.max(0, pos.margin + p - Math.max(0, fee)) };
+  /* Liquidation price given funding accrued so far: where margin + PnL + funding = mm × notional. */
+  function liqPrice(pos, funding = 0) {
+    const d = (pos.margin + funding - RULES.mm * pos.notional) / pos.notional;
+    return pos.side === "long" ? pos.entry * (1 - d) : pos.entry * (1 + d);
   }
 
-  /* First one-minute bar opened after the position whose low (long) / high (short) crosses the liquidation price.
-   * bars: [{ t: minute start (unix s), h, l, c }] ascending. Returns { t, price } or null. */
-  function liquidation(pos, bars) {
+  /* account: { balance, open }. Returns { ok, position, fee, balance } or { error }. */
+  function open(account, { side, margin, lev, mark, now, risk: rk = {} }) {
+    if (side !== "long" && side !== "short") return { error: "bad side" };
+    if (!RULES.levels.includes(lev)) return { error: "leverage not allowed" };
+    if (!(margin >= RULES.minMargin)) return { error: "margin below minimum" };
+    if (!(mark > 0)) return { error: "no mark price" };
+    const cap = maxLeverage(rk);
+    if (cap.paused) return { error: "trading paused" };
+    if (lev > cap.max) return { error: "leverage above the current cap" };
+    if (account.open >= RULES.maxOpen) return { error: "too many open positions" };
+    const notional = margin * lev, fee = notional * RULES.feeRate;
+    if (margin + fee > account.balance) return { error: "insufficient balance" };
+    const position = { side, margin, lev, notional, entry: mark, openedAt: now };
+    position.liq = liqPrice(position, 0);
+    return { ok: true, position, fee, balance: account.balance - margin - fee };
+  }
+
+  /* Closing at `mark` at time `now`: margin + PnL + funding − fee on the exit notional, never below 0. */
+  function close(pos, mark, now, rates = []) {
+    const p = pnl(pos, mark), f = fundingAccrued(pos, rates, now);
+    const fee = pos.notional * (mark / pos.entry) * RULES.feeRate;      // on the exit notional
+    return { pnl: p, funding: f, fee, payout: Math.max(0, pos.margin + p + f - fee) };
+  }
+
+  /* First one-minute bar starting at or after the open whose low (long) / high (short) crosses the liquidation
+   * price, with funding accrued to the end of that bar. bars: [{ t, h, l, c }] ascending. → { t, price } | null */
+  function liquidation(pos, bars, rates = []) {
     for (const b of bars) {
       if (b.t < pos.openedAt) continue;
-      if (pos.side === "long" ? b.l <= pos.liq : b.h >= pos.liq) return { t: b.t, price: pos.liq };
+      const lp = liqPrice(pos, fundingAccrued(pos, rates, b.t + 60));
+      if (pos.side === "long" ? b.l <= lp : b.h >= lp) return { t: b.t, price: lp };
     }
     return null;
   }
 
-  function equity(balance, positions, mark) {
-    return positions.reduce((e, p) => e + Math.max(0, p.margin + pnl(p, mark)), balance);
+  function equity(balance, positions, mark, now, rates = []) {
+    return positions.reduce((e, p) => e + Math.max(0, p.margin + pnl(p, mark) + fundingAccrued(p, rates, now)), balance);
   }
 
-  const api = { RULES, maxLeverage, liqPrice, open, pnl, close, liquidation, equity };
+  const api = { RULES, returns, risk, maxLeverage, fundingAccrued, pnl, liqPrice, open, close, liquidation, equity };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.ABIPilot = api;
 })(typeof window !== "undefined" ? window : globalThis);

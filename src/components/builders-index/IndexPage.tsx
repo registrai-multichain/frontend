@@ -328,7 +328,7 @@ export function Terminal({ d, R, closedLocal, st, pilot }: { d: AbiData; R: Live
       </div>
       <footer className="abi-foot">
         <span>Closed by Tabula through {hm(ts(d.data_until))} UTC{R ? " · open hour computed in this browser from Arc RPC" : ""}</span>
-        <span>Data only <InfoBubble label="About the data">{ABI_COPY.openHour}</InfoBubble></span>
+        <span>Index data <InfoBubble label="About the data">{ABI_COPY.openHour}</InfoBubble></span>
       </footer>
     </div>
   );

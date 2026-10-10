@@ -9,6 +9,7 @@ import {
   shortWallet,
   type ClosedPositionView,
   type LeaderboardRow,
+  type OrderView,
   type PilotAccountView,
 } from "@/lib/abi-pilot-api";
 import { PILOT_COPY } from "@/lib/abi-pilot-copy";
@@ -18,6 +19,9 @@ import "./pilot.css";
 
 const POLL_MS = 5000;
 const BOARD_MS = 30_000;
+const FILL_POLL_MS = 1000;
+/** The server refuses an order with no mark within RULES.markMaxAgeS (10 s); stop asking a little later. */
+const FILL_WAIT_MS = 14_000;
 
 type Res<T> = { status: number; body: T & { error?: string } };
 
@@ -55,6 +59,7 @@ export function PilotPanel() {
   const [history, setHistory] = useState<ClosedPositionView[] | null>(null);
   const [board, setBoard] = useState<LeaderboardRow[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [filling, setFilling] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [closing, setClosing] = useState<number | null>(null);
   const [error, setError] = useState<string>();
@@ -103,7 +108,7 @@ export function PilotPanel() {
     try {
       const n = await api<{ nonce?: string }>(PILOT_PATHS.auth);
       if (!n.body.nonce) throw new Error(n.body.error ?? "Sign-in is not available right now.");
-      const message = pilotLoginMessage({ origin: window.location.origin, nonce: n.body.nonce, issued: new Date().toISOString() });
+      const message = pilotLoginMessage({ address: address.toLowerCase(), origin: window.location.origin, nonce: n.body.nonce, issued: new Date().toISOString() });
       const signature = await walletClient.signMessage({ account: address, message });
       const r = await api<{ address?: string }>(PILOT_PATHS.auth, { method: "POST", body: { message, signature } });
       if (r.status !== 200) throw new Error(r.body.error ?? `Sign-in failed (${r.status}).`);
@@ -122,11 +127,29 @@ export function PilotPanel() {
     await refresh();
   }
 
+  /** Orders fill at the next mark: wait for the queued order to fill or be refused. */
+  async function settle(r: Res<{ order?: OrderView }>): Promise<string | undefined> {
+    if (r.status !== 202 || !r.body.order) return r.body.error ?? `Refused (${r.status}).`;
+    const id = r.body.order.id;
+    const until = Date.now() + FILL_WAIT_MS;
+    while (live.current && Date.now() < until) {
+      await new Promise((ok) => setTimeout(ok, FILL_POLL_MS));
+      const s = await api<{ order?: OrderView }>(`${PILOT_PATHS.order}?id=${id}`);
+      const st = s.body.order?.status;
+      if (st === "filled") return undefined;
+      if (st === "refused") return s.body.order?.error ?? "Refused.";
+    }
+    return "No fill yet. Check your positions in a moment.";
+  }
+
   async function order(o: { side: Side; margin: number; lev: number }) {
     setBusy(true);
+    setFilling(true);
     setError(undefined);
-    const r = await api(PILOT_PATHS.order, { method: "POST", body: o });
-    if (r.status !== 200) setError(r.body.error ?? `Refused (${r.status}).`);
+    const err = await settle(await api<{ order?: OrderView }>(PILOT_PATHS.order, { method: "POST", body: o }));
+    if (!live.current) return;
+    setFilling(false);
+    if (err) setError(err);
     else setTab("positions");
     await refresh();
     setBusy(false);
@@ -135,8 +158,9 @@ export function PilotPanel() {
   async function close(id: number) {
     setClosing(id);
     setError(undefined);
-    const r = await api(PILOT_PATHS.close, { method: "POST", body: { id } });
-    if (r.status !== 200 && r.status !== 409) setError(r.body.error ?? `Refused (${r.status}).`);
+    const err = await settle(await api<{ order?: OrderView }>(PILOT_PATHS.close, { method: "POST", body: { id } }));
+    if (!live.current) return;
+    if (err && err !== "already closed") setError(err);
     await refresh();
     if (tab === "history") await loadHistory();
     else setHistory(null);
@@ -155,12 +179,14 @@ export function PilotPanel() {
         mark={view.mark ? view.mark.mark : null}
         history={history}
         board={board}
+        funding={view.funding}
         closing={closing}
         onClose={(id) => void close(id)}
       />
       <Ticket
         view={view}
         busy={busy}
+        filling={filling}
         error={error ?? walletError}
         signInLabel={signInLabel}
         signingIn={signingIn || isConnecting}

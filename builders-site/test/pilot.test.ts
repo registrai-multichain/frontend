@@ -15,19 +15,40 @@ import { MemoryKV } from "./memory-kv";
 const ORIGIN = "https://builder.registrai.cc";
 const PUSH = "p".repeat(40);
 const SESSION_SECRET = "s".repeat(40);
+const SNAP = 1_000_000;
 // Anvil's dev keys: never real funds.
 const ALICE = privateKeyToAccount("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
 const BOB = privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");
 const T0 = Date.parse("2026-10-10T12:00:10.000Z");
 const ONE = 10n ** 18n;
+const CALM = { sigma_24h: 0.002, sigma_1h: 0.0004 }; // engine cap 20×
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+const lc = (a: { address: string }) => a.address.toLowerCase();
 
-function setup(o: { open?: boolean; db?: boolean; secret?: string } = {}) {
+interface MarkExtra {
+  ts: number;
+  ch24: number;
+  ch1: number;
+  bars: number[][];
+  candle: number[];
+  sigma_24h: number | null;
+  sigma_1h: number | null;
+  funding_rate: number;
+  funding_hour: number;
+  base_pending: boolean;
+  base_step_ts: number | null;
+}
+
+function setup(o: { open?: boolean; db?: boolean; secret?: string; snapshot?: string | null } = {}) {
   let nowMs = T0;
   const db = new MemoryD1();
-  const balances = new Map<string, bigint>([[ALICE.address.toLowerCase(), 5n * ONE], [BOB.address.toLowerCase(), ONE]]);
-  const rpc = { calls: 0, down: false };
+  // balances by "<wallet>@<block tag>"; "latest" = now
+  const balances = new Map<string, bigint>([
+    [`${lc(ALICE)}@latest`, 5n * ONE], [`${lc(ALICE)}@0x${SNAP.toString(16)}`, 2n * ONE],
+    [`${lc(BOB)}@latest`, ONE], [`${lc(BOB)}@0x${SNAP.toString(16)}`, ONE],
+  ]);
+  const rpc = { calls: 0, down: false, tags: [] as string[] };
   const fakeFetch = (async (url: string, init: RequestInit) => {
     rpc.calls++;
     if (rpc.down) return new Response("bad gateway", { status: 502 });
@@ -36,8 +57,8 @@ function setup(o: { open?: boolean; db?: boolean; secret?: string } = {}) {
     expect(body.method).toBe("eth_call");
     expect(body.params[0].to).toBe(REGI_ADDRESS);
     expect(body.params[0].data.slice(0, 10)).toBe("0x70a08231");
-    const who = "0x" + body.params[0].data.slice(-40);
-    const v = balances.get(who) ?? 0n;
+    rpc.tags.push(body.params[1]);
+    const v = balances.get(`0x${body.params[0].data.slice(-40)}@${body.params[1]}`) ?? 0n;
     return Response.json({ jsonrpc: "2.0", id: 1, result: "0x" + v.toString(16).padStart(64, "0") });
   }) as unknown as typeof fetch;
   const env: Env = {
@@ -48,6 +69,7 @@ function setup(o: { open?: boolean; db?: boolean; secret?: string } = {}) {
     ABI_PUSH_TOKEN: PUSH,
     PILOT_DB: o.db === false ? undefined : db,
     PILOT_OPEN: o.open === false ? undefined : "1",
+    PILOT_REGI_SNAPSHOT_BLOCK: o.snapshot === null ? undefined : (o.snapshot ?? String(SNAP)),
   };
   let rnd = 0.5;
   const deps: PilotDeps = { now: () => nowMs, fetch: fakeFetch, random: () => rnd, cache: null };
@@ -60,39 +82,67 @@ function setup(o: { open?: boolean; db?: boolean; secret?: string } = {}) {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
 
-  async function signIn(acct = ALICE): Promise<string> {
+  async function loginWith(acct: typeof ALICE, patch: { address?: string; signature?: string; message?: string } = {}) {
     const { nonce } = (await (await handlePilotNonce(env, deps)).json()) as { nonce: string };
-    const message = pilotLoginMessage({ origin: ORIGIN, nonce, issued: new Date(nowMs).toISOString() });
-    const signature = await acct.signMessage({ message });
-    const res = await handlePilotLogin(req("/api/pilot/auth", "POST", { message, signature }), env, deps);
+    const message = patch.message ?? pilotLoginMessage({ address: patch.address ?? lc(acct), origin: ORIGIN, nonce, issued: new Date(nowMs).toISOString() });
+    const signature = patch.signature ?? (await acct.signMessage({ message }));
+    return handlePilotLogin(req("/api/pilot/auth", "POST", { message, signature }), env, deps);
+  }
+  async function signIn(acct = ALICE): Promise<string> {
+    const res = await loginWith(acct);
     expect(res.status).toBe(200);
-    const sc = res.headers.get("set-cookie")!;
-    return sc.split(";")[0];
+    return res.headers.get("set-cookie")!.split(";")[0];
   }
 
-  /** A producer post at the current clock: bars default to one flat bar at the mark. */
-  async function mark(px: number, extra: Partial<{ ts: number; ch24: number; ch1: number; bars: number[][] }> = {}) {
-    const ts = extra.ts ?? nowS();
+  /** A producer post (live/mark.py v2 shape) at the current clock; bars default to one flat bar at the mark. */
+  async function mark(px: number, x: Partial<MarkExtra> = {}) {
+    const ts = x.ts ?? nowS();
     const minute = Math.floor(ts / 60) * 60;
-    const body = {
-      mark: px, ts, head: 1000 + ts, hour_start: Math.floor(ts / 3600) * 3600, candle: [px, px, px, px, 3, 12.5],
-      ch24: extra.ch24 ?? 0.01, ch1: extra.ch1 ?? 0.001, bars: extra.bars ?? [[minute, px, px, px]],
+    const bars = x.bars ?? [[minute, px, px, px]];
+    const lo = Math.min(px, ...bars.map((b) => b[2])), hi = Math.max(px, ...bars.map((b) => b[1]));
+    const body: Json = {
+      mark: px, ts, head: 1000 + ts, hour_start: Math.floor(ts / 3600) * 3600, candle: x.candle ?? [px, hi, lo, px, 3, 12.5],
+      ch24: x.ch24 ?? 0.001, ch1: x.ch1 ?? 0.0001, bars,
+      sigma_24h: x.sigma_24h === undefined ? CALM.sigma_24h : x.sigma_24h, sigma_1h: x.sigma_1h === undefined ? CALM.sigma_1h : x.sigma_1h,
+      base_pending: x.base_pending ?? false, base_step_ts: x.base_step_ts ?? null,
     };
+    if (x.funding_rate !== undefined) { body.funding_rate = x.funding_rate; body.funding_hour = x.funding_hour ?? body.hour_start; }
     return handlePushMark(req("/api/index/mark", "POST", body, { authorization: `Bearer ${PUSH}` }), env, deps);
   }
+  const markJson = async (px: number, x: Partial<MarkExtra> = {}) => {
+    const r = await mark(px, x);
+    return { status: r.status, body: (await r.json()) as Json };
+  };
 
   const call = async (h: (r: Request, e: Env, d: PilotDeps) => Promise<Response>, r: Request) => {
     const res = await h(r, env, deps);
     return { status: res.status, body: (await res.json()) as Json, res };
   };
-  const order = (cookie: string, body: unknown) => call(handleOrder, req("/api/pilot/order", "POST", body, { cookie }));
-  const close = (cookie: string, id: number) => call(handleClose, req("/api/pilot/close", "POST", { id }, { cookie }));
+  const submit = (cookie: string, body: unknown) => call(handleOrder, req("/api/pilot/order", "POST", body, { cookie }));
+  const submitClose = (cookie: string, id: number) => call(handleClose, req("/api/pilot/close", "POST", { id }, { cookie }));
+  const status = (cookie: string, id: number) => call(handleOrder, req(`/api/pilot/order?id=${id}`, "GET", undefined, { cookie }));
   const account = (cookie?: string) => call(handleAccount, req("/api/pilot/account", "GET", undefined, cookie ? { cookie } : {}));
   const history = (cookie: string) => call(handleHistory, req("/api/pilot/history", "GET", undefined, { cookie }));
   const balanceOf = (w: string) => db.q<{ balance: number }>("SELECT balance FROM accounts WHERE wallet = ?", w.toLowerCase())[0]?.balance;
 
+  /** Submit, then the next mark (1 s later) fills it; returns the order status read. */
+  async function open(cookie: string, body: unknown, fillPx = 1000, x: Partial<MarkExtra> = {}) {
+    const s = await submit(cookie, body);
+    expect(s.status, JSON.stringify(s.body)).toBe(202);
+    nowMs += 1000;
+    expect((await mark(fillPx, x)).status).toBe(200);
+    return status(cookie, s.body.order.id);
+  }
+  async function close(cookie: string, id: number, fillPx = 1000, x: Partial<MarkExtra> = {}) {
+    const s = await submitClose(cookie, id);
+    if (s.status !== 202) return s;
+    nowMs += 1000;
+    expect((await mark(fillPx, x)).status).toBe(200);
+    return status(cookie, s.body.order.id);
+  }
+
   return {
-    db, env, deps, rpc, balances, req, signIn, mark, order, close, account, history, call, balanceOf, nowS,
+    db, env, deps, rpc, balances, req, loginWith, signIn, mark, markJson, submit, submitClose, status, open, close, account, history, call, balanceOf, nowS,
     tick: (ms: number) => (nowMs += ms),
     setRandom: (r: number) => (rnd = r),
   };
@@ -100,102 +150,124 @@ function setup(o: { open?: boolean; db?: boolean; secret?: string } = {}) {
 
 const LONG2 = { side: "long", margin: 1000, lev: 2 };
 
-describe("mark ingest (R4)", () => {
+describe("mark ingest (R4, spec §8.5)", () => {
   test("bearer required; 503 without a 32+ char token", async () => {
     const t = setup();
-    const r1 = await handlePushMark(t.req("/api/index/mark", "POST", {}, { authorization: "Bearer nope" }), t.env, t.deps);
-    expect(r1.status).toBe(401);
-    const r2 = await handlePushMark(t.req("/api/index/mark", "POST", {}, { authorization: `Bearer ${PUSH}` }), { ...t.env, ABI_PUSH_TOKEN: "short" }, t.deps);
-    expect(r2.status).toBe(503);
+    expect((await handlePushMark(t.req("/api/index/mark", "POST", {}, { authorization: "Bearer nope" }), t.env, t.deps)).status).toBe(401);
+    expect((await handlePushMark(t.req("/api/index/mark", "POST", {}, { authorization: `Bearer ${PUSH}` }), { ...t.env, ABI_PUSH_TOKEN: "short" }, t.deps)).status).toBe(503);
   });
 
-  test("the producer's payload (live/mark.py) is accepted and stored in one batch", async () => {
+  test("mark.py v2 payload: stored in one batch; 200 {last_minute} acknowledges up to the last finished minute", async () => {
     const t = setup();
     const ts = t.nowS(), m = Math.floor(ts / 60) * 60;
-    const res = await t.mark(982.25, { bars: [[m - 120, 983, 981, 982], [m - 60, 984, 980.5, 983.1], [m, 983.5, 982, 982.25]] });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ ok: true, ts, bars: 3, liquidated: 0 });
+    const r = await t.markJson(982.25, { bars: [[m - 120, 983, 981, 982], [m - 60, 984, 980.5, 983.1], [m, 983.5, 982, 982.25]], funding_rate: -0.0003, base_step_ts: ts - 100 });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ ok: true, last_minute: m - 60, ts, bars: 3, gap: false, liquidated: 0, filled: 0, refused: 0 });
     expect(t.db.batches).toBe(1);
-    expect(t.db.q("SELECT mark, ts, ch24, ch1, candle FROM mark")).toEqual([{ mark: 982.25, ts, ch24: 0.01, ch1: 0.001, candle: "[982.25,982.25,982.25,982.25,3,12.5]" }]);
-    expect(t.db.q("SELECT minute, h, l, c FROM bars ORDER BY minute").length).toBe(3);
+    expect(t.db.q("SELECT px, ts, ch24, ch1, sigma_1h, sigma_24h, base_pending, base_step_ts FROM mark")).toEqual([{ px: 982.25, ts, ch24: 0.001, ch1: 0.0001, sigma_1h: 0.0004, sigma_24h: 0.002, base_pending: 0, base_step_ts: ts - 100 }]);
+    expect(t.db.q("SELECT hour_start, rate FROM funding")).toEqual([{ hour_start: Math.floor(ts / 3600) * 3600, rate: -0.0003 }]);
+    expect(t.db.q("SELECT COUNT(*) AS n FROM bars")[0]).toEqual({ n: 3 });
+    // the producer re-sends the open minute: it is never acknowledged while ts is inside it
+    t.tick(5000);
+    expect((await t.markJson(982.3, { bars: [[m, 983.5, 981, 982.3]], funding_rate: -0.0002 })).body.last_minute).toBe(m - 60);
+    expect(t.db.q("SELECT l FROM bars WHERE minute = ?", m)).toEqual([{ l: 981 }]);
+    expect(t.db.q("SELECT rate FROM funding")).toEqual([{ rate: -0.0002 }]); // last value for the hour wins
   });
 
-  test("ts: within 30 s of server time, strictly newer than the stored one", async () => {
+  test("ts: within 30 s of server time, strictly newer than the stored one (409 carries last_minute)", async () => {
     const t = setup();
     expect((await t.mark(1000, { ts: t.nowS() - 31 })).status).toBe(400);
     expect((await t.mark(1000, { ts: t.nowS() + 31 })).status).toBe(400);
     expect((await t.mark(1000, { ts: t.nowS() - 5 })).status).toBe(200);
-    expect((await t.mark(1001, { ts: t.nowS() - 5 })).status).toBe(409);
-    expect((await t.mark(1001, { ts: t.nowS() - 6 })).status).toBe(409);
+    const dup = await t.markJson(1001, { ts: t.nowS() - 5 });
+    expect(dup.status).toBe(409);
+    expect("last_minute" in dup.body).toBe(true);
     expect((await t.mark(1002)).status).toBe(200);
-    expect(t.db.q("SELECT mark FROM mark")).toEqual([{ mark: 1002 }]);
+    expect(t.db.q("SELECT px FROM mark")).toEqual([{ px: 1002 }]);
   });
 
-  test("validation: mark, ch24/ch1, bars shape and sanity", () => {
-    const now = 1_760_097_610, m = Math.floor(now / 60) * 60;
-    const ok = { mark: 1000, ts: now, head: 5, hour_start: Math.floor(now / 3600) * 3600, candle: [1, 2, 0.5, 1, 0, 0], ch24: 0, ch1: 0, bars: [[m, 1001, 999, 1000]] };
+  test("validation: mark in its bar and candle, bar shape, the 60-bar cap and catch-up batches, optional fields", () => {
+    const now = 1_760_097_610, m = Math.floor(now / 60) * 60, hs = Math.floor(now / 3600) * 3600;
+    const ok = { mark: 1000, ts: now, head: 5, hour_start: hs, candle: [1000, 1002, 998, 1000, 0, 0], ch24: 0, ch1: 0, bars: [[m, 1001, 999, 1000]], sigma_1h: 0.001, sigma_24h: 0.005 };
     expect(validateMark(ok, now).ok).toBe(true);
     const bad = (patch: Record<string, unknown>) => validateMark({ ...ok, ...patch }, now);
-    expect(bad({ mark: 0 }).ok).toBe(false);
-    expect(bad({ mark: -1 }).ok).toBe(false);
-    expect(bad({ mark: "1000" }).ok).toBe(false);
-    expect(bad({ ch24: null }).ok).toBe(false);
-    expect(bad({ ch1: "x" }).ok).toBe(false);
-    expect(bad({ bars: [] }).ok).toBe(false);
-    expect(bad({ bars: [[m - 180, 1, 1, 1], [m - 120, 1, 1, 1], [m - 60, 1, 1, 1], [m, 1, 1, 1]] }).ok).toBe(false);
-    expect(bad({ bars: [[m, 1001, 999]] }).ok).toBe(false);
-    expect(bad({ bars: [[m, 1001, 1002, 1000]] }).ok).toBe(false); // l > c
-    expect(bad({ bars: [[m, 999, 998, 1000]] }).ok).toBe(false); // c > h
-    expect(bad({ bars: [[m, 1001, 0, 0]] }).ok).toBe(false); // not > 0
-    expect(bad({ bars: [[m + 60, 1001, 999, 1000]] }).ok).toBe(false); // later than ts
-    expect(bad({ bars: [[m + 1, 1001, 999, 1000]] }).ok).toBe(false); // not a minute start
-    expect(bad({ bars: [[m, 1, 1, 1], [m - 60, 1, 1, 1]] }).ok).toBe(false); // order
-    expect(bad({ candle: [1, 2, 3] }).ok).toBe(false);
-    expect(validateMark([], now).ok).toBe(false);
+    const err = (patch: Record<string, unknown>) => { const v = bad(patch); return v.ok ? null : v.error; };
+    expect(err({ mark: 0 })).toBeTruthy();
+    expect(err({ mark: "1000" })).toBeTruthy();
+    expect(err({ ch24: null })).toBeTruthy();
+    expect(err({ bars: [] })).toBeTruthy();
+    expect(err({ bars: [[m, 1001, 999]] })).toBeTruthy();
+    expect(err({ bars: [[m, 1001, 1002, 1000]] })).toBeTruthy(); // l > c
+    expect(err({ bars: [[m, 999, 998, 1000]] })).toBeTruthy(); // c > h
+    expect(err({ bars: [[m + 60, 1001, 999, 1000]] })).toBeTruthy(); // later than ts
+    expect(err({ bars: [[m + 1, 1001, 999, 1000]] })).toBeTruthy(); // not a minute start
+    expect(err({ bars: [[m, 1001, 999, 1000], [m - 60, 1, 1, 1]] })).toBeTruthy(); // order
+    expect(err({ bars: [[m, 1001, 1000.5, 1001]] })).toMatch(/last bar/); // mark outside the last bar
+    expect(err({ candle: [1000, 1001, 999.5, 1000, 0, 0], mark: 999 })).toBeTruthy(); // mark outside the candle
+    expect(err({ candle: [1, 2, 3] })).toBeTruthy();
+    expect(err({ bars: [[m - 60, 1001, 999, 1000]] })).toMatch(/minute of ts/); // short batch must end at the open minute
+    const sixty = Array.from({ length: 60 }, (_, i) => [m - 3600 + i * 60, 1001, 999, 1000]);
+    expect(validateMark({ ...ok, bars: sixty }, now).ok).toBe(true); // a full catch-up batch may end earlier
+    expect(err({ bars: [...sixty, [m, 1001, 999, 1000]] })).toMatch(/1 to 60/);
+    expect(err({ bars: [[m - 7 * 3600, 1, 1, 1], [m, 1001, 999, 1000]] })).toMatch(/too old/);
+    expect(err({ funding_rate: 0.02 })).toMatch(/funding_rate/);
+    expect(err({ funding_rate: 0.001, funding_hour: hs + 3600 })).toMatch(/funding_hour/);
+    expect(validateMark({ ...ok, funding_rate: 0.001 }, now)).toMatchObject({ ok: true, data: { funding: { hour: hs, rate: 0.001 } } });
+    expect(err({ sigma_24h: -1 })).toMatch(/sigma/);
+    expect(err({ base_pending: "yes" })).toMatch(/base_pending/);
+    expect(err({ base_step_ts: now + 60 })).toMatch(/base_step_ts/);
+    expect(validateMark({ ...ok, sigma_1h: undefined, sigma_24h: null }, now)).toMatchObject({ ok: true, data: { sigma1h: null, sigma24h: null } });
   });
 
-  test("two posts with the same ts racing: one wins, and only the winner's bars are written (no liquidation from the loser)", async () => {
+  test("two posts racing: one wins, and only the winner's bars and funding are written", async () => {
     const t = setup();
-    const alice = await t.signIn();
     await t.mark(1000);
-    const o = await t.order(alice, { side: "long", margin: 1000, lev: 3 });
     t.tick(70_000);
     const m = Math.floor(t.nowS() / 60) * 60;
     const before = t.db.batches;
-    const [a, b] = await Promise.all([t.mark(1000, { bars: [[m, 1001, 999, 1000]] }), t.mark(1000, { bars: [[m, 1001, 600, 1000]] })]);
-    expect(t.db.batches - before).toBe(2); // both passed the ts pre-check and raced to the write
+    const [a, b] = await Promise.all([
+      t.mark(1000, { bars: [[m, 1001, 999, 1000]], funding_rate: 0.001 }),
+      t.mark(1000, { bars: [[m, 1001, 600, 1000]], funding_rate: 0.009 }),
+    ]);
+    expect(t.db.batches - before).toBe(2);
     expect([a.status, b.status].sort()).toEqual([200, 409]);
     expect(t.db.q("SELECT l FROM bars WHERE minute = ?", m)).toEqual([{ l: 999 }]);
-    expect(t.db.q("SELECT closed_at FROM positions WHERE id = ?", o.body.position.id)).toEqual([{ closed_at: null }]);
+    expect(t.db.q("SELECT rate FROM funding")).toEqual([{ rate: 0.001 }]);
   });
 
-  test("a bar re-posted later in its minute is merged (high and low only widen)", async () => {
+  test("a gap longer than 60 min gets one gap bar at the posted candle's low and high; shorter gaps get none", async () => {
     const t = setup();
-    const m = Math.floor(t.nowS() / 60) * 60;
-    await t.mark(1000, { bars: [[m, 1002, 998, 1000]] });
-    t.tick(5000);
-    await t.mark(1001, { bars: [[m, 1001, 999, 1001]] });
-    expect(t.db.q("SELECT h, l, c FROM bars WHERE minute = ?", m)).toEqual([{ h: 1002, l: 998, c: 1001 }]);
-  });
-
-  test("bars older than 7 days are pruned in ~1 of 100 posts", async () => {
-    const t = setup();
-    t.db.q("INSERT INTO bars (minute, h, l, c) VALUES (?, 1, 1, 1)", Math.floor(t.nowS() / 60) * 60 - 8 * 86400);
     await t.mark(1000);
+    const m0 = Math.floor(t.nowS() / 60) * 60;
+    t.tick(30 * 60_000);
+    expect((await t.markJson(1000)).body.gap).toBe(false);
+    const m1 = Math.floor(t.nowS() / 60) * 60;
+    t.tick(61 * 60_000 + 5000);
+    const r = await t.markJson(1000, { candle: [1000, 1040, 960, 1000, 9, 9] });
+    expect(r.body.gap).toBe(true);
+    expect(t.db.q("SELECT minute, h, l, c FROM bars WHERE minute > ? AND minute < ?", m1, Math.floor(t.nowS() / 60) * 60)).toEqual([{ minute: m1 + 60, h: 1040, l: 960, c: 1000 }]);
+    expect(t.db.q("SELECT COUNT(*) AS n FROM bars WHERE minute > ? AND minute < ?", m0, m1)[0]).toEqual({ n: 0 });
+  });
+
+  test("bars, nonces, rate windows and old orders are pruned in ~1 of 100 posts", async () => {
+    const t = setup();
+    await t.mark(1000);
+    t.db.q("INSERT INTO bars (minute, h, l, c) VALUES (?, 1, 1, 1)", Math.floor(t.nowS() / 60) * 60 - 8 * 86400);
+    t.db.q("INSERT INTO orders (wallet, kind, arrived_ms, status) VALUES ('0x1', 'open', ?, 'refused')", T0 - 8 * 86400_000);
     expect(t.db.q("SELECT COUNT(*) AS n FROM bars")[0]).toEqual({ n: 2 });
     t.setRandom(0.001);
     t.tick(5000);
-    const r = await t.mark(1000);
-    expect(((await r.json()) as Json).pruned).toBe(true);
+    expect((await t.markJson(1000)).body.pruned).toBe(true);
     expect(t.db.q("SELECT COUNT(*) AS n FROM bars")[0]).toEqual({ n: 1 });
+    expect(t.db.q("SELECT COUNT(*) AS n FROM orders")[0]).toEqual({ n: 0 });
   });
 
-  test("GET /api/index/mark: the latest mark with the leverage cap; 404 before the first post", async () => {
+  test("GET /api/index/mark: the latest mark, the cap from σ_24h and the pauses; 404 before the first post", async () => {
     const t = setup();
     expect((await handlePublicMark(t.req("/api/index/mark"), t.env, t.deps)).status).toBe(404);
-    await t.mark(1000, { ch24: 0.12, ch1: 0.05 });
+    await t.mark(1000, { sigma_24h: 0.012, sigma_1h: 0.002, ch1: 0.011, base_pending: true });
     const b = (await (await handlePublicMark(t.req("/api/index/mark"), t.env, t.deps)).json()) as Json;
-    expect(b).toMatchObject({ mark: 1000, maxLev: 2, paused: true, fresh: true, age: 0 });
+    expect(b).toMatchObject({ mark: 1000, maxLev: 5, paused: true, basePaused: true, fresh: true, age: 0 });
   });
 
   test("no PILOT_DB: 503", async () => {
@@ -206,318 +278,481 @@ describe("mark ingest (R4)", () => {
 });
 
 describe("sign-in and session (R6)", () => {
-  test("nonce + personal_sign sets an HttpOnly, Secure, SameSite=Strict 12 h cookie; REGI read at sign-in", async () => {
+  test("nonce + personal_sign: a 12 h HttpOnly, Secure, SameSite=Strict cookie; REGI read at the snapshot block and now", async () => {
+    const t = setup();
+    const res = await t.loginWith(ALICE);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ address: lc(ALICE), regi: { ok: true, snapshot: true, now: true } });
+    expect(res.headers.get("set-cookie")).toMatch(new RegExp(`^${PILOT_SESSION_COOKIE}=0x[0-9a-f]{40}\\.0\\.\\d+\\.[A-Za-z0-9_-]+; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=43200$`));
+    expect(t.rpc.tags).toEqual([`0x${SNAP.toString(16)}`, "latest"]);
+    expect(t.db.q("SELECT balance, season, regi_ok, regi_snap, regi_snap_block FROM accounts")).toEqual([{ balance: 10000, season: 1, regi_ok: 1, regi_snap: 1, regi_snap_block: SNAP }]);
+  });
+
+  test("a nonce is single use", async () => {
     const t = setup();
     const { nonce } = (await (await handlePilotNonce(t.env, t.deps)).json()) as { nonce: string };
-    const message = pilotLoginMessage({ origin: ORIGIN, nonce, issued: new Date(T0).toISOString() });
-    const res = await handlePilotLogin(t.req("/api/pilot/auth", "POST", { message, signature: await ALICE.signMessage({ message }) }), t.env, t.deps);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ address: ALICE.address.toLowerCase(), regi: true });
-    const sc = res.headers.get("set-cookie")!;
-    expect(sc).toMatch(new RegExp(`^${PILOT_SESSION_COOKIE}=0x[0-9a-f]{40}\\.\\d+\\.[A-Za-z0-9_-]+; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=43200$`));
-    expect(t.rpc.calls).toBe(1);
-    expect(t.db.q("SELECT balance, season, regi_ok FROM accounts")).toEqual([{ balance: 10000, season: 1, regi_ok: 1 }]);
-    // the nonce is single use
-    const again = await handlePilotLogin(t.req("/api/pilot/auth", "POST", { message, signature: await ALICE.signMessage({ message }) }), t.env, t.deps);
+    const message = pilotLoginMessage({ address: lc(ALICE), origin: ORIGIN, nonce, issued: new Date(T0).toISOString() });
+    const signature = await ALICE.signMessage({ message });
+    expect((await t.loginWith(ALICE, { message, signature })).status).toBe(200);
+    const again = await t.loginWith(ALICE, { message, signature });
     expect(again.status).toBe(401);
     expect(((await again.json()) as Json).error).toMatch(/already used/);
+  });
+
+  test("smart-contract wallets: a long (ERC-1271 / 6492) signature, or one that recovers to another address, is refused", async () => {
+    const t = setup();
+    const long = await t.loginWith(ALICE, { signature: "0x" + "ab".repeat(200) });
+    expect(long.status).toBe(400);
+    expect(((await long.json()) as Json).error).toBe("Smart-contract wallets aren't supported yet");
+    const other = await t.loginWith(ALICE, { address: lc(BOB) }); // the smart account's owner key signs for it
+    expect(other.status).toBe(401);
+    expect(((await other.json()) as Json).error).toBe("Smart-contract wallets aren't supported yet");
   });
 
   test("an admin sign-in message, a foreign origin or a missing Origin header is refused", async () => {
     const t = setup();
     const { nonce } = (await (await handlePilotNonce(t.env, t.deps)).json()) as { nonce: string };
     const admin = adminLoginMessage({ origin: ORIGIN, nonce, issued: new Date(T0).toISOString() });
-    expect((await handlePilotLogin(t.req("/api/pilot/auth", "POST", { message: admin, signature: await ALICE.signMessage({ message: admin }) }), t.env, t.deps)).status).toBe(400);
-    const foreign = pilotLoginMessage({ origin: "https://evil.example", nonce, issued: new Date(T0).toISOString() });
-    expect((await handlePilotLogin(t.req("/api/pilot/auth", "POST", { message: foreign, signature: await ALICE.signMessage({ message: foreign }) }), t.env, t.deps)).status).toBe(401);
-    const msg = pilotLoginMessage({ origin: ORIGIN, nonce, issued: new Date(T0).toISOString() });
+    expect((await t.loginWith(ALICE, { message: admin })).status).toBe(400);
+    const foreign = pilotLoginMessage({ address: lc(ALICE), origin: "https://evil.example", nonce, issued: new Date(T0).toISOString() });
+    expect((await t.loginWith(ALICE, { message: foreign })).status).toBe(401);
+    const msg = pilotLoginMessage({ address: lc(ALICE), origin: ORIGIN, nonce, issued: new Date(T0).toISOString() });
     const noOrigin = new Request(`${ORIGIN}/api/pilot/auth`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: msg, signature: await ALICE.signMessage({ message: msg }) }) });
     expect((await handlePilotLogin(noOrigin, t.env, t.deps)).status).toBe(403);
   });
 
-  test("session token: tampered, expired after 12 h, or under another secret is refused; sign-out clears the cookie", async () => {
-    const w = ALICE.address.toLowerCase();
-    const now = Math.floor(T0 / 1000);
-    const tok = await makePilotSession(SESSION_SECRET, w, now);
-    expect(await verifyPilotSession(SESSION_SECRET, tok, now)).toBe(w);
+  test("session token: tampered, expired after 12 h or under another secret is refused", async () => {
+    const w = lc(ALICE), now = Math.floor(T0 / 1000);
+    const tok = await makePilotSession(SESSION_SECRET, w, 3, now);
+    expect(await verifyPilotSession(SESSION_SECRET, tok, now)).toEqual({ wallet: w, epoch: 3 });
     expect(await verifyPilotSession(SESSION_SECRET, tok, now + 12 * 3600)).toBeNull();
     expect(await verifyPilotSession("x".repeat(40), tok, now)).toBeNull();
-    const other = BOB.address.toLowerCase();
-    expect(await verifyPilotSession(SESSION_SECRET, tok.replace(w, other), now)).toBeNull();
-    const [a, exp, mac] = tok.split(".");
-    expect(await verifyPilotSession(SESSION_SECRET, `${a}.${Number(exp) + 1}.${mac}`, now)).toBeNull();
+    expect(await verifyPilotSession(SESSION_SECRET, tok.replace(w, lc(BOB)), now)).toBeNull();
+    const [a, , exp, mac] = tok.split(".");
+    expect(await verifyPilotSession(SESSION_SECRET, `${a}.4.${exp}.${mac}`, now)).toBeNull(); // the epoch is in the MAC
+  });
+
+  test("sign-out ends the session: every cookie of the wallet stops working; signing in again works", async () => {
     const t = setup();
-    const out = await handlePilotLogout(t.req("/api/pilot/auth", "DELETE", {}), t.env);
+    const laptop = await t.signIn();
+    const phone = await t.signIn();
+    expect((await t.account(laptop)).body.address).toBe(lc(ALICE));
+    const out = await handlePilotLogout(t.req("/api/pilot/auth", "DELETE", {}, { cookie: laptop }), t.env, t.deps);
     expect(out.status).toBe(204);
     expect(out.headers.get("set-cookie")).toContain("Max-Age=0");
+    expect((await t.account(laptop)).body.address).toBeNull();
+    expect((await t.account(phone)).body.address).toBeNull();
+    const again = await t.signIn();
+    expect((await t.account(again)).body.address).toBe(lc(ALICE));
   });
 
   test("no PILOT_SESSION_SECRET (or a short one): sign-in fails closed", async () => {
     const t = setup({ secret: "short" });
-    const { nonce } = (await (await handlePilotNonce(t.env, t.deps)).json()) as { nonce: string };
-    const message = pilotLoginMessage({ origin: ORIGIN, nonce, issued: new Date(T0).toISOString() });
-    expect((await handlePilotLogin(t.req("/api/pilot/auth", "POST", { message, signature: await ALICE.signMessage({ message }) }), t.env, t.deps)).status).toBe(503);
+    expect((await t.loginWith(ALICE)).status).toBe(503);
   });
 
-  test("account without a session: kill switch and mark only", async () => {
+  test("account without a session: open flag, mark and funding only", async () => {
     const t = setup();
-    await t.mark(1000);
+    await t.mark(1000, { funding_rate: -0.0002 });
     const a = await t.account();
-    expect(a.body).toMatchObject({ open: true, address: null, regi: null, account: null, positions: [] });
+    expect(a.body).toMatchObject({ open: true, address: null, regi: null, account: null, positions: [], pending: [] });
     expect(a.body.mark.mark).toBe(1000);
+    const hour = Math.floor(t.nowS() / 3600) * 3600;
+    expect(a.body.funding).toEqual({ recent: [{ t: hour, rate: -0.0002 }], current: -0.0002, next: hour + 3600 });
   });
 });
 
-describe("REGI gate (R6)", () => {
-  test("non-holders can sign in but cannot open; the message says to hold REGI", async () => {
+describe("REGI gate (R6, spec §8.4)", () => {
+  test("not holding now: 'Hold REGI to join the points pilot.'", async () => {
     const t = setup();
-    t.balances.set(BOB.address.toLowerCase(), ONE - 1n);
+    t.balances.set(`${lc(BOB)}@latest`, ONE - 1n);
     const bob = await t.signIn(BOB);
     await t.mark(1000);
-    expect((await t.account(bob)).body.regi).toBe(false);
-    const r = await t.order(bob, LONG2);
+    expect((await t.account(bob)).body.regi).toEqual({ ok: false, snapshot: true, now: false });
+    const r = await t.submit(bob, LONG2);
     expect(r.status).toBe(403);
     expect(r.body.error).toBe("Hold REGI to join the points pilot.");
   });
 
-  test("cached for 10 minutes, re-read after; selling REGI blocks new orders but closes still work", async () => {
+  test("holding now but not at the snapshot block: refused; the snapshot answer is cached for good", async () => {
     const t = setup();
-    const alice = await t.signIn();
-    expect(t.rpc.calls).toBe(1);
+    t.balances.set(`${lc(BOB)}@0x${SNAP.toString(16)}`, 0n);
+    const bob = await t.signIn(BOB);
     await t.mark(1000);
-    const o = await t.order(alice, LONG2);
-    expect(o.status).toBe(200);
-    expect(t.rpc.calls).toBe(1); // cached from sign-in
-    t.balances.set(ALICE.address.toLowerCase(), 0n);
-    t.tick(10 * 60_000 + 1000);
-    await t.mark(1000);
-    const o2 = await t.order(alice, LONG2);
-    expect(t.rpc.calls).toBe(2);
-    expect(o2.status).toBe(403);
-    const c = await t.close(alice, o.body.position.id);
-    expect(c.status).toBe(200);
+    const r = await t.submit(bob, LONG2);
+    expect(r.status).toBe(403);
+    expect(r.body.error).toBe("This wallet didn't hold REGI at the pilot snapshot block.");
+    t.balances.set(`${lc(BOB)}@0x${SNAP.toString(16)}`, ONE); // (history does not change; the cache is not re-read)
+    t.tick(11 * 60_000);
+    await t.account(bob);
+    expect(t.rpc.tags.filter((x) => x !== "latest")).toHaveLength(1);
   });
 
-  test("RPC down with a stale cache: orders fail closed", async () => {
+  test("the current balance is cached 10 minutes; selling REGI blocks new orders but closes still fill", async () => {
+    const t = setup();
+    const alice = await t.signIn();
+    expect(t.rpc.calls).toBe(2);
+    await t.mark(1000);
+    const o = await t.open(alice, LONG2);
+    expect(o.body.order.status).toBe("filled");
+    expect(t.rpc.calls).toBe(2);
+    t.balances.set(`${lc(ALICE)}@latest`, 0n);
+    t.tick(10 * 60_000 + 1000);
+    await t.mark(1000);
+    expect((await t.submit(alice, LONG2)).status).toBe(403);
+    expect(t.rpc.calls).toBe(3);
+    const c = await t.close(alice, o.body.order.positionId);
+    expect(c.body.order.status).toBe("filled");
+  });
+
+  test("RPC down: unknown is not 'no' ('Couldn't check REGI right now'), and the RPC is left alone for 30 s", async () => {
     const t = setup();
     const alice = await t.signIn();
     t.tick(11 * 60_000);
     await t.mark(1000);
     t.rpc.down = true;
-    const r = await t.order(alice, LONG2);
+    const r = await t.submit(alice, LONG2);
     expect(r.status).toBe(503);
-    expect(r.body.error).toMatch(/REGI/);
+    expect(r.body.error).toBe("Couldn't check REGI right now");
+    const calls = t.rpc.calls;
+    t.tick(10_000);
+    expect((await t.account(alice)).body.regi).toEqual({ ok: null, snapshot: true, now: null });
+    expect(t.rpc.calls).toBe(calls); // backed off
+    t.tick(21_000);
+    t.rpc.down = false;
+    expect((await t.account(alice)).body.regi).toEqual({ ok: true, snapshot: true, now: true });
+    expect(t.rpc.calls).toBe(calls + 1);
+  });
+
+  test("no PILOT_REGI_SNAPSHOT_BLOCK: the pilot is closed", async () => {
+    const t = setup({ snapshot: null });
+    const alice = await t.signIn();
+    await t.mark(1000);
+    expect((await t.submit(alice, LONG2)).body).toEqual({ error: "pilot closed" });
+    expect((await t.account(alice)).body.open).toBe(false);
   });
 });
 
 describe("kill switch (R1)", () => {
-  test("PILOT_OPEN unset: orders 403 {error:'pilot closed'}; reads, closes and the mark ingest work", async () => {
+  test("PILOT_OPEN unset: orders 403 {error:'pilot closed'}; a queued open is refused at the fill; closes still fill", async () => {
     const t = setup();
     const alice = await t.signIn();
     await t.mark(1000);
-    const o = await t.order(alice, LONG2);
-    expect(o.status).toBe(200);
-    t.env.PILOT_OPEN = undefined;
-    const refused = await t.order(alice, LONG2);
-    expect(refused.status).toBe(403);
-    expect(refused.body).toEqual({ error: "pilot closed" });
+    const o = await t.open(alice, LONG2);
+    const queued = await t.submit(alice, LONG2);
+    expect(queued.status).toBe(202);
     t.env.PILOT_OPEN = "0";
-    expect((await t.order(alice, LONG2)).body).toEqual({ error: "pilot closed" });
-    t.tick(5000);
-    expect((await t.mark(1010)).status).toBe(200);
-    const a = await t.account(alice);
-    expect(a.body.open).toBe(false);
-    expect(a.body.positions).toHaveLength(1);
-    expect((await t.close(alice, o.body.position.id)).status).toBe(200);
+    expect((await t.submit(alice, LONG2)).body).toEqual({ error: "pilot closed" });
+    t.tick(1000);
+    await t.mark(1000);
+    expect((await t.status(alice, queued.body.order.id)).body.order).toMatchObject({ status: "refused", error: "pilot closed" });
+    expect((await t.account(alice)).body.open).toBe(false);
+    expect((await t.close(alice, o.body.order.positionId)).body.order.status).toBe("filled");
   });
 });
 
-describe("orders and closes", () => {
-  test("open: margin + 0.06% fee debited; position at the mark with the engine's liquidation price", async () => {
+describe("fills at the next mark (spec §8.3)", () => {
+  test("an order fills at the first mark posted after it, not at the mark it saw", async () => {
     const t = setup();
     const alice = await t.signIn();
-    await t.mark(982.2);
-    const r = await t.order(alice, LONG2);
-    expect(r.status).toBe(200);
-    const fee = 2000 * 0.0006;
-    expect(r.body.balance).toBeCloseTo(10000 - 1000 - fee, 9);
-    expect(r.body.position).toMatchObject({ side: "long", margin: 1000, lev: 2, notional: 2000, entry: 982.2, liq: Engine.liqPrice("long", 982.2, 2) });
-    const a = await t.account(alice);
-    expect(a.body.account.balance).toBeCloseTo(10000 - 1000 - fee, 9);
-    expect(a.body.account.equity).toBeCloseTo(10000 - fee, 9);
+    await t.mark(1000);
+    const s = await t.submit(alice, { side: "long", margin: 1000, lev: 20 });
+    expect(s.status).toBe(202);
+    expect(s.body.order).toMatchObject({ kind: "open", status: "pending", side: "long", margin: 1000, lev: 20 });
+    expect((await t.account(alice)).body.pending).toHaveLength(1);
+    t.tick(1000);
+    const ing = await t.markJson(1010);
+    expect(ing.body.filled).toBe(1);
+    const st = await t.status(alice, s.body.order.id);
+    expect(st.body.order).toMatchObject({ status: "filled", fillPx: 1010 });
+    const fee = 20000 * Engine.RULES.feeRate;
+    expect(st.body.position).toMatchObject({ entry: 1010, notional: 20000, liq: Engine.liqPrice({ side: "long", margin: 1000, notional: 20000, entry: 1010 }, 0) });
+    expect(t.balanceOf(lc(ALICE))).toBeCloseTo(10000 - 1000 - fee, 9);
   });
 
-  test("the mark must be at most 15 s old ('price updating'); pause and cap use the stored ch24 / ch1", async () => {
+  test("an order that arrives during the ingest waits for the next one", async () => {
     const t = setup();
     const alice = await t.signIn();
-    expect((await t.order(alice, LONG2)).body.error).toBe("price updating"); // no mark yet
     await t.mark(1000);
-    t.tick(16_000);
-    const stale = await t.order(alice, LONG2);
-    expect(stale.status).toBe(503);
-    expect(stale.body.error).toBe("price updating");
-    await t.mark(1000, { ch1: 0.05 });
-    expect((await t.order(alice, LONG2)).body.error).toBe("trading paused");
+    const s = await t.submit(alice, LONG2); // same millisecond as the next post: not strictly before it
+    expect((await t.markJson(1001, { ts: t.nowS() + 1 })).body.filled).toBe(0);
+    expect((await t.status(alice, s.body.order.id)).body.order.status).toBe("pending");
+  });
+
+  test("no mark within markMaxAgeS (10 s): refused 'price updating', by the next ingest or by the status read", async () => {
+    const t = setup();
+    const alice = await t.signIn();
+    await t.mark(1000);
+    const a = await t.submit(alice, LONG2);
+    t.tick(11_000);
+    expect((await t.markJson(1000)).body.refused).toBe(1);
+    expect((await t.status(alice, a.body.order.id)).body.order).toMatchObject({ status: "refused", error: "price updating" });
+    const b = await t.submit(alice, LONG2);
+    t.tick(12_001);
+    expect((await t.status(alice, b.body.order.id)).body.order).toMatchObject({ status: "refused", error: "price updating" });
+  });
+
+  test("no fresh producer: refused at once ('price updating'); σ unknown is the same", async () => {
+    const t = setup();
+    const alice = await t.signIn();
+    expect((await t.submit(alice, LONG2)).body.error).toBe("price updating");
+    await t.mark(1000);
+    t.tick(11_000);
+    expect((await t.submit(alice, LONG2)).body.error).toBe("price updating");
+    await t.mark(1000, { sigma_24h: null });
+    expect((await t.submit(alice, LONG2)).body.error).toBe("price updating");
+  });
+
+  test("while the producer catches up after an outage (bars behind the mark) nothing is queued or filled", async () => {
+    const t = setup();
+    const alice = await t.signIn();
+    await t.mark(1000);
+    t.tick(2 * 3600_000);
+    const m = Math.floor(t.nowS() / 60) * 60;
+    // an order that arrived just before this post (inserted directly: none can be queued during the outage)
+    t.db.q("INSERT INTO orders (wallet, kind, side, margin, lev, arrived_ms) VALUES (?, 'open', 'long', 1000, 2, ?)", lc(ALICE), T0 + 2 * 3600_000 - 1000);
+    const batch = (from: number) => Array.from({ length: 60 }, (_, i) => [from + i * 60, 1000, 1000, 1000]);
+    const r = await t.markJson(1000, { bars: batch(m - 7140) });
+    expect(r.body).toMatchObject({ filled: 0, refused: 1, last_minute: m - 3600 });
+    expect(t.db.q("SELECT error FROM orders")).toEqual([{ error: "price updating" }]);
+    expect((await t.submit(alice, LONG2)).body.error).toBe("price updating"); // the mark is fresh, the bars are not
     t.tick(5000);
-    await t.mark(1000, { ch24: 0.3 });
-    expect((await t.order(alice, LONG2)).body.error).toBe("leverage above the current cap");
-    expect((await t.order(alice, { ...LONG2, lev: 1 })).status).toBe(200);
+    await t.mark(1000, { bars: batch(m - 3540) }); // caught up: ends at the open minute
+    expect((await t.open(alice, LONG2)).body.order.status).toBe("filled");
   });
 
-  test("bad bodies and engine refusals", async () => {
+  test("orders pause while the base sample is pending and for 60 s after it lands", async () => {
+    const t = setup();
+    const alice = await t.signIn();
+    await t.mark(1000, { base_pending: true });
+    expect((await t.submit(alice, LONG2)).body.error).toBe("trading paused");
+    t.tick(5000);
+    await t.mark(1000);
+    const q = await t.submit(alice, LONG2);
+    t.tick(1000);
+    await t.mark(1000, { base_step_ts: t.nowS() - 5 }); // the base landed: a queued order is refused at the fill
+    expect((await t.status(alice, q.body.order.id)).body.order).toMatchObject({ status: "refused", error: "trading paused" });
+    t.tick(30_000);
+    await t.mark(1000, { base_step_ts: t.nowS() - 35 });
+    expect((await t.submit(alice, LONG2)).body.error).toBe("trading paused");
+    t.tick(30_000);
+    await t.mark(1000, { base_step_ts: t.nowS() - 65 });
+    expect((await t.open(alice, LONG2, 1000, { base_step_ts: t.nowS() - 64 })).body.order.status).toBe("filled");
+  });
+
+  test("the engine's cap and pause use the stored σ_24h, σ_1h and ch1", async () => {
+    const t = setup();
+    const alice = await t.signIn();
+    await t.mark(1000, { ch1: 0.006 });
+    expect((await t.submit(alice, LONG2)).body.error).toBe("trading paused");
+    t.tick(5000);
+    await t.mark(1000, { sigma_24h: 0.04, sigma_1h: 0.008 });
+    expect((await t.submit(alice, { side: "long", margin: 100, lev: 3 })).body.error).toBe("leverage above the current cap");
+    const ok = await t.open(alice, { side: "long", margin: 100, lev: 2 }, 1000, { sigma_24h: 0.04, sigma_1h: 0.008 });
+    expect(ok.body.order.status).toBe("filled");
+    // the fill re-checks: a pause at the fill mark refuses the queued order
+    t.tick(5000);
+    await t.mark(1000);
+    const q = await t.submit(alice, LONG2);
+    t.tick(1000);
+    await t.mark(1000, { ch1: 0.006 });
+    expect((await t.status(alice, q.body.order.id)).body.order).toMatchObject({ status: "refused", error: "trading paused" });
+  });
+
+  test("bad bodies, engine refusals and CSRF", async () => {
     const t = setup();
     const alice = await t.signIn();
     await t.mark(1000);
-    expect((await t.order(alice, { side: "up", margin: 100, lev: 1 })).status).toBe(400);
-    expect((await t.order(alice, { side: "long", margin: "100", lev: 1 })).status).toBe(400);
-    expect((await t.order(alice, { side: "long", margin: 5, lev: 1 })).body.error).toBe("margin below minimum");
-    expect((await t.order(alice, { side: "long", margin: 100, lev: 4 })).body.error).toBe("leverage not allowed");
-    expect((await t.order(alice, { side: "long", margin: 20000, lev: 1 })).body.error).toBe("insufficient balance");
-    expect((await t.order("", LONG2)).status).toBe(401);
+    expect((await t.submit(alice, { side: "up", margin: 100, lev: 1 })).status).toBe(400);
+    expect((await t.submit(alice, { side: "long", margin: "100", lev: 1 })).status).toBe(400);
+    expect((await t.submit(alice, { side: "long", margin: 5, lev: 1 })).body.error).toBe("margin below minimum");
+    expect((await t.submit(alice, { side: "long", margin: 100, lev: 4 })).body.error).toBe("leverage not allowed");
+    expect((await t.submit(alice, { side: "long", margin: 20000, lev: 1 })).body.error).toBe("insufficient balance");
+    expect((await t.submit("", LONG2)).status).toBe(401);
     const noOrigin = new Request(`${ORIGIN}/api/pilot/order`, { method: "POST", headers: { "content-type": "application/json", cookie: alice }, body: JSON.stringify(LONG2) });
     expect((await handleOrder(noOrigin, t.env, t.deps)).status).toBe(403);
+    const bob = await t.signIn(BOB);
+    const s = await t.submit(alice, LONG2);
+    expect((await t.status(bob, s.body.order.id)).status).toBe(404); // someone else's order
   });
 
-  test("close at the mark: margin + PnL − close fee returned; history shows it", async () => {
+  test("close fills at the next mark with funding: margin + PnL + funding − fee on the exit notional; history shows it", async () => {
     const t = setup();
     const alice = await t.signIn();
-    await t.mark(1000);
-    const o = await t.order(alice, { side: "short", margin: 1000, lev: 3 });
-    t.tick(5000);
-    await t.mark(990);
-    const c = await t.close(alice, o.body.position.id);
-    expect(c.status).toBe(200);
-    const pos = { side: "short" as const, margin: 1000, notional: 3000, entry: 1000 };
-    const e = Engine.close(pos, 990);
-    expect(c.body.position).toMatchObject({ reason: "close", exit: 990, pnl: e.pnl, returned: e.payout });
-    expect(c.body.balance).toBeCloseTo(10000 - 1000 - 3000 * 0.0006 + e.payout, 9);
+    await t.mark(1000, { funding_rate: 0.0005 });
+    const o = await t.open(alice, { side: "short", margin: 1000, lev: 10 }, 1000, { funding_rate: 0.0005 });
+    const id = o.body.order.positionId as number;
+    const pos = o.body.position;
+    t.tick(2 * 3600_000);
+    await t.mark(1000, { funding_rate: 0.0005 }); // the new hour's rate
+    const p = await t.call(handlePositions, t.req("/api/pilot/positions", "GET", undefined, { cookie: alice }));
+    expect(p.body.positions[0].funding).toBeGreaterThan(0); // shorts receive a positive rate
+    const rates = t.db.q<{ t: number; rate: number }>("SELECT hour_start AS t, rate FROM funding ORDER BY hour_start");
+    const enginePos = { side: "short" as const, margin: 1000, lev: 10, notional: 10000, entry: 1000, liq: pos.liq, openedAt: pos.openedAt };
+    expect(p.body.positions[0].funding).toBeCloseTo(Engine.fundingAccrued(enginePos, rates, t.nowS()), 9);
+    const before = t.balanceOf(lc(ALICE));
+    const c = await t.close(alice, id, 990);
+    expect(c.body.order.status).toBe("filled");
+    const fillTs = t.db.q<{ filled_at: number }>("SELECT filled_at FROM orders WHERE id = ?", c.body.order.id)[0].filled_at;
+    const e = Engine.close(enginePos, 990, fillTs, rates);
+    expect(c.body.position).toMatchObject({ reason: "close", exit: 990 });
+    expect(c.body.position.pnl).toBeCloseTo(e.pnl, 9);
+    expect(c.body.position.funding).toBeCloseTo(e.funding, 9);
+    expect(c.body.position.returned).toBeCloseTo(e.payout, 9);
+    expect(t.balanceOf(lc(ALICE))).toBeCloseTo(before + e.payout, 9);
     const h = await t.history(alice);
-    expect(h.body.history).toHaveLength(1);
-    expect(h.body.history[0].net).toBeCloseTo(e.payout - 1000 - 3000 * 0.0006, 9);
-    expect(h.body.history[0].fee).toBeCloseTo(3000 * 0.0006 + e.fee, 9);
+    expect(h.body.history[0].net).toBeCloseTo(e.payout - 1000 - 10000 * Engine.RULES.feeRate, 9);
+    expect(h.body.history[0].fee).toBeCloseTo(10000 * Engine.RULES.feeRate + e.fee, 9);
   });
 
-  test("someone else's position cannot be closed", async () => {
+  test("someone else's position cannot be closed; a closed one answers 409", async () => {
     const t = setup();
     const alice = await t.signIn();
     const bob = await t.signIn(BOB);
     await t.mark(1000);
-    const o = await t.order(alice, LONG2);
-    expect((await t.close(bob, o.body.position.id)).status).toBe(404);
-  });
-
-  test("positions endpoint: open positions with PnL at the mark", async () => {
-    const t = setup();
-    const alice = await t.signIn();
-    await t.mark(1000);
-    await t.order(alice, LONG2);
-    t.tick(5000);
-    await t.mark(1010);
-    const p = await t.call(handlePositions, t.req("/api/pilot/positions", "GET", undefined, { cookie: alice }));
-    expect(p.body.positions).toHaveLength(1);
-    expect(p.body.positions[0].pnl).toBeCloseTo(20, 9);
+    const o = await t.open(alice, LONG2);
+    expect((await t.submitClose(bob, o.body.order.positionId)).status).toBe(404);
+    await t.close(alice, o.body.order.positionId);
+    expect((await t.submitClose(alice, o.body.order.positionId)).status).toBe(409);
   });
 });
 
 describe("concurrency (R3)", () => {
-  test("two simultaneous orders cannot overspend", async () => {
+  test("two orders that cannot both fit: one fills, the other is refused 'insufficient balance'", async () => {
     const t = setup();
     const alice = await t.signIn();
     await t.mark(1000);
     t.db.q("UPDATE accounts SET balance = 1500");
-    const before = t.db.batches;
-    const [a, b] = await Promise.all([t.order(alice, LONG2), t.order(alice, LONG2)]);
-    expect(t.db.batches - before).toBe(2); // both passed the engine check and raced to the write
-    expect([a.status, b.status].sort()).toEqual([200, 409]);
-    expect([a.body.error, b.body.error]).toContain("insufficient balance");
-    expect(t.balanceOf(ALICE.address)).toBeCloseTo(1500 - 1000 - 1.2, 9);
+    const [a, b] = await Promise.all([t.submit(alice, LONG2), t.submit(alice, LONG2)]);
+    expect([a.status, b.status]).toEqual([202, 202]);
+    t.tick(1000);
+    expect((await t.markJson(1000)).body).toMatchObject({ filled: 1, refused: 1 });
+    expect(t.balanceOf(lc(ALICE))).toBeCloseTo(1500 - 1000 - 2000 * Engine.RULES.feeRate, 9);
     expect(t.db.q("SELECT COUNT(*) AS n FROM positions")[0]).toEqual({ n: 1 });
+    expect(t.db.q("SELECT error FROM orders WHERE status = 'refused'")).toEqual([{ error: "insufficient balance" }]);
   });
 
-  test("two simultaneous orders cannot exceed 5 open positions", async () => {
+  test("two ingests racing over the same pending order: it fills once", async () => {
     const t = setup();
     const alice = await t.signIn();
     await t.mark(1000);
-    for (let i = 0; i < 4; i++) expect((await t.order(alice, { side: "long", margin: 10, lev: 1 })).status).toBe(200);
-    const rs = await Promise.all([t.order(alice, { side: "long", margin: 10, lev: 1 }), t.order(alice, { side: "short", margin: 10, lev: 1 })]);
-    expect(rs.map((r) => r.status).sort()).toEqual([200, 409]);
+    const s = await t.submit(alice, LONG2);
+    t.tick(2000);
+    const before = t.db.batches;
+    const [x, y] = await Promise.all([t.markJson(1000, { ts: t.nowS() - 1 }), t.markJson(1001)]);
+    expect(t.db.batches - before).toBeGreaterThanOrEqual(4); // both marks won and both tried the fill batch
+    expect(x.body.filled + y.body.filled).toBe(1);
+    expect(t.db.q("SELECT COUNT(*) AS n FROM positions")[0]).toEqual({ n: 1 });
+    expect(t.balanceOf(lc(ALICE))).toBeCloseTo(10000 - 1000 - 2000 * Engine.RULES.feeRate, 9);
+    expect((await t.status(alice, s.body.order.id)).body.order.status).toBe("filled");
+  });
+
+  test("two orders cannot exceed 5 open positions", async () => {
+    const t = setup();
+    const alice = await t.signIn();
+    await t.mark(1000);
+    for (let i = 0; i < 4; i++) expect((await t.open(alice, { side: "long", margin: 10, lev: 1 })).body.order.status).toBe("filled");
+    await Promise.all([t.submit(alice, { side: "long", margin: 10, lev: 1 }), t.submit(alice, { side: "short", margin: 10, lev: 1 })]);
+    t.tick(1000);
+    expect((await t.markJson(1000)).body).toMatchObject({ filled: 1, refused: 1 });
     expect(t.db.q("SELECT COUNT(*) AS n FROM positions WHERE closed_at IS NULL")[0]).toEqual({ n: 5 });
   });
 
-  test("a double close settles once", async () => {
+  test("a double close settles once, in one ingest or in two racing ones", async () => {
     const t = setup();
     const alice = await t.signIn();
     await t.mark(1000);
-    const o = await t.order(alice, LONG2);
-    const mid = t.balanceOf(ALICE.address);
-    t.tick(5000);
+    const o = await t.open(alice, LONG2);
+    const id = o.body.order.positionId as number;
+    const mid = t.balanceOf(lc(ALICE));
+    t.tick(1000);
     await t.mark(1010);
-    const [a, b] = await Promise.all([t.close(alice, o.body.position.id), t.close(alice, o.body.position.id)]);
-    expect([a.status, b.status].sort()).toEqual([200, 409]);
-    const e = Engine.close({ side: "long", margin: 1000, notional: 2000, entry: 1000 }, 1010);
-    expect(t.balanceOf(ALICE.address)).toBeCloseTo(mid + e.payout, 9);
+    await Promise.all([t.submitClose(alice, id), t.submitClose(alice, id)]);
+    t.tick(2000);
+    const [x, y] = await Promise.all([t.markJson(1010, { ts: t.nowS() - 1 }), t.markJson(1010)]);
+    expect(x.body.filled + y.body.filled).toBe(1);
+    expect(x.body.refused + y.body.refused).toBe(1);
+    const row = t.db.q<{ opened_at: number; closed_at: number }>("SELECT opened_at, closed_at FROM positions")[0];
+    const e = Engine.close({ side: "long", margin: 1000, notional: 2000, entry: 1000, openedAt: row.opened_at }, 1010, row.closed_at, []);
+    expect(t.balanceOf(lc(ALICE))).toBeCloseTo(mid + e.payout, 9);
   });
 });
 
-describe("liquidation (R5)", () => {
-  test("lazy: an account read settles a position crossed by a stored bar since it opened, at the liquidation price, nothing returned", async () => {
+describe("liquidation (R5, funding-aware)", () => {
+  test("lazy: a read settles a position crossed by a stored bar since it opened, at the engine's funding-moved price", async () => {
     const t = setup();
     const alice = await t.signIn();
     await t.mark(1000);
-    const o = await t.order(alice, { side: "long", margin: 1000, lev: 3 });
-    const liq = o.body.position.liq as number;
-    const opened = o.body.position.openedAt as number;
-    const bal = t.balanceOf(ALICE.address);
-    const m0 = Math.floor(opened / 60) * 60;
-    // written behind the ingest's back: only the lazy path can see them
-    t.db.q("INSERT INTO bars (minute, h, l, c) VALUES (?, 1000, ?, 1000)", m0 - 60, liq - 50); // before the open: ignored
-    t.db.q("INSERT INTO bars (minute, h, l, c) VALUES (?, 1000, 990, 995)", m0 + 60);
-    t.db.q("INSERT INTO bars (minute, h, l, c) VALUES (?, 995, ?, 700)", m0 + 120, liq - 1);
-    t.db.q("INSERT INTO bars (minute, h, l, c) VALUES (?, 995, ?, 650)", m0 + 180, liq - 2);
+    const o = await t.open(alice, { side: "long", margin: 1000, lev: 20 });
+    const p = o.body.position;
+    const pos = { side: "long" as const, margin: 1000, lev: 20, notional: 20000, entry: 1000, liq: p.liq, openedAt: p.openedAt };
+    const bal = t.balanceOf(lc(ALICE));
+    const h0 = Math.floor(p.openedAt / 3600) * 3600;
+    // longs pay 0.5%/h: after ~2 h the liquidation price has risen well above the price at open (955)
+    t.db.q("INSERT INTO funding (hour_start, rate) VALUES (?, 0.005), (?, 0.005)", h0, h0 + 3600);
+    const tb = h0 + 2 * 3600 - 300;
+    const lpAt = (t2: number) => Engine.liqPrice(pos, Engine.fundingAccrued(pos, [{ t: h0, rate: 0.005 }, { t: h0 + 3600, rate: 0.005 }], t2 + 60));
+    const lpThen = lpAt(tb);
+    expect(lpThen).toBeGreaterThan(p.liq + 5);
+    t.db.q("INSERT INTO bars (minute, h, l, c) VALUES (?, 1000, ?, 1000)", h0 - 60, p.liq - 100); // before the open: ignored
+    t.db.q("INSERT INTO bars (minute, h, l, c) VALUES (?, 1000, ?, 1000)", tb - 1800, lpAt(tb - 1800) + 0.5); // just above the price then
+    t.db.q("INSERT INTO bars (minute, h, l, c) VALUES (?, 1000, ?, 1000)", tb, lpThen - 1); // crosses only with funding
+    expect(lpThen - 1).toBeGreaterThan(p.liq);
+    t.tick(2 * 3600_000);
     const a = await t.account(alice);
     expect(a.body.positions).toEqual([]);
-    const row = t.db.q<Json>("SELECT closed_at, exit, pnl, returned, reason FROM positions")[0];
-    const pos = { side: "long" as const, notional: 3000, entry: 1000, margin: 1000, liq, openedAt: opened };
-    expect(row).toEqual({ closed_at: m0 + 120, exit: liq, pnl: Engine.pnl(pos, liq), returned: 0, reason: "liquidation" });
-    expect(t.balanceOf(ALICE.address)).toBe(bal);
-    // idempotent: later reads and a close change nothing
-    await t.account(alice);
-    t.tick(5000);
-    await t.mark(1000);
-    const c = await t.close(alice, o.body.position.id);
-    expect(c.status).toBe(409);
-    expect(t.balanceOf(ALICE.address)).toBe(bal);
-    expect((await t.history(alice)).body.history[0]).toMatchObject({ reason: "liquidation", returned: 0, net: -1000 - 3000 * 0.0006 });
+    const rates = [{ t: h0, rate: 0.005 }, { t: h0 + 3600, rate: 0.005 }];
+    const hit = Engine.liquidation(pos, t.db.q<Engine.MinuteBar>("SELECT minute AS t, h, l, c FROM bars ORDER BY minute"), rates)!;
+    expect(hit.t).toBe(tb);
+    const row = t.db.q<Json>("SELECT closed_at, exit, pnl, accrued, returned, reason FROM positions")[0];
+    expect(row).toEqual({ closed_at: tb, exit: hit.price, pnl: Engine.pnl(pos, hit.price), accrued: Engine.fundingAccrued(pos, rates, tb + 60), returned: 0, reason: "liquidation" });
+    expect(t.balanceOf(lc(ALICE))).toBe(bal);
+    await t.account(alice); // idempotent
+    expect(t.balanceOf(lc(ALICE))).toBe(bal);
+    expect((await t.history(alice)).body.history[0]).toMatchObject({ reason: "liquidation", returned: 0 });
   });
 
   test("a bar in the opening minute does not count (the engine skips bars that start before the open)", async () => {
     const t = setup();
     const alice = await t.signIn();
     await t.mark(1000);
-    const o = await t.order(alice, { side: "short", margin: 1000, lev: 2 });
+    const o = await t.open(alice, { side: "short", margin: 1000, lev: 20 });
     const m0 = Math.floor(o.body.position.openedAt / 60) * 60;
     t.db.q("INSERT OR REPLACE INTO bars (minute, h, l, c) VALUES (?, 2000, 1000, 1000)", m0);
     expect((await t.account(alice)).body.positions).toHaveLength(1);
   });
 
-  test("ingest: a mark post settles the positions its bars cross, with the same values as the engine", async () => {
+  test("ingest: a mark post settles the positions its bars cross, with the engine's values", async () => {
     const t = setup();
     const alice = await t.signIn();
     const bob = await t.signIn(BOB);
     await t.mark(1000);
-    const a = await t.order(alice, { side: "long", margin: 1000, lev: 3 });
-    const b = await t.order(bob, { side: "short", margin: 500, lev: 3 });
-    const keep = await t.order(alice, { side: "long", margin: 100, lev: 1 });
+    const a = await t.open(alice, { side: "long", margin: 1000, lev: 20 });
+    const b = await t.open(bob, { side: "short", margin: 500, lev: 20 });
+    const keep = await t.open(alice, { side: "long", margin: 100, lev: 1 });
     t.tick(70_000);
     const m = Math.floor(t.nowS() / 60) * 60;
-    const res = await t.mark(1000, { bars: [[m, 1400, 600, 1000]] });
-    expect(((await res.json()) as Json).liquidated).toBe(2);
+    const r = await t.markJson(1000, { bars: [[m, 1060, 940, 1000]] });
+    expect(r.body.liquidated).toBe(2);
     const rows = t.db.q<Json>("SELECT id, closed_at, exit, pnl, returned, reason FROM positions ORDER BY id");
-    for (const [p, id] of [[a.body.position, a.body.position.id], [b.body.position, b.body.position.id]] as const) {
-      const r = rows.find((x) => x.id === id)!;
-      expect(r).toEqual({ id, closed_at: m, exit: p.liq, pnl: Engine.pnl(p, p.liq), returned: 0, reason: "liquidation" });
+    for (const x of [a, b]) {
+      const p = x.body.position;
+      const pos = { side: p.side, margin: p.margin, lev: p.lev, notional: p.notional, entry: p.entry, liq: p.liq, openedAt: p.openedAt };
+      const hit = Engine.liquidation(pos, [{ t: m, h: 1060, l: 940, c: 1000 }], [])!;
+      expect(rows.find((y) => y.id === x.body.order.positionId)).toEqual({ id: x.body.order.positionId, closed_at: m, exit: hit.price, pnl: Engine.pnl(pos, hit.price), returned: 0, reason: "liquidation" });
     }
-    expect(rows.find((x) => x.id === keep.body.position.id)!.closed_at).toBeNull();
+    expect(rows.find((y) => y.id === keep.body.order.positionId)!.closed_at).toBeNull();
+  });
+
+  test("a gap bar liquidates what the missing minutes would have", async () => {
+    const t = setup();
+    const alice = await t.signIn();
+    await t.mark(1000);
+    const o = await t.open(alice, { side: "long", margin: 1000, lev: 20 });
+    t.tick(90 * 60_000);
+    const r = await t.markJson(1000, { candle: [1000, 1001, 950, 1000, 1, 1] });
+    expect(r.body).toMatchObject({ gap: true, liquidated: 1 });
+    expect(t.db.q("SELECT reason FROM positions WHERE id = ?", o.body.order.positionId)).toEqual([{ reason: "liquidation" }]);
   });
 });
 
@@ -525,36 +760,36 @@ describe("rate limits (R8)", () => {
   test("orders: 30 per minute per wallet; the next minute starts over", async () => {
     const t = setup();
     const alice = await t.signIn();
-    for (let i = 0; i < 30; i++) expect((await t.order(alice, { side: "up" })).status).toBe(400);
-    expect((await t.order(alice, { side: "up" })).status).toBe(429);
+    for (let i = 0; i < 30; i++) expect((await t.submit(alice, { side: "up" })).status).toBe(400);
+    expect((await t.submit(alice, { side: "up" })).status).toBe(429);
     const bob = await t.signIn(BOB);
-    expect((await t.order(bob, { side: "up" })).status).toBe(400); // per wallet
+    expect((await t.submit(bob, { side: "up" })).status).toBe(400);
     t.tick(60_000);
-    expect((await t.order(alice, { side: "up" })).status).toBe(400);
+    expect((await t.submit(alice, { side: "up" })).status).toBe(400);
   });
 
   test("closes: 60 per minute per wallet", async () => {
     const t = setup();
     const alice = await t.signIn();
-    for (let i = 0; i < 60; i++) expect((await t.close(alice, 999)).status).toBe(404);
-    expect((await t.close(alice, 999)).status).toBe(429);
+    for (let i = 0; i < 60; i++) expect((await t.submitClose(alice, 999)).status).toBe(404);
+    expect((await t.submitClose(alice, 999)).status).toBe(429);
   });
 });
 
 describe("leaderboard and history (R8)", () => {
-  test("top 50 by equity at the latest mark, shortened addresses only, cached 30 s", async () => {
+  test("top 50 by equity (funding included) at the latest mark, shortened addresses only, cached 30 s", async () => {
     const t = setup();
     const alice = await t.signIn();
     const bob = await t.signIn(BOB);
     await t.mark(1000);
-    await t.order(alice, { side: "long", margin: 1000, lev: 3 });
-    await t.order(bob, { side: "short", margin: 1000, lev: 3 });
+    await t.open(alice, { side: "long", margin: 1000, lev: 3 });
+    await t.open(bob, { side: "short", margin: 1000, lev: 3 });
     for (let i = 0; i < 60; i++) {
       const w = "0x" + i.toString(16).padStart(40, "0");
       t.db.q("INSERT INTO accounts (wallet, balance, season, created) VALUES (?, ?, 1, 0)", w, 5000 + i);
       t.db.q("INSERT INTO positions (wallet, side, margin, lev, notional, entry, liq, opened_at, closed_at, fee, returned, reason, exit, pnl) VALUES (?, 'long', 10, 1, 10, 1000, 1, 0, 1, 0, 10, 'close', 1000, 0)", w);
     }
-    t.db.q("INSERT INTO accounts (wallet, balance, season, created) VALUES ('0x00000000000000000000000000000000000000ff', 99999, 1, 0)"); // never opened: not listed
+    t.db.q("INSERT INTO accounts (wallet, balance, season, created) VALUES ('0x00000000000000000000000000000000000000ff', 99999, 1, 0)");
     t.tick(5000);
     await t.mark(1100);
     const cache = new MemoryCache();
@@ -562,23 +797,21 @@ describe("leaderboard and history (R8)", () => {
     const text = await res.text();
     const body = JSON.parse(text) as Json;
     expect(body.rows).toHaveLength(50);
-    expect(body.rows[0]).toEqual({ rank: 1, address: `${ALICE.address.toLowerCase().slice(0, 6)}…${ALICE.address.toLowerCase().slice(-4)}`, equity: expect.any(Number) });
-    expect(body.rows[0].equity).toBeCloseTo(10000 - 1.8 + 300, 6);
-    expect(text).not.toContain(ALICE.address.toLowerCase());
+    expect(body.rows[0].address).toBe(`${lc(ALICE).slice(0, 6)}…${lc(ALICE).slice(-4)}`);
+    expect(body.rows[0].equity).toBeCloseTo(10000 - 3000 * Engine.RULES.feeRate + 300, 6);
+    expect(text).not.toContain(lc(ALICE));
     expect(text).not.toContain("99999");
     expect(res.headers.get("cache-control")).toBe("public, max-age=30");
-    t.db.q("UPDATE accounts SET balance = 1e9 WHERE wallet = ?", BOB.address.toLowerCase());
+    t.db.q("UPDATE accounts SET balance = 1e9 WHERE wallet = ?", lc(BOB));
     const again = (await (await handleLeaderboard(t.req("/api/pilot/leaderboard"), t.env, { ...t.deps, cache: cache as unknown as Cache })).json()) as Json;
-    expect(again.rows[0].rank).toBe(1);
-    expect(again.rows[0].address).toBe(body.rows[0].address); // served from the cache
+    expect(again.rows[0].address).toBe(body.rows[0].address);
   });
 
   test("history: the last 100 closed positions, newest first", async () => {
     const t = setup();
     const alice = await t.signIn();
-    const w = ALICE.address.toLowerCase();
     for (let i = 0; i < 120; i++) {
-      t.db.q("INSERT INTO positions (wallet, side, margin, lev, notional, entry, liq, opened_at, closed_at, fee, returned, reason, exit, pnl) VALUES (?, 'long', 10, 1, 10, 1000, 1, ?, ?, 0.012, 10, 'close', 1000, 0)", w, i, 1000 + i);
+      t.db.q("INSERT INTO positions (wallet, side, margin, lev, notional, entry, liq, opened_at, closed_at, fee, returned, reason, exit, pnl, accrued) VALUES (?, 'long', 10, 1, 10, 1000, 1, ?, ?, 0.002, 10, 'close', 1000, 0, 0)", lc(ALICE), i, 1000 + i);
     }
     const h = await t.history(alice);
     expect(h.body.history).toHaveLength(100);
