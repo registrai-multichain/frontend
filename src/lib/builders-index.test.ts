@@ -204,6 +204,30 @@ describe("milestones, stablecoins, volume_24h, live_fx (spec §12, §13)", () =>
       expect(n.ok && n.data.integrations).toEqual([]);
     }
   });
+  test("§15: live.open_senders deduped and sorted; projects[].kind kept or derived", () => {
+    const d = JSON.parse(JSON.stringify(real));
+    const a = "0x" + "7".repeat(40), b = "0x" + "1".repeat(40);
+    d.live.open_senders = [a, b, a];
+    const i = d.projects.findIndex((p: { base_layer: boolean }) => !p.base_layer);
+    d.projects[i].kind = "integration";
+    const r = validateIndex(d);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.live!.open_senders).toEqual([b, a]);
+    expect(r.data.projects[i].kind).toBe("integration");
+    expect(r.data.projects.filter((p) => p.base_layer).every((p) => p.kind === "base")).toBe(true);
+    expect(validateIndex(real).ok && (validateIndex(real) as { data: { live: object } }).data.live).not.toHaveProperty("open_senders");
+  });
+  test.each([
+    ["open_senders not an array", (d: any) => { d.live.open_senders = "0x" + "7".repeat(40); }],
+    ["open_senders uppercase", (d: any) => { d.live.open_senders = ["0x" + "A".repeat(40)]; }],
+    ["open_senders too many", (d: any) => { d.live.open_senders = Array.from({ length: ABI_LIMITS.openSenders + 1 }, (_, i) => "0x" + i.toString(16).padStart(40, "0")); }],
+    ["unknown project kind", (d: any) => { d.projects[0].kind = "partner"; }],
+  ])("§15 rejected: %s", (_n, f) => {
+    const d = JSON.parse(JSON.stringify(real)); f(d);
+    const r = validateIndex(d);
+    expect(r.ok && !!r.data.live).toBe(false);
+  });
   const moonpay = () => ({ id: "20261010-120000-integration", t: 1791633600, target: "base:arc", tier: "integration", mult: 1.0508, title: "MoonPay live on Arc", evidence: ["https://www.moonpay.com/newsroom"], company: "MoonPay", revenue_usd: 108e6, revenue_kind: "estimate" });
   test("integration milestones (§14) keep company and revenue", () => {
     const r = run((d) => { d.milestones.push(moonpay()); });

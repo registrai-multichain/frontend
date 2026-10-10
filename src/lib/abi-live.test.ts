@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { describe, expect, test, vi } from "vitest";
 import { CHUNK, createEngine, httpRpc, StaleError } from "./abi-live";
 import { ARGUS_DEPLOYER, EURC, GBPA, HB, HS, INDEX, JPYC, mockRpc, NOT_REGISTERED, scIndex, SEEN, tsOf } from "./abi-live-mock";
+import { INTEG_LOGS, integIndex, ROUTER, POOL } from "./abi-live-mock";
 import type { LiveData } from "./abi-live-mock";
 
 const L = INDEX.live!;
@@ -298,5 +299,26 @@ describe("rpc transport", () => {
     vi.stubGlobal("fetch", async () => ({ ok: false, status: 429, json: async () => ({}) }));
     await expect(httpRpc("https://rpc.example", async () => undefined)("x", [])).rejects.toThrow("RPC HTTP 429");
     vi.unstubAllGlobals();
+  });
+});
+
+describe("integrated products (§15): open senders", () => {
+  test("their payments count for other members, never for their own; the old rule still holds without open_senders", async () => {
+    const run = async (index: LiveData) => {
+      const e = createEngine({ call: mockRpc(HB + 300, undefined, INTEG_LOGS) as never });
+      e.load(index, SEEN);
+      return e.tick();
+    };
+    const R = await run(integIndex());
+    const u = R.act["integration:uniswap"];
+    expect([u.payments, u.usdc, [...u.wallets]]).toEqual([1, 30, ["0x" + "1".repeat(40)]]);
+    expect([...R.act["domain:argus.world"].wallets]).toContain(ROUTER);
+    expect([...R.act["domain:peach.ag"].wallets]).toContain(POOL);
+    // the same contracts tracked but not open: every hop from them is internal
+    const closed = integIndex(); delete closed.live.open_senders;
+    const C = await run(closed);
+    expect([...C.act["domain:argus.world"].wallets]).not.toContain(ROUTER);
+    expect(C.act["domain:peach.ag"]?.wallets ? [...C.act["domain:peach.ag"].wallets] : []).not.toContain(POOL);
+    expect(C.act["integration:uniswap"].payments).toBe(1);
   });
 });

@@ -142,19 +142,19 @@ export function freshKeys(rows: TapeRow[], seen: Set<string> | null): Set<string
 }
 
 /* ---------- members ---------- */
-export type MemberRow = { source: string; name: string; base: boolean; share: number; dbase: number | null; pace: number | null; h1: number; d1: number; pay: number; usd: number };
+export type MemberRow = { source: string; name: string; base: boolean; integration: boolean; share: number; dbase: number | null; pace: number | null; h1: number; d1: number; pay: number; usd: number };
 export type SortKey = "name" | "share" | "dbase" | "h1" | "d1" | "pace" | "pay" | "usd";
 
 export function members(d: AbiData, R: LiveResult | null, sortK: SortKey = "share", sortDir: 1 | -1 = -1): MemberRow[] {
   const by = nameMap(d), L = d.live;
   const srcs = R ? Object.keys(R.roots).filter((s) => R.roots[s] > 0) : d.projects.map((p) => p.source);
   const rows = srcs.map((s): MemberRow => {
-    const p = by[s] ?? { source: s, name: s.split(":").pop() ?? s, share: 0, share_base: null, base_layer: s === "base:arc", pts_1h: 0, pts_24h: 0, pay_24h: 0, usdc_24h: 0 };
+    const p = by[s] ?? { source: s, name: s.split(":").pop() ?? s, share: 0, share_base: null, base_layer: s === "base:arc", kind: s === "base:arc" ? "base" : s.startsWith("integration:") ? "integration" : "project", pts_1h: 0, pts_24h: 0, pay_24h: 0, usdc_24h: 0 };
     const a = R?.act[s];
     const share = R ? (100 * R.roots[s]) / R.total : p.share;
     const hold = L ? (L.P[s] || 0) * (1 - Math.pow(L.decay_h, 24)) : 0;
     return {
-      source: s, name: p.name, base: p.base_layer, share, dbase: p.share_base === null ? null : share - p.share_base,
+      source: s, name: p.name, base: p.base_layer, integration: p.kind === "integration", share, dbase: p.share_base === null ? null : share - p.share_base,
       pace: !p.base_layer && hold > 0 ? (100 * p.pts_24h) / hold : null,
       h1: R ? (a ? a.points : 0) : p.pts_1h, d1: p.pts_24h + (a ? a.points : 0),
       pay: p.pay_24h + (a ? a.payments : 0), usd: p.usdc_24h + (a ? a.usdc : 0),

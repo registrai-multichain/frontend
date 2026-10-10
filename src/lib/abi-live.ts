@@ -85,6 +85,7 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
   let P: Record<string, number>, rootsPrev: Record<string, number>;
   let coins: Record<string, AbiLiveCoin> = {}, fx: AbiFx = {};
   let cOpen: number, cHi: number, cLo: number, pathDone: number; // the open hour's candle
+  let openSenders = new Set<string>(); // §15 integrated products' contracts
   let milestones: AbiMilestone[] = [], msDone = new Set<string>(); // recorded milestones; applied after the rise limit
 
   // fx.py rate_for: USD per unit, latest ECB fix dated before the UTC day of ts
@@ -95,12 +96,18 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
     for (const d in fx) if (d < day && (best === null || d > best) && fx[d][ccy] != null) best = d;
     return best ? fx[best][ccy] : null;
   }
+  /* An internal hop: a payment between tracked contracts. §15: an integrated product's contract (open_senders) may
+   * still pay OTHER members (a routed payment counts for the project it reaches), never its own member. */
+  function internal(from: string, src: string): boolean {
+    const owner = L.contracts[from];
+    return !!owner && (!openSenders.has(from) || owner === src);
+  }
   function acceptSc(log: any): Ev | null { // eslint-disable-line @typescript-eslint/no-explicit-any
     const m = coins[log.address.toLowerCase()];
     if (!m || log.topics.length !== 3) return null;
     const to = "0x" + log.topics[2].slice(26), from = "0x" + log.topics[1].slice(26);
     const src = L.contracts[to], ts = parseInt(log.blockTimestamp, 16);
-    if (!src || ts < m.added || from === ZERO || L.contracts[from] || (L.deployers[src] || []).includes(from)) return null;
+    if (!src || ts < m.added || from === ZERO || internal(from, src) || (L.deployers[src] || []).includes(from)) return null;
     const rate = rateFor(m.currency, ts);
     if (rate == null) return null;
     return { ts, b: parseInt(log.blockNumber, 16), src, w: from, v: (Number(BigInt(log.data)) / 10 ** m.decimals) * rate };
@@ -116,7 +123,7 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
       seen.set(s, set);
     }
     topic2 = [...new Set(Object.keys(L.contracts))].sort().map((c) => "0x" + "0".repeat(24) + c.slice(2));
-    coins = L.stablecoins || {}; fx = index.live_fx || {};
+    coins = L.stablecoins || {}; fx = index.live_fx || {}; openSenders = new Set(L.open_senders || []);
     hourStart = L.hour_start; hourBlock = L.hour_start_block; lastBlock = hourBlock - 1;
     events = []; basePts = null; headTs = hourStart;
     P = Object.assign({}, L.P); rootsPrev = Object.assign({}, L.roots_prev);
@@ -132,7 +139,7 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
   function accept(log: any): Ev | null { // eslint-disable-line @typescript-eslint/no-explicit-any
     const to = "0x" + log.topics[2].slice(26), from = "0x" + log.topics[1].slice(26);
     const src = L.contracts[to];
-    if (!src || from === ZERO || L.contracts[from] || (L.deployers[src] || []).includes(from)) return null;
+    if (!src || from === ZERO || internal(from, src) || (L.deployers[src] || []).includes(from)) return null;
     return { ts: parseInt(log.blockTimestamp, 16), b: parseInt(log.blockNumber, 16), src, w: from, v: Number(BigInt(log.data)) / 1e18 };
   }
 

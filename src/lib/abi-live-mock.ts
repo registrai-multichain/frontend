@@ -23,7 +23,7 @@ const pad = (a: string) => "0x" + "0".repeat(24) + a.slice(2);
 const usdc = (v: number) => "0x" + (BigInt(Math.round(v * 1e6)) * 10n ** 12n).toString(16); // 18 decimals
 
 type Log = { blockNumber: string; blockTimestamp?: string; topics: string[]; data: string };
-const log = (offset: number, from: string, to: string, v: number, withTs = true): Log => ({
+export const log = (offset: number, from: string, to: string, v: number, withTs = true): Log => ({
   blockNumber: "0x" + (HB + offset).toString(16),
   ...(withTs ? { blockTimestamp: "0x" + tsOf(HB + offset).toString(16) } : {}),
   topics: [TRANSFER, pad(from), pad(to)],
@@ -90,7 +90,7 @@ export function scIndex(): LiveData {
 }
 
 /** The JSON-RPC handler: `head` is the chain's latest block number. */
-export function mockRpc(head: number, stats = { calls: [] as string[] }) {
+export function mockRpc(head: number, stats = { calls: [] as string[] }, extra: Log[] = []) {
   return async (method: string, params: unknown[]): Promise<unknown> => {
     stats.calls.push(method);
     if (method === "eth_getBlockByNumber") {
@@ -102,7 +102,7 @@ export function mockRpc(head: number, stats = { calls: [] as string[] }) {
       const f = params[0] as { fromBlock: string; toBlock: string; address: string | string[]; topics: (string | string[] | null)[] };
       const from = parseInt(f.fromBlock, 16), to = parseInt(f.toBlock, 16);
       if (to - from >= 10_000) throw new Error("RPC range too large");
-      const source: Log[] = Array.isArray(f.address) ? SC_LOGS.filter((l) => (f.address as string[]).includes(l.address)) : f.address === EMITTER ? CHAIN_LOGS : [];
+      const source: Log[] = Array.isArray(f.address) ? SC_LOGS.filter((l) => (f.address as string[]).includes(l.address)) : f.address === EMITTER ? [...CHAIN_LOGS, ...extra] : [];
       return source.filter((l) => {
         const b = parseInt(l.blockNumber, 16);
         if (b < from || b > to || l.topics[0] !== f.topics[0]) return false;
@@ -113,3 +113,19 @@ export function mockRpc(head: number, stats = { calls: [] as string[] }) {
     throw new Error("unexpected " + method);
   };
 }
+
+/* ---------- integrated products (spec §15) ---------- */
+export const ROUTER = "0x" + "7".repeat(40), POOL = "0x" + "8".repeat(40);
+/** Uniswap-like member: ROUTER and POOL are its contracts and open senders. */
+export function integIndex(): LiveData {
+  const d = JSON.parse(JSON.stringify(INDEX)) as LiveData;
+  d.live.contracts[ROUTER] = "integration:uniswap"; d.live.contracts[POOL] = "integration:uniswap";
+  d.live.open_senders = [ROUTER, POOL];
+  return d;
+}
+export const INTEG_LOGS: Log[] = [
+  log(21, w("1"), ROUTER, 30), // a payment into the router: counts for the integration
+  log(22, ROUTER, POOL, 30), // the router paying its own pool: internal, not counted again
+  log(23, ROUTER, ARGUS, 25), // routed payment into a project: counts for Argus
+  log(24, POOL, PEACH, 10), // pool paying out to a project: counts for Peach
+];

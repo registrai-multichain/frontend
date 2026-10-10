@@ -27,6 +27,7 @@ export const ABI_LIMITS = {
   milestoneTitle: 120,
   company: 60,
   integrations: 400,
+  openSenders: 500,
   integrationCompany: 80,
   integrationCategory: 40,
   evidencePer: 10,
@@ -47,7 +48,11 @@ export const ABI_MILESTONE_TIERS = {
 } as const;
 export type AbiMilestoneTier = keyof typeof ABI_MILESTONE_TIERS;
 
+export const ABI_PROJECT_KINDS = ["project", "integration", "base"] as const;
+export type AbiProjectKind = (typeof ABI_PROJECT_KINDS)[number];
 export type AbiProject = { source: string; name: string; share: number; share_base: number | null; points: number; contracts: number; base_layer: boolean;
+  /** §15; files before it have no kind: base when base_layer, else project */
+  kind: AbiProjectKind;
   /** points this hour / last 24 closed hours, payments and USDC in the last 24 closed hours */
   pts_1h: number; pts_24h: number; pay_24h: number; usdc_24h: number };
 export type AbiEvent = { t: string; source: string; name: string; kind: "activity" | "rise_limit"; payments: number; wallets: number; new_payers: number; points: number; usdc: number; open?: true };
@@ -60,6 +65,8 @@ export type AbiLive = {
   contracts: Record<string, string>; deployers: Record<string, string[]>; seen_prefix: number;
   /** registered fiat stablecoins by lowercase token address (counted from `added`, unix seconds) */
   stablecoins?: Record<string, AbiLiveCoin>;
+  /** §15: integrated products' contracts (sorted, lowercase); their payments into OTHER members count */
+  open_senders?: string[];
 };
 export type AbiLiveCoin = { symbol: string; currency: string; decimals: number; added: number };
 /** A recorded milestone: from `t` (unix seconds) the target's √P is multiplied by √mult, after the rise limit. */
@@ -277,8 +284,15 @@ function validateLive(v: unknown): AbiLive | null {
     coins = validateLiveCoins(v.stablecoins);
     if (!coins) return null;
   }
+  let open: string[] | null = null;
+  if (v.open_senders !== undefined) {
+    const o = v.open_senders;
+    if (!Array.isArray(o) || o.length > ABI_LIMITS.openSenders || !o.every((a) => typeof a === "string" && ADDR.test(a))) return null;
+    open = [...new Set(o as string[])].sort();
+  }
   return {
     ...(coins ? { stablecoins: coins } : {}),
+    ...(open ? { open_senders: open } : {}),
     hour_start: v.hour_start, hour_start_block: v.hour_start_block, K: v.K as number, base_k: v.base_k as number, base: v.base, P, roots_prev: roots,
     decay_h: v.decay_h as number, cap: v.cap as number, new_payer: v.new_payer as number, proj_up: v.proj_up as number, rel_up: v.rel_up as number,
     entry: v.entry as number, base_scale: v.base_scale as number, base_window: v.base_window, contracts, deployers, seen_prefix: v.seen_prefix,
@@ -324,10 +338,12 @@ export function validateIndex(raw: unknown): AbiResult {
   for (const p of raw.projects) {
     if (!isObj(p) || !str(p.source) || !str(p.name) || !num(p.share) || !num(p.points) || !count(p.contracts) || typeof p.base_layer !== "boolean") return bad("a project is malformed");
     if (p.share_base !== null && p.share_base !== undefined && !num(p.share_base)) return bad("share_base must be a number or null");
+    if (p.kind !== undefined && !(typeof p.kind === "string" && (ABI_PROJECT_KINDS as readonly string[]).includes(p.kind))) return bad(`a project's kind must be one of ${ABI_PROJECT_KINDS.join(", ")}`);
+    const kind = (p.kind as AbiProjectKind | undefined) ?? (p.base_layer ? "base" : "project");
     const [h1, d1, pay, usd] = [p.pts_1h ?? 0, p.pts_24h ?? 0, p.pay_24h ?? 0, p.usdc_24h ?? 0];
     if (!num(h1) || !num(d1) || !count(pay) || !num(usd)) return bad("a project's pts_1h, pts_24h, pay_24h or usdc_24h is malformed");
     const extra = { pts_1h: h1, pts_24h: d1, pay_24h: pay, usdc_24h: usd };
-    projects.push({ source: p.source, name: p.name, share: p.share, share_base: p.share_base ?? null, points: p.points, contracts: p.contracts, base_layer: p.base_layer, ...extra });
+    projects.push({ source: p.source, name: p.name, share: p.share, share_base: p.share_base ?? null, points: p.points, contracts: p.contracts, base_layer: p.base_layer, kind, ...extra });
   }
   if (!Array.isArray(raw.events) || raw.events.length > ABI_LIMITS.events) return bad(`events must be an array of at most ${ABI_LIMITS.events}`);
   const events: AbiEvent[] = [];
