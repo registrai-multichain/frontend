@@ -7,7 +7,7 @@ import type { AbiData } from "./builders-index";
 const L = INDEX.live!;
 async function live(off: number): Promise<LiveResult> {
   const e = createEngine({ call: mockRpc(HB + off) as never });
-  e.load(L, SEEN);
+  e.load(INDEX, SEEN);
   return e.tick();
 }
 const sumRows = (w: NonNullable<ReturnType<typeof why>>) => w.rows.filter((r) => r.kind !== "net").reduce((a, r) => a + r.v, 0);

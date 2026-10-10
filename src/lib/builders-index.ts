@@ -4,6 +4,8 @@
  * to /api/index; only the fields below are kept, anything else is dropped.
  */
 
+import { evidenceItem } from "./facts";
+
 export const ABI_KEY = "abi:index";
 export const ABI_SEEN_KEY = "abi:seen";
 export const ABI_LIMITS = {
@@ -21,7 +23,23 @@ export const ABI_LIMITS = {
   events: 2_000,
   params: 32,
   str: 200,
+  milestones: 500,
+  milestoneTitle: 120,
+  evidencePer: 10,
+  stablecoins: 50,
+  volumeCoins: 50,
+  fxDates: 10,
+  fxCurrencies: 20,
 } as const;
+
+/** Milestone tiers (spec §12): the multiplier on the target member's points, and whether the target is the Arc base layer. */
+export const ABI_MILESTONE_TIERS = {
+  "arc-upgrade": { mult: 1.25, base: true },
+  "circle-product": { mult: 1.15, base: true },
+  "stablecoin-launch": { mult: 1.1, base: true },
+  "project-release": { mult: 1.1, base: false },
+} as const;
+export type AbiMilestoneTier = keyof typeof ABI_MILESTONE_TIERS;
 
 export type AbiProject = { source: string; name: string; share: number; share_base: number | null; points: number; contracts: number; base_layer: boolean;
   /** points this hour / last 24 closed hours, payments and USDC in the last 24 closed hours */
@@ -34,7 +52,16 @@ export type AbiLive = {
   P: Record<string, number>; roots_prev: Record<string, number>;
   decay_h: number; cap: number; new_payer: number; proj_up: number; rel_up: number; entry: number; base_scale: number; base_window: number;
   contracts: Record<string, string>; deployers: Record<string, string[]>; seen_prefix: number;
+  /** registered fiat stablecoins by lowercase token address (counted from `added`, unix seconds) */
+  stablecoins?: Record<string, AbiLiveCoin>;
 };
+export type AbiLiveCoin = { symbol: string; currency: string; decimals: number; added: number };
+/** A recorded milestone: from `t` (unix seconds) the target's √P is multiplied by √mult, after the rise limit. */
+export type AbiMilestone = { id: string; t: number; target: string; tier: AbiMilestoneTier; mult: number; title: string; evidence: string[] };
+export type AbiStablecoin = { symbol: string; currency: string; issuer: string; address: string; decimals: number; added: number };
+export type AbiVolume = { members_usd: number; members_payments: number; base_usd_est: number; base_transfers_est: number };
+/** ECB fixes: date (YYYY-MM-DD) -> currency -> USD per unit */
+export type AbiFx = Record<string, Record<string, number>>;
 /** [iso hour open, open, high, low, close, payments, USDC, points] */
 export type AbiCandle = [string, number, number, number, number, number, number, number];
 /** [iso time, source, USDC, points, new payer 0|1] */
@@ -54,6 +81,10 @@ export type AbiData = {
   roots_24h: Record<string, number>;
   candles: AbiCandle[];
   tape: AbiTapeRow[];
+  milestones: AbiMilestone[];
+  stablecoins: AbiStablecoin[];
+  volume_24h: Record<string, AbiVolume>;
+  live_fx: AbiFx;
   live?: AbiLive;
 };
 
@@ -71,6 +102,13 @@ const KEY = /^[a-z0-9_]{1,40}$/;
 
 const ADDR = /^0x[0-9a-f]{40}$/;
 const posInt = (v: unknown): v is number => count(v) && v > 0;
+const SYMBOL = /^[A-Za-z0-9.]{1,16}$/;
+const CCY = /^[A-Z]{3}$/;
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const MS_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
+const decimals = (v: unknown): v is number => count(v) && v <= 36;
+// one line of plain text: no control characters
+const line = (v: unknown, max: number): v is string => str(v, max) && !/[\u0000-\u001f\u007f]/.test(v) && v.trim() === v;
 
 function numberMap(v: unknown, max: number): Record<string, number> | null {
   if (!isObj(v)) return null;
@@ -81,6 +119,95 @@ function numberMap(v: unknown, max: number): Record<string, number> | null {
     const x = v[k];
     if (!str(k) || !num(x) || x < 0) return null;
     out[k] = x;
+  }
+  return out;
+}
+
+/** live.stablecoins: lowercase token address -> { symbol, currency, decimals, added }; null when malformed. */
+function validateLiveCoins(v: unknown): Record<string, AbiLiveCoin> | null {
+  if (!isObj(v)) return null;
+  const keys = Object.keys(v);
+  if (keys.length > ABI_LIMITS.stablecoins) return null;
+  const out: Record<string, AbiLiveCoin> = {};
+  for (const a of keys) {
+    const c = v[a];
+    if (!ADDR.test(a) || !isObj(c) || typeof c.symbol !== "string" || !SYMBOL.test(c.symbol) || typeof c.currency !== "string" || !CCY.test(c.currency) || !decimals(c.decimals) || !posInt(c.added)) return null;
+    out[a] = { symbol: c.symbol, currency: c.currency, decimals: c.decimals, added: c.added };
+  }
+  return out;
+}
+
+/** Recorded milestones (spec §12): known tier, base tiers on a base member and member tiers off it, evidence links only. */
+function validateMilestones(v: unknown): AbiMilestone[] | string {
+  if (!Array.isArray(v) || v.length > ABI_LIMITS.milestones) return `milestones must be an array of at most ${ABI_LIMITS.milestones}`;
+  const out: AbiMilestone[] = [];
+  for (const m of v) {
+    if (!isObj(m) || typeof m.id !== "string" || !MS_ID.test(m.id) || !posInt(m.t) || !str(m.target) || !line(m.title, ABI_LIMITS.milestoneTitle)) return "a milestone is malformed";
+    const tier = typeof m.tier === "string" && Object.prototype.hasOwnProperty.call(ABI_MILESTONE_TIERS, m.tier) ? (m.tier as AbiMilestoneTier) : null;
+    if (!tier) return "a milestone tier is unknown";
+    if (ABI_MILESTONE_TIERS[tier].base !== m.target.startsWith("base:")) return `milestone ${m.id}: ${tier} targets ${ABI_MILESTONE_TIERS[tier].base ? "the Arc base layer" : "a member"}`;
+    if (!num(m.mult) || m.mult <= 1 || m.mult > 2) return "a milestone multiplier must be above 1 and at most 2";
+    if (!Array.isArray(m.evidence) || m.evidence.length < 1 || m.evidence.length > ABI_LIMITS.evidencePer) return `a milestone needs 1 to ${ABI_LIMITS.evidencePer} evidence items`;
+    const evidence: string[] = [];
+    for (const e of m.evidence) {
+      const ok = evidenceItem(e);
+      if (!ok) return "milestone evidence must be https URLs, 0x addresses or 0x tx hashes";
+      evidence.push(ok);
+    }
+    out.push({ id: m.id, t: m.t, target: m.target, tier, mult: m.mult, title: m.title, evidence });
+  }
+  return out;
+}
+
+function validateStablecoins(v: unknown): AbiStablecoin[] | null {
+  if (!Array.isArray(v) || v.length > ABI_LIMITS.stablecoins) return null;
+  const out: AbiStablecoin[] = [];
+  for (const c of v) {
+    if (!isObj(c) || typeof c.symbol !== "string" || !SYMBOL.test(c.symbol) || typeof c.currency !== "string" || !CCY.test(c.currency)) return null;
+    if (typeof c.address !== "string" || !ADDR.test(c.address) || !decimals(c.decimals) || !posInt(c.added)) return null;
+    if (c.issuer !== undefined && !line(c.issuer, 80)) return null;
+    out.push({ symbol: c.symbol, currency: c.currency, issuer: (c.issuer as string | undefined) ?? "", address: c.address, decimals: c.decimals, added: c.added });
+  }
+  return out;
+}
+
+function validateVolume(v: unknown): Record<string, AbiVolume> | null {
+  if (!isObj(v)) return null;
+  const keys = Object.keys(v);
+  if (keys.length > ABI_LIMITS.volumeCoins) return null;
+  const out: Record<string, AbiVolume> = {};
+  for (const k of keys) {
+    const o = v[k];
+    if (!SYMBOL.test(k) || !isObj(o)) return null;
+    const vals = [o.members_usd ?? 0, o.members_payments ?? 0, o.base_usd_est ?? 0, o.base_transfers_est ?? 0];
+    if (!vals.every((x) => num(x) && x >= 0)) return null;
+    const [mu, mp, bu, bt] = vals as number[];
+    out[k] = { members_usd: mu, members_payments: mp, base_usd_est: bu, base_transfers_est: bt };
+  }
+  return out;
+}
+
+/**
+ * ECB fixes for the open hour's conversions: only the currencies of registered coins are kept (the producer sends the
+ * whole ECB table), at most `fxDates` dates and `fxCurrencies` currencies per date. Rates are USD per unit, positive.
+ */
+function validateFx(v: unknown, currencies: Set<string>): AbiFx | null {
+  if (!isObj(v)) return null;
+  const days = Object.keys(v);
+  if (days.length > ABI_LIMITS.fxDates) return null;
+  const out: AbiFx = {};
+  for (const d of days) {
+    const row = v[d];
+    if (!DAY.test(d) || !isObj(row) || Object.keys(row).length > 64) return null;
+    const kept: Record<string, number> = {};
+    for (const c of Object.keys(row)) {
+      if (!currencies.has(c)) continue;
+      const r = row[c];
+      if (!num(r) || r <= 0) return null;
+      kept[c] = r;
+    }
+    if (Object.keys(kept).length > ABI_LIMITS.fxCurrencies) return null;
+    out[d] = kept;
   }
   return out;
 }
@@ -108,7 +235,13 @@ function validateLive(v: unknown): AbiLive | null {
     if (!str(src) || !Array.isArray(list) || list.length > ABI_LIMITS.deployersPer || !list.every((a) => typeof a === "string" && ADDR.test(a))) return null;
     deployers[src] = list as string[];
   }
+  let coins: Record<string, AbiLiveCoin> | null = null;
+  if (v.stablecoins !== undefined) {
+    coins = validateLiveCoins(v.stablecoins);
+    if (!coins) return null;
+  }
   return {
+    ...(coins ? { stablecoins: coins } : {}),
     hour_start: v.hour_start, hour_start_block: v.hour_start_block, K: v.K as number, base_k: v.base_k as number, base: v.base, P, roots_prev: roots,
     decay_h: v.decay_h as number, cap: v.cap as number, new_payer: v.new_payer as number, proj_up: v.proj_up as number, rel_up: v.rel_up as number,
     entry: v.entry as number, base_scale: v.base_scale as number, base_window: v.base_window, contracts, deployers, seen_prefix: v.seen_prefix,
@@ -210,6 +343,32 @@ export function validateIndex(raw: unknown): AbiResult {
     live = l;
   }
 
+  let milestones: AbiMilestone[] = [];
+  if (raw.milestones !== undefined) {
+    const m = validateMilestones(raw.milestones);
+    if (typeof m === "string") return bad(m);
+    milestones = m;
+  }
+  let stablecoins: AbiStablecoin[] = [];
+  if (raw.stablecoins !== undefined) {
+    const c = validateStablecoins(raw.stablecoins);
+    if (!c) return bad(`stablecoins must be at most ${ABI_LIMITS.stablecoins} of { symbol, currency, issuer, address, decimals, added }`);
+    stablecoins = c;
+  }
+  let volume: Record<string, AbiVolume> = {};
+  if (raw.volume_24h !== undefined) {
+    const vv = validateVolume(raw.volume_24h);
+    if (!vv) return bad(`volume_24h must map at most ${ABI_LIMITS.volumeCoins} coins to non-negative numbers`);
+    volume = vv;
+  }
+  let liveFx: AbiFx = {};
+  if (raw.live_fx !== undefined) {
+    const ccys = new Set([...stablecoins.map((c) => c.currency), ...Object.values(live?.stablecoins ?? {}).map((c) => c.currency)]);
+    const fx = validateFx(raw.live_fx, ccys);
+    if (!fx) return bad(`live_fx must map at most ${ABI_LIMITS.fxDates} dates to at most ${ABI_LIMITS.fxCurrencies} positive rates`);
+    liveFx = fx;
+  }
+
   return {
     ok: true,
     data: {
@@ -218,6 +377,7 @@ export function validateIndex(raw: unknown): AbiResult {
       index: raw.index, index_24h_ago: (raw.index_24h_ago as number | null | undefined) ?? null,
       base: { time: b.time, level: b.level, sha256: b.sha256 },
       series, projects, events, candles, tape, roots_24h: roots24, params: params as AbiData["params"],
+      milestones, stablecoins, volume_24h: volume, live_fx: liveFx,
     },
   };
 }

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- tests mutate loosely typed JSON */
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { ABI_LIMITS, validateIndex, validateSeen } from "./builders-index";
 import real from "./fixtures/builders-index.json";
@@ -11,7 +12,7 @@ describe("validateIndex", () => {
     const r = validateIndex(indexFixture());
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(Object.keys(r.data).sort()).toEqual(["base", "events", "head_block", "head_time", "index", "index_24h_ago", "params", "projects", "series", "updated", "data_until", "candles", "tape", "roots_24h"].sort());
+      expect(Object.keys(r.data).sort()).toEqual(["base", "events", "head_block", "head_time", "index", "index_24h_ago", "params", "projects", "series", "updated", "data_until", "candles", "tape", "roots_24h", "milestones", "stablecoins", "volume_24h", "live_fx"].sort());
       expect(r.data.series).toHaveLength(200);
     }
   });
@@ -139,5 +140,107 @@ describe("terminal keys: candles, tape, roots_24h, per-project and per-event sta
     expect(run((d) => { d.candles = Array.from({ length: ABI_LIMITS.candles + 1 }, () => d.candles[0]); }).ok).toBe(false);
     expect(run((d) => { d.tape = Array.from({ length: ABI_LIMITS.tape + 1 }, () => d.tape[0]); }).ok).toBe(false);
     expect(run((d) => { d.tape = Array.from({ length: ABI_LIMITS.tape }, () => d.tape[0]); }).ok).toBe(true);
+  });
+});
+
+describe("milestones, stablecoins, volume_24h, live_fx (spec §12, §13)", () => {
+  const REF_FILE = "/Users/tobiasd/Desktop/arc/research/arc-builders-index/terminal/data/index.json";
+  const EURC = "0xbef5f6d51cb62b58e6a8f77868681825c6fe21c1";
+  const ccys = (n: number) => Array.from({ length: n }, (_, i) => "C" + String.fromCharCode(65 + Math.floor(i / 26)) + String.fromCharCode(65 + (i % 26)));
+  const ecbRow = () => Object.fromEntries(["EUR", "JPY", "GBP", "MXN", "AUD", "CHF", "SEK", "TRY", "ZAR", "CAD", "BRL", "KRW", "CZK", "DKK", "HUF", "PLN", "RON", "ISK", "NOK", "CNY", "HKD", "IDR", "ILS", "INR", "MYR", "NZD", "PHP", "SGD", "THB"].map((c, i) => [c, 0.5 + i / 100]));
+  const full = () => {
+    const d: Record<string, any> = indexFixture();
+    d.milestones = [
+      { id: "20261010-063000-arc-upgrade", t: 1791613800, target: "base:arc", tier: "arc-upgrade", mult: 1.25, title: "Arc v1.2 network upgrade activated", evidence: ["https://docs.arc.io/arc/upgrades", "0x" + "AB".repeat(32)], recorded_by: "someone" },
+      { id: "20261010-064500-project-release", t: 1791614700, target: "domain:argus.world", tier: "project-release", mult: 1.1, title: "Argus v2 contracts", evidence: ["0x07A688A001F416CC433C68FF56AA26BC5131CC6E"] },
+    ];
+    d.stablecoins = [{ symbol: "EURC", currency: "EUR", issuer: "Circle", address: EURC, decimals: 6, added: 1791619200, evidence: ["https://x.io"] }, { symbol: "wARS", currency: "ARS", issuer: "Ripio", address: "0x" + "1".repeat(40), decimals: 18, added: 1791619200 }];
+    d.volume_24h = { USDC: { members_usd: 28317.33, members_payments: 7913, base_usd_est: 0.0, base_transfers_est: 0 }, EURC: { members_usd: 12.5, members_payments: 2, base_usd_est: 3000, base_transfers_est: 30.0 } };
+    d.live_fx = { "2026-10-08": ecbRow(), "2026-10-09": ecbRow() };
+    return d;
+  };
+  const run = (f: (d: Record<string, any>) => void) => { const d = full(); f(d); return validateIndex(d); };
+
+  test("kept as published; evidence normalised; unknown fields dropped; ECB table cut to the registry's currencies", () => {
+    const r = validateIndex(full());
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.milestones).toEqual([
+      { id: "20261010-063000-arc-upgrade", t: 1791613800, target: "base:arc", tier: "arc-upgrade", mult: 1.25, title: "Arc v1.2 network upgrade activated", evidence: ["https://docs.arc.io/arc/upgrades", "0x" + "ab".repeat(32)] },
+      { id: "20261010-064500-project-release", t: 1791614700, target: "domain:argus.world", tier: "project-release", mult: 1.1, title: "Argus v2 contracts", evidence: ["0x07a688a001f416cc433c68ff56aa26bc5131cc6e"] },
+    ]);
+    expect(r.data.stablecoins[0]).toEqual({ symbol: "EURC", currency: "EUR", issuer: "Circle", address: EURC, decimals: 6, added: 1791619200 });
+    expect(r.data.volume_24h.EURC).toEqual({ members_usd: 12.5, members_payments: 2, base_usd_est: 3000, base_transfers_est: 30 });
+    expect(r.data.live_fx["2026-10-08"]).toEqual({ EUR: 0.5 }); // ARS is not an ECB currency: nothing to keep for it
+  });
+  test("a file without them validates with empty defaults", () => {
+    const r = validateIndex(indexFixture());
+    expect(r.ok && { m: r.data.milestones, s: r.data.stablecoins, v: r.data.volume_24h, f: r.data.live_fx }).toEqual({ m: [], s: [], v: {}, f: {} });
+  });
+  test("live.stablecoins is kept and feeds the currencies kept from live_fx", () => {
+    const d = JSON.parse(JSON.stringify(real));
+    d.live.stablecoins = { [EURC]: { symbol: "EURC", currency: "EUR", decimals: 6, added: 1791619200, extra: 1 }, ["0x" + "2".repeat(40)]: { symbol: "JPYC", currency: "JPY", decimals: 18, added: 1791619200 } };
+    d.live_fx = { "2026-10-09": ecbRow() };
+    const r = validateIndex(d);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.live!.stablecoins![EURC]).toEqual({ symbol: "EURC", currency: "EUR", decimals: 6, added: 1791619200 });
+    expect(Object.keys(r.data.live_fx["2026-10-09"]).sort()).toEqual(["EUR", "JPY"]);
+  });
+  test.each([
+    ["unknown tier", (d: any) => { d.milestones[0].tier = "partnership"; }],
+    ["base tier on a member", (d: any) => { d.milestones[0].target = "domain:argus.world"; }],
+    ["member tier on the base layer", (d: any) => { d.milestones[1].target = "base:arc"; }],
+    ["multiplier 1", (d: any) => { d.milestones[0].mult = 1; }],
+    ["multiplier above 2", (d: any) => { d.milestones[0].mult = 3; }],
+    ["string multiplier", (d: any) => { d.milestones[0].mult = "1.25"; }],
+    ["fractional time", (d: any) => { d.milestones[0].t = 1.5; }],
+    ["bad id", (d: any) => { d.milestones[0].id = "<b>x</b>"; }],
+    ["no evidence", (d: any) => { d.milestones[0].evidence = []; }],
+    ["too much evidence", (d: any) => { d.milestones[0].evidence = Array.from({ length: ABI_LIMITS.evidencePer + 1 }, () => "https://docs.arc.io/"); }],
+    ["javascript: evidence", (d: any) => { d.milestones[0].evidence = ["javascript:alert(1)"]; }],
+    ["http evidence", (d: any) => { d.milestones[0].evidence = ["http://docs.arc.io/"]; }],
+    ["credentials in evidence", (d: any) => { d.milestones[0].evidence = ["https://user:pw@docs.arc.io/"]; }],
+    ["short hex evidence", (d: any) => { d.milestones[0].evidence = ["0x1234"]; }],
+    ["title too long", (d: any) => { d.milestones[0].title = "x".repeat(ABI_LIMITS.milestoneTitle + 1); }],
+    ["title with a line break", (d: any) => { d.milestones[0].title = "a\nb"; }],
+    ["too many milestones", (d: any) => { d.milestones = Array.from({ length: ABI_LIMITS.milestones + 1 }, () => d.milestones[0]); }],
+    ["milestones not an array", (d: any) => { d.milestones = {}; }],
+    ["coin with a checksum-case address", (d: any) => { d.stablecoins[0].address = "0xBEF5f6d51cb62b58e6a8f77868681825c6fe21c1"; }],
+    ["coin with 40 decimals", (d: any) => { d.stablecoins[0].decimals = 40; }],
+    ["coin with a bad currency", (d: any) => { d.stablecoins[0].currency = "euro"; }],
+    ["coin with a bad symbol", (d: any) => { d.stablecoins[0].symbol = "EUR C"; }],
+    ["too many coins", (d: any) => { d.stablecoins = Array.from({ length: ABI_LIMITS.stablecoins + 1 }, () => d.stablecoins[0]); }],
+    ["negative volume", (d: any) => { d.volume_24h.EURC.members_usd = -1; }],
+    ["volume with a bad key", (d: any) => { d.volume_24h["<x>"] = {}; }],
+    ["too many volume coins", (d: any) => { for (let i = 0; i < ABI_LIMITS.volumeCoins; i++) d.volume_24h["X" + i] = { members_usd: 1 }; }],
+    ["too many fx dates", (d: any) => { for (let i = 10; i < 21; i++) d.live_fx[`2026-09-${i}`] = { EUR: 1.1 }; }],
+    ["fx with a bad date", (d: any) => { d.live_fx["9 Oct"] = { EUR: 1.1 }; }],
+    ["fx with a zero rate", (d: any) => { d.live_fx["2026-10-08"].EUR = 0; }],
+    ["fx with a string rate", (d: any) => { d.live_fx["2026-10-08"].EUR = "1.1"; }],
+    ["live.stablecoins with a bad address", (d: any) => { d.live = JSON.parse(JSON.stringify(real.live)); d.live.stablecoins = { "0xabc": { symbol: "EURC", currency: "EUR", decimals: 6, added: 1 } }; }],
+    ["live.stablecoins without added", (d: any) => { d.live = JSON.parse(JSON.stringify(real.live)); d.live.stablecoins = { [EURC]: { symbol: "EURC", currency: "EUR", decimals: 6 } }; }],
+  ])("rejects: %s", (_n, f) => {
+    expect(run(f).ok).toBe(false);
+  });
+  test("at most 20 registry currencies per fx date", () => {
+    const withN = (n: number) => run((d) => {
+      d.stablecoins = ccys(n).map((c, i) => ({ symbol: "S" + i, currency: c, issuer: "x", address: "0x" + i.toString(16).padStart(40, "0"), decimals: 6, added: 1 }));
+      d.live_fx = { "2026-10-08": Object.fromEntries(ccys(n).map((c) => [c, 1])) };
+    });
+    expect(withN(ABI_LIMITS.fxCurrencies).ok).toBe(true);
+    expect(withN(ABI_LIMITS.fxCurrencies + 1).ok).toBe(false);
+  });
+  test.skipIf(!existsSync(REF_FILE))("the reference producer file (stablecoins, volume_24h, live_fx, live.stablecoins) passes", () => {
+    const ref = JSON.parse(readFileSync(REF_FILE, "utf8"));
+    const r = validateIndex(ref);
+    expect(r.ok ? "ok" : r.error).toBe("ok");
+    if (!r.ok) return;
+    expect(r.data.stablecoins.map((c) => c.symbol)).toEqual(ref.stablecoins.map((c: { symbol: string }) => c.symbol));
+    expect(Object.keys(r.data.live!.stablecoins!)).toEqual(Object.keys(ref.live.stablecoins));
+    expect(r.data.volume_24h).toEqual(ref.volume_24h);
+    expect(r.data.milestones).toEqual(ref.milestones);
+    const kept = new Set(ref.stablecoins.map((c: { currency: string }) => c.currency));
+    for (const [day, row] of Object.entries(r.data.live_fx)) for (const c of kept) if (ref.live_fx[day][c as string] !== undefined) expect(row[c as string]).toBe(ref.live_fx[day][c as string]);
   });
 });
