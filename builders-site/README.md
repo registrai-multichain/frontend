@@ -27,10 +27,12 @@ Points only: no deposits, no withdrawals, no prizes, no transfers. Spec
 `research/arc-builders-index/pilot/pilot.js` v3 (parity tests: `test/abi-pilot-engine.test.ts`, every vector of
 `fixtures-v3.json`; the economy on the site: `test/pilot-v3.test.ts`).
 
-Economy v3: hourly skew + trend funding (fixed once per hour, `rates`), borrow at 10% APR, levels to 30×, the house as
-the counterparty to the net imbalance (`house_hours`), an append-only points ledger (`ledger`, totals in `pools`),
-an insurance pool for gap losses, and a weekly split (`splits`, Monday 00:00 UTC: 20% insurance, 80% treasury, half
-of it earmarked for the buyback), all in points.
+Economy v3 (with the §9.14 rulings): hourly skew + trend funding, fixed once per hour from the book time-weighted
+over the closing hour (`rates`); borrow at 10% APR; levels to 30×; the house as the counterparty to the net imbalance
+(`house_hours`: price, funding and true-up lines); an append-only points ledger (`ledger`, totals in `pools`); an
+insurance pool that never goes below zero (a gap beyond its balance is a carried house loss); and a weekly split
+(`splits`, Monday 00:00 UTC: 20% insurance, 80% treasury, half of it earmarked for the buyback) of fees, borrow, the
+funding cut and the house's realized result only. All in points. Opens and closes wait for each hour's rates.
 
 One-time setup, from `frontend/builders-site/`:
 
@@ -67,9 +69,11 @@ sigma_24h, base_pending, base_step_ts, milestone_ts, bars:[[minute,h,l,c] …]}`
   low and high, for an earlier hour at that hour's closed candle from the index file in KV (`abi:index`
   `candles`). An earlier hour with no candle yet is kept in `gaps`; until a later post closes it, nothing fills
   and no order is accepted ("price updating").
-- The first post of an hour whose `trend` and `sigma_1h` are not null and whose `funding_hour` is that hour fixes the
-  hour's rates (`rates`, once; never recomputed) from the traders' book after the liquidation sweep, books the
-  projected funding cut, and books the house's hours since the last booking (`house_hours`, ledger `house_pnl`).
+- `hour_start` never goes backwards (409). The first post of an hour whose `trend` and `sigma_1h` are not null and
+  whose `funding_hour` and `hour_start` are the hour of its `ts` fixes that hour's rates (`rates`, once; never
+  recomputed, never for an hour already booked) from the book time-weighted over the hour before, books the
+  projected funding cut, books the house's hours since the last booking (`house_hours`; ledger `house_pnl`,
+  `house_trueup`), and re-checks every bar of the hour so far against the open positions with the new rates.
   `trend` is null for ~15 s after mark.py's own hour close: nothing changes, and new orders are refused ("price
   updating") until the hour's rates are fixed. A producer without `trend` has its `funding_rate` used instead. `sigma_24h`,
   `sigma_1h` and `ch1` drive the leverage cap and the pause; `sigma_24h` ≤ 0 or missing, or `sigma_1h` < 0 or
@@ -119,6 +123,11 @@ What keeps it there:
 - The ingest reads the mark row and probes for pending orders, open gaps, this hour's rates, the last split and the
   last booked hour in one statement. The rates, the house's hour and one booking update per open position are
   written once per hour. Pruning runs once an hour, on the first post of a new hour.
+- Every batch stays under 400 statements (`MAX_BATCH_STATEMENTS`; D1 allows 1000 queries per invocation on Workers
+  Paid, 100 bound parameters per statement). Catch-up hours take at most half of an hourly batch and open positions
+  the rest (about 180; beyond that their bookings rotate, losing nothing); liquidations beyond the cap wait for the
+  next post. A batch that fails for any reason but the deliberate abort is logged (`console.error`, with its kind
+  and size) and answers 500.
 - An account poll (every 15 s, only while the page is visible) is one query for the account and open positions,
   plus the mark row, the pending orders and the funding rates since the oldest open position. The funding list is
   `GET /api/pilot/funding`, edge-cached 60 s.

@@ -89,6 +89,15 @@ export const MARK_CACHE_S = 5;
 export const ORDER_EXPIRY_MS = (RULES.markMaxAgeS + 2) * 1000;
 /** One hourly close books at most this many unbooked hours (the rest follow at the next hours' closes). */
 export const MAX_BOOK_HOURS = 48;
+/**
+ * Review S2: every batch stays under this many statements. D1 (developers.cloudflare.com/d1/platform/limits) allows
+ * 1000 queries per Worker invocation on Workers Paid (50 on Free), 100 bound parameters and 100 KB per statement,
+ * and applies the per-query limits to each statement in a batch; it does not say whether a batch's statements count
+ * one by one toward the per-invocation limit, so the cap keeps a wide margin under 1000.
+ */
+export const MAX_BATCH_STATEMENTS = 400;
+/** Room kept for the rate fix and at least one booked hour when liquidations are capped. */
+const FIX_RESERVE = 3 + 7 + 2 * 20;
 export const HOUR = 3600;
 export const WEEK = 7 * 86400;
 
@@ -322,8 +331,10 @@ export function metered(db: D1Database, meter: Meter): D1Database {
 
 // ───────────────────────────── ledger ─────────────────────────────
 
-export type LedgerKind = "fee" | "borrow" | "cut" | "house_pnl" | "liq_margin" | "insurance_draw" | "split_insurance" | "split_treasury" | "split_buyback";
-export const LEDGER_KINDS: readonly LedgerKind[] = ["fee", "borrow", "cut", "house_pnl", "liq_margin", "insurance_draw", "split_insurance", "split_treasury", "split_buyback"];
+export type LedgerKind = "fee" | "borrow" | "cut" | "house_pnl" | "house_trueup" | "liq_margin" | "insurance_draw" | "split_insurance" | "split_treasury" | "split_buyback";
+export const LEDGER_KINDS: readonly LedgerKind[] = ["fee", "borrow", "cut", "house_pnl", "house_trueup", "liq_margin", "insurance_draw", "split_insurance", "split_treasury", "split_buyback"];
+/** The house's book: every house kind together (house_pnl = price + funding per hour, house_trueup, liq_margin). */
+export const HOUSE_KINDS: readonly LedgerKind[] = ["house_pnl", "house_trueup", "liq_margin"];
 interface Entry {
   kind: LedgerKind;
   amount: number;
@@ -348,6 +359,21 @@ function ledgerStmts(db: D1Database, guard: keyof typeof GUARDS, g: readonly unk
     out.push(db.prepare(L).bind(ts, e.kind, e.amount, e.ref, ...g), db.prepare(P).bind(e.amount, split ? 0 : e.amount, e.kind, ...g));
   }
   return out;
+}
+
+/**
+ * §9.14b / owner item 6: a settled position's loss beyond zero equity (s > 0). Insurance covers what its balance
+ * allows (computed inside the batch, never below zero); the rest is a house loss of `kind`, carried like any other.
+ * The trader never pays more than the margin. Four statements, in this order (lib/pilot-sql.ts gap*).
+ */
+function gapStmts(db: D1Database, id: number, token: string, ts: number, s: number, kind: LedgerKind, ref: string): D1PreparedStatement[] {
+  if (!(s > 0)) return [];
+  return [
+    db.prepare(SQL.gapHouseLedger).bind(ts, kind, s, s, ref, id, token),
+    db.prepare(SQL.gapHousePool).bind(s, s, s, s, kind, id, token),
+    db.prepare(SQL.gapCoverLedger).bind(ts, s, `draw:${id}`, id, token),
+    db.prepare(SQL.gapCoverPool).bind(s, s, id, token),
+  ];
 }
 
 // ───────────────────────────── positions and rates ─────────────────────────────
@@ -447,8 +473,9 @@ async function accountWithOpen(db: D1Database, wallet: string): Promise<{ acct: 
 /**
  * R3: a liquidation's batch statements. The position settles at the engine's liquidation price (exit) with nothing
  * returned; funding and borrow to the end of the crossing bar. The house marks the exit at the bar's low (long) /
- * high (short): the equity left there goes to the house (liq_margin), a gap below zero is drawn from insurance.
- * post: the ingest's in-batch sweep (only if that post won the mark row).
+ * high (short): the equity left there goes to the house (liq_margin); a gap below zero is covered by insurance up to
+ * its balance and the rest is a house loss (liq_margin, negative). post: the ingest's in-batch sweep (only if that
+ * post won the mark row). At most 11 statements.
  */
 function liquidationStmts(
   db: D1Database, r: PositionRow, hit: { t: number; price: number; shortfall: number }, bars: readonly MinuteBar[],
@@ -466,13 +493,15 @@ function liquidationStmts(
     post ? db.prepare(SQL.liquidateIfPost).bind(...binds, post) : db.prepare(SQL.liquidate).bind(...binds),
     ...ledgerStmts(db, "settle", [r.id, token], ts, [
       { kind: "borrow", amount: bp, ref: `borrow:${r.id}` },
-      { kind: "house_pnl", amount: claim.house - r.booked, ref: `settle:${r.id}` },
+      { kind: "house_trueup", amount: claim.house - r.booked, ref: `settle:${r.id}` },
       { kind: "cut", amount: claim.cut - r.booked_cut, ref: `settle:${r.id}` },
       { kind: "liq_margin", amount: Math.max(0, eq), ref: `liq:${r.id}` },
-      { kind: "insurance_draw", amount: -hit.shortfall, ref: `draw:${r.id}` },
     ]),
+    ...gapStmts(db, r.id, token, ts, hit.shortfall, "liq_margin", `liq:${r.id}`),
   ];
 }
+/** Statements per liquidation, at most (liquidationStmts). */
+export const LIQ_STATEMENTS = 11;
 
 /**
  * The safety net behind the ingest's in-batch sweep: the engine's liquidation() over stored bars the sweep has not
@@ -583,6 +612,8 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
     .first<PrevRow>();
   const prev = probe && probe.ts !== null ? probe : null;
   if (prev && d.ts <= prev.ts) return errorJson(409, "ts is not newer than the stored mark", { last_minute: ackMinute(prev.bars_minute, prev.ts), rows: rows() });
+  // review S1: hours only move forward (a stale or replayed post must not fix an hour already booked)
+  if (prev && d.hour_start < prev.hour_start) return errorJson(409, "hour_start is older than the stored mark's", { last_minute: ackMinute(prev.bars_minute, prev.ts), rows: rows() });
   const cur = Math.floor(d.ts / 60) * 60;
   const finished = d.bars.filter((b) => b[0] < cur);
   const openBar = d.bars.find((b) => b[0] === cur) ?? null;
@@ -637,41 +668,86 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
   const covered = [stored, gapFound ? first - 60 : null, merged.length ? merged[merged.length - 1].t : null].filter((x): x is number => x !== null);
   const barsMinute = covered.length ? Math.max(...covered) : null;
 
-  // R2: this post fixes the hour's rates when it carries the hour's trend and σ_1h and nobody fixed them yet
-  const fixing = d.trend !== null && d.trend.hour === d.hour_start && d.sigma1h !== null && !probe?.has_rates;
+  // R2: this post fixes the hour's rates when it carries the trend and σ_1h of the hour its own clock is in, nobody
+  // fixed them yet, and the hour is not booked (review S1: never an earlier hour, never retroactively)
+  const H = d.hour_start, bookedHour = probe?.booked_hour ?? null;
+  const fixing = d.trend !== null && d.trend.hour === H && H === hourOf(d.ts) && d.sigma1h !== null && !probe?.has_rates && (bookedHour === null || H > bookedHour);
   const hourFixed = Boolean(probe?.has_rates) || fixing;
 
-  // R2 step 1: bars stored behind the ingest's back (never swept) are checked first, over every open position
-  if (fixing && prev && prev.bars_minute !== null && (prev.swept_minute === null || prev.swept_minute < prev.bars_minute)) {
+  // R2 step 1, and the safety net: bars stored but never swept are checked first, over every open position
+  if (prev && prev.bars_minute !== null && (prev.swept_minute === null || prev.swept_minute < prev.bars_minute)) {
     await lazyLiquidateRows(db, await allOpen(db), nowS, prev);
   }
 
-  // in-batch liquidation sweep: every open position against the bars this post stores
-  const liqStmts: D1PreparedStatement[] = [];
-  const liqFirst: number[] = []; // index (in liqStmts) of each liquidation's settle statement
+  // the bars the sweep checks: this post's, and after a fix (§9.14c) every stored bar since the hour started, now
+  // with the hour's rates (a crossing found there is stamped at its own bar)
+  let sweepBars = merged;
+  if (fixing) {
+    const since = (await db.prepare("SELECT minute AS t, h, l, c FROM bars WHERE minute >= ? ORDER BY minute").bind(H).all<MinuteBar>()).results;
+    const byT = new Map(since.map((b) => [b.t, b] as const));
+    for (const b of merged) byT.set(b.t, b);
+    sweepBars = [...byT.values()].sort((a, b) => a.t - b.t);
+  }
   let open: PositionRow[] = [];
   let rates: StoredRate[] = [];
-  const hitIds = new Set<number>();
-  if (merged.length || fixing) {
+  let sweepRates: StoredRate[] = [];
+  let fix: { fr: Engine.FundingRates; L: number; S: number; overlap: PositionRow[]; first: number } | null = null;
+  if (sweepBars.length || fixing) {
     open = await allOpen(db);
-    if (open.length) rates = await ratesFor(db, open);
-    const lastBar = merged.length ? merged[merged.length - 1].t : -Infinity;
-    for (const r of open) {
-      if (r.opened_at > lastBar) continue;
-      const hit = Engine.liquidation(toEngine(r), merged, rates);
-      if (hit) {
-        hitIds.add(r.id);
-        liqFirst.push(liqStmts.length);
-        liqStmts.push(...liquidationStmts(db, r, hit, merged, rates, d.ts, post, post));
+    let overlap: PositionRow[] = [];
+    const first = bookedHour === null ? H - HOUR : bookedHour + HOUR;
+    if (fixing) {
+      // every position that overlapped the hours being booked or the closing hour, closed ones included
+      overlap = (await db.prepare(`SELECT ${POS_COLS} FROM positions WHERE opened_at < ? AND (closed_at IS NULL OR closed_at >= ?) ORDER BY id`).bind(H, Math.min(first, H - HOUR) - 60).all<PositionRow>()).results;
+    }
+    const all = overlap.length ? overlap : open;
+    if (all.length) rates = await ratesFor(db, all);
+    sweepRates = rates;
+    if (fixing) {
+      // §9.14a: the book that fixes hour H is time-weighted over hour H − 1 (a crossing before H in this post's bars
+      // ends its position's weight there)
+      const before = sweepBars.filter((b) => b.t < H);
+      const endAt = new Map<number, number>();
+      for (const r of open) {
+        const hit = before.length ? Engine.liquidation(toEngine(r), before, rates) : null;
+        if (hit) endAt.set(r.id, hit.t);
       }
+      const { L, S } = Engine.bookTW(overlap.map((r) => ({ side: r.side, notional: r.notional, openedAt: r.opened_at, closedAt: r.closed_at ?? endAt.get(r.id) ?? null })), H - HOUR, H);
+      const fr = Engine.fundingRates({ L, S, trend: d.trend!.value, sigma1h: d.sigma1h });
+      sweepRates = [...rates.filter((x) => x.t !== H), { t: H, long: fr.long, short: fr.short, r: fr.r }].sort((a, b) => a.t - b.t);
+      fix = { fr, L, S, overlap, first };
     }
   }
+  // in-batch liquidation sweep: every open position against the sweep bars (first crossing)
+  const lastBar = sweepBars.length ? sweepBars[sweepBars.length - 1].t : -Infinity;
+  const hits: { r: PositionRow; hit: { t: number; price: number; shortfall: number } }[] = [];
+  for (const r of open) {
+    if (r.opened_at > lastBar) continue;
+    const hit = Engine.liquidation(toEngine(r), sweepBars, sweepRates);
+    if (hit) hits.push({ r, hit });
+  }
+
+  const pruned = !prev || d.hour_start > prev.hour_start;
+  const split = await splitStmts(db, nowS, probe?.last_split ?? null, post);
+  // review S2: the batch stays under MAX_BATCH_STATEMENTS. Liquidations beyond the cap wait (the swept watermark is
+  // held back, so the next post's safety net picks them up); the hourly booking takes what is left.
+  const base = 1 + merged.length + unresolved.length + closedGaps.length + split.length + (pruned ? 5 : 0);
+  const liqCap = Math.max(1, Math.floor((MAX_BATCH_STATEMENTS - base - (fixing ? FIX_RESERVE : 0)) / LIQ_STATEMENTS));
+  const taken = hits.slice(0, liqCap);
+  const heldBack = taken.length < hits.length;
+  const liqStmts: D1PreparedStatement[] = [];
+  const liqFirst: number[] = []; // index (in liqStmts) of each liquidation's settle statement
+  for (const { r, hit } of taken) {
+    liqFirst.push(liqStmts.length);
+    liqStmts.push(...liquidationStmts(db, r, hit, sweepBars, sweepRates, d.ts, post, post));
+  }
+  const swept = heldBack ? (fixing ? Math.min(prev?.swept_minute ?? H - 60, H - 60) : (prev?.swept_minute ?? null)) : barsMinute;
 
   const stmts: D1PreparedStatement[] = [
     db.prepare(SQL.markUpsert).bind(
       d.mark, d.ts, nowMs, d.head, d.hour_start, d.ch24, d.ch1, d.sigma1h, d.sigma24h, hourFixed ? 1 : 0,
       hourFixed ? (fixing ? d.trend!.value : prev && prev.hour_start === d.hour_start ? prev.funding_rate : null) : null,
-      d.basePending ? 1 : 0, d.baseStepTs, d.milestoneTs, barsMinute, barsMinute, JSON.stringify(d.candle), post,
+      d.basePending ? 1 : 0, d.baseStepTs, d.milestoneTs, barsMinute, swept, JSON.stringify(d.candle), post,
     ),
   ];
   for (const b of merged) stmts.push(db.prepare(SQL.barUpsert).bind(b.t, b.h, b.l, b.c, post));
@@ -679,13 +755,15 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
   for (const from of closedGaps) stmts.push(db.prepare(SQL.gapClose).bind(from, post));
   const liqAt = stmts.length;
   stmts.push(...liqStmts);
-  if (fixing) {
-    const live = open.filter((r) => !hitIds.has(r.id));
-    stmts.push(...(await hourlyClose(db, env, d, live, rates, probe?.booked_hour ?? null, post, nowS)));
+  if (fix) {
+    const takenIds = new Set(taken.map((x) => x.r.id));
+    const ends = new Map(taken.map((x) => [x.r.id, x.hit.t + 60] as const));
+    const live = open.filter((r) => !takenIds.has(r.id));
+    const budget = MAX_BATCH_STATEMENTS - base - liqStmts.length;
+    stmts.push(...(await hourlyClose(db, env, d, fix, live, ends, rates, bookedHour, post, nowS, budget)));
   }
-  stmts.push(...(await splitStmts(db, nowS, probe?.last_split ?? null, post)));
+  stmts.push(...split);
   // prune once an hour: on the first post of a new hour
-  const pruned = !prev || d.hour_start > prev.hour_start;
   if (pruned) {
     stmts.push(db.prepare("DELETE FROM bars WHERE minute < ?").bind(nowS - BARS_KEEP_S));
     stmts.push(db.prepare("DELETE FROM used_nonces WHERE exp < ?").bind(nowS));
@@ -696,10 +774,13 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
   let res: D1Result[];
   try {
     res = await db.batch(stmts);
-  } catch {
-    // a position moved between this post's reads and its batch (abortUnlessChanged), or a racing post won: nothing
-    // was written; the producer re-sends from last_minute
-    return errorJson(409, "changed meanwhile, post again", { last_minute: ackMinute(stored, d.ts), rows: rows() });
+  } catch (e) {
+    const msg = String((e as Error)?.message ?? e);
+    // the deliberate abort (SQL.abortUnlessChanged): a position moved between this post's reads and its batch, or a
+    // racing post fixed the hour; nothing was written, the producer re-sends from last_minute
+    if (isDeliberateAbort(msg)) return errorJson(409, "changed meanwhile, post again", { last_minute: ackMinute(stored, d.ts), rows: rows() });
+    console.error(`pilot ingest: batch failed (${fix ? "hourly close" : "mark"}, ${stmts.length} statements, ${hits.length} liquidations): ${msg}`);
+    return errorJson(500, "ingest failed", { rows: rows() });
   }
   if (res[0].meta.changes !== 1) return errorJson(409, "ts is not newer than the stored mark", { last_minute: ackMinute(stored, d.ts), rows: rows() });
   const liquidated = liqFirst.reduce((n, i) => n + res[liqAt + i].meta.changes, 0);
@@ -707,9 +788,12 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
   const fills = !prev || prev.has_pending ? await fillOrders(db, env, d, gapsLeft > 0, hourFixed, nowMs, openBar) : { filled: 0, refused: 0 };
   return json({
     ok: true, last_minute: ackMinute(barsMinute, d.ts), ts: d.ts, bars: d.bars.length, stored: merged.length, gapBars: gapBars.length,
-    gaps: gapsLeft, liquidated, ...fills, pruned, fixed: fixing, rows: rows(),
+    gaps: gapsLeft, liquidated, ...fills, pruned, fixed: fixing, statements: stmts.length, rows: rows(),
   });
 }
+
+/** The NOT NULL failure SQL.abortUnlessChanged raises on purpose (D1 and SQLite word it the same). */
+export const isDeliberateAbort = (msg: string) => /NOT NULL constraint failed: \w*ledger\.ts\b/.test(msg);
 
 /** [from, to] split at hour starts (minute starts, inclusive). */
 export function hourSegments(from: number, to: number): [number, number][] {
@@ -754,65 +838,89 @@ const allOpen = async (db: D1Database) => (await db.prepare(`SELECT ${POS_COLS} 
 
 interface HourRates {
   hour: number;
+  long: number;
+  short: number;
+  r: number;
   cut: number;
   trend: number;
   sigma_1h: number;
   L: number;
   S: number;
 }
+interface BookedRow {
+  hour: number;
+  close: number;
+  cum: number;
+  cum_price: number;
+  cum_funding: number;
+  cum_trueup: number;
+  cum_liq: number;
+  upto_id: number;
+}
+
+/** When a settled position stopped accruing: a close's time, a liquidation's bar end. null: open. */
+const endOf = (r: PositionRow) => (r.closed_at === null ? null : r.reason === "liquidation" ? r.closed_at + 60 : r.closed_at);
 
 /**
- * R2, steps 2–5, as statements for the ingest batch that fixes hour H = d.hour_start (live: the open positions the
- * sweep left; rates: stored rates since the oldest of them opened):
- * - the rates row: fundingRates() over the traders' book (L, S), INSERT … ON CONFLICT DO NOTHING under this post;
- * - the projected cut of hour H to the fee pool (ledger `cut`, ref hour:H), only if that insert won;
- * - every unbooked hour h < H (the hour just closed, or those since the last booking, MAX_BOOK_HOURS at a time):
- *   a house_hours row with houseHour() on that hour's stored book and candle, its result net of the cut to the
- *   house (ledger `house_pnl`, ref hour:h), and the true-up (ref hour:h:adj, `house_pnl` and `cut`).
+ * R2, steps 2–5, as statements for the ingest batch that fixes hour H = d.hour_start. fix: the rates from the
+ * time-weighted book of hour H − 1 (§9.14a) and every position that overlapped the hours to book; live: the open
+ * positions the sweep left; ends: the bar ends of this batch's liquidations; rates: stored rates (H not included);
+ * budget: statements this may add (review S2).
+ * - the rates row, INSERT … ON CONFLICT DO NOTHING under this post, and the projected cut of hour H (ledger `cut`,
+ *   ref hour:H), only if that insert won;
+ * - each unbooked hour h < H (oldest first, as many as the budget allows, at most MAX_BOOK_HOURS): a house_hours
+ *   row and its ledger rows:
+ *   - `house_pnl` ref hour:h = price + funding. Price: houseHour() on the hour's stored book and candle. Funding
+ *     (§9.14a): what the positions actually paid in the hour, light-side receipts included, minus the cut.
+ *   - `house_trueup` ref hour:h:adj and `cut` ref hour:h:adj: the true-up to the exact counterparty result.
  *
- * The true-up: houseHour() books the house's hour from the book at the fix (L, S) and the candle's open and close,
- * which differs from what the positions actually paid and moved (entries mid-hour, opens and closes during the hour,
- * PnL measured from each entry). Each open position carries the house's and the cut's claim on it already in the
- * ledger (booked, booked_cut, booked_to); at the end of each booked hour its claim is marked at the hour's close and
- * the difference is booked, and at settlement the rest (ref settle:<id>). So the ledger makes the house the exact
- * counterparty of every position, while each hour still shows houseHour()'s figures.
+ * The true-up: each open position carries the house's and the cut's claim on it already in the ledger (booked,
+ * booked_cut, booked_to). At the end of each booked hour its claim is marked at the hour's close and the difference
+ * is booked; at settlement the rest is booked (house_trueup ref settle:<id>). The claims telescope, so the house is
+ * the exact counterparty of every position whatever the hourly figures, and positions left out of one booking (the
+ * batch budget) lose nothing.
  */
 async function hourlyClose(
-  db: D1Database, env: Env, d: MarkPost, live: readonly PositionRow[], rates: readonly StoredRate[], bookedHour: number | null, post: string, nowS: number,
+  db: D1Database, env: Env, d: MarkPost, fix: { fr: Engine.FundingRates; L: number; S: number; overlap: readonly PositionRow[]; first: number },
+  live: readonly PositionRow[], ends: ReadonlyMap<number, number>, rates: readonly StoredRate[], bookedHour: number | null, post: string, nowS: number, budget: number,
 ): Promise<D1PreparedStatement[]> {
-  const H = d.hour_start, trend = d.trend!.value, sigma1h = d.sigma1h!;
-  let L = 0, S = 0;
-  for (const r of live) {
-    if (r.side === "long") L += r.notional;
-    else S += r.notional;
-  }
-  const fr = Engine.fundingRates({ L, S, trend, sigma1h });
+  const H = d.hour_start, trend = d.trend!.value, sigma1h = d.sigma1h!, { fr, L, S } = fix;
   const out: D1PreparedStatement[] = [
     db.prepare(SQL.ratesInsert).bind(H, fr.long, fr.short, fr.skew, fr.r, fr.rMax, fr.cut, fr.houseExposure, fr.houseFunding, trend, sigma1h, L, S, nowS, post, post),
     ...ledgerStmts(db, "rates", [H, post], H, [{ kind: "cut", amount: fr.cut, ref: `hour:${H}` }]),
   ];
-
-  const first = bookedHour === null ? H - HOUR : bookedHour + HOUR;
-  const last = Math.min(H - HOUR, first + (MAX_BOOK_HOURS - 1) * HOUR);
-  if (last < first) return out;
+  // the budget (review S2): 7 statements per hour (house_hours + 3 ledger pairs), 2 per booked position (update +
+  // abort check). Catch-up hours take at most half of it; the open positions with the oldest bookings take the rest
+  // (with more open positions than fit, they rotate: the claims telescope, so a late booking loses nothing).
+  const room = budget - out.length;
+  const first = fix.first;
+  const due = Math.max(0, (H - HOUR - first) / HOUR + 1);
+  if (!due || room < 7) return out;
+  const hoursN = Math.min(due, MAX_BOOK_HOURS, Math.max(1, Math.floor(room / 2 / 7)));
+  const posN = Math.max(0, Math.min(live.length, Math.floor((room - 7 * hoursN) / 2)));
+  const last = first + (hoursN - 1) * HOUR;
   const hours: number[] = [];
   for (let h = first; h <= last; h += HOUR) hours.push(h);
 
-  const [prevRow, hourRates, settledRows, idx] = await Promise.all([
-    db.prepare("SELECT hour, close, cum FROM house_hours ORDER BY hour DESC LIMIT 1").first<{ hour: number; close: number; cum: number }>(),
-    db.prepare("SELECT hour, cut, trend, sigma_1h, L, S FROM rates WHERE hour >= ? AND hour <= ?").bind(first, last).all<HourRates>(),
-    // the house's settlement rows in each hour (closes and liquidations), for house_hours.total
-    db
-      .prepare(
-        "SELECT ts - ts % 3600 AS h, SUM(amount) AS s FROM ledger WHERE kind IN ('house_pnl', 'liq_margin') AND ts >= ? AND ts < ? " +
-          "AND (ref LIKE 'settle:%' OR ref LIKE 'liq:%') GROUP BY h",
-      )
-      .bind(first, last + HOUR)
-      .all<{ h: number; s: number }>(),
+  const [prevRow, hourRates, maxIdRow, idx] = await Promise.all([
+    db.prepare("SELECT hour, close, cum, cum_price, cum_funding, cum_trueup, cum_liq, upto_id FROM house_hours ORDER BY hour DESC LIMIT 1").first<BookedRow>(),
+    db.prepare("SELECT hour, long, short, r, cut, trend, sigma_1h, L, S FROM rates WHERE hour >= ? AND hour <= ?").bind(first, last).all<HourRates>(),
+    db.prepare("SELECT COALESCE(MAX(id), 0) AS id FROM ledger").first<{ id: number }>(),
     indexCandles(env),
   ]);
   const byHour = new Map(hourRates.results.map((x) => [x.hour, x]));
-  const settled = new Map(settledRows.results.map((x) => [x.h, x.s]));
+  // review N4: the house's settlement rows not yet in any booked hour, by ledger id (each counted exactly once)
+  const fromId = prevRow?.upto_id ?? 0, uptoId = maxIdRow?.id ?? 0;
+  const attributed = (
+    await db
+      .prepare("SELECT ts, kind, amount FROM ledger WHERE id > ? AND id <= ? AND kind IN ('house_trueup', 'liq_margin') AND ref NOT LIKE 'hour:%' AND ref NOT LIKE 'split:%'")
+      .bind(fromId, uptoId)
+      .all<{ ts: number; kind: string; amount: number }>()
+  ).results;
+  const trueupAt = new Map<number, number>(), liqAt = new Map<number, number>();
+  const add = (m: Map<number, number>, h: number, x: number) => m.set(h, (m.get(h) ?? 0) + x);
+  for (const a of attributed) add(a.kind === "liq_margin" ? liqAt : trueupAt, Math.min(last, Math.max(first, hourOf(a.ts))), a.amount);
+
   // each hour's open and close: the index file's candle (the same source as the gap bars), else the hour's last bar
   const lastBar = new Map<number, number>();
   if (hours.some((h) => !idx.has(h))) {
@@ -831,11 +939,24 @@ async function hourlyClose(
     prevClose = c;
   }
 
-  // each open position's claim at the end of each hour, against what is booked
+  // §9.14a: the house's funding line per hour, from what every overlapping position actually paid (net of the cut)
+  const fundingAt = new Map<number, number>();
+  for (const r of fix.overlap) {
+    const pos = toEngine(r), end = ends.get(r.id) ?? endOf(r);
+    for (const h of hours) {
+      const rh = byHour.get(h);
+      if (!rh || r.opened_at >= h + HOUR || (end !== null && end <= h)) continue;
+      const one = [{ t: h, long: rh.long, short: rh.short, r: rh.r }];
+      const to = end === null ? h + HOUR : Math.min(end, h + HOUR);
+      add(fundingAt, h, Engine.fundingPaid(pos, one, to) - cutPaid(pos, one, to));
+    }
+  }
+
+  // the claims of the open positions with the oldest bookings, at the end of each hour, against what is booked
   const dHouse = new Map<number, number>(), dCut = new Map<number, number>();
-  const add = (m: Map<number, number>, h: number, x: number) => m.set(h, (m.get(h) ?? 0) + x);
   const moves: D1PreparedStatement[] = [];
-  for (const r of live) {
+  const chosen = [...live].sort((a, b) => a.booked_to - b.booked_to || a.id - b.id).slice(0, posN);
+  for (const r of chosen) {
     const pos = toEngine(r);
     let booked = r.booked, bookedCut = r.booked_cut, to = r.booked_to;
     for (const h of hours) {
@@ -851,28 +972,32 @@ async function hourlyClose(
     if (to !== r.booked_to) moves.push(db.prepare(SQL.bookPosition).bind(booked, bookedCut, to, r.id, r.booked_to, H, post), db.prepare(SQL.abortUnlessChanged));
   }
 
-  let cum = prevRow?.cum ?? 0;
+  const cum = { all: prevRow?.cum ?? 0, price: prevRow?.cum_price ?? 0, funding: prevRow?.cum_funding ?? 0, trueup: prevRow?.cum_trueup ?? 0, liq: prevRow?.cum_liq ?? 0 };
   for (const h of hours) {
     const { o, c } = candle.get(h)!;
     const rh = byHour.get(h);
-    let exposure = 0, pricePnl = 0, funding = 0, pnl = 0, cut = 0;
+    let exposure = 0, price = 0;
     if (rh) {
       const hh = Engine.houseHour({ L: rh.L, S: rh.S, open: o, close: c, trend: rh.trend, sigma1h: rh.sigma_1h });
-      cut = rh.cut;
       exposure = hh.exposure;
-      pricePnl = hh.pricePnl;
-      funding = hh.funding - cut;
-      pnl = hh.total - cut;
+      price = hh.pricePnl;
     }
+    const funding = fundingAt.get(h) ?? 0;
+    const pnl = price + funding;
     const delta = dHouse.get(h) ?? 0;
-    const adj = delta - pnl, cutAdj = (dCut.get(h) ?? 0) - cut;
-    const total = delta + (settled.get(h) ?? 0);
-    cum += total;
+    const adj = delta - pnl, cutAdj = (dCut.get(h) ?? 0) - (rh?.cut ?? 0);
+    const tAttr = trueupAt.get(h) ?? 0, lAttr = liqAt.get(h) ?? 0;
+    const total = delta + tAttr + lAttr;
+    cum.all += total;
+    cum.price += price;
+    cum.funding += funding;
+    cum.trueup += adj + tAttr;
+    cum.liq += lAttr;
     out.push(
-      db.prepare(SQL.houseHourInsert).bind(h, o, c, exposure, pricePnl, funding, pnl, adj, total, cum, nowS, post, H, post),
+      db.prepare(SQL.houseHourInsert).bind(h, o, c, exposure, price, funding, pnl, adj, total, cum.all, cum.price, cum.funding, cum.trueup, cum.liq, uptoId, nowS, post, H, post),
       ...ledgerStmts(db, "hour", [h, post], h, [
         { kind: "house_pnl", amount: pnl, ref: `hour:${h}` },
-        { kind: "house_pnl", amount: adj, ref: `hour:${h}:adj` },
+        { kind: "house_trueup", amount: adj, ref: `hour:${h}:adj` },
         { kind: "cut", amount: cutAdj, ref: `hour:${h}:adj` },
       ]),
     );
@@ -883,22 +1008,41 @@ async function hourlyClose(
 
 // ───────────────────────────── weekly split (R5) ─────────────────────────────
 
-type Pools = Record<LedgerKind, { balance: number; gross: number }>;
+type Pools = Record<LedgerKind, { balance: number; gross: number }> & {
+  /** The house's claim on the positions still open (their booked mark-to-market and accruals): unrealized. */
+  openBooked: number;
+};
 
+/** The pools and the open positions' booked claims in ONE statement (a consistent snapshot). */
 async function readPools(db: D1Database): Promise<Pools> {
-  const rows = (await db.prepare("SELECT kind, balance, gross FROM pools").all<{ kind: LedgerKind; balance: number; gross: number }>()).results;
-  const out = Object.fromEntries(LEDGER_KINDS.map((k) => [k, { balance: 0, gross: 0 }])) as Pools;
+  const rows = (
+    await db
+      .prepare("SELECT p.kind, p.balance, p.gross, (SELECT COALESCE(SUM(booked), 0) FROM positions WHERE closed_at IS NULL) AS open_booked FROM pools p")
+      .all<{ kind: LedgerKind; balance: number; gross: number; open_booked: number }>()
+  ).results;
+  const out = { ...Object.fromEntries(LEDGER_KINDS.map((k) => [k, { balance: 0, gross: 0 }])), openBooked: 0 } as unknown as Pools;
+  out.openBooked = rows[0]?.open_booked ?? 0;
   for (const r of rows) out[r.kind] = { balance: r.balance, gross: r.gross };
   return out;
 }
 
+/** The house's book: every house kind's balance (realized, unrealized and carried, net of what splits moved out). */
+const houseBook = (p: Pools) => HOUSE_KINDS.reduce((a, k) => a + p[k].balance, 0);
 /**
- * The fee pool since the last split (R5): fee + borrow + cut + max(0, the house's unsplit result). A negative house
- * result is carried (spec §9.5); a pool ≤ 0 moves nothing.
+ * §9.14b: the house's realized result not yet split. The book minus the claim on the positions still open: what
+ * settled (closes and liquidations, with the funding and borrow settled on them), net of what earlier splits moved
+ * out. Negative = a carried loss.
+ */
+export const houseRealized = (p: Pools) => houseBook(p) - p.openBooked;
+
+/**
+ * The fee pool since the last split (R5, §9.14b): fee + borrow + cut + max(0, the house's realized unsplit result). A
+ * negative realized result is carried (spec §9.5); the house's mark-to-market on open positions stays in its book;
+ * a pool ≤ 0 moves nothing.
  */
 export function splitOf(p: Pools) {
   const fee = p.fee.balance, borrow = p.borrow.balance, cut = p.cut.balance;
-  const house = Math.max(0, p.house_pnl.balance + p.liq_margin.balance);
+  const house = Math.max(0, houseRealized(p));
   const pool = fee + borrow + cut + house;
   if (!(pool > 0)) return { pool: 0, fee: 0, borrow: 0, cut: 0, house: 0, insurance: 0, treasury: 0, buyback: 0 };
   const s = Engine.splitFees(pool);
@@ -914,7 +1058,9 @@ export function splitDue(nowS: number, lastSplit: number | null): number | null 
 /**
  * The weekly split's statements (none unless due): the splits row (once per week), then, only if it won, rows that
  * move each source's unsplit balance out (ref split:<week>) and into insurance, the treasury and its buyback
- * earmark (split_treasury holds the part not earmarked). Points only (spec §9.12).
+ * earmark (split_treasury holds the part not earmarked). Points only (spec §9.12). After a split, the fee, borrow
+ * and cut balances are exactly what is unsplit per source; the house's realized share leaves its book as a
+ * `house_pnl` row, so the house kinds are read together (houseBook / houseRealized), never one by one.
  */
 async function splitStmts(db: D1Database, nowS: number, lastSplit: number | null, token: string): Promise<D1PreparedStatement[]> {
   const week = splitDue(nowS, lastSplit);
@@ -974,29 +1120,58 @@ export async function handleFunding(req: Request, env: Env, deps: PilotDeps = {}
   }, PILOT_LIMITS.fundingCacheS);
 }
 
-/** The house's cumulative result through the booked hours that end at or before t. */
+interface CumRow {
+  cum_price: number;
+  cum_funding: number;
+  cum_trueup: number;
+  cum_liq: number;
+}
+const CUM_COLS = "cum_price, cum_funding, cum_trueup, cum_liq";
+const ZERO_CUM: CumRow = { cum_price: 0, cum_funding: 0, cum_trueup: 0, cum_liq: 0 };
+/** The house's running sums through the booked hours that end at or before t (zeros before the first). */
 const cumThrough = async (db: D1Database, t: number) =>
-  (await db.prepare("SELECT cum FROM house_hours WHERE hour <= ? ORDER BY hour DESC LIMIT 1").bind(t - HOUR).first<{ cum: number }>())?.cum ?? 0;
+  (await db.prepare(`SELECT ${CUM_COLS} FROM house_hours WHERE hour <= ? ORDER BY hour DESC LIMIT 1`).bind(t - HOUR).first<CumRow>()) ?? ZERO_CUM;
 
-/** R7: the economy in points (about 40 rows read). */
+/**
+ * R7: the economy in points (about 40 rows read). The house's P&L by line, over 24 h, this week and all time:
+ * price and funding (the booked hours' houseHour price and the funding actually paid, net of the cut), true-up (to
+ * the exact counterparty result: the hourly :adj rows and every settlement's residual) and liquidations (equity
+ * left, less gaps insurance could not cover). Windows are the all-time figures minus the running sums at the window's
+ * start; settlement rows are attributed to booked hours by ledger id, so none is counted twice (review N4).
+ */
 export async function economy(db: D1Database, nowS: number): Promise<EconomyView> {
   const H = hourOf(nowS), W = weekStart(nowS);
-  const [recent, pools, c24, cWeek, last] = await Promise.all([
+  const [recent, pools, latest, c24, cWeek, last] = await Promise.all([
     recentRates(db),
     readPools(db),
+    db.prepare(`SELECT ${CUM_COLS} FROM house_hours ORDER BY hour DESC LIMIT 1`).first<CumRow>(),
     cumThrough(db, H - 24 * HOUR),
     cumThrough(db, W),
     db.prepare("SELECT week, ts, pool, insurance, treasury, buyback FROM splits ORDER BY week DESC LIMIT 1").first<NonNullable<EconomyView["lastSplit"]>>(),
   ]);
   const current = recent.find((r) => r.t === H) ?? null;
-  const all = pools.house_pnl.gross + pools.liq_margin.gross;
+  const all = {
+    price: latest?.cum_price ?? 0,
+    funding: latest?.cum_funding ?? 0,
+    trueup: pools.house_trueup.gross,
+    liquidations: pools.liq_margin.gross,
+  };
+  const win = (a: number, k: keyof CumRow) => ({ h24: a - c24[k], week: a - cWeek[k], all: a });
+  const price = win(all.price, "cum_price"), funding = win(all.funding, "cum_funding"), trueup = win(all.trueup, "cum_trueup"), liquidations = win(all.liquidations, "cum_liq");
+  const sum = (k: "h24" | "week" | "all") => price[k] + funding[k] + trueup[k] + liquidations[k];
   const s = splitOf(pools);
   return {
     ts: nowS,
     rates: { current, recent },
     borrowApr: RULES.borrowApr,
-    house: { exposure: current ? current.houseExposure : null, pnl24h: all - c24, pnlWeek: all - cWeek, pnlAll: all },
-    pool: { fee: pools.fee.balance, borrow: pools.borrow.balance, cut: pools.cut.balance, house: Math.max(0, pools.house_pnl.balance + pools.liq_margin.balance), total: s.pool },
+    house: {
+      exposure: current ? current.houseExposure : null,
+      realized: houseRealized(pools),
+      unrealized: pools.openBooked,
+      price, funding, trueup, liquidations,
+      total: { h24: sum("h24"), week: sum("week"), all: sum("all") },
+    },
+    pool: { fee: pools.fee.balance, borrow: pools.borrow.balance, cut: pools.cut.balance, house: s.house, total: s.pool },
     insurance: pools.split_insurance.balance + pools.insurance_draw.balance,
     treasury: pools.split_treasury.balance + pools.split_buyback.balance,
     buyback: pools.split_buyback.balance,
@@ -1044,10 +1219,11 @@ const refuseStmt = (db: D1Database, id: number, error: string) => db.prepare(SQL
 
 /**
  * A close fill's statements (R3): margin + PnL − funding − borrow − exit fee back to the balance (never below 0),
- * the fee and the borrow to the fee pool, the house's and the cut's remaining claim, and any negative equity drawn
- * from insurance. Settles only while the order is pending and the position's booking is as read.
+ * the fee and the borrow to the fee pool, the house's and the cut's remaining claim, and any negative equity covered
+ * by insurance up to its balance (the rest a house loss). Settles only while the order is pending and the position's
+ * booking is as read.
  */
-function closeStmts(db: D1Database, row: PositionRow, o: OrderRow, d: MarkPost, rates: readonly StoredRate[]): D1PreparedStatement[] {
+export function closeStmts(db: D1Database, row: PositionRow, o: Pick<OrderRow, "id" | "wallet">, d: Pick<MarkPost, "mark" | "ts">, rates: readonly StoredRate[]): D1PreparedStatement[] {
   const pos = toEngine(row), token = randomHex(8);
   const c = Engine.close(pos, d.mark, d.ts, rates);
   const claim = claimAt(pos, rates, d.ts, d.mark);
@@ -1059,10 +1235,11 @@ function closeStmts(db: D1Database, row: PositionRow, o: OrderRow, d: MarkPost, 
     ...ledgerStmts(db, "settle", [row.id, token], d.ts, [
       { kind: "fee", amount: c.fee, ref: `close:${row.id}` },
       { kind: "borrow", amount: c.borrow, ref: `borrow:${row.id}` },
-      { kind: "house_pnl", amount: claim.house - row.booked, ref: `settle:${row.id}` },
+      { kind: "house_trueup", amount: claim.house - row.booked, ref: `settle:${row.id}` },
       { kind: "cut", amount: claim.cut - row.booked_cut, ref: `settle:${row.id}` },
-      { kind: "insurance_draw", amount: Math.min(0, eq), ref: `draw:${row.id}` },
     ]),
+    // a deficit (equity below the exit fee): insurance covers what it can, the rest is a carried house loss
+    ...gapStmts(db, row.id, token, d.ts, -eq, "house_trueup", `gap:${row.id}`),
   ];
 }
 
@@ -1070,7 +1247,7 @@ function closeStmts(db: D1Database, row: PositionRow, o: OrderRow, d: MarkPost, 
  * Ingest: fill (or refuse) every order this mark postdates (its chain ts after the order's arrival), at this mark.
  * nowMs: the server's ingest time (an order waits at most RULES.markMaxAgeS of it). openBar: this post's open minute
  * (not stored until it finishes): a close is checked against it first, so a crossing in this minute liquidates.
- * hourFixed: this hour's rates are fixed (opens wait for them).
+ * hourFixed: this hour's rates are fixed: opens and closes wait for them (§9.14c), liquidations do not.
  */
 async function fillOrders(db: D1Database, env: Env, d: MarkPost, gapsOpen: boolean, hourFixed: boolean, nowMs: number, openBar: MarkPost["bars"][number] | null): Promise<{ filled: number; refused: number }> {
   const pending = (await db.prepare(`SELECT ${ORDER_COLS} FROM orders WHERE status = 'pending' AND arrived_ms < ? ORDER BY id`).bind(d.ts * 1000).all<OrderRow>()).results;
@@ -1108,6 +1285,7 @@ async function fillOrders(db: D1Database, env: Env, d: MarkPost, gapsOpen: boole
         await refuse(o, opp ? closeFirst(opp.side) : now.length >= RULES.maxOpen ? "too many open positions" : "insufficient balance");
       }
     } else {
+      if (!hourFixed) { await refuse(o, PRICE_UPDATING); continue; } // §9.14c: nothing settles at unknown rates
       // two tries: the position's booking may move between the read and the batch (a racing ingest)
       for (let attempt = 0; ; attempt++) {
         const row = await db.prepare(`SELECT ${POS_COLS} FROM positions WHERE id = ? AND wallet = ?`).bind(o.position_id, o.wallet).first<PositionRow>();
@@ -1115,11 +1293,12 @@ async function fillOrders(db: D1Database, env: Env, d: MarkPost, gapsOpen: boole
         const rates = await loadRates(db, row.opened_at);
         const bar = openBar ? [{ t: openBar[0], h: openBar[1], l: openBar[2], c: openBar[3] }] : [];
         const hit = bar.length ? Engine.liquidation(toEngine(row), bar, rates) : null;
-        if (hit) { await db.batch(liquidationStmts(db, row, hit, bar, rates, d.ts, randomHex(8))); await refuse(o, ALREADY_CLOSED); break; }
-        const res = await db.batch(closeStmts(db, row, o, d, rates));
-        if (res[2].meta.changes === 1) { filled++; break; }
+        const res = await db.batch(hit ? liquidationStmts(db, row, hit, bar, rates, d.ts, randomHex(8)) : closeStmts(db, row, o, d, rates));
+        if (hit && res[0].meta.changes === 1) { await refuse(o, ALREADY_CLOSED); break; } // liquidated in this minute
+        if (!hit && res[2].meta.changes === 1) { filled++; break; }
+        // nothing settled: the position moved meanwhile (review N1: say so only if it really is closed now)
         if (attempt === 0 && res[0].meta.changes === 0) continue;
-        await refuse(o, ALREADY_CLOSED);
+        await refuse(o, PRICE_UPDATING);
         break;
       }
     }

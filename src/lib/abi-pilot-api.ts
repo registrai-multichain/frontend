@@ -218,6 +218,12 @@ export interface FundingView {
   next: number;
 }
 
+export interface EconomyWindow {
+  h24: number;
+  week: number;
+  all: number;
+}
+
 /** GET /api/pilot/economy (public, edge-cached 30 s). Everything in points. */
 export interface EconomyView {
   ts: number;
@@ -226,11 +232,20 @@ export interface EconomyView {
   house: {
     /** Signed notional this hour (+ = long), null before the hour's rates are fixed. */
     exposure: number | null;
-    pnl24h: number;
-    pnlWeek: number;
-    pnlAll: number;
+    /** Realized (settled) result not yet split; negative = a loss carried forward. */
+    realized: number;
+    /** The house's mark-to-market and accruals on positions still open (stays in its book until they settle). */
+    unrealized: number;
+    /** P&L by line, last 24 h, this week (since Monday 00:00 UTC) and all time. */
+    price: EconomyWindow;
+    funding: EconomyWindow;
+    /** To the exact counterparty result: the hourly true-up and each settlement's residual. */
+    trueup: EconomyWindow;
+    /** Equity left at liquidations, less gaps insurance could not cover. */
+    liquidations: EconomyWindow;
+    total: EconomyWindow;
   };
-  /** Fee pool by source since the last split; house = max(0, the house's unsplit result). */
+  /** Fee pool by source since the last split; house = max(0, the house's realized unsplit result). */
   pool: { fee: number; borrow: number; cut: number; house: number; total: number };
   insurance: number;
   /** Treasury share from all splits, and the buyback earmark inside it. */

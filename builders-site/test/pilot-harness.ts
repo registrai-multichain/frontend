@@ -24,6 +24,8 @@ export const lc = (a: { address: string }) => a.address.toLowerCase();
 
 export interface MarkExtra {
   ts: number;
+  /** Default: the hour of ts (as mark.py posts it). */
+  hour_start: number;
   ch24: number;
   ch1: number;
   bars: number[][];
@@ -106,7 +108,7 @@ export function setup(o: { open?: boolean; db?: boolean; secret?: string; snapsh
     const bars = x.bars ?? [[minute - 60, px, px, px], [minute, px, px, px]];
     const lo = Math.min(px, ...bars.map((b) => b[2])), hi = Math.max(px, ...bars.map((b) => b[1]));
     const body: Json = {
-      mark: px, ts, head: 1000 + ts, hour_start: Math.floor(ts / 3600) * 3600, candle: x.candle ?? [px, hi, lo, px, 3, 12.5],
+      mark: px, ts, head: 1000 + ts, hour_start: x.hour_start ?? Math.floor(ts / 3600) * 3600, candle: x.candle ?? [px, hi, lo, px, 3, 12.5],
       ch24: x.ch24 ?? 0.001, ch1: x.ch1 ?? 0.0001, bars,
       sigma_24h: x.sigma_24h === undefined ? CALM.sigma_24h : x.sigma_24h, sigma_1h: x.sigma_1h === undefined ? CALM.sigma_1h : x.sigma_1h,
       base_pending: x.base_pending ?? false, base_step_ts: x.base_step_ts ?? null,
