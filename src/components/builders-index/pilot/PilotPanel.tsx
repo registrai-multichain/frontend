@@ -10,6 +10,7 @@ import {
   pilotLoginMessage,
   shortWallet,
   type ClosedPositionView,
+  type EconomyView,
   type FundingView,
   type LeaderboardRow,
   type OrderView,
@@ -49,7 +50,7 @@ const userError = (e: unknown) => {
 };
 
 /**
- * The ABI points pilot on the terminal page: ticket, positions, history, leaderboard.
+ * The ABI points pilot on the terminal page: ticket, positions, history, leaderboard, funding, economy.
  * Renders nothing until mounted in the browser, and nothing at all where the pilot API is not
  * deployed (the static page stays data only). Sign-in is a personal_sign message; no transactions.
  */
@@ -60,6 +61,7 @@ export function PilotPanel() {
   const [history, setHistory] = useState<ClosedPositionView[] | null>(null);
   const [board, setBoard] = useState<LeaderboardRow[] | null>(null);
   const [funding, setFunding] = useState<FundingView | null>(null);
+  const [economy, setEconomy] = useState<EconomyView | null>(null);
   const [busy, setBusy] = useState(false);
   const [filling, setFilling] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
@@ -83,6 +85,10 @@ export function PilotPanel() {
   const loadFunding = useCallback(async () => {
     const r = await api<FundingView>(PILOT_PATHS.funding);
     if (live.current && r.status === 200) setFunding(r.body);
+  }, []);
+  const loadEconomy = useCallback(async () => {
+    const r = await api<EconomyView>(PILOT_PATHS.economy);
+    if (live.current && r.status === 200) setEconomy(r.body);
   }, []);
 
   useEffect(() => {
@@ -110,11 +116,12 @@ export function PilotPanel() {
   useEffect(() => {
     if (tab === "history" && signedIn) void loadHistory();
     if (tab === "funding") void loadFunding();
-    if (tab !== "leaderboard") return;
-    void loadBoard();
-    const t = setInterval(() => { if (document.visibilityState === "visible") void loadBoard(); }, BOARD_POLL_MS);
+    const poll = tab === "leaderboard" ? loadBoard : tab === "economy" ? loadEconomy : null;
+    if (!poll) return;
+    void poll();
+    const t = setInterval(() => { if (document.visibilityState === "visible") void poll(); }, BOARD_POLL_MS);
     return () => clearInterval(t);
-  }, [tab, signedIn, loadHistory, loadBoard, loadFunding]);
+  }, [tab, signedIn, loadHistory, loadBoard, loadFunding, loadEconomy]);
 
   async function signIn() {
     setError(undefined);
@@ -195,6 +202,7 @@ export function PilotPanel() {
         history={history}
         board={board}
         funding={funding}
+        economy={economy}
         closing={closing}
         onClose={(id) => void close(id)}
       />

@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { InfoBubble } from "@/components/InfoBubble";
-import { liqPrice, RULES, type Side } from "@/lib/abi-pilot";
+import { borrowPaid, liqPrice, RULES, type Side } from "@/lib/abi-pilot";
 import type { PilotAccountView } from "@/lib/abi-pilot-api";
-import { fmtHour, fmtPts, fmtPx, fmtRate, openLabel, PILOT_COPY, PILOT_DISCLAIMER, PILOT_LIQ_NOTE } from "@/lib/abi-pilot-copy";
+import { borrowPerDay, fmtHour, fmtPts, fmtPx, fmtSideRate, openLabel, PILOT_COPY, PILOT_DISCLAIMER, PILOT_LIQ_NOTE } from "@/lib/abi-pilot-copy";
 
 export interface TicketProps {
   view: PilotAccountView;
@@ -36,17 +36,21 @@ function regiLine(view: PilotAccountView): string | null {
   return r.snapshot === false ? PILOT_COPY.notAtSnapshot : PILOT_COPY.holdRegi;
 }
 
-function FundingRow({ view }: { view: PilotAccountView }) {
+/** This hour's funding per side, signed with its direction (+ pays, − receives); "–" until the hour's rates are set. */
+function FundingRows({ view }: { view: PilotAccountView }) {
   const f = view.funding;
+  const rate = (r: number | null) => (r === null ? "–" : fmtSideRate(r));
   return (
     <>
-      <dt>Funding <InfoBubble label="About funding">{PILOT_COPY.fundingTip}</InfoBubble></dt>
-      <dd>{f.current === null ? "–" : fmtRate(f.current)} · next {fmtHour(f.next)} UTC</dd>
+      <dt>Funding long <InfoBubble label="About funding">{PILOT_COPY.fundingTip}</InfoBubble></dt>
+      <dd>{rate(f.long)}</dd>
+      <dt>Funding short</dt>
+      <dd>{rate(f.short)} · next {fmtHour(f.next)} UTC</dd>
     </>
   );
 }
 
-/** The trade ticket: Long / Short, margin, leverage (capped from ABI's volatility), liquidation price, fee, funding. */
+/** The trade ticket: Long / Short, margin, leverage (capped), liquidation price with costs, fee, borrow, funding. */
 export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onSignIn, onSignOut, onOrder }: TicketProps) {
   const [side, setSide] = useState<Side>("long");
   const [lev, setLev] = useState(1);
@@ -80,7 +84,7 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
         <p className="abi-pt-note">{!view.open ? PILOT_COPY.closed : blocked}</p>
         <dl className="abi-kv abi-pt-kv">
           {acct && <><dt>Balance</dt><dd>{fmtPts(acct.balance)} pts</dd></>}
-          <FundingRow view={view} />
+          <FundingRows view={view} />
         </dl>
         {error && <p className="abi-pt-err" role="alert">{error}</p>}
         {disclaimer}
@@ -92,7 +96,12 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
     const levUse = RULES.levels.filter((l) => l <= Math.min(lev, maxLev)).pop() ?? 1;
     const notional = Number.isFinite(margin) ? margin * levUse : 0;
     const fee = notional * RULES.feeRate;
-    const liq = m && margin > 0 ? liqPrice({ side, margin, notional, entry: m.mark }, 0) : null;
+    const pos = m && margin > 0 ? { side, margin, notional, entry: m.mark, openedAt: 0 } : null;
+    const liq = pos ? liqPrice(pos, 0) : null;
+    // a day on: 24 h of borrow plus 24 h of this hour's funding for the side (+ = paid)
+    const sideRate = side === "long" ? view.funding.long : view.funding.short;
+    const liq24 = pos ? liqPrice(pos, borrowPaid(pos, 86400) + (sideRate ?? 0) * notional * 24) : null;
+    const borrowDay = margin > 0 ? borrowPerDay(notional, margin) : 0;
     const balance = acct?.balance ?? 0;
     const full = view.positions.length >= RULES.maxOpen;
     const held = view.positions[0]?.side;
@@ -134,8 +143,10 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
           <dt>Mark</dt><dd>{m ? fmtPx(m.mark) : "–"}</dd>
           <dt>Size</dt><dd>{fmtPts(notional)} pts</dd>
           <dt>Fee</dt><dd>{fmtPts(fee)} pts</dd>
-          <dt>Liquidation price</dt><dd>{liq === null ? "–" : fmtPx(liq)}</dd>
-          <FundingRow view={view} />
+          <dt>Borrow <InfoBubble label="About borrow">{PILOT_COPY.borrowTip}</InfoBubble></dt><dd>{fmtPts(borrowDay)} pts/day</dd>
+          <dt>Liquidation price <InfoBubble label="About the liquidation price">{PILOT_COPY.liqTip}</InfoBubble></dt>
+          <dd>{liq === null || liq24 === null ? "–" : <>{fmtPx(liq)} · {fmtPx(liq24)} in 24 h</>}</dd>
+          <FundingRows view={view} />
           <dt>Balance</dt><dd>{fmtPts(balance)} pts</dd>
           {acct?.equity !== null && acct?.equity !== undefined && (<><dt>Equity</dt><dd>{fmtPts(acct.equity)} pts</dd></>)}
         </dl>

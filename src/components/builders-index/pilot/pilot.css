@@ -37,6 +37,8 @@
 .abi-t .abi-pt-empty { padding: 14px 12px; margin: 0; text-align: left; font-family: var(--abi-sans); }
 .abi-t tr.abi-pt-me td { background: var(--abi-accent-soft); }
 .abi-t .abi-seg button[role="tab"][aria-selected="true"] { background: var(--abi-raise); color: var(--abi-fg); }
+.abi-t .abi-pt-eco { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 18px; padding: 6px 12px 0; }
+.abi-t .abi-pt-eco .abi-pt-foot { grid-column: 1 / -1; padding-left: 0; padding-right: 0; }
 .abi-t .abi-pt-foot { margin: 0; padding: 8px 12px 10px; font-size: 11.5px; color: var(--abi-mute); border-top: 1px solid var(--abi-line); }
 /* narrow phones (320–360 px): the tab strip, the leverage row and the margin field wrap instead of widening the page */
 .abi-t .abi-seg[role="tablist"], .abi-t .abi-pt .abi-seg { flex-wrap: wrap; }

@@ -5,9 +5,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 import { PilotTables, type PilotTablesProps } from "@/components/builders-index/pilot/PilotTables";
 import { Ticket, type TicketProps } from "@/components/builders-index/pilot/Ticket";
-import { liqPrice } from "./abi-pilot";
-import { accountPollMs, type PilotAccountView } from "./abi-pilot-api";
-import { fmtSigned, fmtWhen, openLabel, PILOT_COPY, PILOT_DISCLAIMER, PILOT_DISCLAIMERS, PILOT_LIQ_NOTE } from "./abi-pilot-copy";
+import { borrowPaid, liqPrice, RULES } from "./abi-pilot";
+import { accountPollMs, type EconomyView, type PilotAccountView, type RateView } from "./abi-pilot-api";
+import { borrowPerDay, fmtPts, fmtPx, fmtSideRate, fmtSigned, fmtWhen, openLabel, PILOT_COPY, PILOT_DISCLAIMER, PILOT_DISCLAIMERS, PILOT_LIQ_NOTE } from "./abi-pilot-copy";
 
 /**
  * R7 copy lint for the points pilot: no prize-type words anywhere in pilot copy (UI strings, server
@@ -85,15 +85,28 @@ describe("pilot copy lint (R7)", () => {
 // ───────────────────────────── markup ─────────────────────────────
 
 const ME = "0x1234567890abcdef1234567890abcdef12345678";
-const MARK = { mark: 1000, ts: 1_760_097_600, age: 2, ch24: 0.01, ch1: 0.001, sigma1h: 0.0004, sigma24h: 0.002, maxLev: 20, paused: false, basePaused: false, milestonePaused: false, fresh: true };
-const FUNDING = { recent: [{ t: 1_760_094_000, rate: -0.0003 }, { t: 1_760_090_400, rate: 0.0002 }], current: -0.0003, next: 1_760_097_600 };
+const MARK = { mark: 1000, ts: 1_760_097_600, age: 2, ch24: 0.01, ch1: 0.001, sigma1h: 0.0004, sigma24h: 0.002, maxLev: 30, paused: false, basePaused: false, milestonePaused: false, fresh: true };
+const rate = (t: number, long: number, short: number, skew: number): RateView => ({ t, long, short, skew, trend: 0, r: 0, cut: 0, L: 0, S: 0, houseExposure: 0 });
+const FUNDING = { recent: [rate(1_760_094_000, 0.0003, -0.00027, 0.5), rate(1_760_090_400, -0.0002, 0.0002, 0)], current: rate(1_760_094_000, 0.0003, -0.00027, 0.5), next: 1_760_097_600 };
+const NOW = { hour: 1_760_094_000, long: 0.0003, short: -0.00027, skew: 0.5, next: 1_760_097_600 };
 const POS_LIQ = liqPrice({ side: "long", margin: 1000, notional: 2000, entry: 990 }, 0);
 const VIEW: PilotAccountView = {
   open: true, address: ME, regi: { ok: true, snapshot: true, now: true }, account: { balance: 9000, equity: 9998.8, season: 1 },
-  positions: [{ id: 7, side: "long", margin: 1000, lev: 2, notional: 2000, entry: 990, liq: POS_LIQ, openedAt: 1_760_097_000, fee: 0.2, funding: 0.6, pnl: 20.2 }],
+  positions: [{ id: 7, side: "long", margin: 1000, lev: 2, notional: 2000, entry: 990, liq: POS_LIQ, openedAt: 1_760_097_000, fee: 0.2, funding: 0.6, borrow: 0.02, pnl: 20.2 }],
   pending: [],
   mark: MARK,
-  funding: FUNDING,
+  funding: NOW,
+};
+const ECONOMY: EconomyView = {
+  ts: 1_760_097_600,
+  rates: { current: { ...FUNDING.current, L: 70000, S: 30000, houseExposure: -40000, cut: 0.42 }, recent: FUNDING.recent },
+  borrowApr: 0.1,
+  house: { exposure: -40000, pnl24h: 12.5, pnlWeek: -3.25, pnlAll: 40 },
+  pool: { fee: 10, borrow: 5, cut: 1, house: 40, total: 56 },
+  insurance: -2.5,
+  treasury: 80, buyback: 40,
+  week: { start: 1_759_708_800, pool: 56, insurance: 11.2, treasury: 44.8, buyback: 22.4 },
+  lastSplit: { week: 1_759_104_000, ts: 1_759_708_900, pool: 100, insurance: 20, treasury: 80, buyback: 40 },
 };
 const VISITOR: PilotAccountView = { ...VIEW, address: null, regi: null, account: null, positions: [] };
 const noop = () => undefined;
@@ -101,7 +114,7 @@ const ticket = (p: Partial<TicketProps> = {}) => renderToStaticMarkup(createElem
 const tables = (p: Partial<PilotTablesProps> = {}) =>
   renderToStaticMarkup(createElement(PilotTables, {
     tab: "positions", onTab: noop, address: ME, positions: VIEW.positions, mark: 1000, closing: null, onClose: noop, funding: FUNDING,
-    history: [{ id: 3, side: "short", margin: 500, lev: 3, notional: 1500, entry: 1000, openedAt: 1, closedAt: 1_760_090_000, exit: 1470, pnl: -705, funding: -1.5, fee: 0.3, returned: 0, net: -500.15, reason: "liquidation" }],
+    history: [{ id: 3, side: "short", margin: 500, lev: 3, notional: 1500, entry: 1000, openedAt: 1, closedAt: 1_760_090_000, exit: 1470, pnl: -705, funding: -1.5, borrow: 0.75, fee: 0.3, returned: 0, net: -500.15, reason: "liquidation" }],
     board: [{ rank: 1, address: "0x1234…5678", equity: 10500 }, { rank: 2, address: "0xabcd…ef01", equity: 9000 }],
     ...p,
   }));
@@ -110,22 +123,31 @@ const esc = (s: string) => s.replace(/'/g, "&#x27;");
 const visible = (html: string) => html.replace(/<[^>]*?(?:aria-label|title)="([^"]*)"[^>]*>/g, " $1 ").replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&amp;/g, "&");
 
 describe("ticket", () => {
-  test("signed-in holder: Long / Short, margin, leverage 1–20×, liquidation price, fee, funding; both disclaimers above the button", () => {
+  test("signed-in holder: Long / Short, margin, leverage 1–30×, liquidation price with costs, fee, borrow, funding per side; both disclaimers above the button", () => {
     const h = ticket();
-    for (const t of ["Long", "Short", "Margin", "Leverage", "Liquidation price", "Fee", "Size", "Balance", "Funding", "−0.0300%/h", "1×", "2×", "3×", "5×", "10×", "20×"]) expect(h).toContain(t);
+    for (const t of ["Long", "Short", "Margin", "Leverage", "Liquidation price", "Fee", "Size", "Balance", "Funding long", "Funding short", "Borrow", "pts/day", "in 24 h", "pays 0.0300%/h", "receives 0.0270%/h"]) expect(h).toContain(t);
+    for (const l of RULES.levels) expect(h).toContain(`>${l}×</button>`);
+    expect(RULES.levels).toEqual([1, 2, 3, 5, 10, 20, 30]);
+    // at 100 pts, 1× (the default): borrow 0; the liquidation price a day on moves with this hour's long rate
+    expect(h).toContain(`${fmtPts(0)} pts/day`);
+    const pos = { side: "long" as const, margin: 100, notional: 100, entry: 1000, openedAt: 0 };
+    expect(h).toContain(`${fmtPx(liqPrice(pos, 0))} · ${fmtPx(liqPrice(pos, borrowPaid(pos, 86400) + 0.0003 * 100 * 24))} in 24 h`);
+    expect(borrowPerDay(30000, 1000)).toBeCloseTo(29000 * 0.1 / 365, 12);
     expect(h).toContain(`>${openLabel("long", 1)}</button>`);
     const button = h.indexOf('type="submit"');
     expect(h.indexOf(PILOT_DISCLAIMER)).toBeGreaterThan(-1);
     expect(h.indexOf(PILOT_DISCLAIMER)).toBeLessThan(button);
     expect(h.indexOf(esc(PILOT_LIQ_NOTE))).toBeGreaterThan(-1);
     expect(h.indexOf(esc(PILOT_LIQ_NOTE))).toBeLessThan(button);
-    for (const l of ["About the points pilot", "About funding"]) expect(h).toContain(`aria-label="${l}"`);
+    for (const l of ["About the points pilot", "About funding", "About borrow", "About the liquidation price"]) expect(h).toContain(`aria-label="${l}"`);
     expect(banned(visible(h))).toBeUndefined();
   });
   test("leverage above the volatility cap is disabled; paused, base-paused and stale marks block the button; a queued order says so", () => {
     const capped = ticket({ view: { ...VIEW, mark: { ...MARK, maxLev: 5 } } });
     expect(capped).toMatch(/disabled="">10×<\/button>/);
     expect(capped).toMatch(/disabled="">20×<\/button>/);
+    expect(capped).toMatch(/disabled="">30×<\/button>/);
+    expect(ticket()).not.toMatch(/disabled="">30×<\/button>/);
     expect(capped).not.toMatch(/disabled="">5×<\/button>/);
     expect(capped).toContain(esc(PILOT_COPY.capped(5)));
     for (const [mark, text] of [[{ ...MARK, paused: true }, PILOT_COPY.paused], [{ ...MARK, basePaused: true }, PILOT_COPY.basePaused], [{ ...MARK, fresh: false }, PILOT_COPY.priceUpdating]] as const) {
@@ -166,14 +188,14 @@ describe("ticket", () => {
 });
 
 describe("positions, history, leaderboard, funding", () => {
-  test("positions: entry, mark, PnL, funding, liquidation price and Close", () => {
+  test("positions: entry, mark, PnL, funding, borrow, liquidation price and Close", () => {
     const h = tables();
-    for (const t of ["Positions (1)", "History", "Leaderboard", "Funding", "Long 2×", "990.00", "1,000.00", "+20.20", "+0.60", "Liq. price", ">Close</button>"]) expect(h).toContain(t);
+    for (const t of ["Positions (1)", "History", "Leaderboard", "Funding", "Economy", "Long 2×", "990.00", "1,000.00", "+20.20", "+0.60", "Borrow", "0.02", "Liq. price", ">Close</button>"]) expect(h).toContain(t);
     expect(banned(visible(h))).toBeUndefined();
   });
   test("history: funding, net result and liquidations", () => {
     const h = tables({ tab: "history" });
-    for (const t of ["Short 3×", fmtWhen(1_760_090_000), fmtSigned(-1.5), fmtSigned(-500.15), "Liquidated"]) expect(h).toContain(t);
+    for (const t of ["Short 3×", fmtWhen(1_760_090_000), fmtSigned(-1.5), "0.75", fmtSigned(-500.15), "Liquidated"]) expect(h).toContain(t);
     expect(banned(visible(h))).toBeUndefined();
   });
   test("leaderboard: shortened addresses, own row marked, the disclaimer under it; visible signed out", () => {
@@ -186,10 +208,25 @@ describe("positions, history, leaderboard, funding", () => {
     expect(tables({ tab: "positions", address: null })).toContain(PILOT_COPY.signInForPositions);
     expect(banned(visible(h))).toBeUndefined();
   });
-  test("funding: the recent hourly rates with who pays, and an i bubble", () => {
+  test("funding: the recent hourly rates per side with who pays, the skew, and an i bubble", () => {
     const h = tables({ tab: "funding", address: null });
-    for (const t of ["−0.0300%/h", "+0.0200%/h", "receive", "pay", 'aria-label="About funding"']) expect(h).toContain(t);
+    for (const t of ["Skew", "50% long", "0%", fmtSideRate(0.0003), fmtSideRate(-0.00027), "receives 0.0200%/h", "pays 0.0200%/h", 'aria-label="About funding"']) expect(h).toContain(t);
     expect(banned(visible(h))).toBeUndefined();
+  });
+  test("economy (R8): skew, funding per side, the house, the fee pool by source, insurance and the split in points; the disclaimer", () => {
+    const h = tables({ tab: "economy", address: null, economy: ECONOMY });
+    for (const t of [
+      "Skew", "50% long", "Funding long", "pays 0.0300%/h", "Funding short", "receives 0.0270%/h",
+      "House position", "Short 40,000.00 pts", "House P&amp;L 24 h", "+12.50 pts", "−3.25 pts", "+40.00 pts",
+      "Fee pool since the last split", "56.00 pts", "Trading fees", "10.00 pts", "Borrow", "5.00 pts", "Funding cut", "1.00 pts", "House",
+      "Insurance", "−2.50 pts", "Split this week", "11.20 insurance · 44.80 treasury pts", "Buyback (in treasury)", "22.40 pts",
+      "Last split", "100.00 pts", "Treasury, all splits", "80.00 pts", "Buyback, all splits", "40.00 pts",
+      'aria-label="About the economy"', 'aria-label="About insurance"', PILOT_DISCLAIMER,
+    ]) expect(h).toContain(t);
+    expect(h).not.toMatch(/REGI\b[^<]*\d/); // points only: no REGI amount anywhere
+    expect(PILOT_COPY.economyTip).toContain("All in points; nothing is bought during the pilot.");
+    expect(banned(visible(h))).toBeUndefined();
+    expect(tables({ tab: "economy", economy: null })).toContain("Loading…");
   });
 });
 
