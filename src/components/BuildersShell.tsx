@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LEGAL, LEGAL_LINKS } from "@/lib/legal";
 import type { ReactNode } from "react";
 import { BrandLockup } from "./Brand";
 import { WalletButton } from "./WalletButton";
@@ -40,9 +41,11 @@ export function BuildersShell({ children, wallet = false, note }: { children: Re
       <footer className="pa-foot">
         <div className="pa-foot-in">
           <span>Verified builders on {BUILDERS.label}</span>
-          {note && <span>{note}</span>}
+          {note && note !== LEGAL.independence && <span>{note}</span>}
+          <span>{LEGAL.independence}</span>
           <span className="flex flex-wrap gap-4">
             <Link href="/guide/">Builder guide</Link>
+            {LEGAL_LINKS.map((l) => <Link key={l.href} href={l.href}>{l.label}</Link>)}
             <a href="https://registrai.cc">registrai.cc ↗</a>
             <a href="https://github.com/registrai-multichain" target="_blank" rel="noreferrer">GitHub ↗</a>
           </span>

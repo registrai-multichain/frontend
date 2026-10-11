@@ -19,12 +19,21 @@ export interface TicketProps {
   onOrder: (o: { side: Side; margin: number; lev: number }) => void;
 }
 
+/** Sign-in needs the 18+ and Terms confirmation first; the signed message repeats it (PILOT_LOGIN_NOTE). */
 function SignInRow({ label, busy, regiMin, onSignIn }: { label: string; busy?: boolean; regiMin: number; onSignIn: () => void }) {
+  const [agreed, setAgreed] = useState(false);
   return (
-    <div className="abi-pt-row">
-      <button type="button" className="abi-pt-primary" onClick={onSignIn} disabled={busy}>{busy ? PILOT_COPY.signingIn : label}</button>
-      <InfoBubble label="About sign-in">{PILOT_COPY.signInTip(regiMin)}</InfoBubble>
-    </div>
+    <>
+      <label className="abi-pt-agree">
+        <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />{" "}
+        {PILOT_COPY.agreeBefore}<a href="/terms/" target="_blank" rel="noopener">{PILOT_COPY.agreeTerms}</a>{PILOT_COPY.agreeAnd}
+        <a href="/privacy/" target="_blank" rel="noopener">{PILOT_COPY.agreePrivacy}</a>{PILOT_COPY.agreeAfter}
+      </label>
+      <div className="abi-pt-row">
+        <button type="button" className="abi-pt-primary" onClick={onSignIn} disabled={busy || !agreed}>{busy ? PILOT_COPY.signingIn : label}</button>
+        <InfoBubble label="About sign-in">{PILOT_COPY.signInTip(regiMin)}</InfoBubble>
+      </div>
+    </>
   );
 }
 

@@ -10,7 +10,7 @@ import type { Side } from "./abi-pilot";
 // ───────────────────────────── sign-in ─────────────────────────────
 
 export const PILOT_LOGIN_TITLE = "Registrai ABI points pilot sign-in";
-export const PILOT_LOGIN_NOTE = "Signing in is not a transaction and costs nothing.";
+export const PILOT_LOGIN_NOTE = "I am 18 or older and accept the Terms of use (/terms). Signing in is not a transaction and costs nothing.";
 export const PILOT_SESSION_COOKIE = "__Host-rb_pilot";
 export const PILOT_SESSION_TTL_S = 12 * 60 * 60;
 

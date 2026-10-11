@@ -216,3 +216,9 @@
 .pa-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .pa-table th, .pa-table td { text-align: left; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); vertical-align: baseline; }
 .pa-table th { font-weight: 400; color: var(--fg-mute); }
+
+/* Legal pages (terms, privacy, pilot rules): plain bullet lists */
+.pa-list { list-style: disc; padding-left: 1.25rem; margin: 0.5rem 0 1rem; display: grid; gap: 0.45rem; }
+.pa-list li { line-height: 1.55; }
+.pa-legal-table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1rem; font-size: 0.92em; }
+.pa-legal-table th, .pa-legal-table td { text-align: left; vertical-align: top; padding: 0.45rem 0.6rem 0.45rem 0; border-bottom: 1px solid var(--line); }

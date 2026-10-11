@@ -45,3 +45,7 @@
 .abi-t .abi-seg[role="tablist"], .abi-t .abi-pt .abi-seg { flex-wrap: wrap; }
 .abi-t .abi-pt-field { flex-wrap: wrap; }
 .abi-t .abi-pt-panel, .abi-t .abi-pt-row-wrap > .abi-panel { min-width: 0; max-width: 100%; }
+/* the 18+ and Terms confirmation before sign-in */
+.abi-pt-agree { display: flex; align-items: flex-start; gap: 6px; font-size: 12px; line-height: 1.4; color: var(--abi-mute); margin-bottom: 8px; }
+.abi-pt-agree input { margin-top: 2px; }
+.abi-pt-agree a { color: var(--abi-fg); text-decoration: underline; }

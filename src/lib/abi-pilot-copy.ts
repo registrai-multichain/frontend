@@ -25,6 +25,12 @@ export const PILOT_COPY = {
   notAtSnapshot: "This wallet didn't hold REGI at the pilot snapshot block.",
   regiUnchecked: "Couldn't check REGI right now",
   signIn: "Sign in",
+  /** "I'm 18 or older and accept the Terms and the Privacy notice." with the two links */
+  agreeBefore: "I'm 18 or older and accept the ",
+  agreeTerms: "Terms",
+  agreeAnd: " and the ",
+  agreePrivacy: "Privacy notice",
+  agreeAfter: ".",
   signingIn: "Check your wallet…",
   signOut: "Sign out",
   signInTip: (min: number) =>

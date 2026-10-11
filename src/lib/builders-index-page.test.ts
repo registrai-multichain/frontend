@@ -109,7 +109,11 @@ describe("audit L5 and L12: the page's footer line and its share tags", () => {
     expect(INDEX_FOOT_NOTE).toBe("Independent. Not affiliated with Circle or Arc.");
     const html = renderToStaticMarkup(createElement(Shell, { note: INDEX_FOOT_NOTE }, createElement("p", null, "Loading…")));
     expect(html).toMatch(/<footer class="pa-foot">[\s\S]*Independent\. Not affiliated with Circle or Arc\.[\s\S]*<\/footer>/);
-    expect(renderToStaticMarkup(createElement(Shell, null, null))).not.toContain("affiliated");
+    // every builder page carries it (the shell footer, with the Terms / Privacy / Pilot rules links), never twice
+    expect(html.match(/Not affiliated with Circle or Arc/g)).toHaveLength(1);
+    const plain = renderToStaticMarkup(createElement(Shell, null, null));
+    expect(plain.match(/Not affiliated with Circle or Arc/g)).toHaveLength(1);
+    for (const href of ["/terms", "/privacy", "/pilot-rules"]) expect(plain).toContain(`href="${href}"`);
   });
   test("plain title and description, in the OpenGraph and Twitter tags too; no landing-page slogan", () => {
     const title = "Arc indices · Registrai";
