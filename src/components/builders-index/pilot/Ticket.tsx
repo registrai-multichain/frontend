@@ -4,7 +4,7 @@ import { useState } from "react";
 import { InfoBubble } from "@/components/InfoBubble";
 import { borrowPaid, liqPrice, RULES, type Side } from "@/lib/abi-pilot";
 import type { PilotAccountView } from "@/lib/abi-pilot-api";
-import { borrowPerDay, fmtHour, fmtPts, fmtPx, fmtSideRate, openLabel, PILOT_COPY, PILOT_DISCLAIMER, PILOT_LIQ_NOTE } from "@/lib/abi-pilot-copy";
+import { borrowPerDay, fmtHour, fmtPts, fmtPx, fmtSideRate, openLabel, PILOT_COPY, PILOT_DISCLAIMER, PILOT_JUMP_NOTE, PILOT_LIQ_NOTE } from "@/lib/abi-pilot-copy";
 
 export interface TicketProps {
   view: PilotAccountView;
@@ -66,7 +66,7 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
       {view.address && <span className="sp"><button type="button" className="abi-pt-link" onClick={onSignOut}>{PILOT_COPY.signOut}</button></span>}
     </div>
   );
-  const disclaimer = <div className="abi-pt-disc"><p>{PILOT_DISCLAIMER}</p></div>;
+  const disclaimer = <div className="abi-pt-disc"><p>{PILOT_DISCLAIMER}</p><p>{PILOT_JUMP_NOTE}</p></div>;
 
   const closedLine = view.misconfigured ? PILOT_COPY.misconfigured : PILOT_COPY.closed;
   let body: React.ReactNode;
@@ -153,7 +153,7 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
           <dt>Balance</dt><dd>{fmtPts(balance)} pts</dd>
           {acct?.equity !== null && acct?.equity !== undefined && (<><dt>Equity</dt><dd>{fmtPts(acct.equity)} pts</dd></>)}
         </dl>
-        <div className="abi-pt-disc"><p>{PILOT_DISCLAIMER}</p><p>{PILOT_LIQ_NOTE}</p></div>
+        <div className="abi-pt-disc"><p>{PILOT_DISCLAIMER}</p><p>{PILOT_LIQ_NOTE}</p><p>{PILOT_JUMP_NOTE}</p></div>
         <button type="submit" className={`abi-pt-primary ${side}`} disabled={Boolean(problem) || busy}>{filling ? PILOT_COPY.filling : openLabel(side, levUse)}</button>
         {problem && (
           <p className="abi-pt-note" role="status">

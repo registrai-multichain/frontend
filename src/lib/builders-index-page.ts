@@ -6,6 +6,9 @@ export const abiPath = "/api/index";
 export const abiSeenPath = "/api/index/seen";
 
 /** The copy is written for ABI; the other indices (spec §17) show their own code. */
+/** Audit L5: always visible in the index pages' footer (Arc and USDC are in the index names). */
+export const INDEX_FOOT_NOTE = "Independent. Not affiliated with Circle or Arc.";
+
 export const forIndex = (text: string, code: string): string => text.replace(/\bABI\b/g, code);
 
 /** Plain labels only (owner copy rules): every explanation sits behind an "i" bubble. */

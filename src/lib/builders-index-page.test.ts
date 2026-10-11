@@ -2,7 +2,11 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { indexFixture } from "./builders-index-fixture";
-import { ABI_COPY, abiState, baseTip, decayTip, startGate } from "./builders-index-page";
+import { createElement, type FC, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { metadata } from "@/app/builders-index/page";
+import { BuildersShell } from "@/components/BuildersShell";
+import { ABI_COPY, abiState, baseTip, decayTip, INDEX_FOOT_NOTE, startGate } from "./builders-index-page";
 import { INDEX } from "./abi-live-mock";
 
 describe("page state", () => {
@@ -96,5 +100,21 @@ describe("audit SS-3: engine restarts after a mismatched seen file back off", ()
     let downloads = 0;
     for (let t = 0; t < 3600_000; t += 60_000) if (g.due(t, false)) { downloads++; g.miss(t); }
     expect(downloads).toBe(14); // minutes 0, 1, 3, then every 5 minutes (8, 13, …, 58)
+  });
+});
+
+const Shell = BuildersShell as FC<{ note?: ReactNode; children?: ReactNode }>;
+describe("audit L5 and L12: the page's footer line and its share tags", () => {
+  test("the footer says the index is independent, on every state of the page", () => {
+    expect(INDEX_FOOT_NOTE).toBe("Independent. Not affiliated with Circle or Arc.");
+    const html = renderToStaticMarkup(createElement(Shell, { note: INDEX_FOOT_NOTE }, createElement("p", null, "Loading…")));
+    expect(html).toMatch(/<footer class="pa-foot">[\s\S]*Independent\. Not affiliated with Circle or Arc\.[\s\S]*<\/footer>/);
+    expect(renderToStaticMarkup(createElement(Shell, null, null))).not.toContain("affiliated");
+  });
+  test("plain title and description, in the OpenGraph and Twitter tags too; no landing-page slogan", () => {
+    const title = "Arc indices · Registrai";
+    const description = "Hourly indices of builder, integration and ecosystem activity on Arc mainnet, computed from public chain data.";
+    expect(metadata).toMatchObject({ title, description, openGraph: { title, description, url: "https://builder.registrai.cc/builders-index/" }, twitter: { title, description } });
+    expect(JSON.stringify(metadata)).not.toMatch(/Tabula|Proof, mapped|proof layer|You judge/i);
   });
 });

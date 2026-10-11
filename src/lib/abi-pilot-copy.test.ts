@@ -7,7 +7,7 @@ import { PilotTables, type PilotTablesProps } from "@/components/builders-index/
 import { Ticket, type TicketProps } from "@/components/builders-index/pilot/Ticket";
 import { borrowPaid, liqPrice, RULES } from "./abi-pilot";
 import { accountPollMs, type EconomyView, type PilotAccountView, type RateView } from "./abi-pilot-api";
-import { borrowPerDay, fmtBook, fmtPts, fmtPx, fmtSideRate, fmtSigned, fmtWhen, openLabel, PILOT_COPY, PILOT_DISCLAIMER, PILOT_DISCLAIMERS, PILOT_LIQ_NOTE } from "./abi-pilot-copy";
+import { borrowPerDay, fmtBook, fmtPts, fmtPx, fmtSideRate, fmtSigned, fmtWhen, openLabel, PILOT_COPY, PILOT_DISCLAIMER, PILOT_DISCLAIMERS, PILOT_JUMP_NOTE, PILOT_LIQ_NOTE } from "./abi-pilot-copy";
 
 /**
  * R7 copy lint for the points pilot: no prize-type words anywhere in pilot copy (UI strings, server
@@ -58,6 +58,7 @@ describe("pilot copy lint (R7)", () => {
   test("the disclaimers are the exact required strings", () => {
     expect(PILOT_DISCLAIMER).toBe("Points only. No deposits, no prizes; points have no value.");
     expect(PILOT_LIQ_NOTE).toBe("Liquidation only takes the position's margin.");
+    expect(PILOT_JUMP_NOTE).toBe("Recorded milestones move ABI at once and can liquidate leveraged positions."); // audit L4
     expect(PILOT_COPY.closed).toBe("The points pilot is not open yet.");
     // owner decision 2026-10-11 (audit PE-3): the gate is 1,000,000 REGI, and the copy says so
     expect(PILOT_COPY.holdRegi(1_000_000)).toBe("Hold 1,000,000 REGI to join the points pilot.");
@@ -147,6 +148,9 @@ describe("ticket", () => {
     expect(h.indexOf(PILOT_DISCLAIMER)).toBeLessThan(button);
     expect(h.indexOf(esc(PILOT_LIQ_NOTE))).toBeGreaterThan(-1);
     expect(h.indexOf(esc(PILOT_LIQ_NOTE))).toBeLessThan(button);
+    // audit L4: the milestone-step risk inline, next to the other disclaimers, above the button
+    expect(h).toContain(`<p>${esc(PILOT_LIQ_NOTE)}</p><p>${PILOT_JUMP_NOTE}</p>`);
+    expect(h.indexOf(PILOT_JUMP_NOTE)).toBeLessThan(button);
     for (const l of ["About the points pilot", "About funding", "About borrow", "About the liquidation price"]) expect(h).toContain(`aria-label="${l}"`);
     expect(banned(visible(h))).toBeUndefined();
   });
@@ -197,6 +201,7 @@ describe("ticket", () => {
       const h = ticket({ view });
       expect(h).toContain(esc(line));
       expect(h).toContain(PILOT_DISCLAIMER);
+      expect(h).toContain(PILOT_JUMP_NOTE);
       expect(h).not.toContain('type="submit"');
       expect(banned(visible(h))).toBeUndefined();
     }

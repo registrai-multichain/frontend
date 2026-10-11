@@ -18,9 +18,9 @@ const NAV: NavItem[] = [
 /**
  * The builder side's frame (/builders, /verify, /guide, /suggest): the paper look,
  * pinned to the BUILDERS network and saying nothing about markets (mainnet phase 1
- * has only the builder registries).
+ * has only the builder registries). note: an extra footer line a page must always show.
  */
-export function BuildersShell({ children, wallet = false }: { children: ReactNode; wallet?: boolean }) {
+export function BuildersShell({ children, wallet = false, note }: { children: ReactNode; wallet?: boolean; note?: ReactNode }) {
   return (
     <div className="paper-theme paper-type flex min-h-screen flex-col">
       <header className="pa-topbar">
@@ -40,6 +40,7 @@ export function BuildersShell({ children, wallet = false }: { children: ReactNod
       <footer className="pa-foot">
         <div className="pa-foot-in">
           <span>Verified builders on {BUILDERS.label}</span>
+          {note && <span>{note}</span>}
           <span className="flex flex-wrap gap-4">
             <Link href="/guide/">Builder guide</Link>
             <a href="https://registrai.cc">registrai.cc ↗</a>

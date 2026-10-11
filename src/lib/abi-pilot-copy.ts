@@ -1,6 +1,6 @@
 /**
  * ABI points pilot: the page copy and number formats. Plain labels; explanations sit behind an "i"
- * bubble; the two disclaimers are always visible above the order button (plan R7; economy v3 plan R8).
+ * bubble; the disclaimers are always visible above the order button (plan R7; economy v3 plan R8; audit L4).
  * The copy lint (src/lib/abi-pilot-copy.test.ts) bans prize-type words everywhere in pilot copy except
  * inside these two exact disclaimer strings.
  */
@@ -9,7 +9,9 @@ import { holdRegiText } from "./abi-pilot-api";
 
 export const PILOT_DISCLAIMER = "Points only. No deposits, no prizes; points have no value.";
 export const PILOT_LIQ_NOTE = "Liquidation only takes the position's margin.";
-export const PILOT_DISCLAIMERS = [PILOT_DISCLAIMER, PILOT_LIQ_NOTE] as const;
+/** Audit L4: the risk that decides outcomes at high leverage, inline (never only behind "i"). */
+export const PILOT_JUMP_NOTE = "Recorded milestones move ABI at once and can liquidate leveraged positions.";
+export const PILOT_DISCLAIMERS = [PILOT_DISCLAIMER, PILOT_LIQ_NOTE, PILOT_JUMP_NOTE] as const;
 
 const pct = (x: number) => `${+(x * 100).toFixed(3)}%`;
 const top = RULES.levels[RULES.levels.length - 1];
