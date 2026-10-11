@@ -40,6 +40,8 @@ describe("the vendored reference", () => {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const CALLS: Record<string, (P: Api, i: any) => unknown> = {
   fundingRates: (P, i) => P.fundingRates(i),
+  fundingRatesPremium: (P, i) => P.fundingRates(i),
+  premium: (P, i) => P.premium(i.n, i.steps),
   fundingPaid: (P, i) => P.fundingPaid(i.pos, i.rates, i.to),
   borrowPaid: (P, i) => P.borrowPaid(i.pos, i.to),
   liqPrice: (P, i) => P.liqPrice(i.pos, i.costs),
@@ -84,7 +86,7 @@ describe.each([["reference", REF], ["port", Port as Api]])("pilot.test.js cases 
     const jumped = closes.slice(); for (let i = 28; i < jumped.length; i++) jumped[i] *= 1.025;
     near(P.risk(jumped, { 28: 1.025 }).trend!, -0.0002, 1e-12);
     expect(P.risk(jumped).trend!).toBeGreaterThan(0.003);
-    expect(P.risk([1000])).toEqual({ trend: null, funding: null, sigma1h: null, sigma24: null });
+    expect(P.risk([1000])).toEqual({ trend: null, funding: null, sigma1h: null, sigma24: null, premium: null });
   });
 
   test("leverage: jump cap 30× even when volatility allows more", () => {
@@ -171,6 +173,18 @@ describe.each([["reference", REF], ["port", Port as Api]])("pilot.test.js cases 
     expect(P.bookTW(pos, h + 7200, h + 10800)).toEqual({ L: 60000, S: 36000 });
   });
 
+  test("milestone premium: longs pay the trailing-30-day mean log step; the house collects it; conservation holds", () => {
+    const closes = Array.from({ length: 800 }, () => 1000);
+    near(P.premium(closes.length, { 799: 1.0508, 50: 1.25 }), Math.log(1.0508) / 720, 1e-15); // step 50 is outside the 720 h window
+    near(P.risk(closes, { 799: 1.0508 }).premium!, Math.log(1.0508) / 720, 1e-15);
+    const pm = 0.00005, a = P.fundingRates({ L: 70000, S: 30000, trend: -0.0002, sigma1h: 0.0001 }), b = P.fundingRates({ L: 70000, S: 30000, trend: -0.0002, sigma1h: 0.0001, premium: pm });
+    near(b.long - a.long, pm); near(b.short, a.short); near(b.housePremium, pm * 70000);
+    for (const [L, S] of [[70000, 30000], [0, 50000], [5e5, 5e5]]) {
+      const fr = P.fundingRates({ L, S, trend: 0.0001, sigma1h: 0.0001, premium: pm });
+      near(fr.long * L + fr.short * S - fr.houseFunding, 0, 1e-9);
+    }
+  });
+
   test("fee split", () => {
     const s = P.splitFees(1000);
     near(s.insurance, 200); near(s.treasury, 800); near(s.buyback, 400);
@@ -194,13 +208,15 @@ describe("port = reference on random inputs (exact)", () => {
       const steps = rnd() < 0.3 && closes.length > 2 ? { [1 + Math.floor(rnd() * (closes.length - 1))]: 1 + (rnd() - 0.5) * 0.05 } : {};
       expect(Port.returns(closes, steps)).toEqual(REF.returns(closes, steps));
       expect(Port.risk(closes, steps)).toEqual(REF.risk(closes, steps));
+      const n = Math.floor(rnd() * 1500), far = { [Math.floor(rnd() * n)]: 1 + rnd() * 0.25, [Math.floor(rnd() * n)]: pick([0, -1, 1.1]) };
+      expect(Port.premium(n, far)).toBe(REF.premium(n, far));
       const rk = {
         sigma24: pick([0, null, undefined, NaN, rnd() * 0.2, 0.005, 0.1, 0.0125, 0.0005]),
         sigma1h: pick([0, null, undefined, rnd() * 0.01, 0.001]),
         ch1: pick([0, null, undefined, (rnd() - 0.5) * 0.03, 0.005, -0.005]),
       };
       expect(Port.maxLeverage(rk)).toEqual(REF.maxLeverage(rk));
-      const book = { L: pick([0, Math.round(rnd() * 2e6), 50000]), S: pick([0, Math.round(rnd() * 2e6), 50000]), trend: pick([0, null, undefined, (rnd() - 0.5) * 0.001]), sigma1h: pick([0, null, undefined, rnd() * 0.0005]) };
+      const book = { L: pick([0, Math.round(rnd() * 2e6), 50000]), S: pick([0, Math.round(rnd() * 2e6), 50000]), trend: pick([0, null, undefined, (rnd() - 0.5) * 0.001]), sigma1h: pick([0, null, undefined, rnd() * 0.0005]), premium: pick([0, null, undefined, rnd() * 0.0001]) };
       expect(Port.fundingRates(book)).toEqual(REF.fundingRates(book));
       const hh = { ...book, open: 900 + rnd() * 200, close: 900 + rnd() * 200 };
       expect(Port.houseHour(hh)).toEqual(REF.houseHour(hh));

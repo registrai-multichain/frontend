@@ -40,6 +40,8 @@ export interface MarkExtra {
   base_pending: boolean;
   base_step_ts: number | null;
   milestone_ts: number | null;
+  /** §9.15: the milestone premium (absent by default: an older producer, counted as 0; null blocks the hour's fix). */
+  milestone_premium: number | null;
 }
 
 /**
@@ -123,6 +125,7 @@ export function setup(o: { open?: boolean; db?: boolean; secret?: string; snapsh
       base_pending: x.base_pending ?? false, base_step_ts: x.base_step_ts ?? null,
     };
     if (x.milestone_ts !== undefined) body.milestone_ts = x.milestone_ts;
+    if (x.milestone_premium !== undefined) body.milestone_premium = x.milestone_premium;
     // like mark.py v3: trend every post (default 0 here), null until its hour close is confirmed; funding_rate = trend
     body.trend = x.trend === undefined ? 0 : x.trend;
     body.funding_rate = body.trend;

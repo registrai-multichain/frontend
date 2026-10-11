@@ -27,6 +27,7 @@
     fundingCut: 0.10,         // protocol share of every skew-funding payment
     borrowApr: 0.10,
     split: { insurance: 0.2, treasury: 0.8, buybackOfTreasury: 0.5 },
+    premiumWindow: 720,       // §9.15 milestone premium: mean hourly log milestone step over the last 30 days (720 h)
   };
 
   /* closes: hourly closes, ascending. steps (optional): {i: factor} = the milestone factor applied in the return
@@ -39,11 +40,20 @@
   function risk(closes, steps = {}) {
     const all = returns(closes, steps);
     const rf = all.slice(-RULES.window), rs = all.slice(-RULES.sigmaWindow);
-    if (!rs.length) return { trend: null, funding: null, sigma1h: null, sigma24: null };   // no data: callers refuse orders
+    if (!rs.length) return { trend: null, funding: null, sigma1h: null, sigma24: null, premium: null };   // no data: callers refuse orders
     const trend = rf.reduce((a, b) => a + b, 0) / rf.length;
     const mean = rs.reduce((a, b) => a + b, 0) / rs.length;
     const sd = Math.sqrt(rs.reduce((a, b) => a + (b - mean) ** 2, 0) / rs.length);
-    return { trend, funding: trend, sigma1h: sd, sigma24: sd * Math.sqrt(24) };
+    return { trend, funding: trend, sigma1h: sd, sigma24: sd * Math.sqrt(24), premium: premium(closes.length, steps) };
+  }
+
+  /* §9.15 (audit PE-2): milestone steps only go up and the trend divides them out, so longs held a free option the
+   * house paid for. Longs pay the expected step instead: Σ ln(step) over the milestone steps in the last 720 hourly
+   * returns, ÷ 720, per hour per unit of notional. steps: {i: factor} as in returns(); n = closes.length. */
+  function premium(n, steps = {}) {
+    let s = 0;
+    for (const k in steps) { const i = +k; if (i > n - 1 - RULES.premiumWindow && i <= n - 1 && steps[k] > 0) s += Math.log(steps[k]); }
+    return s / RULES.premiumWindow;
   }
 
   function maxLeverage({ sigma24, sigma1h, ch1 }) {
@@ -63,7 +73,7 @@
    *   predictable drift.
    * - Skew term: r = r_max · skew; the heavy side pays |r| per unit; the light side, house included, receives
    *   (1 − cut) · |r| per unit (light traders + house exposure = heavy notional); the protocol keeps cut · |r| · H. */
-  function fundingRates({ L, S, trend, sigma1h }) {
+  function fundingRates({ L, S, trend, sigma1h, premium = 0 }) {
     const oi = L + S, skew = oi > 0 ? (L - S) / oi : 0;
     const rMax = Math.max(RULES.rMaxMult * (sigma1h || 0), RULES.rMinFloor);
     const r = rMax * skew;                               // > 0: longs heavy, longs pay
@@ -72,13 +82,15 @@
     const paid = Math.abs(r) * H, cut = RULES.fundingCut * paid;
     const recv = (1 - RULES.fundingCut) * Math.abs(r);   // per unit on the light side
     const tr = trend || 0;
-    const long = tr + (heavy === "long" ? Math.abs(r) : heavy === "short" ? -recv : 0);
+    const pm = premium || 0;                             // §9.15: longs only, the house collects it
+    const long = tr + pm + (heavy === "long" ? Math.abs(r) : heavy === "short" ? -recv : 0);
     const short = -tr + (heavy === "short" ? Math.abs(r) : heavy === "long" ? -recv : 0);
     const houseExposure = S - L;                        // signed notional, + = house long
     const houseSkew = recv * Math.abs(houseExposure);    // its light-side receipt
     const houseTrend = tr * (L - S);                     // drift compensation (trend · traders' net long)
-    return { skew, rMax, r, heavy, long, short, cut, paid, houseExposure, houseSkew, houseTrend,
-             houseFunding: houseSkew + houseTrend + cut };   // per hour, points, to the house / fee pool
+    const housePremium = pm * L;
+    return { skew, rMax, r, heavy, long, short, cut, paid, houseExposure, houseSkew, houseTrend, housePremium,
+             houseFunding: houseSkew + houseTrend + housePremium + cut };   // per hour, points, to the house / fee pool
   }
 
   /* §9.14a: the book that fixes the next hour's rates is time-weighted over the closing hour [from, to), not a
@@ -96,8 +108,8 @@
   }
 
   /* The house's hour: PnL of its exposure over the hour plus its funding receipts (points). */
-  function houseHour({ L, S, open, close, trend, sigma1h }) {
-    const fr = fundingRates({ L, S, trend, sigma1h });
+  function houseHour({ L, S, open, close, trend, sigma1h, premium = 0 }) {
+    const fr = fundingRates({ L, S, trend, sigma1h, premium });
     const pricePnl = fr.houseExposure * (close / open - 1);
     return { pricePnl, funding: fr.houseFunding, total: pricePnl + fr.houseFunding, exposure: fr.houseExposure };
   }
@@ -184,7 +196,7 @@
     return { insurance: ins, treasury: tre, buyback: tre * RULES.split.buybackOfTreasury };
   }
 
-  const api = { RULES, returns, risk, maxLeverage, fundingRates, fundingPaid, fundingAccrued, borrowPaid, pnl, liqPrice,
+  const api = { RULES, returns, risk, premium, maxLeverage, fundingRates, fundingPaid, fundingAccrued, borrowPaid, pnl, liqPrice,
                 open, close, liquidation, equity, bookTW, houseHour, splitFees };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.ABIPilot = api;

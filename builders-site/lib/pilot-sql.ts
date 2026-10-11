@@ -11,7 +11,7 @@ export const TABLES = [
 ] as const;
 export const INDEXES = ["positions_wallet", "positions_open", "orders_pending", "orders_wallet", "bars_l", "bars_h", "ledger_ref", "ledger_kind_ts"] as const;
 /** The migrations, in order (the guard check and the D1 test double apply all of them). */
-export const MIGRATIONS = ["0001_pilot.sql", "0002_pilot_v3.sql"] as const;
+export const MIGRATIONS = ["0001_pilot.sql", "0002_pilot_v3.sql", "0003_pilot_premium.sql"] as const;
 
 /**
  * One ledger row plus the matching pools update, under the same guard (R4): `<guard>` is a SQL condition true only
@@ -79,11 +79,12 @@ export const SQL = {
   poolSettled: poolUnder(BY_SETTLE),
   /**
    * R2: the hour's rates, once (the first non-null trend wins), only by the post that won the mark row — bind: hour,
-   * long, short, skew, r, r_max, cut, house_exposure, house_funding, trend, sigma_1h, L, S, fixed_at, post, post.
+   * long, short, skew, r, r_max, cut, house_exposure, house_funding, trend, sigma_1h, L, S, fixed_at, post, premium,
+   * post (premium: §9.15, migration 0003).
    */
   ratesInsert:
-    "INSERT INTO rates (hour, long, short, skew, r, r_max, cut, house_exposure, house_funding, trend, sigma_1h, L, S, fixed_at, post) " +
-    "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT post FROM mark WHERE id = 1) = ? ON CONFLICT (hour) DO NOTHING",
+    "INSERT INTO rates (hour, long, short, skew, r, r_max, cut, house_exposure, house_funding, trend, sigma_1h, L, S, fixed_at, post, premium) " +
+    "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT post FROM mark WHERE id = 1) = ? ON CONFLICT (hour) DO NOTHING",
   /** Ledger rows of a rate fix (the projected cut): only if this post's rates insert won — guard bind: hour, post. */
   ledgerByRates: ledgerUnder(BY_RATES),
   poolByRates: poolUnder(BY_RATES),

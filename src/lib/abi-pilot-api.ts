@@ -211,6 +211,8 @@ export interface RateView {
   skew: number;
   /** The ex-milestone drift (trend term). */
   trend: number;
+  /** §9.15: the milestone premium longs pay (to the house); included in `long`. 0 before it existed. */
+  premium: number;
   /** The skew term: > 0 longs heavy. */
   r: number;
   /** The protocol cut projected for the hour (points). */

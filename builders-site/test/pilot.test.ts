@@ -106,6 +106,14 @@ describe("mark ingest (R4, spec §8.5)", () => {
     expect(err({ milestone_ts: now - 0.5 })).toMatch(/milestone_ts/);
     expect(err({ milestone_ts: "x" })).toMatch(/milestone_ts/);
     expect(validateMark({ ...ok, sigma_1h: undefined, sigma_24h: null }, now)).toMatchObject({ ok: true, data: { sigma1h: null, sigma24h: null } });
+    // §9.15 milestone premium: absent = 0 (an older producer), null = not known yet, else finite within ±0.001
+    expect(validateMark(ok, now)).toMatchObject({ ok: true, data: { premium: 0 } });
+    expect(validateMark({ ...ok, milestone_premium: null }, now)).toMatchObject({ ok: true, data: { premium: null } });
+    expect(validateMark({ ...ok, milestone_premium: 0.00007 }, now)).toMatchObject({ ok: true, data: { premium: 0.00007 } });
+    expect(validateMark({ ...ok, milestone_premium: -0.001 }, now)).toMatchObject({ ok: true, data: { premium: -0.001 } });
+    expect(err({ milestone_premium: 0.0011 })).toMatch(/milestone_premium/);
+    expect(err({ milestone_premium: "0.0001" })).toMatch(/milestone_premium/);
+    expect(err({ milestone_premium: Infinity })).toMatch(/milestone_premium/);
   });
 
   test("two posts racing: one wins, and only the winner's bars and rates are written", async () => {
@@ -302,7 +310,7 @@ describe("sign-in and session (R6)", () => {
     const hour = Math.floor(t.nowS() / 3600) * 3600;
     expect(a.body.funding).toEqual({ hour, long: -0.0002, short: 0.0002, skew: 0, next: hour + 3600 }); // joined to the mark row
     const pub = await t.call(handleFunding, t.req("/api/pilot/funding"));
-    const row = { t: hour, long: -0.0002, short: 0.0002, skew: 0, trend: -0.0002, r: 0, cut: 0, L: 0, S: 0, houseExposure: 0 };
+    const row = { t: hour, long: -0.0002, short: 0.0002, skew: 0, trend: -0.0002, premium: 0, r: 0, cut: 0, L: 0, S: 0, houseExposure: 0 };
     expect(pub.body).toEqual({ recent: [row], current: row, next: hour + 3600 });
   });
 });

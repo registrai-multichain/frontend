@@ -66,6 +66,8 @@ describe("pilot copy lint (R7)", () => {
     expect(PILOT_COPY.misconfigured).toBe("The points pilot is misconfigured; new orders are refused.");
     for (const s of [PILOT_COPY.holdRegi(1_000_000), PILOT_COPY.signInTip(1_000_000), PILOT_COPY.misconfigured]) expect(banned(s)).toBeUndefined();
     expect(PILOT_COPY.rulesTip).toContain("One direction at a time: close your longs before opening a short, and the reverse.");
+    // §9.15 (audit PE-2): the long rate includes the milestone premium, and the funding tip says so
+    expect(PILOT_COPY.fundingTip).toContain("Milestone premium: longs also pay the mean hourly milestone step of the last 30 days, to the house; it is part of the long rate.");
   });
   test("the lint catches what it should", () => {
     expect(banned("Win up to 500 pts")).toBe("Win");
@@ -91,7 +93,7 @@ describe("pilot copy lint (R7)", () => {
 
 const ME = "0x1234567890abcdef1234567890abcdef12345678";
 const MARK = { mark: 1000, ts: 1_760_097_600, age: 2, ch24: 0.01, ch1: 0.001, sigma1h: 0.0004, sigma24h: 0.002, maxLev: 30, levCap: 30, paused: false, basePaused: false, milestonePaused: false, fresh: true };
-const rate = (t: number, long: number, short: number, L: number, S: number): RateView => ({ t, long, short, skew: (L - S) / (L + S || 1), trend: 0, r: 0, cut: 0, L, S, houseExposure: S - L });
+const rate = (t: number, long: number, short: number, L: number, S: number): RateView => ({ t, long, short, skew: (L - S) / (L + S || 1), trend: 0, premium: 0, r: 0, cut: 0, L, S, houseExposure: S - L });
 const FUNDING = { recent: [rate(1_760_094_000, 0.0003, -0.00027, 75000, 25000), rate(1_760_090_400, -0.0002, 0.0002, 0, 0)], current: rate(1_760_094_000, 0.0003, -0.00027, 75000, 25000), next: 1_760_097_600 };
 const NOW = { hour: 1_760_094_000, long: 0.0003, short: -0.00027, skew: 0.5, next: 1_760_097_600 };
 const POS_LIQ = liqPrice({ side: "long", margin: 1000, notional: 2000, entry: 990 }, 0);

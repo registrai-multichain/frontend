@@ -40,6 +40,7 @@ export const PILOT_COPY = {
   fundingTip:
     "Each hour's rates are set at the start of the hour from the open positions, per point of size per hour held. " +
     `Trend: longs pay and shorts receive ABI's mean hourly move over the last ${RULES.window} closed hours, with milestone steps taken out. ` +
+    `Milestone premium: longs also pay the mean hourly milestone step of the last ${RULES.premiumWindow / 24} days, to the house; it is part of the long rate. ` +
     `Skew: the larger side pays up to max(${RULES.rMaxMult}σ_1h, ${pct(RULES.rMinFloor)}) an hour, in proportion to the imbalance; ` +
     `the smaller side and the house receive ${pct(1 - RULES.fundingCut)} of that per point and the pilot keeps ${pct(RULES.fundingCut)}. ` +
     "Funding counts toward equity, closing and liquidation.",

@@ -97,7 +97,7 @@ export async function runGuardChecks(db: D1Database, migrations: string | readon
     const post = (ts: number, id: string) => db.batch([
       q(SQL.markUpsert).bind(1000, ts, 0, 1, 0, 0, 0, 0.0004, 0.002, 1, null, 0, null, null, null, null, "[]", id),
       q(SQL.barUpsert).bind(60, 1001, 999, 1000, id),
-      q(SQL.ratesInsert).bind(0, 0.0003, -0.0001, 0.5, 0.0001, 0.0002, 0.5, -1000, 1, 0.0002, 0.0001, 3000, 1000, ts, id, id),
+      q(SQL.ratesInsert).bind(0, 0.0003, -0.0001, 0.5, 0.0001, 0.0002, 0.5, -1000, 1, 0.0002, 0.0001, 3000, 1000, ts, id, 0.00002, id),
       q(SQL.ledgerByRates).bind(0, "cut", 0.5, "hour:0", 0, id),
       q(SQL.poolByRates).bind(0.5, 0.5, "cut", 0, id),
     ]);
@@ -119,7 +119,7 @@ export async function runGuardChecks(db: D1Database, migrations: string | readon
       q(SQL.ledgerSettled).bind(101, "insurance_draw", -1, `draw:${lp}`, lp, "d3b"),
     ]);
     check("liquidation in the ingest batch: only for the post that won, once; its rows under its token only", changes(lw), [1, 0, 1, 1, 0, 0]);
-    check("rates once per hour; the same bar re-posted is not rewritten", [changes(await post(102, "e")), await q("SELECT long, post FROM rates").first(), await pool("cut")], [[1, 0, 0, 0, 0], { long: 0.0003, post: "a" }, { balance: 0.5, gross: 0.5 }]);
+    check("rates once per hour; the same bar re-posted is not rewritten", [changes(await post(102, "e")), await q("SELECT long, premium, post FROM rates").first(), await pool("cut")], [[1, 0, 0, 0, 0], { long: 0.0003, premium: 0.00002, post: "a" }, { balance: 0.5, gross: 0.5 }]);
 
     // the house's hour: only by the post whose rates insert won; a position's booking that moved aborts the whole batch
     const hp = (await q("INSERT INTO positions (wallet, side, margin, lev, notional, entry, liq, opened_at, fee, booked_to) VALUES (?, 'short', 100, 2, 200, 1000, 1500, 0, 0, 0) RETURNING id").bind(W).first<{ id: number }>())!.id;

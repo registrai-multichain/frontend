@@ -8,6 +8,7 @@
  * (short) the ex-milestone drift (mean hourly return of the last 6 closed hours, milestone steps divided out). Skew
  * term: the heavier side pays |r| = r_max · |skew|, r_max = max(1.5 · σ_1h, 0.005%/h); the lighter side, including
  * the house (always the counterparty to the net imbalance), receives 90% of that per unit; the protocol keeps 10%.
+ * Milestone premium (§9.15, audit PE-2): longs also pay the trailing 30-day mean hourly log milestone step, to the house.
  * Rates are stored per hour as { t, long, short }: points per unit of notional per hour, + = pays.
  * Borrow fee (§9.3): APR on notional − margin, hourly pro rata. Leverage (§9.4): min(volatility cap, jump cap).
  *
@@ -46,6 +47,8 @@ export const RULES = {
   fundingCut: 0.10,
   borrowApr: 0.10,
   split: { insurance: 0.2, treasury: 0.8, buybackOfTreasury: 0.5 },
+  /** §9.15 milestone premium: mean hourly log milestone step over the last 30 days (720 h). */
+  premiumWindow: 720,
 };
 
 export interface PilotPosition {
@@ -100,7 +103,9 @@ export interface FundingRates {
   houseExposure: number;
   houseSkew: number;
   houseTrend: number;
-  /** Points per hour to the house and the fee pool (cut included). */
+  /** §9.15: the milestone premium the longs pay the house, points per hour (premium · L). */
+  housePremium: number;
+  /** Points per hour to the house and the fee pool (cut and premium included). */
   houseFunding: number;
 }
 
@@ -128,14 +133,29 @@ export function returns(closes: readonly number[], steps: Readonly<Record<number
 export function risk(
   closes: readonly number[],
   steps: Readonly<Record<number, number>> = {},
-): { trend: number | null; funding: number | null; sigma1h: number | null; sigma24: number | null } {
+): { trend: number | null; funding: number | null; sigma1h: number | null; sigma24: number | null; premium: number | null } {
   const all = returns(closes, steps);
   const rf = all.slice(-RULES.window), rs = all.slice(-RULES.sigmaWindow);
-  if (!rs.length) return { trend: null, funding: null, sigma1h: null, sigma24: null };
+  if (!rs.length) return { trend: null, funding: null, sigma1h: null, sigma24: null, premium: null };
   const trend = rf.reduce((a, b) => a + b, 0) / rf.length;
   const mean = rs.reduce((a, b) => a + b, 0) / rs.length;
   const sd = Math.sqrt(rs.reduce((a, b) => a + (b - mean) ** 2, 0) / rs.length);
-  return { trend, funding: trend, sigma1h: sd, sigma24: sd * Math.sqrt(24) };
+  return { trend, funding: trend, sigma1h: sd, sigma24: sd * Math.sqrt(24), premium: premium(closes.length, steps) };
+}
+
+/**
+ * §9.15 (audit PE-2): milestone steps only go up and the trend divides them out, so longs held a free option the
+ * house paid for. Longs pay the expected step instead: Σ ln(step) over the milestone steps in the last
+ * premiumWindow hourly returns, ÷ premiumWindow, per hour per unit of notional. steps: { i: factor } as in
+ * returns(); n = closes.length.
+ */
+export function premium(n: number, steps: Readonly<Record<number, number>> = {}): number {
+  let s = 0;
+  for (const k in steps) {
+    const i = +k;
+    if (i > n - 1 - RULES.premiumWindow && i <= n - 1 && steps[k] > 0) s += Math.log(steps[k]);
+  }
+  return s / RULES.premiumWindow;
 }
 
 export function maxLeverage({ sigma24, sigma1h, ch1 }: Risk): { max: number; paused: boolean } {
@@ -156,7 +176,7 @@ export function maxLeverage({ sigma24, sigma1h, ch1 }: Risk): { max: number; pau
  * - Skew term: r = r_max · skew; the heavy side pays |r| per unit; the light side, house included, receives
  *   (1 − cut) · |r| per unit; the protocol keeps cut · |r| · H.
  */
-export function fundingRates({ L, S, trend, sigma1h }: { L: number; S: number; trend?: number | null; sigma1h?: number | null }): FundingRates {
+export function fundingRates({ L, S, trend, sigma1h, premium = 0 }: { L: number; S: number; trend?: number | null; sigma1h?: number | null; premium?: number | null }): FundingRates {
   const oi = L + S, skew = oi > 0 ? (L - S) / oi : 0;
   const rMax = Math.max(RULES.rMaxMult * (sigma1h || 0), RULES.rMinFloor);
   const r = rMax * skew;
@@ -165,12 +185,14 @@ export function fundingRates({ L, S, trend, sigma1h }: { L: number; S: number; t
   const paid = Math.abs(r) * H, cut = RULES.fundingCut * paid;
   const recv = (1 - RULES.fundingCut) * Math.abs(r);
   const tr = trend || 0;
-  const long = tr + (heavy === "long" ? Math.abs(r) : heavy === "short" ? -recv : 0);
+  const pm = premium || 0; // §9.15: longs only, the house collects it
+  const long = tr + pm + (heavy === "long" ? Math.abs(r) : heavy === "short" ? -recv : 0);
   const short = -tr + (heavy === "short" ? Math.abs(r) : heavy === "long" ? -recv : 0);
   const houseExposure = S - L;
   const houseSkew = recv * Math.abs(houseExposure);
   const houseTrend = tr * (L - S);
-  return { skew, rMax, r, heavy, long, short, cut, paid, houseExposure, houseSkew, houseTrend, houseFunding: houseSkew + houseTrend + cut };
+  const housePremium = pm * L;
+  return { skew, rMax, r, heavy, long, short, cut, paid, houseExposure, houseSkew, houseTrend, housePremium, houseFunding: houseSkew + houseTrend + housePremium + cut };
 }
 
 /**
@@ -189,10 +211,10 @@ export function bookTW(positions: readonly { side: Side | string; notional: numb
 }
 
 /** The house's hour: PnL of its exposure over the hour plus its funding receipts (points; cut included). */
-export function houseHour({ L, S, open, close, trend, sigma1h }: { L: number; S: number; open: number; close: number; trend?: number | null; sigma1h?: number | null }): {
+export function houseHour({ L, S, open, close, trend, sigma1h, premium = 0 }: { L: number; S: number; open: number; close: number; trend?: number | null; sigma1h?: number | null; premium?: number | null }): {
   pricePnl: number; funding: number; total: number; exposure: number;
 } {
-  const fr = fundingRates({ L, S, trend, sigma1h });
+  const fr = fundingRates({ L, S, trend, sigma1h, premium });
   const pricePnl = fr.houseExposure * (close / open - 1);
   return { pricePnl, funding: fr.houseFunding, total: pricePnl + fr.houseFunding, exposure: fr.houseExposure };
 }

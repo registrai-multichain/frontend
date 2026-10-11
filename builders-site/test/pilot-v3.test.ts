@@ -596,3 +596,78 @@ describe("conservation (R4, review S3)", () => {
   });
 });
 
+
+describe("milestone premium (§9.15, audit PE-2: longs pay it, the house collects it)", () => {
+  test("the long rate includes the premium, the rates row stores it, and the house's funding line holds what longs paid", async () => {
+    const t = v3();
+    const alice = await t.signIn(), bob = await t.signIn(BOB);
+    await t.mark(1000);
+    await t.open(alice, { side: "long", margin: 1000, lev: 10 }, 1000);
+    await t.open(bob, { side: "short", margin: 300, lev: 10 }, 1000);
+    t.nextHour();
+    const H = t.hour();
+    const { L, S } = t.tw(H - 3600);
+    const pm = 0.00005;
+    await t.mark(1000, { trend: -0.0001, milestone_premium: pm });
+    const fr = Engine.fundingRates({ L, S, trend: -0.0001, sigma1h: 0.0004, premium: pm });
+    const plain = Engine.fundingRates({ L, S, trend: -0.0001, sigma1h: 0.0004 });
+    expect(fr.long - plain.long).toBeCloseTo(pm, 15);
+    expect(fr.short).toBe(plain.short);
+    expect(t.db.q("SELECT long, short, premium, house_funding FROM rates WHERE hour = ?", H)).toEqual([{ long: fr.long, short: fr.short, premium: pm, house_funding: fr.houseFunding }]);
+    expect(fr.houseFunding - plain.houseFunding).toBeCloseTo(pm * L, 9);
+    // the funding view and the ticket's rate: the long rate with the premium in it
+    const f = await t.call(handleFunding, t.req("/api/pilot/funding"));
+    expect(f.body.current).toMatchObject({ long: fr.long, premium: pm });
+    expect((await t.account(alice)).body.funding).toMatchObject({ long: fr.long, short: fr.short });
+    expect((await t.economy()).rates.current).toMatchObject({ long: fr.long, premium: pm });
+    t.nextHour(1);
+    await t.mark(1000, { trend: -0.0001, milestone_premium: pm });
+    const longPos = t.enginePos(t.positions().find((r) => r.side === "long")!);
+    const shortPos = t.enginePos(t.positions().find((r) => r.side === "short")!);
+    const rh = [{ t: H, long: fr.long, short: fr.short, r: fr.r }];
+    const paid = Engine.fundingPaid(longPos, rh, H + 3600) + Engine.fundingPaid(shortPos, rh, H + 3600);
+    const cutPaid = 0.1 * Math.abs(fr.r) * (fr.heavy === "long" ? longPos.notional : shortPos.notional);
+    const booked = t.one<Json>("SELECT funding FROM house_hours WHERE hour = ?", H);
+    expect(booked.funding).toBeCloseTo(paid - cutPaid, 9);
+    expect(Engine.fundingPaid(longPos, rh, H + 3600) - Engine.fundingPaid(longPos, [{ t: H, long: plain.long, short: plain.short }], H + 3600)).toBeCloseTo(pm * longPos.notional, 9);
+    t.conserved();
+  });
+
+  test("conservation with a premium > 0: opens, closes, a liquidation, hours booked; Σ balance changes + Σ ledger = 0", async () => {
+    const t = v3();
+    const alice = await t.signIn(), bob = await t.signIn(BOB);
+    await t.mark(1000, { trend: -0.0002, milestone_premium: 0.0001 });
+    const a = await t.open(alice, { side: "long", margin: 1000, lev: 10 }, 1000, { milestone_premium: 0.0001 });
+    const b = await t.open(bob, { side: "short", margin: 500, lev: 20 }, 1001, { milestone_premium: 0.0001 });
+    for (let h = 0; h < 3; h++) {
+      t.nextHour(5);
+      await t.mark(1000 + h, { trend: 0.0001 * h, milestone_premium: 0.0002 });
+      t.tick(30 * 60_000);
+      await t.mark(1001 + h, { milestone_premium: 0.0002 });
+      t.conserved();
+    }
+    expect(t.db.q<{ premium: number }>("SELECT premium FROM rates ORDER BY hour").map((r) => r.premium)).toEqual([0.0001, 0.0002, 0.0002, 0.0002]);
+    expect((await t.close(alice, a.body.order.positionId, 1003, { milestone_premium: 0.0002 })).body.order.status).toBe("filled");
+    // Bob (20× short) is liquidated by a jump
+    t.tick(60_000);
+    const m = t.minute();
+    await t.markJson(1003, { bars: [[m - 60, 1060, 1003, 1003], [m, 1003, 1003, 1003]], milestone_premium: 0.0002 });
+    expect(t.db.q("SELECT reason FROM positions WHERE id = ?", b.body.order.positionId)).toEqual([{ reason: "liquidation" }]);
+    await t.bookAll(1003);
+    t.conserved(true);
+  });
+
+  test("an explicit null premium holds the hour's fix (like a null trend); a producer without the key fixes with 0", async () => {
+    const t = v3();
+    const alice = await t.signIn();
+    await t.mark(1000, { trend: -0.0001, milestone_premium: null });
+    expect(t.db.q("SELECT COUNT(*) AS n FROM rates")).toEqual([{ n: 0 }]);
+    expect((await t.submit(alice, { side: "long", margin: 100, lev: 2 })).body.error).toBe("price updating");
+    t.tick(5000);
+    await t.mark(1000, { trend: -0.0001, milestone_premium: 0.00003 });
+    expect(t.db.q("SELECT long, premium FROM rates")).toEqual([{ long: -0.0001 + 0.00003, premium: 0.00003 }]);
+    t.nextHour();
+    await t.mark(1000, { trend: -0.0001 });
+    expect(t.db.q("SELECT premium FROM rates WHERE hour = ?", t.hour())).toEqual([{ premium: 0 }]);
+  });
+});

@@ -13,7 +13,7 @@ test("risk: trend over 6 h with milestone steps divided out; σ over 24 h", () =
   const jumped = closes.slice(); for (let i = 28; i < jumped.length; i++) jumped[i] *= 1.025;   // a +2.5% milestone at return 28
   near(P.risk(jumped, { 28: 1.025 }).trend, -0.0002, 1e-12);
   assert.ok(P.risk(jumped).trend > 0.003);                         // without the step removed it would swamp funding
-  assert.deepEqual(P.risk([1000]), { trend: null, funding: null, sigma1h: null, sigma24: null });
+  assert.deepEqual(P.risk([1000]), { trend: null, funding: null, sigma1h: null, sigma24: null, premium: null });
 });
 
 test("leverage: jump cap 30× even when volatility allows more", () => {
@@ -101,6 +101,18 @@ test("time-weighted book: a position closed 1 min before the close still counts 
   const b = P.bookTW(pos, h, h + 3600);
   near(b.L, 60000 + 1800); near(b.S, 35400);
   assert.deepEqual(P.bookTW(pos, h + 7200, h + 10800), { L: 60000, S: 36000 });
+});
+
+test("milestone premium: longs pay the trailing-30-day mean log step; the house collects it; conservation holds", () => {
+  const closes = Array.from({ length: 800 }, (_, i) => 1000);
+  near(P.premium(closes.length, { 799: 1.0508, 50: 1.25 }), Math.log(1.0508) / 720, 1e-15);   // step 50 is outside the 720 h window (returns 80–799)
+  near(P.risk(closes, { 799: 1.0508 }).premium, Math.log(1.0508) / 720, 1e-15);
+  const pm = 0.00005, a = P.fundingRates({ L: 70000, S: 30000, trend: -0.0002, sigma1h: 0.0001 }), b = P.fundingRates({ L: 70000, S: 30000, trend: -0.0002, sigma1h: 0.0001, premium: pm });
+  near(b.long - a.long, pm); near(b.short, a.short); near(b.housePremium, pm * 70000);
+  for (const [L, S] of [[70000, 30000], [0, 50000], [5e5, 5e5]]) {
+    const fr = P.fundingRates({ L, S, trend: 0.0001, sigma1h: 0.0001, premium: pm });
+    near(fr.long * L + fr.short * S - fr.houseFunding, 0, 1e-9);
+  }
 });
 
 test("fee split", () => {

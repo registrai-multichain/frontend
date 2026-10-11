@@ -22,7 +22,8 @@
  * Orders are refused while the hour's base sample is pending, for 60 s after it lands, and until the hour's rates
  * are fixed.
  *
- * Hourly close (R2): the first mark post of an hour with a non-null trend and sigma_1h fixes that hour's rates from the
+ * Hourly close (R2): the first mark post of an hour with a non-null trend, milestone premium (§9.15; an absent key
+ * counts as 0) and sigma_1h fixes that hour's rates from the
  * traders' book (after the liquidation sweep), once (INSERT … ON CONFLICT DO NOTHING, under the post's token), books
  * the projected funding cut, and books the house's hours since the last booking: houseHour() − cut, plus a true-up
  * row that makes the house the exact counterparty of every position (see bookHours()).
@@ -89,6 +90,8 @@ export const ORDERS_KEEP_MS = 7 * 24 * 3600 * 1000;
 export const BAR_MAX_AGE_S = 6 * 3600;
 /** |trend| (and the v2 funding_rate) above this per hour is refused as a producer bug. */
 export const MAX_FUNDING_RATE = 0.01;
+/** |milestone_premium| above this per hour is refused as a producer bug (§9.15: a 30-day mean log step). */
+export const MAX_PREMIUM = 0.001;
 export const MILESTONE_MAX_AGE_S = 7 * 24 * 3600;
 export const MARK_CACHE_S = 5;
 /** A pending order the status read finds older than this is refused (the ingest refuses after markMaxAgeS). */
@@ -173,6 +176,11 @@ export interface MarkPost {
   trend: { hour: number; value: number } | null;
   sigma1h: number | null;
   sigma24h: number | null;
+  /**
+   * §9.15 (audit PE-2): the milestone premium longs pay per unit per hour (live/mark.py `milestone_premium`). A
+   * producer that doesn't send the key: 0. An explicit null: not known yet, so the hour's rates wait (like trend).
+   */
+  premium: number | null;
   basePending: boolean;
   baseStepTs: number | null;
   milestoneTs: number | null;
@@ -235,6 +243,12 @@ export function validateMark(raw: unknown, nowS: number): { ok: true; data: Mark
   };
   const sigma1h = sigma("sigma_1h"), sigma24h = sigma("sigma_24h");
   if (sigma1h === undefined || sigma24h === undefined) return bad("sigma_1h and sigma_24h must be finite numbers ≥ 0");
+  let premium: number | null = 0;
+  if (b.milestone_premium !== undefined) {
+    if (b.milestone_premium === null) premium = null;
+    else if (!finite(b.milestone_premium) || Math.abs(b.milestone_premium) > MAX_PREMIUM) return bad(`milestone_premium must be a finite number within ±${MAX_PREMIUM}, or null`);
+    else premium = b.milestone_premium;
+  }
   if (b.base_pending !== undefined && typeof b.base_pending !== "boolean") return bad("base_pending must be a boolean");
   let baseStepTs: number | null = null;
   if (b.base_step_ts !== undefined && b.base_step_ts !== null) {
@@ -252,7 +266,7 @@ export function validateMark(raw: unknown, nowS: number): { ok: true; data: Mark
     ok: true,
     data: {
       mark, ts, head: b.head, hour_start: b.hour_start, candle: b.candle as number[], ch24: b.ch24, ch1: b.ch1, bars,
-      trend, sigma1h, sigma24h, basePending: b.base_pending === true, baseStepTs, milestoneTs,
+      trend, sigma1h, sigma24h, premium, basePending: b.base_pending === true, baseStepTs, milestoneTs,
     },
   };
 }
@@ -751,7 +765,7 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
     netDone = net.done;
     netLiquidated = net.n;
   }
-  const fixing = netDone && d.trend !== null && d.trend.hour === H && H === hourOf(d.ts) && d.sigma1h !== null && !probe?.has_rates && (bookedHour === null || H > bookedHour);
+  const fixing = netDone && d.trend !== null && d.premium !== null && d.trend.hour === H && H === hourOf(d.ts) && d.sigma1h !== null && !probe?.has_rates && (bookedHour === null || H > bookedHour);
   const hourFixed = Boolean(probe?.has_rates) || fixing;
 
   // the bars the sweep checks: this post's, and after a fix (§9.14c) every stored bar since the hour started, now
@@ -788,7 +802,7 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
         if (hit) endAt.set(r.id, hit.t);
       }
       const { L, S } = Engine.bookTW(overlap.map((r) => ({ side: r.side, notional: r.notional, openedAt: r.opened_at, closedAt: r.closed_at ?? endAt.get(r.id) ?? null })), H - HOUR, H);
-      const fr = Engine.fundingRates({ L, S, trend: d.trend!.value, sigma1h: d.sigma1h });
+      const fr = Engine.fundingRates({ L, S, trend: d.trend!.value, sigma1h: d.sigma1h, premium: d.premium });
       sweepRates = [...rates.filter((x) => x.t !== H), { t: H, long: fr.long, short: fr.short, r: fr.r }].sort((a, b) => a.t - b.t);
       fix = { fr, L, S, overlap, first };
     }
@@ -927,6 +941,7 @@ interface HourRates {
   sigma_1h: number;
   L: number;
   S: number;
+  premium: number | null;
 }
 interface BookedRow {
   hour: number;
@@ -967,7 +982,7 @@ async function hourlyClose(
 ): Promise<D1PreparedStatement[]> {
   const H = d.hour_start, trend = d.trend!.value, sigma1h = d.sigma1h!, { fr, L, S } = fix;
   const out: D1PreparedStatement[] = [
-    db.prepare(SQL.ratesInsert).bind(H, fr.long, fr.short, fr.skew, fr.r, fr.rMax, fr.cut, fr.houseExposure, fr.houseFunding, trend, sigma1h, L, S, nowS, post, post),
+    db.prepare(SQL.ratesInsert).bind(H, fr.long, fr.short, fr.skew, fr.r, fr.rMax, fr.cut, fr.houseExposure, fr.houseFunding, trend, sigma1h, L, S, nowS, post, d.premium ?? 0, post),
     ...ledgerStmts(db, "rates", [H, post], H, [{ kind: "cut", amount: fr.cut, ref: `hour:${H}` }]),
   ];
   // the budget (review S2): 7 statements per hour (house_hours + 3 ledger pairs), 2 per booked position (update +
@@ -985,7 +1000,7 @@ async function hourlyClose(
 
   const [prevRow, hourRates, maxIdRow, idx] = await Promise.all([
     db.prepare("SELECT hour, close, cum, cum_price, cum_funding, cum_trueup, cum_liq, upto_id FROM house_hours ORDER BY hour DESC LIMIT 1").first<BookedRow>(),
-    db.prepare("SELECT hour, long, short, r, cut, trend, sigma_1h, L, S FROM rates WHERE hour >= ? AND hour <= ?").bind(first, last).all<HourRates>(),
+    db.prepare("SELECT hour, long, short, r, cut, trend, sigma_1h, L, S, premium FROM rates WHERE hour >= ? AND hour <= ?").bind(first, last).all<HourRates>(),
     db.prepare("SELECT COALESCE(MAX(id), 0) AS id FROM ledger").first<{ id: number }>(),
     indexCandles(env),
   ]);
@@ -1059,7 +1074,7 @@ async function hourlyClose(
     const rh = byHour.get(h);
     let exposure = 0, price = 0;
     if (rh) {
-      const hh = Engine.houseHour({ L: rh.L, S: rh.S, open: o, close: c, trend: rh.trend, sigma1h: rh.sigma_1h });
+      const hh = Engine.houseHour({ L: rh.L, S: rh.S, open: o, close: c, trend: rh.trend, sigma1h: rh.sigma_1h, premium: rh.premium ?? 0 });
       exposure = hh.exposure;
       price = hh.pricePnl;
     }
@@ -1183,7 +1198,7 @@ export async function handlePublicMark(req: Request, env: Env, deps: PilotDeps =
   }, MARK_CACHE_S);
 }
 
-const RATE_SEL = "hour AS t, long, short, skew, trend, r, cut, L, S, house_exposure AS houseExposure";
+const RATE_SEL = "hour AS t, long, short, skew, trend, COALESCE(premium, 0) AS premium, r, cut, L, S, house_exposure AS houseExposure";
 const recentRates = async (db: D1Database) =>
   (await db.prepare(`SELECT ${RATE_SEL} FROM rates ORDER BY hour DESC LIMIT ?`).bind(PILOT_LIMITS.fundingShown).all<RateView>()).results;
 

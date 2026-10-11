@@ -39,12 +39,15 @@ over the closing hour (`rates`); borrow at 10% APR; levels to 30×; the house as
 insurance pool that never goes below zero (a gap beyond its balance is a carried house loss); and a weekly split
 (`splits`, Monday 00:00 UTC: 20% insurance, 80% treasury, half of it earmarked for the buyback) of fees, borrow, the
 funding cut and the house's realized result only. All in points. Opens and closes wait for each hour's rates.
+Milestone premium (§9.15, audit PE-2): longs also pay the trailing 30-day mean hourly log milestone step
+(`milestone_premium` from the producer, stored in `rates.premium`, part of the long rate); the house collects it in
+its funding line.
 
 One-time setup, from `frontend/builders-site/`:
 
 ```sh
 npx wrangler d1 create registrai-pilot                      # paste database_id into wrangler.toml
-npx wrangler d1 migrations apply registrai-pilot --remote   # migrations/0001_pilot.sql, 0002_pilot_v3.sql
+npx wrangler d1 migrations apply registrai-pilot --remote   # migrations/0001_pilot.sql, 0002_pilot_v3.sql, 0003_pilot_premium.sql
 openssl rand -base64 48 | npx wrangler pages secret put PILOT_SESSION_SECRET --project-name=registrai-builders
 ```
 
@@ -74,7 +77,7 @@ while liquidations are held back.
 
 `POST https://builder.registrai.cc/api/index/mark`, `Authorization: Bearer $ABI_PUSH_TOKEN`, every 5 s:
 `{mark, ts, head, hour_start, candle:[o,h,l,c,payments,usdc], ch24, ch1, trend, funding_rate, funding_hour, sigma_1h,
-sigma_24h, base_pending, base_step_ts, milestone_ts, bars:[[minute,h,l,c] …]}`.
+sigma_24h, milestone_premium, base_pending, base_step_ts, milestone_ts, bars:[[minute,h,l,c] …]}`.
 
 - `ts` within 30 s of server time and newer than the stored mark (else 409, with `last_minute`).
 - `bars`: 1–60, ascending, `l ≤ c ≤ h`, minutes ≤ `ts`. When the batch ends at the minute of `ts`, the mark lies
@@ -95,6 +98,9 @@ sigma_24h, base_pending, base_step_ts, milestone_ts, bars:[[minute,h,l,c] …]}`
   updating") until the hour's rates are fixed. A producer without `trend` has its `funding_rate` used instead. `sigma_24h`,
   `sigma_1h` and `ch1` drive the leverage cap and the pause; `sigma_24h` ≤ 0 or missing, or `sigma_1h` < 0 or
   missing, is unknown and refuses orders the same way.
+- `milestone_premium` (§9.15): a finite number within ±0.001 per hour, or `null`. The hour's rates are fixed only
+  once it is not null, like `trend`. A producer that doesn't send the key (an older mark.py, or before
+  `ABI_POST_PREMIUM=1`) counts as 0 and blocks nothing.
 - Orders pause while `base_pending` and for 60 s after `base_step_ts`.
 - `milestone_ts`: the latest recorded index milestone at or before head (integer unix time, at or before `ts`,
   at most 7 days old), or `null`. It is stored on the mark row. New orders, but not closes, pause for 60 s after
