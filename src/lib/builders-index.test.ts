@@ -375,3 +375,13 @@ test("audit L11: an integration link written as '<url> — note (date)' keeps on
   const r = validateIndex(d);
   expect(r.ok && r.data.integrations[0].link).toBe("https://blog.kraken.com/news/arc");
 });
+
+test("audit F1 params in live: kept when non-negative numbers, the block refused otherwise", () => {
+  const d = JSON.parse(JSON.stringify(real));
+  Object.assign(d.live, { min_pay: 0, new_payer_min: 10, new_payer_max_h: 25, entry_step: 0.001 / 24 });
+  const r = validateIndex(d);
+  expect(r.ok && [r.data.live!.min_pay, r.data.live!.new_payer_min, r.data.live!.new_payer_max_h, r.data.live!.entry_step]).toEqual([0, 10, 25, 0.001 / 24]);
+  const b = JSON.parse(JSON.stringify(d)); b.live.new_payer_min = -1;
+  const v = validateIndex(b);
+  expect(v.ok && !!v.data.live).toBe(false);
+});

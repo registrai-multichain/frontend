@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { describe, expect, test, vi } from "vitest";
 import { CHUNK, createEngine, httpRpc, LOG_CAP, StaleError, WIDE_CHUNK } from "./abi-live";
 import { ARGUS_DEPLOYER, EURC, GBPA, HB, HS, INDEX, JPYC, mockRpc, NOT_REGISTERED, scIndex, SEEN, tsOf } from "./abi-live-mock";
-import { INTEG_LOGS, integIndex, ROUTER, POOL, wideIntegIndex } from "./abi-live-mock";
+import { F1_LOGS, f1Index, INTEG_LOGS, integIndex, ROUTER, POOL, wideIntegIndex } from "./abi-live-mock";
 import type { LiveData } from "./abi-live-mock";
 
 const L = INDEX.live!;
@@ -107,11 +107,11 @@ describe.skipIf(!existsSync(REF))("equivalence with the reference live.js", () =
     vi.unstubAllGlobals();
     return out;
   }
-  const cases = [10, 100, 300, 1000, 4100, 5450, 7300].flatMap((off) => [[off, "USDC only"], [off, "stablecoins + milestones"], [off, "integrated products"], [off, "wide member list"]] as const);
+  const cases = [10, 100, 300, 1000, 4100, 5450, 7300].flatMap((off) => [[off, "USDC only"], [off, "stablecoins + milestones"], [off, "integrated products"], [off, "wide member list"], [off, "audit F1 rules"]] as const);
   test.each(cases)("head +%i blocks, %s: identical numbers", async (off, kind) => {
     const wide = kind === "wide member list" ? wideIntegIndex() : null;
-    const index = kind === "USDC only" ? INDEX : kind === "integrated products" ? integIndex() : wide ? wide.index : scIndex();
-    const extra = kind === "integrated products" || wide ? INTEG_LOGS : [];
+    const index = kind === "USDC only" ? INDEX : kind === "integrated products" ? integIndex() : wide ? wide.index : kind === "audit F1 rules" ? f1Index() : scIndex();
+    const extra = kind === "integrated products" || wide ? INTEG_LOGS : kind === "audit F1 rules" ? F1_LOGS : [];
     const a = await ref(HB + off, index, extra, wide?.doc);
     const e = createEngine({ call: mockRpc(HB + off, undefined, extra) as never });
     e.load(wide ? { ...index, contracts: wide.doc } : index, SEEN);
@@ -385,5 +385,25 @@ describe("audit OPS-1: the base-layer sample survives a window that one request 
     expect(refused).toBeGreaterThan(0);
     expect(got.baseSampled).toBe(true);
     for (const k of ["index", "roots", "P"] as const) expect(got[k]).toEqual(want[k]);
+  });
+});
+
+describe("audit F1: dust, the new-payer bar and cap, phased entry", () => {
+  test("dust earns nothing; under $10 no bonus; at most new_payer_max_h bonuses per member-hour; entry capped at entry_step·Σ", async () => {
+    const e = createEngine({ call: mockRpc(HB + 300, undefined, F1_LOGS) as never });
+    e.load(f1Index(), SEEN);
+    const R = await e.tick();
+    const a = R.act["domain:peach.ag"];
+    expect(a.payments).toBe(5); // the two dust payments are skipped entirely
+    expect(a.new_payers).toBe(2);
+    const prevTotal = Object.values(f1Index().live.roots_prev).reduce((x, y) => x + y, 0);
+    expect(R.roots["domain:peach.ag"]).toBeLessThanOrEqual((f1Index().live.entry / 24) * prevTotal + 1e-12);
+    expect(R.capped).toContain("domain:peach.ag");
+  });
+  test("older files (no F1 params) score exactly as before", async () => {
+    const run = async (d: LiveData) => { const e = createEngine({ call: mockRpc(HB + 300) as never }); e.load(d, SEEN); return (await e.tick()).index; };
+    const d = JSON.parse(JSON.stringify(INDEX)) as LiveData;
+    Object.assign(d.live, { min_pay: 0, new_payer_min: 0, entry_step: d.live.entry });
+    expect(await run(d)).toBe(await run(INDEX));
   });
 });

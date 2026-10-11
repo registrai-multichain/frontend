@@ -250,14 +250,20 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
     for (const s in P) p[s] = P[s] * Math.pow(L.decay_h, f);
     const evs = hourEvents().filter((e) => e.ts <= upto);
     const spent = new Map<string, number>(), hourSeen = new Set<string>(), act: Record<string, Act> = {}, tape: TapeEntry[] = [];
+    const npHour: Record<string, number> = {};
+    const minPay = L.min_pay || 0, npMin = L.new_payer_min || 0, npMax = L.new_payer_max_h == null ? Infinity : L.new_payer_max_h;
     for (const e of evs) {
+      if (e.v < minPay) continue; // audit F1: dust is ignored
       const k = e.src + e.w, room = Math.max(0, L.cap - (spent.get(k) || 0)), counted = Math.min(e.v, room);
       spent.set(k, (spent.get(k) || 0) + counted);
       let pts = counted > 0 ? Math.log2(1 + counted) : 0;
       const sk = e.src + e.w;
-      const isNew = !hourSeen.has(sk) && !(seen.get(e.src) || new Set<string>()).has(e.w.slice(2, 2 + L.seen_prefix));
-      if (isNew) pts += L.new_payer;
-      hourSeen.add(sk);
+      let isNew = false;
+      if (e.v >= npMin) { // audit F1: only a payment of new_payer_min or more makes (and marks) a new payer, at most new_payer_max_h per member-hour
+        isNew = !hourSeen.has(sk) && !(seen.get(e.src) || new Set<string>()).has(e.w.slice(2, 2 + L.seen_prefix)) && (npHour[e.src] || 0) < npMax;
+        if (isNew) { pts += L.new_payer; npHour[e.src] = (npHour[e.src] || 0) + 1; }
+        hourSeen.add(sk);
+      }
       p[e.src] = (p[e.src] || 0) + pts;
       const a = act[e.src] || (act[e.src] = { payments: 0, wallets: new Set<string>(), new_payers: 0, points: 0, usdc: 0 });
       a.payments++; a.wallets.add(e.w); if (isNew) a.new_payers++; a.points += pts; a.usdc += counted;
@@ -274,7 +280,8 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
       const prev = rootsPrev[s] || 0;
       if (prevTotal > 0) {
         let lim = prev + L.proj_up * prevTotal;
-        if (L.rel_up > 0) lim = Math.min(lim, prev > 0 ? Math.max(prev * (1 + L.rel_up), L.entry * prevTotal) : L.entry * prevTotal);
+        const step = L.entry_step == null ? L.entry : L.entry_step; // audit F1: a member's entry allowance phases in
+        if (L.rel_up > 0) lim = Math.min(lim, Math.max(prev * (1 + L.rel_up), Math.min(L.entry * prevTotal, prev + step * prevTotal)));
         if (r > lim) { r = lim; p[s] = (r / sc) ** 2; capped.push(s); }
       }
       // milestones: after the rise limit, exempt from it
@@ -290,7 +297,7 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
     if (basePts == null && L.base_k > 0) basePts = await sampleBase();
     walkPath(Infinity);
     const fin = evaluate(1);
-    for (const e of events) if (e.ts < hourStart + 3600) {
+    for (const e of events) if (e.ts < hourStart + 3600 && e.v >= Math.max(L.new_payer_min || 0, L.min_pay || 0)) {
       let s = seen.get(e.src);
       if (!s) seen.set(e.src, (s = new Set<string>()));
       s.add(e.w.slice(2, 2 + L.seen_prefix));

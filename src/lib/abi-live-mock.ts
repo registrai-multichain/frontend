@@ -144,3 +144,18 @@ export function wideIntegIndex(pad = 1200): { index: LiveData; doc: { contracts:
   d.live.contracts_count = Object.keys(contracts).length;
   return { index: d, doc };
 }
+
+/* ---------- audit F1: dust, the $10 new-payer bar, the per-hour bonus cap, phased entry ---------- */
+/** Peach restarts from zero (its entry phases in); min_pay 0.5, new_payer_min 10, new_payer_max_h 2, entry_step = entry/24. */
+export function f1Index(): LiveData {
+  const d = JSON.parse(JSON.stringify(INDEX)) as LiveData;
+  Object.assign(d.live, { min_pay: 0.5, new_payer_min: 10, new_payer_max_h: 2, entry_step: d.live.entry / 24 });
+  d.live.P["domain:peach.ag"] = 0; d.live.roots_prev["domain:peach.ag"] = 0;
+  return d;
+}
+export const F1_LOGS: Log[] = [
+  log(31, w("2"), PEACH, 0.2), log(32, w("3"), PEACH, 0.3), // dust: ignored
+  log(33, w("4"), PEACH, 9), // under the $10 bar: points, no bonus, not marked
+  log(34, w("5"), PEACH, 11), log(35, w("6"), PEACH, 12), log(36, w("7"), PEACH, 15), // 3 new payers: only 2 bonuses this hour
+  log(37, w("4"), PEACH, 20), // the $9 payer comes back with $20: now a new payer, but the cap is reached
+];
