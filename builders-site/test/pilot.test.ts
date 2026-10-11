@@ -226,7 +226,8 @@ describe("sign-in and session (R6)", () => {
     expect(await res.json()).toEqual({ address: lc(ALICE), regi: { ok: true, snapshot: true, now: true } });
     expect(res.headers.get("set-cookie")).toMatch(new RegExp(`^${PILOT_SESSION_COOKIE}=0x[0-9a-f]{40}\\.0\\.\\d+\\.[A-Za-z0-9_-]+; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=43200$`));
     expect(t.rpc.tags).toEqual([`0x${SNAP.toString(16)}`, "latest"]);
-    expect(t.db.q("SELECT balance, season, regi_ok, regi_snap, regi_snap_block FROM accounts")).toEqual([{ balance: 10000, season: 1, regi_ok: 1, regi_snap: 1, regi_snap_block: SNAP }]);
+    // regi_snap: the whole REGI held at the snapshot block (2,000,000), so a changed PILOT_REGI_MIN needs no re-read
+    expect(t.db.q("SELECT balance, season, regi_ok, regi_snap, regi_snap_block FROM accounts")).toEqual([{ balance: 10000, season: 1, regi_ok: 1, regi_snap: 2_000_000, regi_snap_block: SNAP }]);
   });
 
   test("a nonce is single use", async () => {
@@ -307,7 +308,7 @@ describe("sign-in and session (R6)", () => {
 });
 
 describe("REGI gate (R6, spec §8.4)", () => {
-  test("not holding now: 'Hold REGI to join the points pilot.'", async () => {
+  test("not holding now: 'Hold 1,000,000 REGI to join the points pilot.'", async () => {
     const t = setup();
     t.balances.set(`${lc(BOB)}@latest`, ONE - 1n);
     const bob = await t.signIn(BOB);
@@ -315,7 +316,7 @@ describe("REGI gate (R6, spec §8.4)", () => {
     expect((await t.account(bob)).body.regi).toEqual({ ok: false, snapshot: true, now: false });
     const r = await t.submit(bob, LONG2);
     expect(r.status).toBe(403);
-    expect(r.body.error).toBe("Hold REGI to join the points pilot.");
+    expect(r.body.error).toBe("Hold 1,000,000 REGI to join the points pilot.");
   });
 
   test("holding now but not at the snapshot block: refused; the snapshot answer is cached for good", async () => {
@@ -368,12 +369,15 @@ describe("REGI gate (R6, spec §8.4)", () => {
     expect(t.rpc.calls).toBe(calls + 1);
   });
 
-  test("no PILOT_REGI_SNAPSHOT_BLOCK: the pilot is closed", async () => {
+  test("no PILOT_REGI_SNAPSHOT_BLOCK with PILOT_OPEN \"1\": the pilot is misconfigured (audit PE-7)", async () => {
     const t = setup({ snapshot: null });
     const alice = await t.signIn();
     await t.mark(1000);
+    expect((await t.submit(alice, LONG2)).body).toEqual({ error: "pilot misconfigured" });
+    expect((await t.account(alice)).body).toMatchObject({ open: false, misconfigured: true });
+    t.env.PILOT_OPEN = "0";
     expect((await t.submit(alice, LONG2)).body).toEqual({ error: "pilot closed" });
-    expect((await t.account(alice)).body.open).toBe(false);
+    expect((await t.account(alice)).body).toMatchObject({ open: false, misconfigured: false });
   });
 });
 

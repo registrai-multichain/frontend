@@ -12,7 +12,10 @@ Deploy from `frontend/` with `npm run deploy:builders`.
 | `PILOT_DB` | D1 `registrai-pilot` | ABI points pilot: accounts, positions, minute bars, latest mark |
 | `ADMIN_ADDRESSES`, `ONBOARDER_ADDRESSES`, `SITE_ORIGIN`, `PROPOSALS_ALLOWED_ORIGIN` | var | admin sign-in, CSRF, CORS |
 | `PILOT_OPEN` | var, default `"0"` | pilot kill switch: `"1"` accepts new orders |
-| `PILOT_REGI_SNAPSHOT_BLOCK` | var, default `""` | REGI holding window; empty = pilot closed |
+| `PILOT_REGI_SNAPSHOT_BLOCK` | var, default `""` | REGI holding window: a block in the past, ≥ 22,419,071 (REGI's deploy); with `PILOT_OPEN = "1"`, empty / malformed / future / pre-REGI = "pilot misconfigured" (every order refused, logged once per isolate) |
+| `PILOT_REGI_MIN` | var, default `"1000000"` | whole REGI a wallet must hold at the snapshot block and now |
+| `PILOT_MAX_LEV` | var, default `"10"` | the pilot's leverage cap after the engine's (ticket, `POST /api/pilot/order`, `maxLev` in `/api/index/mark`) |
+| `PILOT_BLOCKED_WALLETS` | var, default `""` | comma-separated lowercase wallets that may not open positions (milestone recorders); closes still work |
 | `NONCE_SECRET` | secret | sign-in nonces (admin and pilot) |
 | `PILOT_SESSION_SECRET` | secret, ≥ 32 chars | pilot session cookie HMAC |
 | `ABI_PUSH_TOKEN` | secret, ≥ 32 chars | Bearer of `POST /api/index`, `/api/index/seen` and `/api/index/mark` |
@@ -50,8 +53,15 @@ npx tsx builders-site/scripts/d1-guard-check.mjs            # remote (wrangler l
 npx tsx builders-site/scripts/d1-guard-check.mjs --local    # dry run on a throwaway local D1
 ```
 
-To open: set `PILOT_REGI_SNAPSHOT_BLOCK` (a past Arc block) and `PILOT_OPEN = "1"` in `wrangler.toml`, redeploy.
-Anything else keeps new orders closed; closes, reads and the mark ingest keep working.
+To open: set `PILOT_REGI_SNAPSHOT_BLOCK` (an Arc block in the past, taken before the opening is announced) and
+`PILOT_OPEN = "1"` in `wrangler.toml`, check `PILOT_REGI_MIN`, `PILOT_MAX_LEV` and `PILOT_BLOCKED_WALLETS`, redeploy.
+`PILOT_OPEN` anything but `"1"` keeps new orders closed; a wrong setting with `"1"` refuses them as "pilot
+misconfigured" (the ticket shows it). Closes, reads and the mark ingest keep working either way.
+
+Limits per wallet: 30 orders and 60 closes a minute, at most 3 orders pending at once, 5 open positions (queued opens
+count). One mark ingest runs at most 800 statements in all (reads and batch statements: the safety-net
+liquidations first, then its batch, then the fills); what does not fit waits for the next post, and nothing fills
+while liquidations are held back.
 
 ### Mark producer (`research/arc-builders-index/live/mark.py` v3)
 

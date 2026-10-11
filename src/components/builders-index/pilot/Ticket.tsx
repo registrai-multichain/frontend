@@ -19,11 +19,11 @@ export interface TicketProps {
   onOrder: (o: { side: Side; margin: number; lev: number }) => void;
 }
 
-function SignInRow({ label, busy, onSignIn }: { label: string; busy?: boolean; onSignIn: () => void }) {
+function SignInRow({ label, busy, regiMin, onSignIn }: { label: string; busy?: boolean; regiMin: number; onSignIn: () => void }) {
   return (
     <div className="abi-pt-row">
       <button type="button" className="abi-pt-primary" onClick={onSignIn} disabled={busy}>{busy ? PILOT_COPY.signingIn : label}</button>
-      <InfoBubble label="About sign-in">{PILOT_COPY.signInTip}</InfoBubble>
+      <InfoBubble label="About sign-in">{PILOT_COPY.signInTip(regiMin)}</InfoBubble>
     </div>
   );
 }
@@ -33,7 +33,7 @@ function regiLine(view: PilotAccountView): string | null {
   const r = view.regi;
   if (!r || r.ok === true) return null;
   if (r.ok === null) return PILOT_COPY.regiUnchecked;
-  return r.snapshot === false ? PILOT_COPY.notAtSnapshot : PILOT_COPY.holdRegi;
+  return r.snapshot === false ? PILOT_COPY.notAtSnapshot : PILOT_COPY.holdRegi(view.regiMin);
 }
 
 /** This hour's funding per side, signed with its direction (+ pays, − receives); "–" until the hour's rates are set. */
@@ -68,12 +68,13 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
   );
   const disclaimer = <div className="abi-pt-disc"><p>{PILOT_DISCLAIMER}</p></div>;
 
+  const closedLine = view.misconfigured ? PILOT_COPY.misconfigured : PILOT_COPY.closed;
   let body: React.ReactNode;
   if (!view.address) {
     body = (
       <div className="abi-pt">
-        <p className="abi-pt-note">{view.open ? PILOT_COPY.holdRegi : PILOT_COPY.closed}</p>
-        {view.open && <SignInRow label={signInLabel} busy={signingIn} onSignIn={onSignIn} />}
+        <p className="abi-pt-note">{view.open ? PILOT_COPY.holdRegi(view.regiMin) : closedLine}</p>
+        {view.open && <SignInRow label={signInLabel} busy={signingIn} regiMin={view.regiMin} onSignIn={onSignIn} />}
         {error && <p className="abi-pt-err" role="alert">{error}</p>}
         {disclaimer}
       </div>
@@ -81,7 +82,7 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
   } else if (!view.open || blocked) {
     body = (
       <div className="abi-pt">
-        <p className="abi-pt-note">{!view.open ? PILOT_COPY.closed : blocked}</p>
+        <p className="abi-pt-note">{!view.open ? closedLine : blocked}</p>
         <dl className="abi-kv abi-pt-kv">
           {acct && <><dt>Balance</dt><dd>{fmtPts(acct.balance)} pts</dd></>}
           <FundingRows view={view} />
@@ -93,7 +94,9 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
   } else {
     const margin = Number(marginText);
     const maxLev = m ? m.maxLev : 1;
-    const levUse = RULES.levels.filter((l) => l <= Math.min(lev, maxLev)).pop() ?? 1;
+    // the pilot's cap (PILOT_MAX_LEV): no level above it is offered at all; the engine's lower cap disables levels
+    const levels = RULES.levels.filter((l) => l <= (m ? m.levCap : 1));
+    const levUse = levels.filter((l) => l <= Math.min(lev, maxLev)).pop() ?? 1;
     const notional = Number.isFinite(margin) ? margin * levUse : 0;
     const fee = notional * RULES.feeRate;
     const pos = m && margin > 0 ? { side, margin, notional, entry: m.mark, openedAt: 0 } : null;
@@ -133,12 +136,12 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
         <div className="abi-pt-field">
           <span>Leverage</span>
           <div className="abi-seg" role="group" aria-label="Leverage">
-            {RULES.levels.map((l) => (
+            {levels.map((l) => (
               <button key={l} type="button" aria-pressed={levUse === l} disabled={l > maxLev} onClick={() => setLev(l)}>{l}×</button>
             ))}
           </div>
         </div>
-        {m && maxLev < RULES.levels[RULES.levels.length - 1] && <p className="abi-pt-note">{PILOT_COPY.capped(maxLev)}</p>}
+        {m && maxLev < m.levCap && <p className="abi-pt-note">{PILOT_COPY.capped(maxLev)}</p>}
         <dl className="abi-kv abi-pt-kv">
           <dt>Mark</dt><dd>{m ? fmtPx(m.mark) : "–"}</dd>
           <dt>Size</dt><dd>{fmtPts(notional)} pts</dd>

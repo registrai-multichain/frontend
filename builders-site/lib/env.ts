@@ -74,10 +74,20 @@ export interface Env {
   ABI_PUSH_TOKEN?: string;
   /** D1 "registrai-pilot" (builders-site/migrations): the ABI points pilot's accounts, positions, minute bars and latest mark. Unset = /api/pilot/* and /api/index/mark answer 503. */
   PILOT_DB?: D1Database;
-  /** Kill switch: "1" accepts new pilot orders; anything else (the default) refuses them with 403 {error:"pilot closed"}. Closes and reads always work. */
+  /** Kill switch: "1" accepts new pilot orders (if the settings below are valid); anything else (the default) refuses them with 403 {error:"pilot closed"}. Closes and reads always work. */
   PILOT_OPEN?: string;
-  /** The pilot's REGI snapshot block (spec §8.4): a wallet trades only if it held ≥ 1 REGI at this Arc block and still does. Unset = the pilot is closed, like PILOT_OPEN "0". */
+  /**
+   * The pilot's REGI snapshot block (spec §8.4): a wallet trades only if it held PILOT_REGI_MIN at this Arc block and
+   * still does. With PILOT_OPEN "1" it must be a block number from REGI's deploy (22,419,071) up to the current head,
+   * else the pilot is misconfigured and refuses every order (audit PE-7).
+   */
   PILOT_REGI_SNAPSHOT_BLOCK?: string;
+  /** Whole REGI a wallet must hold at the snapshot block and now. Default "1000000". Not a positive integer = misconfigured. */
+  PILOT_REGI_MIN?: string;
+  /** The pilot's leverage cap, applied after the engine's. Default "10". Not an integer ≥ 1 = misconfigured. */
+  PILOT_MAX_LEV?: string;
+  /** Comma-separated lowercase addresses that may not open positions (milestone recorders, audit F4). Closes still work. */
+  PILOT_BLOCKED_WALLETS?: string;
   /** Pages SECRET: the HMAC key of the pilot session cookie. Under 32 characters = pilot sign-in fails closed (503). */
   PILOT_SESSION_SECRET?: string;
   /** https://app.registrai.cc — the only origin /api/market-proposals accepts submissions from (CORS). */

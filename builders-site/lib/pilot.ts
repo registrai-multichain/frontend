@@ -7,7 +7,8 @@
  *   POST /api/index/mark          producer (Bearer ABI_PUSH_TOKEN, live/mark.py) → 200 { last_minute, … }
  *   GET  /api/index/mark          public: the latest mark (edge-cached 5 s)
  *   GET  /api/pilot/account       session optional: open?, REGI, balance, positions, pending orders, mark, funding
- *   POST /api/pilot/order         { side, margin, lev } → 202 a pending order (session + REGI + open); 30/min
+ *   POST /api/pilot/order         { side, margin, lev } → 202 a pending order (session + REGI + open); 30/min, at most
+ *                                 3 pending per wallet, leverage ≤ PILOT_MAX_LEV, not a PILOT_BLOCKED_WALLETS wallet
  *   GET  /api/pilot/order?id=     the order's status (pending / filled / refused)
  *   POST /api/pilot/close         { id } → 202 a pending close order (session only); 60/min
  *   GET  /api/pilot/positions     session: open positions
@@ -40,7 +41,9 @@
 import * as Engine from "../../src/lib/abi-pilot";
 import { RULES, type FundingRate, type MinuteBar, type PilotPosition, type Side } from "../../src/lib/abi-pilot";
 import {
+  holdRegiText,
   PILOT_LIMITS,
+  REGI_MIN_DEFAULT,
   shortWallet,
   type ClosedPositionView,
   type EconomyView,
@@ -59,13 +62,16 @@ import { readCapped } from "./builders-index";
 import type { D1Database, D1PreparedStatement, D1Result, Env } from "./env";
 import { csrfFailure, edgeCachedGet, errorJson, json, randomHex, siteOrigin } from "./http";
 import {
+  blockedWallet,
   getAccount,
   type AccountRow,
   nowMsOf,
   nowSOf,
   PILOT_UNCONFIGURED,
-  pilotOpen,
+  pilotMaxLev,
+  pilotState,
   pilotWallet,
+  regiMinOf,
   rateOk,
   sessionOf,
   regiStatus,
@@ -96,16 +102,44 @@ export const MAX_BOOK_HOURS = 48;
  * one by one toward the per-invocation limit, so the cap keeps a wide margin under 1000.
  */
 export const MAX_BATCH_STATEMENTS = 400;
+/**
+ * Review R3 + audit SS-5: one ingest invocation runs at most this many statements in all (every read and every
+ * batch statement), across the safety-net liquidations, the batch (in-batch liquidations, the hourly close) and the
+ * order fills. Liquidations go first; what does not fit waits for the next post (the swept watermark and the pending
+ * orders stay where they are, so each settles exactly once, later).
+ */
+export const INGEST_MAX_STATEMENTS = 800;
+/** Reads the ingest makes between the safety net and its batch (open positions, bars, overlap, rates, pools: about 5). */
+const POST_NET_READS = 20;
+/** The hourly close's own reads (house_hours, rates, ledger id, the attributed rows, last bars). */
+const CLOSE_READS = 6;
+/** The weekly split's statements at most (splitStmts: the splits row and 7 ledger pairs). */
+const SPLIT_STATEMENTS = 15;
+/** The safety net reads every unswept bar at once up to this many; beyond it, it pages per position. */
+const NET_BARS = 1440;
+/** An open fill's statements at most (account, open positions, the 5-statement batch, a re-read, a refusal). */
+const OPEN_FILL_STATEMENTS = 9;
+/** A close fill's at most: two tries of (position, rates, a 15-statement settlement), then a refusal. */
+const CLOSE_FILL_STATEMENTS = 35;
 /** Room kept for the rate fix and at least one booked hour when liquidations are capped. */
 const FIX_RESERVE = 3 + 7 + 2 * 20;
 export const HOUR = 3600;
 export const WEEK = 7 * 86400;
 
-export const HOLD_REGI = "Hold REGI to join the points pilot.";
+/** "Hold 1,000,000 REGI to join the points pilot." (PILOT_REGI_MIN). */
+export const holdRegi = (env: Env) => holdRegiText(regiMinOf(env) ?? REGI_MIN_DEFAULT);
 export const NOT_AT_SNAPSHOT = "This wallet didn't hold REGI at the pilot snapshot block.";
 export const REGI_UNCHECKED = "Couldn't check REGI right now";
 export const PRICE_UPDATING = "price updating";
 export const PILOT_CLOSED = "pilot closed";
+/** PILOT_OPEN is "1" but a setting is wrong (audit PE-7): every order is refused. */
+export const PILOT_MISCONFIGURED = "pilot misconfigured";
+/** Above PILOT_MAX_LEV (the engine's own cap gives the same words). */
+export const LEV_ABOVE_CAP = "leverage above the current cap";
+/** PILOT_BLOCKED_WALLETS (audit F4): opens refused, closes allowed. */
+export const BLOCKED_WALLET = "This wallet can't trade in the pilot.";
+/** Audit SS-5: PILOT_LIMITS.pendingPerWallet orders waiting already. */
+export const TOO_MANY_PENDING = "too many pending orders";
 export const TRADING_PAUSED = "trading paused";
 export const MILESTONE_PAUSED = "Paused: index milestone";
 export const ALREADY_CLOSED = "already closed";
@@ -274,7 +308,8 @@ export const basePaused = (m: { base_pending: number | boolean; base_step_ts: nu
 /** New orders (not closes) pause for 60 s after a recorded index milestone (it moves the index at once). */
 export const milestonePaused = (m: { milestone_ts: number | null; ts: number }) => m.milestone_ts !== null && m.ts < m.milestone_ts + PILOT_LIMITS.milestonePauseS;
 
-export function markView(m: MarkRow | null, nowS: number): PilotMark | null {
+/** levCap: the pilot's own cap (pilotMaxLev(env)); maxLev is the lower of it and the engine's. */
+export function markView(m: MarkRow | null, nowS: number, levCap: number): PilotMark | null {
   if (!m) return null;
   const cap = Engine.maxLeverage(riskOf(m));
   const age = nowS - m.ts;
@@ -282,7 +317,7 @@ export function markView(m: MarkRow | null, nowS: number): PilotMark | null {
   const known = riskKnown(m.sigma_24h, m.sigma_1h) && m.funding_known === 1;
   return {
     mark: m.px, ts: m.ts, age, ch24: m.ch24, ch1: m.ch1, sigma1h: m.sigma_1h, sigma24h: m.sigma_24h,
-    maxLev: known ? cap.max : 1, paused: cap.paused, basePaused: basePaused(m), milestonePaused: milestonePaused(m), fresh: known && age <= RULES.markMaxAgeS,
+    maxLev: known ? Math.min(cap.max, levCap) : 1, levCap, paused: cap.paused, basePaused: basePaused(m), milestonePaused: milestonePaused(m), fresh: known && age <= RULES.markMaxAgeS,
   };
 }
 
@@ -302,6 +337,8 @@ const ackMinute = (barsMinute: number | null, ts: number) => (barsMinute === nul
 export class Meter {
   read = 0;
   written = 0;
+  /** Statements run (a batch counts each of its statements): the invocation budget (INGEST_MAX_STATEMENTS). */
+  statements = 0;
   note(r: D1Result<unknown>) {
     this.read += Number(r.meta.rows_read ?? 0);
     this.written += Number(r.meta.rows_written ?? 0);
@@ -314,9 +351,9 @@ export function metered(db: D1Database, meter: Meter): D1Database {
   const wrap = (s: D1PreparedStatement): D1PreparedStatement => {
     const w: D1PreparedStatement = {
       bind: (...v: unknown[]) => wrap(s.bind(...v)),
-      first: async <T,>() => { const r = await s.all<T>(); meter.note(r); return (r.results[0] ?? null) as T | null; },
-      all: async <T,>() => { const r = await s.all<T>(); meter.note(r); return r; },
-      run: async <T,>() => { const r = await s.run<T>(); meter.note(r); return r; },
+      first: async <T,>() => { meter.statements++; const r = await s.all<T>(); meter.note(r); return (r.results[0] ?? null) as T | null; },
+      all: async <T,>() => { meter.statements++; const r = await s.all<T>(); meter.note(r); return r; },
+      run: async <T,>() => { meter.statements++; const r = await s.run<T>(); meter.note(r); return r; },
     };
     inner.set(w, s);
     return w;
@@ -324,6 +361,7 @@ export function metered(db: D1Database, meter: Meter): D1Database {
   return {
     prepare: (sql: string) => wrap(db.prepare(sql)),
     batch: async <T,>(stmts: D1PreparedStatement[]) => {
+      meter.statements += stmts.length;
       const rs = await db.batch<T>(stmts.map((x) => inner.get(x) ?? x));
       for (const r of rs) meter.note(r);
       return rs;
@@ -510,15 +548,17 @@ export const LIQ_STATEMENTS = 11;
  * covered (minute > mark.swept_minute). Every ingest sweeps the bars it stores in the same batch, so normally
  * swept_minute = bars_minute and this reads no bars at all. Only bars that could cross are read: the liquidation price
  * at the highest costs the position has had bounds every bar's own (cost-aware) one; candidates are paged.
- * → the number of positions it liquidated.
+ * room: statements this may still run (the ingest's budget); a position it can't afford is left for later.
+ * → the number of positions it liquidated, and whether every position was checked.
  */
-async function lazyLiquidateRows(db: D1Database, rows: readonly PositionRow[], nowS: number, m: MarkRow | null): Promise<number> {
-  if (!m || m.bars_minute === null || (m.swept_minute !== null && m.swept_minute >= m.bars_minute)) return 0;
-  if (!rows.length) return 0;
+async function lazyLiquidateRows(db: D1Database, rows: readonly PositionRow[], nowS: number, m: MarkRow | null, room: () => number = () => Infinity): Promise<{ n: number; done: boolean }> {
+  if (!m || m.bars_minute === null || (m.swept_minute !== null && m.swept_minute >= m.bars_minute)) return { n: 0, done: true };
+  if (!rows.length) return { n: 0, done: true };
   const rates = await ratesFor(db, rows);
   const end = nowS + 120;
   let n = 0;
   for (const r of rows) {
+    if (room() < 1 + LIQ_STATEMENTS) return { n, done: false };
     const pos = toEngine(r);
     const pts = [r.opened_at, end, ...rates.flatMap((x) => [x.t, x.t + HOUR]).filter((t) => t > r.opened_at && t < end)];
     const cmax = Math.max(0, ...pts.map((t) => Engine.fundingPaid(pos, rates, t) + Engine.borrowPaid(pos, t)));
@@ -537,12 +577,37 @@ async function lazyLiquidateRows(db: D1Database, rows: readonly PositionRow[], n
       from = cands[cands.length - 1].t + 60;
     }
   }
-  return n;
+  return { n, done: true };
 }
 
 export async function lazyLiquidate(db: D1Database, wallet: string, nowS: number, m: MarkRow | null, known?: PositionRow[]): Promise<number> {
   if (!m || m.bars_minute === null || (m.swept_minute !== null && m.swept_minute >= m.bars_minute)) return 0;
-  return lazyLiquidateRows(db, known ?? (await openRows(db, wallet)), nowS, m);
+  return (await lazyLiquidateRows(db, known ?? (await openRows(db, wallet)), nowS, m)).n;
+}
+
+/**
+ * The ingest's safety net over every open position (review R3): the bars not swept yet are read once (normally a
+ * few minutes of them) and each position is checked in memory, so a position that does not cross costs no statement;
+ * each crossing is settled in its own batch while `room` allows. A very long unswept stretch (over NET_BARS bars)
+ * falls back to the paged per-position read. done = false: positions were left for the next post (the caller then
+ * holds the swept watermark, fills nothing and fixes no rates in this post).
+ */
+async function sweepUnswept(db: D1Database, rows: readonly PositionRow[], nowS: number, m: MarkRow, room: () => number): Promise<{ n: number; done: boolean }> {
+  if (!rows.length) return { n: 0, done: true };
+  const from = m.swept_minute === null ? 0 : m.swept_minute + 60;
+  const bars = (await db.prepare("SELECT minute AS t, h, l, c FROM bars WHERE minute >= ? ORDER BY minute LIMIT ?").bind(from, NET_BARS + 1).all<MinuteBar>()).results;
+  if (bars.length > NET_BARS) return lazyLiquidateRows(db, rows, nowS, m, room);
+  if (!bars.length) return { n: 0, done: true };
+  const rates = await ratesFor(db, rows);
+  let n = 0;
+  for (const r of rows) {
+    const hit = Engine.liquidation(toEngine(r), bars, rates);
+    if (!hit) continue;
+    if (room() < LIQ_STATEMENTS) return { n, done: false };
+    const res = await db.batch(liquidationStmts(db, r, hit, bars, rates, nowS, randomHex(8)));
+    n += res[0].meta.changes;
+  }
+  return { n, done: true };
 }
 
 function openView(r: PositionRow, mark: number | null, rates: readonly StoredRate[], nowS: number): OpenPositionView {
@@ -673,13 +738,21 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
   // R2: this post fixes the hour's rates when it carries the trend and σ_1h of the hour its own clock is in, nobody
   // fixed them yet, and the hour is not booked (review S1: never an earlier hour, never retroactively)
   const H = d.hour_start, bookedHour = probe?.booked_hour ?? null;
-  const fixing = d.trend !== null && d.trend.hour === H && H === hourOf(d.ts) && d.sigma1h !== null && !probe?.has_rates && (bookedHour === null || H > bookedHour);
-  const hourFixed = Boolean(probe?.has_rates) || fixing;
 
-  // R2 step 1, and the safety net: bars stored but never swept are checked first, over every open position
+  // R2 step 1, and the safety net: bars stored but never swept are checked first, over every open position. Review
+  // R3: it takes at most what leaves room for the batch; if positions are left, this post sweeps, fixes and fills
+  // nothing (the next post goes on from the same watermark)
+  let netDone = true, netLiquidated = 0;
   if (prev && prev.bars_minute !== null && (prev.swept_minute === null || prev.swept_minute < prev.bars_minute)) {
-    await lazyLiquidateRows(db, await allOpen(db), nowS, prev);
+    // what the rest of this post needs at least: its reads, the mark / bar / gap / prune / split statements, and a
+    // rate fix with its close's reads
+    const rest = POST_NET_READS + 1 + merged.length + unresolved.length + closedGaps.length + SPLIT_STATEMENTS + 5 + FIX_RESERVE + CLOSE_READS;
+    const net = await sweepUnswept(db, await allOpen(db), nowS, prev, () => INGEST_MAX_STATEMENTS - rest - meter.statements);
+    netDone = net.done;
+    netLiquidated = net.n;
   }
+  const fixing = netDone && d.trend !== null && d.trend.hour === H && H === hourOf(d.ts) && d.sigma1h !== null && !probe?.has_rates && (bookedHour === null || H > bookedHour);
+  const hourFixed = Boolean(probe?.has_rates) || fixing;
 
   // the bars the sweep checks: this post's, and after a fix (§9.14c) every stored bar since the hour started, now
   // with the hour's rates (a crossing found there is stamped at its own bar)
@@ -694,7 +767,7 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
   let rates: StoredRate[] = [];
   let sweepRates: StoredRate[] = [];
   let fix: { fr: Engine.FundingRates; L: number; S: number; overlap: PositionRow[]; first: number } | null = null;
-  if (sweepBars.length || fixing) {
+  if (netDone && (sweepBars.length || fixing)) {
     open = await allOpen(db);
     let overlap: PositionRow[] = [];
     const first = bookedHour === null ? H - HOUR : bookedHour + HOUR;
@@ -731,12 +804,14 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
 
   const pruned = !prev || d.hour_start > prev.hour_start;
   const split = await splitStmts(db, nowS, probe?.last_split ?? null, post);
-  // review S2: the batch stays under MAX_BATCH_STATEMENTS. Liquidations beyond the cap wait (the swept watermark is
-  // held back, so the next post's safety net picks them up); the hourly booking takes what is left.
+  // review S2: the batch stays under MAX_BATCH_STATEMENTS, and (review R3) under what is left of the invocation's
+  // INGEST_MAX_STATEMENTS after the reads so far and the hourly close's own. Liquidations beyond the cap wait (the
+  // swept watermark is held back, so the next post's safety net picks them up); the hourly booking takes what is left.
+  const batchCap = Math.min(MAX_BATCH_STATEMENTS, INGEST_MAX_STATEMENTS - meter.statements - (fixing ? CLOSE_READS : 0));
   const base = 1 + merged.length + unresolved.length + closedGaps.length + split.length + (pruned ? 5 : 0);
-  const liqCap = Math.max(1, Math.floor((MAX_BATCH_STATEMENTS - base - (fixing ? FIX_RESERVE : 0)) / LIQ_STATEMENTS));
+  const liqCap = Math.max(1, Math.floor((batchCap - base - (fixing ? FIX_RESERVE : 0)) / LIQ_STATEMENTS));
   const taken = hits.slice(0, liqCap);
-  const heldBack = taken.length < hits.length;
+  const heldBack = !netDone || taken.length < hits.length;
   const liqStmts: D1PreparedStatement[] = [];
   const liqFirst: number[] = []; // index (in liqStmts) of each liquidation's settle statement
   for (const { r, hit } of taken) {
@@ -761,7 +836,7 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
     const takenIds = new Set(taken.map((x) => x.r.id));
     const ends = new Map(taken.map((x) => [x.r.id, x.hit.t + 60] as const));
     const live = open.filter((r) => !takenIds.has(r.id));
-    const budget = MAX_BATCH_STATEMENTS - base - liqStmts.length;
+    const budget = batchCap - base - liqStmts.length;
     stmts.push(...(await hourlyClose(db, env, d, fix, live, ends, rates, bookedHour, post, nowS, budget)));
   }
   stmts.push(...split);
@@ -787,10 +862,14 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
   if (res[0].meta.changes !== 1) return errorJson(409, "ts is not newer than the stored mark", { last_minute: ackMinute(stored, d.ts), rows: rows() });
   const liquidated = liqFirst.reduce((n, i) => n + res[liqAt + i].meta.changes, 0);
 
-  const fills = !prev || prev.has_pending ? await fillOrders(db, env, d, gapsLeft > 0, hourFixed, nowMs, openBar) : { filled: 0, refused: 0 };
+  // review R3: while liquidations are held back nothing fills (a close must not settle a position an earlier bar
+  // liquidates); the orders wait for the next post, within RULES.markMaxAgeS of their arrival
+  const fills = (!prev || prev.has_pending) && !heldBack
+    ? await fillOrders(db, env, d, gapsLeft > 0, hourFixed, nowMs, openBar, () => INGEST_MAX_STATEMENTS - meter.statements)
+    : { filled: 0, refused: 0, deferred: 0 };
   return json({
     ok: true, last_minute: ackMinute(barsMinute, d.ts), ts: d.ts, bars: d.bars.length, stored: merged.length, gapBars: gapBars.length,
-    gaps: gapsLeft, liquidated, ...fills, pruned, fixed: fixing, statements: stmts.length, rows: rows(),
+    gaps: gapsLeft, liquidated, netLiquidated, ...fills, heldBack, pruned, fixed: fixing, statements: stmts.length, queries: meter.statements, rows: rows(),
   });
 }
 
@@ -1099,7 +1178,7 @@ export async function handlePublicMark(req: Request, env: Env, deps: PilotDeps =
   const db = env.PILOT_DB;
   if (!db) return unconfigured();
   return edgeCachedGet(req, deps, async () => {
-    const m = markView(await loadMark(db), nowSOf(deps));
+    const m = markView(await loadMark(db), nowSOf(deps), pilotMaxLev(env));
     return m ? json(m) : errorJson(404, "no data");
   }, MARK_CACHE_S);
 }
@@ -1251,21 +1330,30 @@ export function closeStmts(db: D1Database, row: PositionRow, o: Pick<OrderRow, "
  * (not stored until it finishes): a close is checked against it first, so a crossing in this minute liquidates.
  * hourFixed: this hour's rates are fixed: opens and closes wait for them (§9.14c), liquidations do not.
  */
-async function fillOrders(db: D1Database, env: Env, d: MarkPost, gapsOpen: boolean, hourFixed: boolean, nowMs: number, openBar: MarkPost["bars"][number] | null): Promise<{ filled: number; refused: number }> {
+async function fillOrders(
+  db: D1Database, env: Env, d: MarkPost, gapsOpen: boolean, hourFixed: boolean, nowMs: number, openBar: MarkPost["bars"][number] | null, room: () => number,
+): Promise<{ filled: number; refused: number; deferred: number }> {
+  if (room() < 1) return { filled: 0, refused: 0, deferred: 0 };
   const pending = (await db.prepare(`SELECT ${ORDER_COLS} FROM orders WHERE status = 'pending' AND arrived_ms < ? ORDER BY id`).bind(d.ts * 1000).all<OrderRow>()).results;
-  let filled = 0, refused = 0;
-  if (!pending.length) return { filled, refused };
+  let filled = 0, refused = 0, deferred = 0;
+  if (!pending.length) return { filled, refused, deferred };
+  const state = pilotState(env, d.head), levCap = pilotMaxLev(env);
   const paused = basePaused({ base_pending: d.basePending, base_step_ts: d.baseStepTs, ts: d.ts });
   // a catch-up batch (bars behind the mark) or an open gap: older bars may still liquidate, so nothing fills now
   const catchingUp = gapsOpen || d.bars[d.bars.length - 1][0] < Math.floor(d.ts / 60) * 60;
   const risk = { sigma24: d.sigma24h, sigma1h: d.sigma1h, ch1: d.ch1 };
   const refuse = async (o: OrderRow, error: string) => { refused += (await refuseStmt(db, o.id, error).run()).meta.changes; };
 
-  for (const o of pending) {
+  for (let i = 0; i < pending.length; i++) {
+    const o = pending[i];
+    // review R3: the invocation's budget; the rest stays pending for the next post
+    if (room() < (o.kind === "open" ? OPEN_FILL_STATEMENTS : CLOSE_FILL_STATEMENTS)) { deferred = pending.length - i; break; }
     if (catchingUp || nowMs - o.arrived_ms > RULES.markMaxAgeS * 1000) { await refuse(o, PRICE_UPDATING); continue; }
     if (paused) { await refuse(o, TRADING_PAUSED); continue; }
     if (o.kind === "open") {
-      if (!pilotOpen(env)) { await refuse(o, PILOT_CLOSED); continue; }
+      if (state !== "open") { await refuse(o, state === "closed" ? PILOT_CLOSED : PILOT_MISCONFIGURED); continue; }
+      if (blockedWallet(env, o.wallet)) { await refuse(o, BLOCKED_WALLET); continue; }
+      if (o.lev! > levCap) { await refuse(o, LEV_ABOVE_CAP); continue; }
       if (milestonePaused({ milestone_ts: d.milestoneTs, ts: d.ts })) { await refuse(o, MILESTONE_PAUSED); continue; }
       if (!riskKnown(d.sigma24h, d.sigma1h) || !hourFixed) { await refuse(o, PRICE_UPDATING); continue; }
       const acct = await getAccount(db, o.wallet);
@@ -1305,7 +1393,7 @@ async function fillOrders(db: D1Database, env: Env, d: MarkPost, gapsOpen: boole
       }
     }
   }
-  return { filled, refused };
+  return { filled, refused, deferred };
 }
 
 // ───────────────────────────── handlers ─────────────────────────────
@@ -1326,7 +1414,7 @@ async function readBody(req: Request): Promise<Record<string, unknown> | null> {
  * to the minute before the mark's, no open gap) and not in the base-sample pause.
  */
 async function markProblem(db: D1Database, m: MarkRow | null, nowS: number): Promise<Response | null> {
-  const v = markView(m, nowS);
+  const v = markView(m, nowS, RULES.levels[RULES.levels.length - 1]);
   if (!m || !v || !v.fresh) return errorJson(503, PRICE_UPDATING);
   if (m.bars_minute === null || m.bars_minute < Math.floor(m.ts / 60) * 60 - 60 || (await openGaps(db)) > 0) return errorJson(503, PRICE_UPDATING);
   if (v.basePaused) return errorJson(409, TRADING_PAUSED);
@@ -1363,9 +1451,14 @@ export async function handleAccount(req: Request, env: Env, deps: PilotDeps = {}
   const nowS = nowSOf(deps);
   const [me, m] = await Promise.all([signedIn(req, env, db, nowS), loadMark(db)]);
   if (m) await maybeSplit(db, nowS, m.last_split);
-  const base: PilotAccountView = { open: pilotOpen(env), address: null, regi: null, account: null, positions: [], pending: [], mark: markView(m, nowS), funding: fundingNow(m, nowS) };
+  const state = pilotState(env, m ? m.head : null);
+  const base: PilotAccountView = {
+    open: state === "open", misconfigured: state === "misconfigured", regiMin: regiMinOf(env) ?? REGI_MIN_DEFAULT,
+    address: null, regi: null, account: null, positions: [], pending: [], mark: markView(m, nowS, pilotMaxLev(env)), funding: fundingNow(m, nowS),
+  };
   if (!me) return json(base);
-  const regi = await regiStatus(db, me.acct, env, nowS, deps);
+  // misconfigured: no REGI read (a future block only fails, a pre-REGI one reads 0 for everyone)
+  const regi = state === "misconfigured" ? null : await regiStatus(db, me.acct, env, nowS, deps);
   let open = me.open, balance = me.acct.balance;
   if ((await lazyLiquidate(db, me.wallet, nowS, m, open)) > 0) {
     const again = (await accountWithOpen(db, me.wallet))!;
@@ -1408,12 +1501,18 @@ async function orderStatus(req: Request, env: Env, db: D1Database, deps: PilotDe
   return json({ order: orderView(o), position });
 }
 
+/** The wallet's orders still waiting for a mark (not yet expired), by kind (index orders_wallet). */
+async function pendingOf(db: D1Database, wallet: string, nowMs: number): Promise<{ all: number; opens: number }> {
+  const rows = (await db.prepare("SELECT kind FROM orders WHERE wallet = ? AND status = 'pending' AND arrived_ms > ?").bind(wallet, nowMs - ORDER_EXPIRY_MS).all<{ kind: string }>()).results;
+  return { all: rows.length, opens: rows.filter((r) => r.kind === "open").length };
+}
+
 export async function handleOrder(req: Request, env: Env, deps: PilotDeps = {}): Promise<Response> {
   const method = req.method.toUpperCase();
   const db = env.PILOT_DB;
   if (method === "GET") return db ? orderStatus(req, env, db, deps) : unconfigured();
   if (method !== "POST") return errorJson(405, "method not allowed");
-  if (!pilotOpen(env)) return errorJson(403, PILOT_CLOSED);
+  if (pilotState(env, null) === "closed") return errorJson(403, PILOT_CLOSED);
   if (!db) return unconfigured();
   const csrf = csrfFailure(req, siteOrigin(env));
   if (csrf) return errorJson(403, csrf);
@@ -1429,17 +1528,24 @@ export async function handleOrder(req: Request, env: Env, deps: PilotDeps = {}):
   if (!finite(margin) || margin > 1e12) return errorJson(400, "margin must be a number");
   if (!finite(lev)) return errorJson(400, "lev must be a number");
 
+  const m = await loadMark(db);
+  // audit PE-7: a wrong snapshot block (or minimum, or cap) refuses every order, before any REGI read
+  if (pilotState(env, m ? m.head : null) !== "open") return errorJson(503, PILOT_MISCONFIGURED);
+  if (blockedWallet(env, wallet)) return errorJson(403, BLOCKED_WALLET);
+  if (lev > pilotMaxLev(env)) return errorJson(400, LEV_ABOVE_CAP);
+  const pending = await pendingOf(db, wallet, nowMs);
+  if (pending.all >= PILOT_LIMITS.pendingPerWallet) return errorJson(409, TOO_MANY_PENDING);
   const regi = await regiStatus(db, me.acct, env, nowS, deps);
   if (regi.ok === null) return errorJson(503, REGI_UNCHECKED);
-  if (!regi.ok) return errorJson(403, regi.snapshot === false ? NOT_AT_SNAPSHOT : HOLD_REGI);
-  const m = await loadMark(db);
+  if (!regi.ok) return errorJson(403, regi.snapshot === false ? NOT_AT_SNAPSHOT : holdRegi(env));
   let { open: rows, acct } = me;
   if ((await lazyLiquidate(db, wallet, nowS, m, rows)) > 0) ({ open: rows, acct } = (await accountWithOpen(db, wallet))!);
   const problem = await markProblem(db, m, nowS);
   if (problem) return problem;
   if (milestonePaused(m!)) return errorJson(409, MILESTONE_PAUSED); // new orders only: closes go on
-  // the same checks the fill makes, at the current mark: refuse now what would be refused at the fill
-  const pre = Engine.open({ balance: acct.balance, open: rows.length, side: rows[0]?.side ?? null }, { side, margin, lev, mark: m!.px, now: m!.ts, risk: riskOf(m!) });
+  // the same checks the fill makes, at the current mark: refuse now what would be refused at the fill (queued opens
+  // count as open: audit SS-5)
+  const pre = Engine.open({ balance: acct.balance, open: rows.length + pending.opens, side: rows[0]?.side ?? null }, { side, margin, lev, mark: m!.px, now: m!.ts, risk: riskOf(m!) });
   if (!pre.ok) return errorJson(["insufficient balance", "too many open positions", HEDGE].includes(pre.error) ? 409 : 400, engineError(pre.error, rows));
   const o = await insertOrder(db, wallet, "open", { side, margin, lev }, nowMs);
   return json({ order: orderView(o) }, 202);
@@ -1458,6 +1564,7 @@ export async function handleClose(req: Request, env: Env, deps: PilotDeps = {}):
   const b = await readBody(req);
   const id = b?.id;
   if (typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0) return errorJson(400, "id must be a position id");
+  if ((await pendingOf(db, wallet, nowMs)).all >= PILOT_LIMITS.pendingPerWallet) return errorJson(409, TOO_MANY_PENDING);
 
   const m = await loadMark(db);
   await lazyLiquidate(db, wallet, nowS, m);
@@ -1481,7 +1588,7 @@ export async function handlePositions(req: Request, env: Env, deps: PilotDeps = 
   let open = me.open;
   if ((await lazyLiquidate(db, me.wallet, nowS, m, open)) > 0) open = (await accountWithOpen(db, me.wallet))!.open;
   const rates = await ratesFor(db, open);
-  return json({ positions: open.map((r) => openView(r, m ? m.px : null, rates, nowS)), mark: markView(m, nowS), funding: fundingNow(m, nowS) });
+  return json({ positions: open.map((r) => openView(r, m ? m.px : null, rates, nowS)), mark: markView(m, nowS, pilotMaxLev(env)), funding: fundingNow(m, nowS) });
 }
 
 /** The caller's last 100 closed positions: index positions_wallet (wallet, closed_at, id), read backwards, no sort. */

@@ -59,7 +59,11 @@ describe("pilot copy lint (R7)", () => {
     expect(PILOT_DISCLAIMER).toBe("Points only. No deposits, no prizes; points have no value.");
     expect(PILOT_LIQ_NOTE).toBe("Liquidation only takes the position's margin.");
     expect(PILOT_COPY.closed).toBe("The points pilot is not open yet.");
-    expect(PILOT_COPY.holdRegi).toBe("Hold REGI to join the points pilot.");
+    // owner decision 2026-10-11 (audit PE-3): the gate is 1,000,000 REGI, and the copy says so
+    expect(PILOT_COPY.holdRegi(1_000_000)).toBe("Hold 1,000,000 REGI to join the points pilot.");
+    expect(PILOT_COPY.signInTip(1_000_000)).toContain("held at least 1,000,000 REGI on Arc at the pilot snapshot block");
+    expect(PILOT_COPY.misconfigured).toBe("The points pilot is misconfigured; new orders are refused.");
+    for (const s of [PILOT_COPY.holdRegi(1_000_000), PILOT_COPY.signInTip(1_000_000), PILOT_COPY.misconfigured]) expect(banned(s)).toBeUndefined();
     expect(PILOT_COPY.rulesTip).toContain("One direction at a time: close your longs before opening a short, and the reverse.");
   });
   test("the lint catches what it should", () => {
@@ -85,13 +89,13 @@ describe("pilot copy lint (R7)", () => {
 // ───────────────────────────── markup ─────────────────────────────
 
 const ME = "0x1234567890abcdef1234567890abcdef12345678";
-const MARK = { mark: 1000, ts: 1_760_097_600, age: 2, ch24: 0.01, ch1: 0.001, sigma1h: 0.0004, sigma24h: 0.002, maxLev: 30, paused: false, basePaused: false, milestonePaused: false, fresh: true };
+const MARK = { mark: 1000, ts: 1_760_097_600, age: 2, ch24: 0.01, ch1: 0.001, sigma1h: 0.0004, sigma24h: 0.002, maxLev: 30, levCap: 30, paused: false, basePaused: false, milestonePaused: false, fresh: true };
 const rate = (t: number, long: number, short: number, L: number, S: number): RateView => ({ t, long, short, skew: (L - S) / (L + S || 1), trend: 0, r: 0, cut: 0, L, S, houseExposure: S - L });
 const FUNDING = { recent: [rate(1_760_094_000, 0.0003, -0.00027, 75000, 25000), rate(1_760_090_400, -0.0002, 0.0002, 0, 0)], current: rate(1_760_094_000, 0.0003, -0.00027, 75000, 25000), next: 1_760_097_600 };
 const NOW = { hour: 1_760_094_000, long: 0.0003, short: -0.00027, skew: 0.5, next: 1_760_097_600 };
 const POS_LIQ = liqPrice({ side: "long", margin: 1000, notional: 2000, entry: 990 }, 0);
 const VIEW: PilotAccountView = {
-  open: true, address: ME, regi: { ok: true, snapshot: true, now: true }, account: { balance: 9000, equity: 9998.8, season: 1 },
+  open: true, misconfigured: false, regiMin: 1_000_000, address: ME, regi: { ok: true, snapshot: true, now: true }, account: { balance: 9000, equity: 9998.8, season: 1 },
   positions: [{ id: 7, side: "long", margin: 1000, lev: 2, notional: 2000, entry: 990, liq: POS_LIQ, openedAt: 1_760_097_000, fee: 0.2, funding: 0.6, borrow: 0.02, pnl: 20.2 }],
   pending: [],
   mark: MARK,
@@ -154,6 +158,16 @@ describe("ticket", () => {
     expect(ticket()).not.toMatch(/disabled="">30×<\/button>/);
     expect(capped).not.toMatch(/disabled="">5×<\/button>/);
     expect(capped).toContain(esc(PILOT_COPY.capped(5)));
+    // the pilot's own cap (PILOT_MAX_LEV, owner decision: 10×): no level above it is offered, and no volatility note
+    const pilotCap = ticket({ view: { ...VIEW, mark: { ...MARK, maxLev: 10, levCap: 10 } } });
+    for (const l of [1, 2, 3, 5, 10]) expect(pilotCap).toContain(`>${l}×</button>`);
+    for (const l of [20, 30]) expect(pilotCap).not.toContain(`>${l}×</button>`);
+    expect(pilotCap).not.toMatch(/disabled="">10×<\/button>/);
+    expect(pilotCap).not.toContain(esc(PILOT_COPY.capped(10)));
+    const both = ticket({ view: { ...VIEW, mark: { ...MARK, maxLev: 5, levCap: 10 } } });
+    expect(both).not.toContain(">20×</button>");
+    expect(both).toMatch(/disabled="">10×<\/button>/);
+    expect(both).toContain(esc(PILOT_COPY.capped(5)));
     for (const [mark, text] of [[{ ...MARK, paused: true }, PILOT_COPY.paused], [{ ...MARK, basePaused: true }, PILOT_COPY.basePaused], [{ ...MARK, fresh: false }, PILOT_COPY.priceUpdating]] as const) {
       const h = ticket({ view: { ...VIEW, mark } });
       expect(h).toContain(esc(text));
@@ -172,8 +186,10 @@ describe("ticket", () => {
     const states: [PilotAccountView, string][] = [
       [{ ...VIEW, open: false }, PILOT_COPY.closed],
       [{ ...VISITOR, open: false }, PILOT_COPY.closed],
-      [VISITOR, PILOT_COPY.holdRegi],
-      [{ ...VIEW, regi: { ok: false, snapshot: true, now: false } }, PILOT_COPY.holdRegi],
+      [VISITOR, PILOT_COPY.holdRegi(1_000_000)],
+      [{ ...VIEW, regi: { ok: false, snapshot: true, now: false } }, PILOT_COPY.holdRegi(1_000_000)],
+      [{ ...VIEW, open: false, misconfigured: true }, PILOT_COPY.misconfigured],
+      [{ ...VISITOR, open: false, misconfigured: true }, PILOT_COPY.misconfigured],
       [{ ...VIEW, regi: { ok: false, snapshot: false, now: true } }, PILOT_COPY.notAtSnapshot],
       [{ ...VIEW, regi: { ok: null, snapshot: true, now: null } }, PILOT_COPY.regiUnchecked],
     ];
@@ -185,7 +201,7 @@ describe("ticket", () => {
       expect(banned(visible(h))).toBeUndefined();
     }
     // a possible holder whose check failed is never told to hold REGI
-    expect(ticket({ view: { ...VIEW, regi: { ok: null, snapshot: null, now: null } } })).not.toContain(PILOT_COPY.holdRegi);
+    expect(ticket({ view: { ...VIEW, regi: { ok: null, snapshot: null, now: null } } })).not.toContain(PILOT_COPY.holdRegi(1_000_000));
     expect(ticket({ view: VISITOR })).toContain(">Sign in</button>");
     expect(ticket({ view: VISITOR })).toContain('aria-label="About sign-in"');
   });

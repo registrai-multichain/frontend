@@ -5,6 +5,7 @@
  * inside these two exact disclaimer strings.
  */
 import { RULES } from "./abi-pilot";
+import { holdRegiText } from "./abi-pilot-api";
 
 export const PILOT_DISCLAIMER = "Points only. No deposits, no prizes; points have no value.";
 export const PILOT_LIQ_NOTE = "Liquidation only takes the position's margin.";
@@ -16,14 +17,16 @@ const top = RULES.levels[RULES.levels.length - 1];
 export const PILOT_COPY = {
   heading: "Points pilot",
   closed: "The points pilot is not open yet.",
-  holdRegi: "Hold REGI to join the points pilot.",
+  misconfigured: "The points pilot is misconfigured; new orders are refused.",
+  /** "Hold 1,000,000 REGI to join the points pilot." */
+  holdRegi: holdRegiText,
   notAtSnapshot: "This wallet didn't hold REGI at the pilot snapshot block.",
   regiUnchecked: "Couldn't check REGI right now",
   signIn: "Sign in",
   signingIn: "Check your wallet…",
   signOut: "Sign out",
-  signInTip:
-    "Sign a one-time message with a wallet that held at least 1 REGI on Arc at the pilot snapshot block and still does. It is not a transaction and costs nothing. The session lasts 12 hours. Smart-contract wallets aren't supported yet.",
+  signInTip: (min: number) =>
+    `Sign a one-time message with a wallet that held at least ${min.toLocaleString("en-US")} REGI on Arc at the pilot snapshot block and still does. It is not a transaction and costs nothing. The session lasts 12 hours. Smart-contract wallets aren't supported yet.`,
   rulesTip:
     `Market orders fill at the first ABI mark posted after the order (the mark updates every 5 s); with no mark within ${RULES.markMaxAgeS} s the order is refused. ` +
     `Leverage ${RULES.levels.join(", ")}×, capped at the lower of ${RULES.volTarget} ÷ σ_24h and 1 ÷ (${pct(RULES.jump)} + ${pct(RULES.mm)}), so a ${pct(RULES.jump)} milestone step stays inside the margin; from 1× to ${top}×. ` +

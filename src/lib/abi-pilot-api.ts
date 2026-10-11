@@ -54,8 +54,16 @@ export function parsePilotLoginMessage(message: string): PilotLogin | null {
 export const ARC_CHAIN_ID = 5042;
 export const ARC_RPC_URL = "https://rpc.mainnet.arc.io";
 export const REGI_ADDRESS = "0x93D5b8c53ee763C2c4522bF0d958ce51Af4360ae";
-/** 1 REGI (18 decimals). */
-export const REGI_MIN = 10n ** 18n;
+/** REGI has 18 decimals. */
+export const REGI_UNIT = 10n ** 18n;
+/** The gate (owner decision 2026-10-11, audit PE-3): a wallet must hold at least this many REGI (PILOT_REGI_MIN overrides it). */
+export const REGI_MIN_DEFAULT = 1_000_000;
+/** REGI's contract has code from this Arc block on (audit PE-7): a snapshot block before it is a misconfiguration. */
+export const REGI_DEPLOY_BLOCK = 22_419_071;
+/** The pilot's leverage cap on top of the engine's (owner decision 2026-10-11, audit F2; PILOT_MAX_LEV overrides it). */
+export const PILOT_MAX_LEV_DEFAULT = 10;
+/** "Hold 1,000,000 REGI to join the points pilot." */
+export const holdRegiText = (min: number) => `Hold ${min.toLocaleString("en-US")} REGI to join the points pilot.`;
 export const BALANCE_OF_SELECTOR = "0x70a08231";
 /** A cached REGI check is reused for at most this long. */
 export const REGI_CACHE_S = 10 * 60;
@@ -81,6 +89,8 @@ export const PILOT_PATHS = {
 export const PILOT_LIMITS = {
   ordersPerMin: 30,
   closesPerMin: 60,
+  /** Pending orders (opens and closes) one wallet may have waiting for the next mark (audit SS-5). */
+  pendingPerWallet: 3,
   loginsPerMin: 10,
   leaderboard: 50,
   history: 100,
@@ -106,7 +116,10 @@ export interface PilotMark {
   ch1: number;
   sigma1h: number | null;
   sigma24h: number | null;
+  /** The highest leverage an order may use now: the engine's cap (volatility, jump) and the pilot's cap, the lower. */
   maxLev: number;
+  /** The pilot's own cap (PILOT_MAX_LEV): the ticket offers no level above it. */
+  levCap: number;
   /** The engine's pause (the last hour moved more than max(5σ_1h, 0.5%)). */
   paused: boolean;
   /** Paused around the hour's base sample (base_pending, or under 60 s after base_step_ts). */
@@ -173,7 +186,7 @@ export interface OrderView {
 }
 
 export interface RegiView {
-  /** Eligible: held ≥ 1 REGI at the snapshot block and now. null = couldn't check. */
+  /** Eligible: held the minimum REGI (regiMin) at the snapshot block and now. null = couldn't check. */
   ok: boolean | null;
   snapshot: boolean | null;
   now: boolean | null;
@@ -257,8 +270,12 @@ export interface EconomyView {
 }
 
 export interface PilotAccountView {
-  /** PILOT_OPEN = "1" and a REGI snapshot block is set: new orders accepted. */
+  /** PILOT_OPEN = "1" and the pilot's settings are valid: new orders accepted. */
   open: boolean;
+  /** PILOT_OPEN = "1" but a setting is invalid (the snapshot block, PILOT_REGI_MIN, PILOT_MAX_LEV): every order is refused. */
+  misconfigured: boolean;
+  /** The REGI a wallet must hold (whole REGI). */
+  regiMin: number;
   address: string | null;
   regi: RegiView | null;
   account: { balance: number; equity: number | null; season: number } | null;

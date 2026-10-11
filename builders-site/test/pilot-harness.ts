@@ -11,12 +11,14 @@ import { MemoryKV } from "./memory-kv";
 export const ORIGIN = "https://builder.registrai.cc";
 export const PUSH = "p".repeat(40);
 export const SESSION_SECRET = "s".repeat(40);
-export const SNAP = 1_000_000;
+/** A snapshot block after REGI's deploy (22,419,071) and below every mark's head (audit PE-7). */
+export const SNAP = 23_000_000;
 // Anvil's dev keys: never real funds.
 export const ALICE = privateKeyToAccount("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
 export const BOB = privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");
 export const T0 = Date.parse("2026-10-10T12:00:10.000Z");
-export const ONE = 10n ** 18n;
+/** The REGI gate's default minimum: 1,000,000 REGI (owner decision 2026-10-11, audit PE-3). */
+export const ONE = 1_000_000n * 10n ** 18n;
 export const CALM = { sigma_24h: 0.002, sigma_1h: 0.0004 }; // engine cap 30× (the jump cap; volatility allows 50×)
 
 export type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -40,7 +42,11 @@ export interface MarkExtra {
   milestone_ts: number | null;
 }
 
-export function setup(o: { open?: boolean; db?: boolean; secret?: string; snapshot?: string | null } = {}) {
+/**
+ * maxLev: PILOT_MAX_LEV ("30" here, so the engine's own caps stay under test; null = unset, the 10× default).
+ * regiMin / blocked: PILOT_REGI_MIN / PILOT_BLOCKED_WALLETS (unset by default).
+ */
+export function setup(o: { open?: boolean; db?: boolean; secret?: string; snapshot?: string | null; maxLev?: string | null; regiMin?: string; blocked?: string } = {}) {
   let nowMs = T0;
   const db = new MemoryD1();
   // balances by "<wallet>@<block tag>"; "latest" = now
@@ -76,6 +82,9 @@ export function setup(o: { open?: boolean; db?: boolean; secret?: string; snapsh
     PILOT_DB: o.db === false ? undefined : db,
     PILOT_OPEN: o.open === false ? undefined : "1",
     PILOT_REGI_SNAPSHOT_BLOCK: o.snapshot === null ? undefined : (o.snapshot ?? String(SNAP)),
+    PILOT_MAX_LEV: o.maxLev === null ? undefined : (o.maxLev ?? "30"),
+    ...(o.regiMin !== undefined ? { PILOT_REGI_MIN: o.regiMin } : {}),
+    ...(o.blocked !== undefined ? { PILOT_BLOCKED_WALLETS: o.blocked } : {}),
   };
   let rnd = 0.5;
   const deps: PilotDeps = { now: () => nowMs, fetch: fakeFetch, random: () => rnd, cache: null };
