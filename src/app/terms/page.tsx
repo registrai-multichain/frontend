@@ -15,7 +15,7 @@ const H = ({ children }: { children: React.ReactNode }) => <h2 className="pa-h2 
 export default function TermsPage() {
   return (
     <BuildersShell>
-      <article className="perennial-app-page">
+      <article className="perennial-app-page pa-legal">
         <header className="mb-6">
           <h1 className="pa-h1">Terms of use</h1>
           <p className="pa-muted">Effective {LEGAL.effective}. Operator: {LEGAL.operator}, <a href={`mailto:${LEGAL.contact}`}>{LEGAL.contact}</a>.</p>

@@ -18,7 +18,7 @@ const H = ({ children }: { children: React.ReactNode }) => <h2 className="pa-h2 
 export default function PilotRulesPage() {
   return (
     <BuildersShell>
-      <article className="perennial-app-page">
+      <article className="perennial-app-page pa-legal">
         <header className="mb-6">
           <h1 className="pa-h1">Points pilot rules</h1>
           <p className="pa-muted">These rules are part of the <Link href="/terms/">Terms of use</Link>. We may change them; this page shows the current version.</p>

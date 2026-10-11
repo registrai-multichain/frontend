@@ -26,7 +26,7 @@ const ROWS: [string, string, string, string][] = [
 export default function PrivacyPage() {
   return (
     <BuildersShell>
-      <article className="perennial-app-page">
+      <article className="perennial-app-page pa-legal">
         <header className="mb-6">
           <h1 className="pa-h1">Privacy notice</h1>
           <p className="pa-muted">Effective {LEGAL.effective}. Controller: {LEGAL.operator}, <a href={`mailto:${LEGAL.contact}`}>{LEGAL.contact}</a>.</p>
