@@ -110,7 +110,7 @@ describe("mark ingest (R4, spec §8.5)", () => {
     expect(validateMark(ok, now)).toMatchObject({ ok: true, data: { premium: 0 } });
     expect(validateMark({ ...ok, milestone_premium: null }, now)).toMatchObject({ ok: true, data: { premium: null } });
     expect(validateMark({ ...ok, milestone_premium: 0.00007 }, now)).toMatchObject({ ok: true, data: { premium: 0.00007 } });
-    expect(validateMark({ ...ok, milestone_premium: -0.001 }, now)).toMatchObject({ ok: true, data: { premium: -0.001 } });
+    expect(err({ milestone_premium: -0.001 })).toMatch(/milestone_premium/); // never negative (§9.15)
     expect(err({ milestone_premium: 0.0011 })).toMatch(/milestone_premium/);
     expect(err({ milestone_premium: "0.0001" })).toMatch(/milestone_premium/);
     expect(err({ milestone_premium: Infinity })).toMatch(/milestone_premium/);

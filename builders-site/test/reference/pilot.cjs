@@ -53,7 +53,7 @@
   function premium(n, steps = {}) {
     let s = 0;
     for (const k in steps) { const i = +k; if (i > n - 1 - RULES.premiumWindow && i <= n - 1 && steps[k] > 0) s += Math.log(steps[k]); }
-    return s / RULES.premiumWindow;
+    return Math.max(0, s / RULES.premiumWindow);          // never negative (every milestone tier is a rise)
   }
 
   function maxLeverage({ sigma24, sigma1h, ch1 }) {

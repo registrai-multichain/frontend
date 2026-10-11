@@ -246,7 +246,7 @@ export function validateMark(raw: unknown, nowS: number): { ok: true; data: Mark
   let premium: number | null = 0;
   if (b.milestone_premium !== undefined) {
     if (b.milestone_premium === null) premium = null;
-    else if (!finite(b.milestone_premium) || Math.abs(b.milestone_premium) > MAX_PREMIUM) return bad(`milestone_premium must be a finite number within ±${MAX_PREMIUM}, or null`);
+    else if (!finite(b.milestone_premium) || b.milestone_premium < 0 || b.milestone_premium > MAX_PREMIUM) return bad(`milestone_premium must be a finite number from 0 to ${MAX_PREMIUM}, or null`);
     else premium = b.milestone_premium;
   }
   if (b.base_pending !== undefined && typeof b.base_pending !== "boolean") return bad("base_pending must be a boolean");

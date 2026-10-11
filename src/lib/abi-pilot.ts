@@ -155,7 +155,7 @@ export function premium(n: number, steps: Readonly<Record<number, number>> = {})
     const i = +k;
     if (i > n - 1 - RULES.premiumWindow && i <= n - 1 && steps[k] > 0) s += Math.log(steps[k]);
   }
-  return s / RULES.premiumWindow;
+  return Math.max(0, s / RULES.premiumWindow); // never negative (every milestone tier is a rise), as pilot.js
 }
 
 export function maxLeverage({ sigma24, sigma1h, ch1 }: Risk): { max: number; paused: boolean } {
