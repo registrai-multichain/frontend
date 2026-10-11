@@ -187,10 +187,31 @@ export async function pilotWallet(req: Request, env: Env, nowS: number): Promise
 
 // ───────────────────────────── rate limits ─────────────────────────────
 
-/** Counts one call in the current one-minute window; true while the count is within `limit` (atomic upsert). */
+/**
+ * Counts one call in the current one-minute window; true while the count is within `limit` (atomic upsert). Once
+ * the limit is reached the statement writes nothing (audit SS-2).
+ */
 export async function rateOk(db: D1Database, key: string, limit: number, nowS: number): Promise<boolean> {
-  const r = await db.prepare(SQL.rateHit).bind(key, Math.floor(nowS / 60)).first<{ n: number }>();
-  return (r?.n ?? 0) <= limit;
+  const r = await db.prepare(SQL.rateHit).bind(key, Math.floor(nowS / 60), limit).first<{ n: number }>();
+  return r !== null && r.n <= limit;
+}
+
+/**
+ * The sign-in rate-limit key of a client address (audit SS-2): IPv4 whole; IPv6 by its /64, since one host
+ * usually holds a whole /64 and could otherwise use 2^64 keys. Malformed input is kept as is (cut to 64 chars).
+ */
+export function ipKey(raw: string | null): string {
+  const s = (raw ?? "").trim().toLowerCase();
+  if (!s) return "unknown";
+  if (!s.includes(":")) return s.slice(0, 64);
+  const mapped = /^(?:0{0,4}:){0,5}:?ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(s);
+  if (mapped) return mapped[1];
+  const parts = s.split("::");
+  if (parts.length > 2) return s.slice(0, 64);
+  const head = parts[0] ? parts[0].split(":") : [], tail = parts.length === 2 && parts[1] ? parts[1].split(":") : [];
+  const groups = parts.length === 2 ? [...head, ...Array(Math.max(0, 8 - head.length - tail.length)).fill("0"), ...tail] : head;
+  if (groups.length !== 8 || !groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return s.slice(0, 64);
+  return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":")}::/64`;
 }
 
 export const tooMany = () => errorJson(429, "too many requests; wait a minute");
@@ -307,9 +328,9 @@ export async function handlePilotLogin(req: Request, env: Env, deps: PilotDeps =
   if (csrf) return errorJson(403, csrf);
   if (!env.NONCE_SECRET) return errorJson(500, NONCE_SECRET_MISSING);
   const nowMs = nowMsOf(deps), nowS = Math.floor(nowMs / 1000);
-  const ip = req.headers.get("cf-connecting-ip") ?? "unknown";
-  if (!(await rateOk(db, `login:${ip}`, PILOT_LIMITS.loginsPerMin, nowS))) return tooMany();
 
+  // audit SS-2: the request's shape, the nonce's MAC and age, the origin and the issue time are checked before
+  // anything touches D1; then the rate limit (no write once it is reached), then the signature
   const text = await readCapped(req, 8192);
   let body: unknown;
   try {
@@ -330,6 +351,7 @@ export async function handlePilotLogin(req: Request, env: Env, deps: PilotDeps =
   const origin = siteOrigin(env);
   if (!origin || login.origin !== origin) return errorJson(401, `message is for ${login.origin}, this site is ${origin || "(SITE_ORIGIN unset)"}`);
   if (!issuedFresh(login.issued, nowMs)) return errorJson(401, "sign-in message expired; sign in again");
+  if (!(await rateOk(db, `login:${ipKey(req.headers.get("cf-connecting-ip"))}`, PILOT_LIMITS.loginsPerMin, nowS))) return tooMany();
   let wallet: string;
   try {
     wallet = (await recoverMessageAddress({ message, signature: signature as Hex })).toLowerCase();

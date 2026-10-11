@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import * as Engine from "../../src/lib/abi-pilot";
 import { handlePublicMark, INGEST_MAX_STATEMENTS } from "../lib/pilot";
-import { ALICE, BOB, lc, ONE, setup, SNAP, T0, type Json } from "./pilot-harness";
+import { handlePilotLogin, handlePilotNonce, ipKey } from "../lib/pilot-auth";
+import { pilotLoginMessage } from "../../src/lib/abi-pilot-api";
+import { ALICE, BOB, lc, ONE, ORIGIN, setup, SNAP, T0, type Json } from "./pilot-harness";
 
 /**
  * Audit fixes, site batch (docs/superpowers/plans/2026-10-11-audit-site-fixes.md), group A: the pilot's leverage cap,
@@ -295,5 +297,70 @@ describe("review R3 + audit SS-5: one ingest runs at most INGEST_MAX_STATEMENTS 
     expect(t.db.q("SELECT COUNT(*) AS n FROM orders WHERE status = 'filled'")).toEqual([{ n }]);
     expect(t.db.q("SELECT COUNT(*) AS n FROM positions")).toEqual([{ n }]);
     expect(t.db.q("SELECT COUNT(*) AS n FROM ledger WHERE ref LIKE 'open:%'")).toEqual([{ n }]);
+  });
+});
+
+describe("audit SS-2: sign-in and anonymous reads", () => {
+  const changesSoFar = (t: ReturnType<typeof setup>) => t.db.q<{ c: number }>("SELECT total_changes() AS c")[0].c;
+  const login = async (t: ReturnType<typeof setup>, ip: string, body: unknown) =>
+    handlePilotLogin(new Request(`${ORIGIN}/api/pilot/auth`, { method: "POST", headers: { "content-type": "application/json", origin: ORIGIN, "cf-connecting-ip": ip }, body: typeof body === "string" ? body : JSON.stringify(body) }), t.env, t.deps);
+  async function signed(t: ReturnType<typeof setup>) {
+    const { nonce } = (await (await handlePilotNonce(t.env, t.deps)).json()) as { nonce: string };
+    const message = pilotLoginMessage({ address: lc(ALICE), origin: ORIGIN, nonce, issued: new Date(t.nowS() * 1000).toISOString() });
+    return { message, signature: await ALICE.signMessage({ message }) };
+  }
+
+  test("a malformed request is refused before any D1 statement", async () => {
+    const t = setup();
+    const before = t.db.log.length;
+    const good = await signed(t);
+    for (const body of ["not json", {}, { message: 1, signature: "0x00" }, { message: "hello", signature: "0x" + "ab".repeat(65) }, { ...good, signature: "0xzz" },
+      { message: good.message.replace(/nonce: .*/, "nonce: AAAAAAAAAAAAAAAAAAAAAAAA"), signature: good.signature }]) {
+      const r = await login(t, "203.0.113.7", body);
+      expect([400, 401]).toContain(r.status);
+    }
+    expect(t.db.log.length).toBe(before);
+  });
+
+  test("the limit (10 a minute) is per IPv4 address and per IPv6 /64; at the limit nothing is written", async () => {
+    const t = setup();
+    for (let i = 0; i < 10; i++) expect((await login(t, `2001:db8:1:2::${i.toString(16)}`, await signed(t))).status).toBe(200);
+    const before = changesSoFar(t), log = t.db.log.length;
+    const r = await login(t, "2001:0db8:0001:0002:ffff:ffff:ffff:fffe", await signed(t)); // same /64, written another way
+    expect(r.status).toBe(429);
+    expect(changesSoFar(t)).toBe(before); // not even the counter
+    expect(t.db.log.slice(log)).toHaveLength(1); // the one rate statement, which wrote nothing
+    expect(t.db.q("SELECT n FROM ratelimit WHERE k = 'login:2001:db8:1:2::/64'")).toEqual([{ n: 10 }]);
+    expect((await login(t, "2001:db8:1:3::1", await signed(t))).status).toBe(200); // the next /64
+    expect((await login(t, "203.0.113.7", await signed(t))).status).toBe(200);
+    t.tick(60_000);
+    expect((await login(t, "2001:db8:1:2::99", await signed(t))).status).toBe(200); // a new minute
+  });
+
+  test("ipKey: IPv4 whole, IPv6 by /64 in one canonical form", () => {
+    expect(ipKey("203.0.113.7")).toBe("203.0.113.7");
+    expect(ipKey("2001:db8:1:2::1")).toBe("2001:db8:1:2::/64");
+    expect(ipKey("2001:0DB8:0001:0002:aaaa:bbbb:cccc:dddd")).toBe("2001:db8:1:2::/64");
+    expect(ipKey("2001:db8::1")).toBe("2001:db8:0:0::/64");
+    expect(ipKey("::1")).toBe("0:0:0:0::/64");
+    expect(ipKey("::ffff:198.51.100.4")).toBe("198.51.100.4");
+    expect(ipKey(null)).toBe("unknown");
+    expect(ipKey("not:an:ip:::")).toBe("not:an:ip:::");
+  });
+
+  test("GET /api/pilot/account without a session writes nothing and calls no RPC, even with a weekly split due", async () => {
+    const t = setup();
+    await t.mark(1000);
+    t.tick(8 * 86400_000); // a new week: a split is due
+    const before = changesSoFar(t), calls = t.rpc.calls;
+    const a = await t.account();
+    expect(a.status).toBe(200);
+    expect(a.body).toMatchObject({ address: null, regi: null, open: true });
+    expect(changesSoFar(t)).toBe(before);
+    expect(t.rpc.calls).toBe(calls);
+    expect(t.db.q("SELECT COUNT(*) AS n FROM splits")).toEqual([{ n: 1 }]); // only the one the first ingest ran
+    const alice = await t.signIn();
+    await t.account(alice); // a signed-in read runs the due split
+    expect(t.db.q("SELECT COUNT(*) AS n FROM splits")).toEqual([{ n: 2 }]);
   });
 });

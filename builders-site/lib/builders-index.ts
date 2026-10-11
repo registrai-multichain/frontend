@@ -2,7 +2,8 @@
  * Arc indices (contract: src/lib/builders-index.ts; spec §17: ABI, AII, AEI). Two KV values per index on INVITES:
  *   <id>:index  the validated index file (series, members, events, and the `live` block the browser replays from)
  *   <id>:seen   the wallets seen before the open hour (same hour_start as the index file's live block)
- *   POST /api/index[/aii|/aei], POST …/seen   producer (Bearer ABI_PUSH_TOKEN): validates, one KV write each
+ *   POST /api/index[/aii|/aei], POST …/seen   producer (Bearer ABI_PUSH_TOKEN): validates, one KV write each; a file
+ *                                             older than the stored one is refused with 409 (audit SS-6)
  *   GET  the same paths                       public; reads one key, never writes; edge-cached 30 s; 404 {error:"no data"} when empty
  */
 import { ABI_INDEX_IDS, ABI_INDICES, ABI_LIMITS, canonicalJson, sha256Hex, validateContracts, validateIndex, validateSeen, type AbiIndexId, type AbiIndexSummary } from "../../src/lib/builders-index";
@@ -36,7 +37,40 @@ export async function readCapped(req: Request, maxBytes: number): Promise<string
 
 type Checked<D> = { ok: true; data: D } | { ok: false; error: string };
 
-async function push<D>(req: Request, env: Env, key: string, maxBytes: number, validate: (raw: unknown) => Checked<D>, summary: (data: D) => Record<string, unknown>, finalize?: (data: D) => Promise<void>): Promise<Response> {
+/**
+ * Audit SS-6: what ranks the files of one key (index: data_until, seen and contracts: hour_start). A post older
+ * than the stored file is refused (a delayed retry or a second writer must not move the published file back); an
+ * equal one is accepted, because producers re-post and restate the same hour.
+ */
+interface Rank<D> {
+  field: string;
+  of: (x: D | Record<string, unknown>) => number | null;
+}
+const hourStartRank: Rank<{ hour_start: number }> = {
+  field: "hour_start",
+  of: (x) => (typeof x.hour_start === "number" && Number.isFinite(x.hour_start) ? x.hour_start : null),
+};
+const dataUntilRank: Rank<{ data_until: string }> = {
+  field: "data_until",
+  of: (x) => {
+    const t = typeof x.data_until === "string" ? Date.parse(x.data_until) : NaN;
+    return Number.isFinite(t) ? t : null;
+  },
+};
+
+/** The stored file's rank; null when there is none or it can't be read (then any valid post is taken). */
+async function storedRank<D>(env: Env, key: string, rank: Rank<D>): Promise<number | null> {
+  try {
+    const text = await env.INVITES.get(key);
+    if (!text) return null;
+    const stored = JSON.parse(text) as unknown;
+    return typeof stored === "object" && stored !== null ? rank.of(stored as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function push<D>(req: Request, env: Env, key: string, maxBytes: number, validate: (raw: unknown) => Checked<D>, summary: (data: D) => Record<string, unknown>, rank: Rank<D>, finalize?: (data: D) => Promise<void>): Promise<Response> {
   const refused = bearerGuard(req, env.ABI_PUSH_TOKEN, "POST", "index publishing");
   if (refused) return refused;
   const header = req.headers.get("content-length");
@@ -55,16 +89,20 @@ async function push<D>(req: Request, env: Env, key: string, maxBytes: number, va
   }
   const v = validate(body);
   if (!v.ok) return errorJson(400, v.error);
+  const incoming = rank.of(v.data), stored = await storedRank(env, key, rank);
+  if (incoming !== null && stored !== null && incoming < stored) {
+    return errorJson(409, `${rank.field} is older than the stored file's`, { stored: rank.field === "data_until" ? new Date(stored).toISOString() : stored });
+  }
   if (finalize) await finalize(v.data);
   await env.INVITES.put(key, JSON.stringify(v.data));
   return json({ ok: true, ...summary(v.data) });
 }
 
 export const handlePushIndex = (req: Request, env: Env, id: AbiIndexId = "abi") =>
-  push(req, env, ABI_INDICES[id].key, ABI_LIMITS.bytes, validateIndex, (d) => ({ index: id, updated: d.updated, points: d.series.length }));
+  push(req, env, ABI_INDICES[id].key, ABI_LIMITS.bytes, validateIndex, (d) => ({ index: id, updated: d.updated, points: d.series.length }), dataUntilRank);
 
 export const handlePushSeen = (req: Request, env: Env, id: AbiIndexId = "abi") =>
-  push(req, env, ABI_INDICES[id].seenKey, ABI_INDICES[id].seenBytes, validateSeen, (d) => ({ index: id, hour_start: d.hour_start, sources: Object.keys(d.seen).length }));
+  push(req, env, ABI_INDICES[id].seenKey, ABI_INDICES[id].seenBytes, validateSeen, (d) => ({ index: id, hour_start: d.hour_start, sources: Object.keys(d.seen).length }), hourStartRank);
 
 /** POST …/contracts: the index's contract map. The site stores it with the sha256 of its canonical JSON, which the
  * index file pins (live.contracts_sha256), so a browser never pairs an index with the wrong map. */
@@ -73,7 +111,7 @@ export async function handlePushContracts(req: Request, env: Env, id: AbiIndexId
   const r = await push(req, env, ABI_INDICES[id].contractsKey, ABI_LIMITS.contractsBytes, (raw) => {
     const v = validateContracts(raw);
     return v.ok ? { ok: true as const, data: { ...v.data, sha256: "" } } : v;
-  }, (d) => ({ index: id, hour_start: d.hour_start, contracts: Object.keys(d.contracts).length, sha256: sha }), async (d) => {
+  }, (d) => ({ index: id, hour_start: d.hour_start, contracts: Object.keys(d.contracts).length, sha256: sha }), hourStartRank, async (d) => {
     sha = await sha256Hex(canonicalJson({ contracts: d.contracts, open_senders: d.open_senders }));
     d.sha256 = sha;
   });

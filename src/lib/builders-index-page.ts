@@ -49,3 +49,26 @@ export function abiState(res: { status: number; body: unknown } | null): AbiStat
   const v = validateIndex(res.body);
   return v.ok ? { kind: "ready", data: v.data } : { kind: "error" };
 }
+
+/** Audit SS-3: waits before the next engine start after a seen file or member map that doesn't match the index. */
+export const START_BACKOFF_S = [60, 120, 300] as const;
+
+/**
+ * When the browser may (re)start the live engine, which downloads the seen file (up to several MB). A new index
+ * file always may. After a mismatched pair (the seen file's hour_start, or the member map's sha256, differs from
+ * the index's) it waits 60 s, then 120 s, then 300 s between tries instead of downloading on every poll; a matching
+ * pair resets the wait. After stale server data it waits for a new index file.
+ */
+export function startGate() {
+  let misses = 0, retryAt = 0;
+  return {
+    due: (nowMs: number, changed: boolean) => changed || nowMs >= retryAt,
+    miss: (nowMs: number) => {
+      misses++;
+      retryAt = nowMs + START_BACKOFF_S[Math.min(misses, START_BACKOFF_S.length) - 1] * 1000;
+    },
+    hold: () => { retryAt = Infinity; },
+    ok: () => { misses = 0; retryAt = 0; },
+    get misses() { return misses; },
+  };
+}

@@ -18,7 +18,7 @@ Deploy from `frontend/` with `npm run deploy:builders`.
 | `PILOT_BLOCKED_WALLETS` | var, default `""` | comma-separated lowercase wallets that may not open positions (milestone recorders); closes still work |
 | `NONCE_SECRET` | secret | sign-in nonces (admin and pilot) |
 | `PILOT_SESSION_SECRET` | secret, ≥ 32 chars | pilot session cookie HMAC |
-| `ABI_PUSH_TOKEN` | secret, ≥ 32 chars | Bearer of `POST /api/index`, `/api/index/seen` and `/api/index/mark` |
+| `ABI_PUSH_TOKEN` | secret, ≥ 32 chars | Bearer of `POST /api/index`, `/api/index/seen`, `/api/index/contracts` (and the AII / AEI ones) and `/api/index/mark`. An index file older than the stored one (`data_until`), or a seen file or contract map older than the stored one (`hour_start`), is refused with 409; the same value is accepted again |
 | `BOT_SECRET`, `RADAR_PUBLISH_SECRET` | secret | `/api/bot/*` |
 
 ## ABI points pilot
@@ -57,6 +57,10 @@ To open: set `PILOT_REGI_SNAPSHOT_BLOCK` (an Arc block in the past, taken before
 `PILOT_OPEN = "1"` in `wrangler.toml`, check `PILOT_REGI_MIN`, `PILOT_MAX_LEV` and `PILOT_BLOCKED_WALLETS`, redeploy.
 `PILOT_OPEN` anything but `"1"` keeps new orders closed; a wrong setting with `"1"` refuses them as "pilot
 misconfigured" (the ticket shows it). Closes, reads and the mark ingest keep working either way.
+
+Sign-in (`POST /api/pilot/auth`): the body, the message, the nonce's MAC and age, the origin and the issue time
+are checked before any D1 statement; then 10 sign-ins a minute per IPv4 address or IPv6 /64 (a refused one writes
+nothing); then the signature. `GET /api/pilot/account` without a session only reads.
 
 Limits per wallet: 30 orders and 60 closes a minute, at most 3 orders pending at once, 5 open positions (queued opens
 count). One mark ingest runs at most 800 statements in all (reads and batch statements: the safety-net

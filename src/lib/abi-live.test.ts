@@ -407,3 +407,48 @@ describe("audit F1: dust, the new-payer bar and cap, phased entry", () => {
     expect(await run(d)).toBe(await run(INDEX));
   });
 });
+
+describe("audit SS-7: a hostile but valid live block", () => {
+  test("hour_start_block 0 with a current hour_start: no catch-up from block 0 (one time check, no log fetch)", async () => {
+    for (const block of [0, HB - 2 * (3 * 3600 + 120)]) {
+      const calls: string[] = [];
+      const index = JSON.parse(JSON.stringify(INDEX)) as LiveData;
+      index.live.hour_start_block = block;
+      const e = createEngine({ call: mockRpc(HB + 100, { calls }) as never });
+      e.load(index, SEEN);
+      await expect(e.tick()).rejects.toBeInstanceOf(StaleError);
+      expect(calls).toEqual(block === 0 ? ["eth_getBlockByNumber"] : ["eth_getBlockByNumber", "eth_getBlockByNumber"]);
+    }
+  });
+  test("a start block within STALE_AFTER_S of the head still catches up, checked once per load", async () => {
+    const calls: string[] = [];
+    const e = createEngine({ call: mockRpc(HB + 100, { calls }) as never });
+    e.load(INDEX, SEEN);
+    await e.tick();
+    const n = calls.filter((c) => c === "eth_getBlockByNumber").length;
+    await e.tick();
+    expect(calls.filter((c) => c === "eth_getBlockByNumber").length).toBe(n + 1); // only "latest" the second time
+  });
+  test.each(["constructor", "__proto__", "toString", "hasOwnProperty"])("a member source named %s scores like any other", async (name) => {
+    // the Argus member renamed (its contracts, P, roots, seen); its deployer list dropped in both runs, so the lookup
+    // for it falls through to whatever the map's prototype holds
+    const plain = JSON.parse(JSON.stringify(INDEX)) as LiveData;
+    delete (plain.live.deployers as Record<string, string[]>)["domain:argus.world"];
+    const index = JSON.parse(JSON.stringify(plain).split('"domain:argus.world"').join(JSON.stringify(name))) as LiveData;
+    const seen = JSON.parse(JSON.stringify(SEEN).split('"domain:argus.world"').join(JSON.stringify(name)));
+    const run = async (d: LiveData, s: typeof SEEN) => {
+      const e = createEngine({ call: mockRpc(HB + 4100) as never });
+      e.load(d, s);
+      return e.tick();
+    };
+    const base = await run(plain, SEEN);
+    const r = await run(index, seen);
+    expect(Number.isFinite(r.index)).toBe(true);
+    expect(r.index).toBeCloseTo(base.index, 9);
+    expect(Object.keys(r.roots)).toContain(name);
+    expect(Object.getPrototypeOf(r.roots)).toBeNull();
+    expect(r.act[name].points).toBeCloseTo(base.act["domain:argus.world"].points, 9);
+    expect(r.act[name].payments).toBe(4); // the deployer's 40 counts: it is not listed for this member
+    expect(Object.keys(r.rootsPrev)).toContain(name);
+  });
+});

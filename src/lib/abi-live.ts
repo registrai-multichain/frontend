@@ -20,7 +20,11 @@ export const WIDE_CHUNK = 1000;
 /** A page returning this many rows may have been cut at the RPC's result cap: split it (as an RPC error is). */
 export const LOG_CAP = 9999;
 
-/** The open hour is more than this many seconds behind the chain: the server file is stale, so the browser does not catch up. */
+/**
+ * The open hour is more than this many seconds behind the chain: the server file is stale, so the browser does not
+ * catch up. Audit SS-7: the first catch-up after a load also checks the time of the file's hour_start_block against
+ * the head's, so a bad block number (0, or far behind the hour) can't make a visitor fetch the whole chain.
+ */
 export const STALE_AFTER_S = 3 * 3600;
 export class StaleError extends Error {
   constructor() { super("server data is stale"); this.name = "StaleError"; }
@@ -72,6 +76,16 @@ export function httpRpc(url = RPC_URL, sleep: (ms: number) => Promise<void> = (m
 }
 
 const hex = (n: number) => "0x" + n.toString(16);
+/**
+ * Audit SS-7: every map keyed by a source id from the file is a null-prototype object, so ids such as "constructor"
+ * or "__proto__" are plain keys (never Object.prototype members, never a prototype change).
+ */
+type Dict<T> = Record<string, T>;
+function dict<T>(src?: Dict<T> | null): Dict<T> {
+  const o = Object.create(null) as Dict<T>;
+  if (src) for (const k of Object.keys(src)) o[k] = src[k];
+  return o;
+}
 
 export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: number) => Promise<void> } = {}) {
   const call: RpcCall = opts.call ?? httpRpc(opts.rpc || RPC_URL, opts.sleep);
@@ -92,7 +106,9 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
   let hourStart: number, hourBlock: number, lastBlock: number, headTs: number;
   let events: Ev[];
   let basePts: number | null;
-  let P: Record<string, number>, rootsPrev: Record<string, number>;
+  let P: Dict<number>, rootsPrev: Dict<number>;
+  let deployers: Dict<string[]> = dict();
+  let anchored = false; // the first catch-up since load() checked hour_start_block's time (audit SS-7)
   let coins: Record<string, AbiLiveCoin> = {}, fx: AbiFx = {};
   let cOpen: number, cHi: number, cLo: number, pathDone: number; // the open hour's candle
   let openSenders = new Set<string>(); // §15 integrated products' contracts
@@ -117,7 +133,7 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
     if (!m || log.topics.length !== 3) return null;
     const to = "0x" + log.topics[2].slice(26), from = "0x" + log.topics[1].slice(26);
     const src = C[to], ts = parseInt(log.blockTimestamp, 16);
-    if (!src || ts < m.added || from === ZERO || internal(from, src) || (L.deployers[src] || []).includes(from)) return null;
+    if (!src || ts < m.added || from === ZERO || internal(from, src) || (deployers[src] || []).includes(from)) return null;
     const rate = rateFor(m.currency, ts);
     if (rate == null) return null;
     return { ts, b: parseInt(log.blockNumber, 16), src, w: from, v: (Number(BigInt(log.data)) / 10 ** m.decimals) * rate };
@@ -138,8 +154,8 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
     coins = L.stablecoins || {}; fx = index.live_fx || {};
     openSenders = new Set(index.contracts ? index.contracts.open_senders : L.open_senders || []);
     hourStart = L.hour_start; hourBlock = L.hour_start_block; lastBlock = hourBlock - 1;
-    events = []; basePts = null; headTs = hourStart;
-    P = Object.assign({}, L.P); rootsPrev = Object.assign({}, L.roots_prev);
+    events = []; basePts = null; headTs = hourStart; anchored = false;
+    P = dict(L.P); rootsPrev = dict(L.roots_prev); deployers = dict(L.deployers);
     milestones = (index.milestones || []).slice(); msDone = new Set();
     resetCandle();
   }
@@ -152,7 +168,7 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
   function accept(log: any): Ev | null { // eslint-disable-line @typescript-eslint/no-explicit-any
     const to = "0x" + log.topics[2].slice(26), from = "0x" + log.topics[1].slice(26);
     const src = C[to];
-    if (!src || from === ZERO || internal(from, src) || (L.deployers[src] || []).includes(from)) return null;
+    if (!src || from === ZERO || internal(from, src) || (deployers[src] || []).includes(from)) return null;
     return { ts: parseInt(log.blockTimestamp, 16), b: parseInt(log.blockNumber, 16), src, w: from, v: Number(BigInt(log.data)) / 1e18 };
   }
 
@@ -246,11 +262,11 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
 
   // the hourly loop of the producer for the open hour, decay pro rata (equal to the full hour at f = 1)
   function evaluate(f: number, upto = Infinity, withBase: boolean = basePts != null) {
-    const p: Record<string, number> = {};
+    const p = dict<number>();
     for (const s in P) p[s] = P[s] * Math.pow(L.decay_h, f);
     const evs = hourEvents().filter((e) => e.ts <= upto);
-    const spent = new Map<string, number>(), hourSeen = new Set<string>(), act: Record<string, Act> = {}, tape: TapeEntry[] = [];
-    const npHour: Record<string, number> = {};
+    const spent = new Map<string, number>(), hourSeen = new Set<string>(), act = dict<Act>(), tape: TapeEntry[] = [];
+    const npHour = dict<number>();
     const minPay = L.min_pay || 0, npMin = L.new_payer_min || 0, npMax = L.new_payer_max_h == null ? Infinity : L.new_payer_max_h;
     for (const e of evs) {
       if (e.v < minPay) continue; // audit F1: dust is ignored
@@ -271,9 +287,9 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
     }
     if (withBase && basePts != null && L.base_k > 0) p[L.base] = (p[L.base] || 0) + basePts;
     const prevTotal = Object.values(rootsPrev).reduce((x, y) => x + y, 0);
-    const cut = upto === Infinity ? headTs : upto, mm: Record<string, number> = {};
+    const cut = upto === Infinity ? headTs : upto, mm = dict<number>();
     for (const m of milestones) if (m.t >= hourStart && m.t < hourStart + 3600 && m.t <= cut) mm[m.target] = (mm[m.target] || 1) * m.mult;
-    const roots: Record<string, number> = {}, capped: string[] = [];
+    const roots = dict<number>(), capped: string[] = [];
     for (const s in p) {
       const sc = s === L.base ? L.base_k : 1;
       let r = Math.sqrt(p[s]) * sc;
@@ -318,8 +334,13 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
 
   async function tick(): Promise<LiveResult> {
     const hb = await call("eth_getBlockByNumber", ["latest", false]); // number + time in one call
-    const head = parseInt(hb.number, 16);
-    if (parseInt(hb.timestamp, 16) - hourStart > STALE_AFTER_S) throw new StaleError();
+    const head = parseInt(hb.number, 16), hts = parseInt(hb.timestamp, 16);
+    if (hts - hourStart > STALE_AFTER_S) throw new StaleError();
+    if (!anchored && head > lastBlock) {
+      // audit SS-7: never catch up more than STALE_AFTER_S of chain time, whatever hour_start_block says
+      if (!(hourBlock >= 1) || hts - (await blockTs(hourBlock)) > STALE_AFTER_S) throw new StaleError();
+      anchored = true;
+    }
     if (head > lastBlock) {
       events.push(...(await fetchLogs(lastBlock + 1, head)));
       headTs = parseInt(hb.timestamp, 16);
@@ -334,7 +355,7 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
     const now = evaluate(f);
     cHi = Math.max(cHi, now.index); cLo = Math.min(cLo, now.index);
     const candle: Candle = [isoHour(hourStart), cOpen, cHi, cLo, now.index, now.tape.length, sum(now.act, "usdc"), sum(now.act, "points")];
-    return Object.assign(now, { head: lastBlock, headTs, hourStart, closedHours, baseSampled: basePts != null, candle, rootsPrev: Object.assign({}, rootsPrev) });
+    return Object.assign(now, { head: lastBlock, headTs, hourStart, closedHours, baseSampled: basePts != null, candle, rootsPrev: dict(rootsPrev) });
   }
 
   return { load, tick, evaluate, get hourStart() { return hourStart; } };

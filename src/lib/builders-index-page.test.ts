@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { indexFixture } from "./builders-index-fixture";
-import { ABI_COPY, abiState, baseTip, decayTip } from "./builders-index-page";
+import { ABI_COPY, abiState, baseTip, decayTip, startGate } from "./builders-index-page";
 import { INDEX } from "./abi-live-mock";
 
 describe("page state", () => {
@@ -60,5 +60,41 @@ describe("data only: no order-entry words anywhere in the page source", () => {
   test.skipIf(!existsSync(built))("the built page (skipped: run the builders-site build to create dist-builders)", () => {
     const html = readFileSync(built, "utf8").replace(/<script[\s\S]*?<\/script>/g, "").replace(/<style[\s\S]*?<\/style>/g, "");
     expect(html.match(WORDS)?.[0]).toBeUndefined();
+  });
+});
+
+describe("audit SS-3: engine restarts after a mismatched seen file back off", () => {
+  test("60 s, 120 s, then 300 s (cap) between tries; a matching pair resets; a new index file always may", () => {
+    const g = startGate();
+    expect(g.due(0, false)).toBe(true);
+    g.miss(0);
+    expect(g.due(59_999, false)).toBe(false);
+    expect(g.due(60_000, false)).toBe(true);
+    g.miss(60_000);
+    expect(g.due(179_999, false)).toBe(false);
+    expect(g.due(180_000, false)).toBe(true);
+    g.miss(180_000);
+    expect(g.due(479_999, false)).toBe(false);
+    g.miss(480_000);
+    expect(g.due(779_999, false)).toBe(false); // capped at 300 s
+    expect(g.due(780_000, false)).toBe(true);
+    expect(g.due(480_001, true)).toBe(true); // the index changed: try at once
+    g.ok();
+    expect(g.misses).toBe(0);
+    expect(g.due(480_001, false)).toBe(true);
+    g.miss(0);
+    expect(g.due(60_000, false)).toBe(true); // back to 60 s
+  });
+  test("stale server data waits for a new index file", () => {
+    const g = startGate();
+    g.hold();
+    expect(g.due(Number.MAX_SAFE_INTEGER, false)).toBe(false);
+    expect(g.due(0, true)).toBe(true);
+  });
+  test("one tab over an hour of mismatch downloads the seen file 14 times, not 60", () => {
+    const g = startGate();
+    let downloads = 0;
+    for (let t = 0; t < 3600_000; t += 60_000) if (g.due(t, false)) { downloads++; g.miss(t); }
+    expect(downloads).toBe(14); // minutes 0, 1, 3, then every 5 minutes (8, 13, …, 58)
   });
 });

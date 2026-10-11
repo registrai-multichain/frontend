@@ -1450,7 +1450,8 @@ export async function handleAccount(req: Request, env: Env, deps: PilotDeps = {}
   if (!db) return unconfigured();
   const nowS = nowSOf(deps);
   const [me, m] = await Promise.all([signedIn(req, env, db, nowS), loadMark(db)]);
-  if (m) await maybeSplit(db, nowS, m.last_split);
+  // audit SS-2: a visitor without a session reads only (no split, no account row, no REGI call)
+  if (m && me) await maybeSplit(db, nowS, m.last_split);
   const state = pilotState(env, m ? m.head : null);
   const base: PilotAccountView = {
     open: state === "open", misconfigured: state === "misconfigured", regiMin: regiMinOf(env) ?? REGI_MIN_DEFAULT,
@@ -1583,8 +1584,8 @@ export async function handlePositions(req: Request, env: Env, deps: PilotDeps = 
   if (!db) return unconfigured();
   const nowS = nowSOf(deps);
   const [me, m] = await Promise.all([signedIn(req, env, db, nowS), loadMark(db)]);
-  if (m) await maybeSplit(db, nowS, m.last_split);
   if (!me) return errorJson(401, "sign in first");
+  if (m) await maybeSplit(db, nowS, m.last_split);
   let open = me.open;
   if ((await lazyLiquidate(db, me.wallet, nowS, m, open)) > 0) open = (await accountWithOpen(db, me.wallet))!.open;
   const rates = await ratesFor(db, open);

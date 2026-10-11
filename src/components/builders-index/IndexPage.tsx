@@ -11,7 +11,7 @@ import {
   status, tapeRows, freshKeys, rowKey, rowKeys, tickerItems, ts, usdFmt, why, type Bar, type ChartModel, type RangeKey, type SortKey,
   type IntegrationFilter,
 } from "@/lib/abi-terminal";
-import { ABI_COPY, abiState, baseTip, coinsTip, decayTip, forIndex, type AbiState } from "@/lib/builders-index-page";
+import { ABI_COPY, abiState, baseTip, coinsTip, decayTip, forIndex, startGate, type AbiState } from "@/lib/builders-index-page";
 import { PilotPanel } from "./pilot/PilotPanel";
 import "./terminal.css";
 
@@ -512,16 +512,21 @@ export function IndexPage() {
     server.current = null; engine.current = null;
     setRes(null); setClosedLocal([]); setFailures(0); setEngineOn(false); setStale(false);
     let live = true;
-    // the seen file is read only when the engine has to (re)start: first load or a newer closed hour
+    const gate = startGate();
+    // the seen file is read only when the engine has to (re)start: first load or a newer closed hour; after a
+    // mismatched pair (server mid-update, or a failed post) the retries back off (audit SS-3)
     async function start(d: AbiData) {
       engine.current = null;
       setEngineOn(false); setClosedLocal([]); setRes(null);
       if (!d.live) return;
       const sr = await load(seenPath);
       const seen = sr.status === 200 ? validateSeen(sr.body) : null;
-      if (!live || !seen || !seen.ok || seen.data.hour_start !== d.live.hour_start) return; // server mid-update: next poll
+      if (!live) return;
+      if (!seen || !seen.ok || seen.data.hour_start !== d.live.hour_start) { gate.miss(Date.now()); return; }
       const map = d.live.contracts_sha256 ? await contractsFor(d.live.contracts_sha256) : null;
-      if (!live || (d.live.contracts_sha256 && !map)) return;
+      if (!live) return;
+      if (d.live.contracts_sha256 && !map) { gate.miss(Date.now()); return; }
+      gate.ok();
       const e = createEngine();
       e.load({ live: d.live, milestones: d.milestones, live_fx: d.live_fx, ...(map ? { contracts: map } : {}) }, seen.data);
       engine.current = e;
@@ -538,7 +543,7 @@ export function IndexPage() {
       server.current = s.data;
       setState(s);
       setNow(Date.now());
-      if (changed || !engine.current) await start(s.data);
+      if (changed || (!engine.current && gate.due(Date.now(), false))) await start(s.data);
     }
     async function tick() {
       const e = engine.current;
@@ -553,7 +558,7 @@ export function IndexPage() {
       } catch (err) {
         if (err instanceof StaleError) {
           // the server file is old: show its last closed value, no catch-up in the browser
-          if (live) { engine.current = null; setEngineOn(false); setRes(null); setStale(true); }
+          if (live) { engine.current = null; setEngineOn(false); setRes(null); setStale(true); gate.hold(); } // until a new index file
         } else if (live) setFailures((n) => n + 1);
       }
       busy.current = false;

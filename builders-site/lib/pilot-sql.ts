@@ -130,10 +130,14 @@ export const SQL = {
   poolBySplit: poolUnder(BY_SPLIT),
   /** bind: nonce, exp. changes = 1 only for the first use. */
   nonceUse: "INSERT INTO used_nonces (nonce, exp) VALUES (?, ?) ON CONFLICT (nonce) DO NOTHING",
-  /** bind: key, slot. RETURNING the count in this window. */
+  /**
+   * bind: key, slot, limit. RETURNING the count in this window; no row (and no write at all) once the window's count
+   * has reached the limit (audit SS-2: a request refused 429 costs no D1 write).
+   */
   rateHit:
     "INSERT INTO ratelimit (k, slot, n) VALUES (?, ?, 1) ON CONFLICT (k) DO UPDATE SET " +
-    "n = CASE WHEN ratelimit.slot = excluded.slot THEN ratelimit.n + 1 ELSE 1 END, slot = excluded.slot RETURNING n",
+    "n = CASE WHEN ratelimit.slot = excluded.slot THEN ratelimit.n + 1 ELSE 1 END, slot = excluded.slot " +
+    "WHERE ratelimit.slot <> excluded.slot OR ratelimit.n < ? RETURNING n",
   /**
    * bind: px, ts, received_ms, head, hour_start, ch24, ch1, sigma_1h, sigma_24h, funding_known, funding_rate, base_pending,
    * base_step_ts, milestone_ts, bars_minute, swept_minute, candle, post. Moves forward only.

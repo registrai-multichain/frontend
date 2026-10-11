@@ -324,3 +324,45 @@ describe("/api/index/…/contracts", () => {
     expect(s.kv.puts).toBe(0);
   });
 });
+
+describe("audit SS-6: an older file never replaces a newer one (409); the same hour is re-posted fine", () => {
+  const at = (iso: string) => ({ ...indexFixture(), data_until: iso });
+  test("index: by data_until", async () => {
+    const s = setup();
+    expect((await s.push(at("2026-10-09T15:00:00Z"))).status).toBe(200);
+    expect((await s.push(at("2026-10-09T15:00:00Z"))).status).toBe(200); // a restated hour
+    expect((await s.push(at("2026-10-09T16:00:00Z"))).status).toBe(200);
+    const old = await s.push(at("2026-10-09T15:00:00Z")); // a delayed retry of the hour before
+    expect(old.status).toBe(409);
+    expect(old.body).toEqual({ error: "data_until is older than the stored file's", stored: "2026-10-09T16:00:00.000Z" });
+    expect(s.kv.puts).toBe(3);
+    expect(JSON.parse((await s.kv.get(ABI_KEY))!).data_until).toBe("2026-10-09T16:00:00Z");
+    // AII and AEI keep their own order
+    const aii = (b: unknown) => handlePushIndex(s.post(b), s.env, "aii");
+    expect((await aii(at("2026-10-09T15:00:00Z"))).status).toBe(200);
+  });
+  test("seen: by hour_start", async () => {
+    const s = setup();
+    const req = (hour: number, path = "/api/index/seen") => new Request(`${ORIGIN}${path}`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` }, body: JSON.stringify({ hour_start: hour, seen: { "domain:argus.world": "0123456789abcdef0123" } }) });
+    expect((await handlePushSeen(req(1791561600), s.env)).status).toBe(200);
+    expect((await handlePushSeen(req(1791561600), s.env)).status).toBe(200);
+    const r = await handlePushSeen(req(1791558000), s.env);
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({ error: "hour_start is older than the stored file's", stored: 1791561600 });
+    expect(JSON.parse((await s.kv.get(ABI_SEEN_KEY))!).hour_start).toBe(1791561600);
+    expect((await handlePushSeen(req(1791558000, "/api/index/aei/seen"), s.env, "aei")).status).toBe(200); // another index's key
+  });
+  test("contracts: by hour_start (the hour of the map's last change)", async () => {
+    const s = setup();
+    const map = (hour: number) => new Request(`${ORIGIN}/api/index/aii/contracts`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` }, body: JSON.stringify({ hour_start: hour, open_senders: [], contracts: { "0x07a688a001f416cc433c68ff56aa26bc5131cc6e": "domain:argus.world" } }) });
+    expect((await handlePushContracts(map(1791666000), s.env, "aii")).status).toBe(200);
+    expect((await handlePushContracts(map(1791666000), s.env, "aii")).status).toBe(200);
+    expect((await handlePushContracts(map(1791662400), s.env, "aii")).status).toBe(409);
+    expect(JSON.parse((await s.kv.get(ABI_INDICES.aii.contractsKey))!).hour_start).toBe(1791666000);
+  });
+  test("an unreadable stored file does not block a valid post", async () => {
+    const s = setup();
+    await s.kv.put(ABI_KEY, "{not json");
+    expect((await s.push(indexFixture())).status).toBe(200);
+  });
+});

@@ -90,7 +90,8 @@ export async function runGuardChecks(db: D1Database, migrations: string | readon
 
     // single-use nonce, rate window
     check("nonce: first use only", [(await q(SQL.nonceUse).bind("n1", 9).run()).meta.changes, (await q(SQL.nonceUse).bind("n1", 9).run()).meta.changes], [1, 0]);
-    check("rate limit: RETURNING the count", [(await q(SQL.rateHit).bind("k", 7).first<{ n: number }>())!.n, (await q(SQL.rateHit).bind("k", 7).first<{ n: number }>())!.n], [1, 2]);
+    const hit = async (slot: number) => (await q(SQL.rateHit).bind("k", slot, 2).first<{ n: number }>())?.n ?? null;
+    check("rate limit: RETURNING the count; nothing (and no write) once the limit is reached; a new window restarts", [await hit(7), await hit(7), await hit(7), await q("SELECT n FROM ratelimit WHERE k = 'k'").first(), await hit(8)], [1, 2, null, { n: 2 }, 1]);
 
     // the mark row moves forward only, and only the winning post writes bars, the hour's rates and the projected cut
     const post = (ts: number, id: string) => db.batch([
