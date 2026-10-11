@@ -2,7 +2,7 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, test, vi } from "vitest";
-import { CHUNK, createEngine, httpRpc, LOG_CAP, StaleError, WIDE_CHUNK } from "./abi-live";
+import { CHUNK, createEngine, httpRpc, LOG_CAP, pushAll, StaleError, WIDE_CHUNK } from "./abi-live";
 import { ARGUS_DEPLOYER, EURC, GBPA, HB, HS, INDEX, JPYC, mockRpc, NOT_REGISTERED, scIndex, SEEN, tsOf } from "./abi-live-mock";
 import { addIntegIndex, F1_LOGS, f1Index, INTEG_LOGS, integIndex, ROUTER, POOL, wideIntegIndex } from "./abi-live-mock";
 import type { LiveData } from "./abi-live-mock";
@@ -466,4 +466,11 @@ describe("§18: today's joins (live.contracts_add) on top of the daily base map"
     for (const k of ["index", "roots", "P", "tape"] as const) expect(b[k]).toEqual(a[k]);
     expect(split.doc.contracts).not.toHaveProperty(ROUTER); // the base map object is not mutated by the merge
   });
+});
+
+test("pushAll appends arrays far beyond the call-argument limit (a wide-mode hour's logs)", () => {
+  const big = Array.from({ length: 600_000 }, (_, i) => i);
+  expect(() => [].push(...(big as never[]))).toThrow(RangeError); // what the spread did
+  const out = pushAll([-1], big);
+  expect([out.length, out[0], out[600_000]]).toEqual([600_001, -1, 599_999]);
 });

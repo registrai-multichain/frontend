@@ -30,6 +30,13 @@ export class StaleError extends Error {
   constructor() { super("server data is stale"); this.name = "StaleError"; }
 }
 
+/** dst.push(...src) without spreading src into call arguments: a wide-mode hour can carry more logs than the engine's
+ * argument limit allows ("Maximum call stack size exceeded"; found in live.js on AII/AEI catch-ups). */
+export function pushAll<T>(dst: T[], src: readonly T[]): T[] {
+  for (const x of src) dst.push(x);
+  return dst;
+}
+
 export type RpcCall = (method: string, params: unknown[]) => Promise<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 export type SeenFile = { hour_start: number; seen: Record<string, string> };
 /** What the engine reads from the index file: the `live` block, recorded milestones and the ECB fixes. */
@@ -191,7 +198,7 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
   async function getLogs(filter: { address: string | string[]; topics: (string | string[] | null)[] }, from: number, to: number): Promise<any[]> { // eslint-disable-line @typescript-eslint/no-explicit-any
     const out: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
     const size = wide ? WIDE_CHUNK : CHUNK;
-    for (let b = from; b <= to; b += size) out.push(...(await getLogsSafe(filter, b, Math.min(to, b + size - 1))));
+    for (let b = from; b <= to; b += size) pushAll(out, await getLogsSafe(filter, b, Math.min(to, b + size - 1)));
     return out;
   }
   const memberTo = (l: { topics: string[] }) => l.topics.length === 3 && C["0x" + l.topics[2].slice(26)] !== undefined;
@@ -346,7 +353,7 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
       anchored = true;
     }
     if (head > lastBlock) {
-      events.push(...(await fetchLogs(lastBlock + 1, head)));
+      pushAll(events, await fetchLogs(lastBlock + 1, head));
       headTs = parseInt(hb.timestamp, 16);
       lastBlock = head;
     }
