@@ -2,12 +2,25 @@
 # Package the standalone builders site (builder.registrai.cc): the /builders
 # gallery, /verify, /admin and the badge art ONLY — no market page is served there.
 # "/" goes to the gallery; every other app route bounces to registrai.cc.
-# Run after `next build` (out/). Deployed to the Pages project
+# Run after `next build` (out/), on a clean tree: it refuses uncommitted tracked
+# changes and an out/ older than the last commit. Deployed to the Pages project
 # `registrai-builders` (npm run deploy:builders, which deploys from
 # builders-site/ so its Pages Functions — the admin API — ship with it);
 # builder.registrai.cc is its custom domain.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Release safety (audit OPS-8): package only committed code, from a `next build` run after the last commit.
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+  echo "build-builders-site: refusing: the working tree has uncommitted changes to tracked files (commit or discard them):" >&2
+  git status --short --untracked-files=no >&2
+  exit 1
+fi
+mtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1"; }
+[ -f out/index.html ] || { echo "build-builders-site: refusing: no out/: run npm run build first" >&2; exit 1; }
+if [ "$(mtime out/index.html)" -lt "$(git log -1 --format=%ct HEAD)" ]; then
+  echo "build-builders-site: refusing: out/ is older than the last commit ($(git log -1 --format=%h HEAD)): run npm run build first" >&2
+  exit 1
+fi
 D=dist-builders
 rm -rf "$D"; mkdir -p "$D"
 for x in 404 404.html _headers _next _not-found apple-icon.png icon.png admin badge brand builders guide how-we-publish project suggest track-record record builders-index verify \

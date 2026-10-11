@@ -23,6 +23,24 @@ if grep -q REPLACE_WITH_D1_ID wrangler.toml; then
   exit 1
 fi
 [ -f ../dist-builders/builders/index.html ] || { echo "no ../dist-builders: run scripts/build-builders-site.sh first" >&2; exit 1; }
+# Release safety (audit OPS-8): deploy only a clean, committed tree, and only a dist-builders packaged from the
+# current out/ after the last commit (run from a stale checkout, this refuses instead of shipping an old site).
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+  echo "deploy-builders-site: refusing: the working tree has uncommitted changes to tracked files (commit or discard them):" >&2
+  git status --short --untracked-files=no >&2
+  exit 1
+fi
+mtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1"; }
+[ -f ../out/builders/index.html ] || { echo "deploy-builders-site: refusing: no ../out: run npm run build and scripts/build-builders-site.sh first" >&2; exit 1; }
+if [ "$(mtime ../dist-builders/builders/index.html)" -lt "$(mtime ../out/builders/index.html)" ]; then
+  echo "deploy-builders-site: refusing: dist-builders is older than out/: run bash scripts/build-builders-site.sh first" >&2
+  exit 1
+fi
+if [ "$(mtime ../dist-builders/builders/index.html)" -lt "$(git log -1 --format=%ct HEAD)" ]; then
+  echo "deploy-builders-site: refusing: dist-builders is older than the last commit: run npm run build, then bash scripts/build-builders-site.sh" >&2
+  exit 1
+fi
+echo "deploying commit $(git rev-parse HEAD) ($(git log -1 --format='%h %s' HEAD)) from $(git rev-parse --show-toplevel)"
 if grep -Eq '^ADMIN_ADDRESSES = ""' wrangler.toml; then
   echo "note: ADMIN_ADDRESSES is empty in builders-site/wrangler.toml: nobody can sign in to /admin." >&2
 fi

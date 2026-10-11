@@ -2,7 +2,10 @@
 
 The Pages Functions and config of builder.registrai.cc (Pages project `registrai-builders`).
 `wrangler.toml` is the source of truth for bindings and variables; secrets live on the Pages project.
-Deploy from `frontend/` with `npm run deploy:builders`.
+Deploy from the checkout of the commit you mean to ship with `npm run deploy:builders`. Both
+`scripts/build-builders-site.sh` and `scripts/deploy-builders-site.sh` refuse uncommitted changes to tracked files;
+the build refuses an `out/` older than the last commit ("run npm run build first"), the deploy a `dist-builders`
+older than `out/` or than the last commit, and it prints the commit it deploys.
 
 ## Bindings, variables, secrets
 
