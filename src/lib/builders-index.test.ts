@@ -385,3 +385,15 @@ test("audit F1 params in live: kept when non-negative numbers, the block refused
   const v = validateIndex(b);
   expect(v.ok && !!v.data.live).toBe(false);
 });
+
+test("§18: live.contracts_add accepted as lowercase address -> source, capped", () => {
+  const d = JSON.parse(JSON.stringify(real));
+  d.live.contracts_add = { ["0x" + "7".repeat(40)]: "integration:uniswap" };
+  const r = validateIndex(d);
+  expect(r.ok && r.data.live!.contracts_add).toEqual({ ["0x" + "7".repeat(40)]: "integration:uniswap" });
+  for (const bad of [{ ["0x" + "A".repeat(40)]: "x" }, { ["0x" + "7".repeat(40)]: 5 }, Object.fromEntries(Array.from({ length: ABI_LIMITS.contractsAdd + 1 }, (_, i) => ["0x" + i.toString(16).padStart(40, "0"), "x"]))]) {
+    const b = JSON.parse(JSON.stringify(d)); b.live.contracts_add = bad;
+    const v = validateIndex(b);
+    expect(v.ok && !!v.data.live).toBe(false);
+  }
+});

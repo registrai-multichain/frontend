@@ -159,3 +159,13 @@ export const F1_LOGS: Log[] = [
   log(34, w("5"), PEACH, 11), log(35, w("6"), PEACH, 12), log(36, w("7"), PEACH, 15), // 3 new payers: only 2 bonuses this hour
   log(37, w("4"), PEACH, 20), // the $9 payer comes back with $20: now a new payer, but the cap is reached
 ];
+
+/** §18: the wide integrated-products index with ROUTER and POOL joining today (live.contracts_add), not in the base map. */
+export function addIntegIndex(): { index: LiveData; doc: { contracts: Record<string, string>; open_senders: string[] } } {
+  const { index, doc } = wideIntegIndex();
+  const base = { ...doc.contracts };
+  const add: Record<string, string> = {};
+  for (const a of [ROUTER, POOL]) { add[a] = base[a]; delete base[a]; }
+  index.live.contracts_add = add;
+  return { index, doc: { contracts: base, open_senders: doc.open_senders.filter((a) => !(a in add)) } };
+}

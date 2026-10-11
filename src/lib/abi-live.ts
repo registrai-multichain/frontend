@@ -149,10 +149,14 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
       seen.set(s, set);
     }
     C = index.contracts ? index.contracts.contracts : L.contracts;
+    const add = L.contracts_add || {}; // pools that joined since the base map's day (§18; the base map is daily)
+    const addKeys = Object.keys(add);
+    if (addKeys.length) C = { ...C, ...add }; // a new object: the page keeps the base map across polls
     wide = Object.keys(C).length > WIDE_ABOVE;
     topic2 = wide ? [] : [...new Set(Object.keys(C))].sort().map((c) => "0x" + "0".repeat(24) + c.slice(2));
     coins = L.stablecoins || {}; fx = index.live_fx || {};
     openSenders = new Set(index.contracts ? index.contracts.open_senders : L.open_senders || []);
+    for (const c of addKeys) if (add[c].startsWith("integration:")) openSenders.add(c);
     hourStart = L.hour_start; hourBlock = L.hour_start_block; lastBlock = hourBlock - 1;
     events = []; basePts = null; headTs = hourStart; anchored = false;
     P = dict(L.P); rootsPrev = dict(L.roots_prev); deployers = dict(L.deployers);

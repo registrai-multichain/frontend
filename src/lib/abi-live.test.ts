@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { describe, expect, test, vi } from "vitest";
 import { CHUNK, createEngine, httpRpc, LOG_CAP, StaleError, WIDE_CHUNK } from "./abi-live";
 import { ARGUS_DEPLOYER, EURC, GBPA, HB, HS, INDEX, JPYC, mockRpc, NOT_REGISTERED, scIndex, SEEN, tsOf } from "./abi-live-mock";
-import { F1_LOGS, f1Index, INTEG_LOGS, integIndex, ROUTER, POOL, wideIntegIndex } from "./abi-live-mock";
+import { addIntegIndex, F1_LOGS, f1Index, INTEG_LOGS, integIndex, ROUTER, POOL, wideIntegIndex } from "./abi-live-mock";
 import type { LiveData } from "./abi-live-mock";
 
 const L = INDEX.live!;
@@ -107,9 +107,9 @@ describe.skipIf(!existsSync(REF))("equivalence with the reference live.js", () =
     vi.unstubAllGlobals();
     return out;
   }
-  const cases = [10, 100, 300, 1000, 4100, 5450, 7300].flatMap((off) => [[off, "USDC only"], [off, "stablecoins + milestones"], [off, "integrated products"], [off, "wide member list"], [off, "audit F1 rules"]] as const);
+  const cases = [10, 100, 300, 1000, 4100, 5450, 7300].flatMap((off) => [[off, "USDC only"], [off, "stablecoins + milestones"], [off, "integrated products"], [off, "wide member list"], [off, "audit F1 rules"], [off, "daily base map + today's joins"]] as const);
   test.each(cases)("head +%i blocks, %s: identical numbers", async (off, kind) => {
-    const wide = kind === "wide member list" ? wideIntegIndex() : null;
+    const wide = kind === "wide member list" ? wideIntegIndex() : kind === "daily base map + today's joins" ? addIntegIndex() : null;
     const index = kind === "USDC only" ? INDEX : kind === "integrated products" ? integIndex() : wide ? wide.index : kind === "audit F1 rules" ? f1Index() : scIndex();
     const extra = kind === "integrated products" || wide ? INTEG_LOGS : kind === "audit F1 rules" ? F1_LOGS : [];
     const a = await ref(HB + off, index, extra, wide?.doc);
@@ -450,5 +450,20 @@ describe("audit SS-7: a hostile but valid live block", () => {
     expect(r.act[name].points).toBeCloseTo(base.act["domain:argus.world"].points, 9);
     expect(r.act[name].payments).toBe(4); // the deployer's 40 counts: it is not listed for this member
     expect(Object.keys(r.rootsPrev)).toContain(name);
+  });
+});
+
+describe("§18: today's joins (live.contracts_add) on top of the daily base map", () => {
+  test("merged into the map, integration joins become open senders: the same numbers as one full map", async () => {
+    const tick = async (input: Parameters<ReturnType<typeof createEngine>["load"]>[0]) => {
+      const e = createEngine({ call: mockRpc(HB + 300, undefined, INTEG_LOGS) as never });
+      e.load(input, SEEN);
+      return e.tick();
+    };
+    const full = wideIntegIndex(), split = addIntegIndex();
+    const a = await tick({ ...full.index, contracts: full.doc });
+    const b = await tick({ ...split.index, contracts: split.doc });
+    for (const k of ["index", "roots", "P", "tape"] as const) expect(b[k]).toEqual(a[k]);
+    expect(split.doc.contracts).not.toHaveProperty(ROUTER); // the base map object is not mutated by the merge
   });
 });

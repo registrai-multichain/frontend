@@ -11,7 +11,7 @@ export const ABI_SEEN_KEY = "abi:seen";
 
 export const ABI_LIMITS = {
   /** an index file; history is trimmed by the producer (30 days hourly, then daily) and the member map lives apart */
-  bytes: 512 * 1024,
+  bytes: 1024 * 1024,
   seenBytes: 1024 * 1024,
   /** AII/AEI: ~350k integration payers in the 30-day window */
   seenBytesWide: 6 * 1024 * 1024,
@@ -33,8 +33,10 @@ export const ABI_LIMITS = {
   integrations: 400,
   openSenders: 500,
   /** the separate contracts file (factory pools: Uniswap alone ≈ 11.5k) */
-  contractsFile: 40_000,
-  contractsBytes: 4 * 1024 * 1024,
+  contractsFile: 100_000,
+  contractsBytes: 8 * 1024 * 1024,
+  /** live.contracts_add: today's joins on top of the daily base map */
+  contractsAdd: 5_000,
   integrationCompany: 80,
   integrationCategory: 40,
   evidencePer: 10,
@@ -92,6 +94,8 @@ export type AbiLive = {
   min_pay?: number; new_payer_min?: number; new_payer_max_h?: number; entry_step?: number;
   /** "close the gaps": the contract map lives in its own file (/api/index/…/contracts); this pins its version */
   contracts_sha256?: string; contracts_count?: number;
+  /** §18: contracts that joined since the base map's day0 (merged into it; integration ones are also open senders) */
+  contracts_add?: Record<string, string>;
   /** registered fiat stablecoins by lowercase token address (counted from `added`, unix seconds) */
   stablecoins?: Record<string, AbiLiveCoin>;
   /** §15: integrated products' contracts (sorted, lowercase); their payments into OTHER members count */
@@ -315,6 +319,18 @@ function validateLive(v: unknown): AbiLive | null {
   if (!isObj(v)) return null;
   if (!posInt(v.hour_start) || !count(v.hour_start_block) || !str(v.base) || !posInt(v.base_window) || v.base_window > ABI_LIMITS.baseWindow || !posInt(v.seen_prefix) || v.seen_prefix > 40) return null;
   for (const k of ["K", "base_k", "decay_h", "cap", "new_payer", "proj_up", "rel_up", "entry", "base_scale"] as const) if (!num(v[k]) || v[k] < 0) return null;
+  let add: Record<string, string> | null = null;
+  if (v.contracts_add !== undefined && v.contracts_add !== null) {
+    if (!isObj(v.contracts_add)) return null;
+    const keys = Object.keys(v.contracts_add);
+    if (keys.length > ABI_LIMITS.contractsAdd) return null;
+    add = {};
+    for (const a of keys) {
+      const src = (v.contracts_add as Record<string, unknown>)[a];
+      if (!ADDR.test(a) || !str(src)) return null;
+      add[a] = src;
+    }
+  }
   const f1: Partial<Pick<AbiLive, "min_pay" | "new_payer_min" | "new_payer_max_h" | "entry_step">> = {};
   for (const k of ["min_pay", "new_payer_min", "new_payer_max_h", "entry_step"] as const) {
     if (v[k] === undefined || v[k] === null) continue;
@@ -359,6 +375,7 @@ function validateLive(v: unknown): AbiLive | null {
     ...(open && !external ? { open_senders: open } : {}),
     ...(external ? { contracts_sha256: v.contracts_sha256 as string, contracts_count: v.contracts_count as number } : {}),
     ...f1,
+    ...(add ? { contracts_add: add } : {}),
     hour_start: v.hour_start, hour_start_block: v.hour_start_block, K: v.K as number, base_k: v.base_k as number, base: v.base, P, roots_prev: roots,
     decay_h: v.decay_h as number, cap: v.cap as number, new_payer: v.new_payer as number, proj_up: v.proj_up as number, rel_up: v.rel_up as number,
     entry: v.entry as number, base_scale: v.base_scale as number, base_window: v.base_window, contracts, deployers, seen_prefix: v.seen_prefix,
