@@ -11,6 +11,7 @@ const WALLET_CHAIN = { id: BUILDERS.chain.id, name: BUILDERS.chain.name, shortNa
 
 const NAV: NavItem[] = [
   { href: "/builders/", label: "Gallery" },
+  { href: "/builders-index/", label: "Index" },
   { href: "/verify/", label: "Verify" },
   { href: "/guide/", label: "Guide" },
   { href: "/suggest/", label: "Suggest" },
