@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { describe, expect, test, vi } from "vitest";
 import { CHUNK, createEngine, httpRpc, LOG_CAP, pushAll, StaleError, WIDE_CHUNK } from "./abi-live";
 import { ARGUS_DEPLOYER, EURC, GBPA, HB, HS, INDEX, JPYC, mockRpc, NOT_REGISTERED, scIndex, SEEN, tsOf } from "./abi-live-mock";
-import { addIntegIndex, F1_LOGS, f1Index, INTEG_LOGS, integIndex, ROUTER, POOL, wideIntegIndex } from "./abi-live-mock";
+import { addIntegIndex, volIndex, F1_LOGS, f1Index, INTEG_LOGS, integIndex, ROUTER, POOL, wideIntegIndex } from "./abi-live-mock";
 import type { LiveData } from "./abi-live-mock";
 
 const L = INDEX.live!;
@@ -107,10 +107,10 @@ describe.skipIf(!existsSync(REF))("equivalence with the reference live.js", () =
     vi.unstubAllGlobals();
     return out;
   }
-  const cases = [10, 100, 300, 1000, 4100, 5450, 7300].flatMap((off) => [[off, "USDC only"], [off, "stablecoins + milestones"], [off, "integrated products"], [off, "wide member list"], [off, "audit F1 rules"], [off, "daily base map + today's joins"]] as const);
+  const cases = [10, 100, 300, 1000, 4100, 5450, 7300].flatMap((off) => [[off, "USDC only"], [off, "stablecoins + milestones"], [off, "integrated products"], [off, "wide member list"], [off, "audit F1 rules"], [off, "daily base map + today's joins"], [off, "§21 volume term"]] as const);
   test.each(cases)("head +%i blocks, %s: identical numbers", async (off, kind) => {
     const wide = kind === "wide member list" ? wideIntegIndex() : kind === "daily base map + today's joins" ? addIntegIndex() : null;
-    const index = kind === "USDC only" ? INDEX : kind === "integrated products" ? integIndex() : wide ? wide.index : kind === "audit F1 rules" ? f1Index() : scIndex();
+    const index = kind === "USDC only" ? INDEX : kind === "integrated products" ? integIndex() : wide ? wide.index : kind === "audit F1 rules" ? f1Index() : kind === "§21 volume term" ? volIndex() : scIndex();
     const extra = kind === "integrated products" || wide ? INTEG_LOGS : kind === "audit F1 rules" ? F1_LOGS : [];
     const a = await ref(HB + off, index, extra, wide?.doc);
     const e = createEngine({ call: mockRpc(HB + off, undefined, extra) as never });
@@ -473,4 +473,17 @@ test("pushAll appends arrays far beyond the call-argument limit (a wide-mode hou
   expect(() => [].push(...(big as never[]))).toThrow(RangeError); // what the spread did
   const out = pushAll([-1], big);
   expect([out.length, out[0], out[600_000]]).toEqual([600_001, -1, 599_999]);
+});
+
+describe("§21 volume term", () => {
+  const run = async (d: LiveData) => { const e = createEngine({ call: mockRpc(HB + 300) as never }); e.load(d, SEEN); return e.tick(); };
+  test("a $1,500 payment counts in full under vol_cap and earns log2(1+v) + v/vol_unit; absent params score as before", async () => {
+    const plain = await run(INDEX), vol = await run(volIndex());
+    const a = vol.act["domain:argus.world"], b = plain.act["domain:argus.world"];
+    expect(a.usdc).toBeGreaterThan(b.usdc); // the old $1,000 cap no longer clips the $1,500 payment
+    expect(a.points).toBeGreaterThan(b.points);
+    const same = JSON.parse(JSON.stringify(INDEX)) as LiveData;
+    Object.assign(same.live, { vol_cap: same.live.cap, base_cap: same.live.cap }); // vol_unit absent: no volume term
+    expect((await run(same)).index).toBe(plain.index);
+  });
 });

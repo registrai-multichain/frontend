@@ -169,3 +169,10 @@ export function addIntegIndex(): { index: LiveData; doc: { contracts: Record<str
   index.live.contracts_add = add;
   return { index, doc: { contracts: base, open_senders: doc.open_senders.filter((a) => !(a in add)) } };
 }
+
+/* ---------- §21 volume term: cap $10k per wallet-hour, +1 point per $100 counted, base keeps $1k log-only ---------- */
+export function volIndex(): LiveData {
+  const d = JSON.parse(JSON.stringify(INDEX)) as LiveData;
+  Object.assign(d.live, { cap: 10_000, vol_cap: 10_000, vol_unit: 100, base_cap: 1000 });
+  return d;
+}

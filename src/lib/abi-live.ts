@@ -246,7 +246,8 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
       }
     }
     let pts = 0;
-    for (const v of agg.values()) pts += Math.log2(1 + Math.min(Math.round(v * 1e6) / 1e6, L.cap));
+    const baseCap = L.base_cap == null ? L.cap : L.base_cap; // §21: the base layer keeps its own (log-only) cap
+    for (const v of agg.values()) pts += Math.log2(1 + Math.min(Math.round(v * 1e6) / 1e6, baseCap));
     return L.base_scale * pts;
   }
 
@@ -281,9 +282,9 @@ export function createEngine(opts: { call?: RpcCall; rpc?: string; sleep?: (ms: 
     const minPay = L.min_pay || 0, npMin = L.new_payer_min || 0, npMax = L.new_payer_max_h == null ? Infinity : L.new_payer_max_h;
     for (const e of evs) {
       if (e.v < minPay) continue; // audit F1: dust is ignored
-      const k = e.src + e.w, room = Math.max(0, L.cap - (spent.get(k) || 0)), counted = Math.min(e.v, room);
+      const k = e.src + e.w, room = Math.max(0, (L.vol_cap == null ? L.cap : L.vol_cap) - (spent.get(k) || 0)), counted = Math.min(e.v, room);
       spent.set(k, (spent.get(k) || 0) + counted);
-      let pts = counted > 0 ? Math.log2(1 + counted) : 0;
+      let pts = counted > 0 ? Math.log2(1 + counted) + (L.vol_unit ? counted / L.vol_unit : 0) : 0; // §21 volume term
       const sk = e.src + e.w;
       let isNew = false;
       if (e.v >= npMin) { // audit F1: only a payment of new_payer_min or more makes (and marks) a new payer, at most new_payer_max_h per member-hour

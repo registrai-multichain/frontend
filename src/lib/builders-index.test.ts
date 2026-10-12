@@ -397,3 +397,13 @@ test("§18: live.contracts_add accepted as lowercase address -> source, capped",
     expect(v.ok && !!v.data.live).toBe(false);
   }
 });
+
+test("§21 params in live: kept when non-negative, vol_unit may be null", () => {
+  const d = JSON.parse(JSON.stringify(real));
+  Object.assign(d.live, { cap: 10000, vol_cap: 10000, vol_unit: 100, base_cap: 1000 });
+  const r = validateIndex(d);
+  expect(r.ok && [r.data.live!.vol_cap, r.data.live!.vol_unit, r.data.live!.base_cap]).toEqual([10000, 100, 1000]);
+  const n = JSON.parse(JSON.stringify(d)); n.live.vol_unit = null;
+  const v = validateIndex(n);
+  expect(v.ok && v.data.live!.vol_unit).toBeUndefined();
+});
