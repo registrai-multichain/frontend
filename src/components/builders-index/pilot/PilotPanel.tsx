@@ -76,7 +76,7 @@ export function PilotPanel({ market = "abi" }: { market?: PilotMarket }) {
     const r = await api<PilotAccountView>(withMarket(PILOT_PATHS.account, market));
     if (!live.current) return;
     // a reply for a tab the page has since left is dropped (the next refresh is for the new market)
-    if (r.status === 200 && r.body.market === market) setView(r.body);
+    if (r.status === 200 && (r.body.market ?? "abi") === market) setView(r.body);
   }, [market]);
   const loadHistory = useCallback(async () => {
     const r = await api<{ history: ClosedPositionView[] }>(PILOT_PATHS.history);
@@ -88,11 +88,11 @@ export function PilotPanel({ market = "abi" }: { market?: PilotMarket }) {
   }, []);
   const loadFunding = useCallback(async () => {
     const r = await api<FundingView>(withMarket(PILOT_PATHS.funding, market));
-    if (live.current && r.status === 200 && r.body.market === market) setFunding(r.body);
+    if (live.current && r.status === 200 && (r.body.market ?? "abi") === market) setFunding(r.body);
   }, [market]);
   const loadEconomy = useCallback(async () => {
     const r = await api<EconomyView>(withMarket(PILOT_PATHS.economy, market));
-    if (live.current && r.status === 200 && r.body.market === market) setEconomy(r.body);
+    if (live.current && r.status === 200 && (r.body.market ?? "abi") === market) setEconomy(r.body);
   }, [market]);
   // another index tab: its funding and economy load afresh (the account view refreshes through `refresh`)
   useEffect(() => { setFunding(null); setEconomy(null); }, [market]);
