@@ -7,6 +7,9 @@ export const metadata: Metadata = {
   title: "Terms of use · Registrai",
   description: "Terms for using builder.registrai.cc: the builder registry, the Arc indices and the points pilot.",
   alternates: { canonical: "/terms" },
+  // own share tags: the root layout's carry the landing page's line and image (audit L12)
+  openGraph: { type: "website", siteName: "Registrai", title: "Terms of use · Registrai", description: "Terms for using builder.registrai.cc: the builder registry, the Arc indices and the points pilot.", url: "https://builder.registrai.cc/terms/" },
+  twitter: { card: "summary", title: "Terms of use · Registrai", description: "Terms for using builder.registrai.cc: the builder registry, the Arc indices and the points pilot." },
 };
 
 const H = ({ children }: { children: React.ReactNode }) => <h2 className="pa-h2 mt-8 mb-2">{children}</h2>;

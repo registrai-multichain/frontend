@@ -9,6 +9,9 @@ export const metadata: Metadata = {
   title: "Points pilot rules · Registrai",
   description: "How the ABI points pilot works: eligibility, orders, leverage, funding, borrow, liquidation and the points economy.",
   alternates: { canonical: "/pilot-rules" },
+  // own share tags: the root layout's carry the landing page's line and image (audit L12)
+  openGraph: { type: "website", siteName: "Registrai", title: "Points pilot rules · Registrai", description: "How the ABI points pilot works: eligibility, orders, leverage, funding, borrow, liquidation and the points economy.", url: "https://builder.registrai.cc/pilot-rules/" },
+  twitter: { card: "summary", title: "Points pilot rules · Registrai", description: "How the ABI points pilot works: eligibility, orders, leverage, funding, borrow, liquidation and the points economy." },
 };
 
 const H = ({ children }: { children: React.ReactNode }) => <h2 className="pa-h2 mt-8 mb-2">{children}</h2>;

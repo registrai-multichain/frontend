@@ -7,6 +7,9 @@ export const metadata: Metadata = {
   title: "Privacy notice · Registrai",
   description: "What personal data builder.registrai.cc processes, why, for how long, and your rights.",
   alternates: { canonical: "/privacy" },
+  // own share tags: the root layout's carry the landing page's line and image (audit L12)
+  openGraph: { type: "website", siteName: "Registrai", title: "Privacy notice · Registrai", description: "What personal data builder.registrai.cc processes, why, for how long, and your rights.", url: "https://builder.registrai.cc/privacy/" },
+  twitter: { card: "summary", title: "Privacy notice · Registrai", description: "What personal data builder.registrai.cc processes, why, for how long, and your rights." },
 };
 
 const H = ({ children }: { children: React.ReactNode }) => <h2 className="pa-h2 mt-8 mb-2">{children}</h2>;
