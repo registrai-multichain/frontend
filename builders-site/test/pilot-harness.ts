@@ -42,6 +42,8 @@ export interface MarkExtra {
   milestone_ts: number | null;
   /** §9.15: the milestone premium (absent by default: an older producer, counted as 0; null blocks the hour's fix). */
   milestone_premium: number | null;
+  /** The market (plan 2026-10-12 R4): absent by default, as today's producer posts (= abi). */
+  index: string;
 }
 
 /**
@@ -70,11 +72,11 @@ export function setup(o: { open?: boolean; db?: boolean; secret?: string; snapsh
     return Response.json({ jsonrpc: "2.0", id: 1, result: "0x" + v.toString(16).padStart(64, "0") });
   }) as unknown as typeof fetch;
   const kv = new MemoryKV(() => nowMs);
-  /** The index file's closed hourly candles in KV ([iso hour start, o, h, l, c, …]); flat 1000 by default. */
-  const setCandles = (rows: [number, number, number, number][]) =>
-    kv.put("abi:index", JSON.stringify({ candles: rows.map(([t, h, l, c]) => [new Date(t * 1000).toISOString(), c, h, l, c, 1, 1, 1]) }));
+  /** A market's index file's closed hourly candles in KV ([iso hour start, o, h, l, c, …]); flat 1000 by default, every market. */
+  const setCandles = (rows: [number, number, number, number][], market: "abi" | "aii" | "aei" = "abi") =>
+    kv.put(`${market}:index`, JSON.stringify({ candles: rows.map(([t, h, l, c]) => [new Date(t * 1000).toISOString(), c, h, l, c, 1, 1, 1]) }));
   const h0 = Math.floor(T0 / 3_600_000) * 3600;
-  void setCandles(Array.from({ length: 72 }, (_, i) => [h0 - 24 * 3600 + i * 3600, 1000, 1000, 1000]));
+  for (const m of ["abi", "aii", "aei"] as const) void setCandles(Array.from({ length: 72 }, (_, i) => [h0 - 24 * 3600 + i * 3600, 1000, 1000, 1000]), m);
   const env: Env = {
     INVITES: kv,
     SITE_ORIGIN: ORIGIN,
@@ -126,6 +128,7 @@ export function setup(o: { open?: boolean; db?: boolean; secret?: string; snapsh
     };
     if (x.milestone_ts !== undefined) body.milestone_ts = x.milestone_ts;
     if (x.milestone_premium !== undefined) body.milestone_premium = x.milestone_premium;
+    if (x.index !== undefined) body.index = x.index;
     // like mark.py v3: trend every post (default 0 here), null until its hour close is confirmed; funding_rate = trend
     body.trend = x.trend === undefined ? 0 : x.trend;
     body.funding_rate = body.trend;
@@ -144,7 +147,7 @@ export function setup(o: { open?: boolean; db?: boolean; secret?: string; snapsh
   const submit = (cookie: string, body: unknown) => call(handleOrder, req("/api/pilot/order", "POST", body, { cookie }));
   const submitClose = (cookie: string, id: number) => call(handleClose, req("/api/pilot/close", "POST", { id }, { cookie }));
   const status = (cookie: string, id: number) => call(handleOrder, req(`/api/pilot/order?id=${id}`, "GET", undefined, { cookie }));
-  const account = (cookie?: string) => call(handleAccount, req("/api/pilot/account", "GET", undefined, cookie ? { cookie } : {}));
+  const account = (cookie?: string, market?: string) => call(handleAccount, req(`/api/pilot/account${market ? `?market=${market}` : ""}`, "GET", undefined, cookie ? { cookie } : {}));
   const history = (cookie: string) => call(handleHistory, req("/api/pilot/history", "GET", undefined, { cookie }));
   const balanceOf = (w: string) => db.q<{ balance: number }>("SELECT balance FROM accounts WHERE wallet = ?", w.toLowerCase())[0]?.balance;
 
