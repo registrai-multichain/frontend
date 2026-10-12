@@ -12,7 +12,7 @@ older than `out/` or than the last commit, and it prints the commit it deploys.
 | Name | Kind | Used by |
 |---|---|---|
 | `INVITES` | KV | invites, admin sign-in nonces and sessions, the Arc Builders Index files |
-| `PILOT_DB` | D1 `registrai-pilot` | ABI points pilot: accounts, positions, minute bars, latest mark |
+| `PILOT_DB` | D1 `registrai-pilot` | Points pilot (ABI, AII, AEI): accounts, positions, minute bars, latest mark per market |
 | `ADMIN_ADDRESSES`, `ONBOARDER_ADDRESSES`, `SITE_ORIGIN`, `PROPOSALS_ALLOWED_ORIGIN` | var | admin sign-in, CSRF, CORS |
 | `PILOT_OPEN` | var, default `"0"` | pilot kill switch: `"1"` accepts new orders |
 | `PILOT_REGI_SNAPSHOT_BLOCK` | var, default `""` | optional REGI snapshot: empty = none (the default). Set, a wallet must also have held the minimum at this block, which must be in the past and ≥ 22,419,071 (REGI's deploy); with `PILOT_OPEN = "1"`, malformed / future / pre-REGI = "pilot misconfigured" (every order refused, logged once per isolate) |
@@ -24,7 +24,7 @@ older than `out/` or than the last commit, and it prints the commit it deploys.
 | `ABI_PUSH_TOKEN` | secret, ≥ 32 chars | Bearer of `POST /api/index`, `/api/index/seen`, `/api/index/contracts` (and the AII / AEI ones) and `/api/index/mark`. An index file older than the stored one (`data_until`), or a seen file or contract map older than the stored one (`hour_start`), is refused with 409; the same value is accepted again |
 | `BOT_SECRET`, `RADAR_PUBLISH_SECRET` | secret | `/api/bot/*` |
 
-## ABI points pilot
+## Points pilot (ABI, AII, AEI)
 
 Points only: no deposits, no withdrawals, no prizes, no transfers. Spec
 `docs/superpowers/specs/2026-10-10-abi-points-pilot.md` (economy v3: §9, §9.13; site plan
@@ -32,6 +32,16 @@ Points only: no deposits, no withdrawals, no prizes, no transfers. Spec
 `lib/pilot-sql.ts` (every guarded statement); rules engine `src/lib/abi-pilot.ts`, an exact port of
 `research/arc-builders-index/pilot/pilot.js` v3 (parity tests: `test/abi-pilot-engine.test.ts`, every vector of
 `fixtures-v3.json`; the economy on the site: `test/pilot-v3.test.ts`).
+
+Three markets (spec §9.16, plan `docs/superpowers/plans/2026-10-12-pilot-three-markets.md`; migration
+`0004_pilot_markets.sql`; tests `test/pilot-markets.test.ts`): ABI, AII and AEI. One points balance per wallet
+(`accounts.balance`) across them. Everything else is per market, keyed by `market`: the mark row, bars, gaps, rates,
+house hours, pools (fee pool, insurance) and splits; positions, orders and ledger rows carry their market. One
+direction at a time and 5 open positions per wallet per market; the 3-pending-orders cap per wallet across markets.
+AII has no base layer: the base-sample pause never applies there. Reads take `?market=abi|aii|aei` (absent: abi):
+`/api/pilot/account` (mark and funding of that market; positions in every market, each at its own market's mark),
+`/api/pilot/funding`, `/api/pilot/economy`, `GET /api/index/mark?index=`; `POST /api/pilot/order` takes `market`. The
+leaderboard is one board: balance + every open position at its market's latest mark.
 
 Economy v3 (with the §9.14 rulings): hourly skew + trend funding, fixed once per hour from the book time-weighted
 over the closing hour (`rates`); borrow at 10% APR; levels to 30×; the house as the counterparty to the net imbalance
@@ -47,7 +57,7 @@ One-time setup, from `frontend/builders-site/`:
 
 ```sh
 npx wrangler d1 create registrai-pilot                      # paste database_id into wrangler.toml
-npx wrangler d1 migrations apply registrai-pilot --remote   # migrations/0001_pilot.sql, 0002_pilot_v3.sql, 0003_pilot_premium.sql
+npx wrangler d1 migrations apply registrai-pilot --remote   # migrations/0001_pilot.sql … 0004_pilot_markets.sql
 openssl rand -base64 48 | npx wrangler pages secret put PILOT_SESSION_SECRET --project-name=registrai-builders
 ```
 
@@ -68,7 +78,7 @@ Sign-in (`POST /api/pilot/auth`): the body, the message, the nonce's MAC and age
 are checked before any D1 statement; then 10 sign-ins a minute per IPv4 address or IPv6 /64 (a refused one writes
 nothing); then the signature. `GET /api/pilot/account` without a session only reads.
 
-Limits per wallet: 30 orders and 60 closes a minute, at most 3 orders pending at once, 5 open positions (queued opens
+Limits per wallet: 30 orders and 60 closes a minute, at most 3 orders pending at once (all markets), 5 open positions per market (queued opens
 count). One mark ingest runs at most 800 statements in all (reads and batch statements: the safety-net
 liquidations first, then its batch, then the fills); what does not fit waits for the next post, and nothing fills
 while liquidations are held back.
@@ -76,8 +86,12 @@ while liquidations are held back.
 ### Mark producer (`research/arc-builders-index/live/mark.py` v3)
 
 `POST https://builder.registrai.cc/api/index/mark`, `Authorization: Bearer $ABI_PUSH_TOKEN`, every 5 s:
-`{mark, ts, head, hour_start, candle:[o,h,l,c,payments,usdc], ch24, ch1, trend, funding_rate, funding_hour, sigma_1h,
+`{index, mark, ts, head, hour_start, candle:[o,h,l,c,payments,usdc], ch24, ch1, trend, funding_rate, funding_hour, sigma_1h,
 sigma_24h, milestone_premium, base_pending, base_step_ts, milestone_ts, bars:[[minute,h,l,c] …]}`.
+
+- `index`: `"abi"`, `"aii"` or `"aei"`; absent = `"abi"` (a single-index producer keeps working). Everything below
+  is per market: the post reads and writes its own market only (its mark row, bars, gaps, rates, house hours,
+  liquidations, fills, pools and split). `ts` must be newer than that market's stored mark.
 
 - `ts` within 30 s of server time and newer than the stored mark (else 409, with `last_minute`).
 - `bars`: 1–60, ascending, `l ≤ c ≤ h`, minutes ≤ `ts`. When the batch ends at the minute of `ts`, the mark lies
@@ -86,8 +100,8 @@ sigma_24h, milestone_premium, base_pending, base_step_ts, milestone_ts, bars:[[m
   only finished minutes are stored. The producer sends every bar after it, so the open minute is re-sent until it
   closes, and is stored once it has.
 - Any missing minute between the stored bars and a post gets a gap bar: for the open hour at the posted candle's
-  low and high, for an earlier hour at that hour's closed candle from the index file in KV (`abi:index`
-  `candles`). An earlier hour with no candle yet is kept in `gaps`; until a later post closes it, nothing fills
+  low and high, for an earlier hour at that hour's closed candle from the market's own index file in KV
+  (`abi:index`, `aii:index`, `aei:index` `candles`). An earlier hour with no candle yet is kept in `gaps`; until a later post closes it, nothing fills
   and no order is accepted ("price updating").
 - `hour_start` never goes backwards (409). The first post of an hour whose `trend` and `sigma_1h` are not null and
   whose `funding_hour` and `hour_start` are the hour of its `ts` fixes that hour's rates (`rates`, once; never
@@ -101,7 +115,7 @@ sigma_24h, milestone_premium, base_pending, base_step_ts, milestone_ts, bars:[[m
 - `milestone_premium` (§9.15): a finite number within ±0.001 per hour, or `null`. The hour's rates are fixed only
   once it is not null, like `trend`. A producer that doesn't send the key (an older mark.py, or before
   `ABI_POST_PREMIUM=1`) counts as 0 and blocks nothing.
-- Orders pause while `base_pending` and for 60 s after `base_step_ts`.
+- Orders pause while `base_pending` and for 60 s after `base_step_ts` (ABI and AEI; ignored for AII).
 - `milestone_ts`: the latest recorded index milestone at or before head (integer unix time, at or before `ts`,
   at most 7 days old), or `null`. It is stored on the mark row. New orders, but not closes, pause for 60 s after
   it ("Paused: index milestone"): recorded milestones change the index at once.
@@ -110,8 +124,9 @@ Orders fill at the first mark whose own `ts` (chain time) is later than the orde
 within 10 s of server time; otherwise they are refused "price updating". Nothing fills while the producer is
 catching up (bars behind the mark) or a gap is open.
 
-No hedging: a wallet holds open positions in one direction at a time (the engine refuses "one direction at a
-time", shown as "Close your long first" / "Close your short first"; the fill batch re-checks it atomically).
+No hedging: a wallet holds open positions in one direction at a time in each market (the engine refuses "one
+direction at a time", shown as "Close your long first" / "Close your short first"; the fill batch re-checks it
+atomically). Long ABI and short AII at once is fine.
 
 Routes: `POST|GET /api/index/mark`, `GET|POST|DELETE /api/pilot/auth`, `GET /api/pilot/account`,
 `POST /api/pilot/order` (202, pending) + `GET /api/pilot/order?id=`, `POST /api/pilot/close` (202),

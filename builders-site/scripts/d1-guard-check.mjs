@@ -47,7 +47,8 @@ writeFileSync(config, [
 let code = 1;
 const proxy = await getPlatformProxy({ configPath: config, persist: false });
 try {
-  // every migration in order (0001 v2 tables, 0002 v3: rates, ledger, pools, splits, house_hours, 0003 rates.premium), on scratch tables
+  // every migration in order (0001 v2 tables, 0002 v3: rates, ledger, pools, splits, house_hours, 0003 rates.premium,
+  // 0004 three markets: the keyed tables rebuilt through *_v4 copies, market on positions / orders / ledger), on scratch tables
   const migrations = MIGRATIONS.map((f) => readFileSync(resolve(here, "../migrations", f), "utf8"));
   const results = await runGuardChecks(proxy.env.PILOT_DB, migrations);
   for (const r of results) console.log(`${r.ok ? "ok  " : "FAIL"}  ${r.name}${r.ok ? "" : `: ${r.detail}`}`);
