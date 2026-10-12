@@ -238,7 +238,7 @@ describe("late-rate guard (§9.14c)", () => {
     expect(refused.body.error).toBe("price updating");
     // the bar of minute H crosses only once hour H's funding counts (trend 1%/h, a book all long)
     const p = t.enginePos(t.positions()[0]);
-    const before = await loadRates(t.db, p.openedAt);
+    const before = await loadRates(t.db, "abi", p.openedAt);
     const { L, S } = t.tw(H - 3600);
     const fr = Engine.fundingRates({ L, S, trend: 0.01, sigma1h: 0.0004 });
     const withH = [...before, { t: H, long: fr.long, short: fr.short, r: fr.r }];
@@ -271,7 +271,7 @@ describe("settlement and insurance (R3, owner item 6)", () => {
     const bobLiq = b.body.position.liq as number;
     const r = await t.markJson(1000, { bars: [[m - 60, bobLiq + 0.5, 950, 1000], [m, 1000, 1000, 1000]] });
     expect(r.body.liquidated).toBe(2);
-    const rates = await loadRates(t.db, a.body.position.openedAt);
+    const rates = await loadRates(t.db, "abi", a.body.position.openedAt);
     const bar = [{ t: m - 60, h: bobLiq + 0.5, l: 950, c: 1000 }];
     for (const [x, gap] of [[a, true], [b, false]] as const) {
       const p = x.body.position, id = x.body.order.positionId as number;
@@ -317,7 +317,7 @@ describe("weekly split (R5, §9.14b)", () => {
     expect(e0.house.realized).toBeLessThan(0); // Alice's gain, net of the cut and funding: the house lost it
     // to Monday 00:00 UTC + 1 minute: three public reads race
     t.tick((W + 7 * 86400 + 60 - t.nowS()) * 1000);
-    const bal = Object.fromEntries(t.db.q<{ kind: string; balance: number }>("SELECT kind, balance FROM pools").map((x) => [x.kind, x.balance]));
+    const bal = Object.fromEntries(t.db.q<{ kind: string; balance: number }>("SELECT kind, balance FROM pools WHERE market = 'abi'").map((x) => [x.kind, x.balance]));
     const pool = bal.fee + bal.borrow + bal.cut; // the house's realized result is negative: carried, not split
     await Promise.all([t.economy(), t.account(), t.call(handleFunding, t.req("/api/pilot/funding")), t.economy()]);
     const s = Engine.splitFees(pool);
@@ -326,7 +326,7 @@ describe("weekly split (R5, §9.14b)", () => {
     expect(split).toMatchObject({ split_insurance: s.insurance, split_treasury: s.treasury - s.buyback, split_buyback: s.buyback, fee: -bal.fee, cut: -bal.cut });
     expect(split.house_pnl).toBeUndefined();
     // after the split each fee-pool source is exactly what is unsplit (review N6): zero here
-    for (const k of ["fee", "borrow", "cut"]) expect(t.one<{ balance: number }>("SELECT balance FROM pools WHERE kind = ?", k).balance).toBeCloseTo(0, 9);
+    for (const k of ["fee", "borrow", "cut"]) expect(t.one<{ balance: number }>("SELECT balance FROM pools WHERE market = 'abi' AND kind = ?", k).balance).toBeCloseTo(0, 9);
     const e = await t.economy();
     expect(e.lastSplit).toMatchObject({ week: W, pool, insurance: s.insurance, treasury: s.treasury, buyback: s.buyback });
     expect(e.insurance).toBeCloseTo(s.insurance, 9);
@@ -370,7 +370,7 @@ describe("batch cap (review S2)", () => {
       const id = t.db.q<{ id: number }>("INSERT INTO positions (wallet, side, margin, lev, notional, entry, liq, opened_at, fee, booked_to) VALUES (?, ?, 100, 10, 1000, 1000, ?, ?, ?, ?) RETURNING id",
         owner, side, side === "long" ? 905 : 1095, now - 60 + (i % 50), fee, now - 60 + (i % 50))[0].id;
       t.db.q("INSERT INTO ledger (ts, kind, amount, ref) VALUES (?, 'fee', ?, ?)", now, fee, `open:${id}`);
-      t.db.q("UPDATE pools SET balance = balance + ?, gross = gross + ? WHERE kind = 'fee'", fee, fee);
+      t.db.q("UPDATE pools SET balance = balance + ?, gross = gross + ? WHERE market = 'abi' AND kind = 'fee'", fee, fee);
     }
     // the house's books: claims booked = house rows; cut booked + the projected cut of every fixed, unbooked hour = cut rows
     const invariant = () => {
@@ -435,7 +435,8 @@ describe("economy endpoint (R7, owner item 5)", () => {
     t.nextHour();
     await t.mark(1001, { trend: -0.0002 });
     const e = await t.economy();
-    expect(Object.keys(e).sort()).toEqual(["borrowApr", "buyback", "house", "insurance", "lastSplit", "pool", "rates", "treasury", "ts", "week"]);
+    expect(Object.keys(e).sort()).toEqual(["borrowApr", "buyback", "house", "insurance", "lastSplit", "market", "pool", "rates", "treasury", "ts", "week"]);
+    expect(e.market).toBe("abi");
     expect(Object.keys(e.house).sort()).toEqual(["exposure", "funding", "liquidations", "price", "realized", "total", "trueup", "unrealized"]);
     for (const k of ["price", "funding", "trueup", "liquidations", "total"] as const) expect(Object.keys(e.house[k]).sort()).toEqual(["all", "h24", "week"]);
     expect(e.rates.current).toMatchObject({ t: t.hour(), S: 0, skew: 1 });
@@ -519,7 +520,7 @@ describe("conservation (R4, review S3)", () => {
     const bobRow = () => t.db.q<Json>("SELECT * FROM positions WHERE id = ?", b.body.order.positionId)[0];
     t.setBefore(async () => {
       const row = bobRow();
-      const res = await t.db.batch(closeStmts(t.db, row as never, { id: bc.body.order.id, wallet: lc(BOB) }, { mark: 1001, ts: t.nowS() - 2 }, await loadRates(t.db, row.opened_at)));
+      const res = await t.db.batch(closeStmts(t.db, row as never, { id: bc.body.order.id, wallet: lc(BOB) }, { mark: 1001, ts: t.nowS() - 2 }, await loadRates(t.db, "abi", row.opened_at)));
       expect(res[0].meta.changes).toBe(1);
     }, (sql) => sql.includes(SQL.bookPosition));
     t.nextHour(0, 7);
@@ -564,7 +565,7 @@ describe("conservation (R4, review S3)", () => {
     const fc = await t.submitClose(c.frank, f.body.order.positionId);
     const row = t.db.q<Json>("SELECT * FROM positions WHERE id = ?", f.body.order.positionId)[0];
     const ins0 = t.insurance();
-    await t.db.batch(closeStmts(t.db, row as never, { id: fc.body.order.id, wallet: lc(FRANK) }, { mark: 900, ts: t.nowS() }, await loadRates(t.db, row.opened_at)));
+    await t.db.batch(closeStmts(t.db, row as never, { id: fc.body.order.id, wallet: lc(FRANK) }, { mark: 900, ts: t.nowS() }, await loadRates(t.db, "abi", row.opened_at)));
     const draw = -t.amount(`draw:${row.id}`, "insurance_draw")!;
     expect(draw).toBeCloseTo(Math.min(ins0, -t.amount(`gap:${row.id}`, "house_trueup")! + draw), 9);
     expect(t.insurance()).toBeGreaterThanOrEqual(0);

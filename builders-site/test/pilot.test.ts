@@ -318,7 +318,7 @@ describe("sign-in and session (R6)", () => {
     expect(a.body.funding).toEqual({ hour, long: -0.0002, short: 0.0002, skew: 0, next: hour + 3600 }); // joined to the mark row
     const pub = await t.call(handleFunding, t.req("/api/pilot/funding"));
     const row = { t: hour, long: -0.0002, short: 0.0002, skew: 0, trend: -0.0002, premium: 0, r: 0, cut: 0, L: 0, S: 0, houseExposure: 0 };
-    expect(pub.body).toEqual({ recent: [row], current: row, next: hour + 3600 });
+    expect(pub.body).toEqual({ market: "abi", recent: [row], current: row, next: hour + 3600 });
   });
 });
 

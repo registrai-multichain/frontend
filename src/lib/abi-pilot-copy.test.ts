@@ -98,17 +98,18 @@ describe("pilot copy lint (R7)", () => {
 const ME = "0x1234567890abcdef1234567890abcdef12345678";
 const MARK = { mark: 1000, ts: 1_760_097_600, age: 2, ch24: 0.01, ch1: 0.001, sigma1h: 0.0004, sigma24h: 0.002, maxLev: 30, levCap: 30, paused: false, basePaused: false, milestonePaused: false, fresh: true };
 const rate = (t: number, long: number, short: number, L: number, S: number): RateView => ({ t, long, short, skew: (L - S) / (L + S || 1), trend: 0, premium: 0, r: 0, cut: 0, L, S, houseExposure: S - L });
-const FUNDING = { recent: [rate(1_760_094_000, 0.0003, -0.00027, 75000, 25000), rate(1_760_090_400, -0.0002, 0.0002, 0, 0)], current: rate(1_760_094_000, 0.0003, -0.00027, 75000, 25000), next: 1_760_097_600 };
+const FUNDING = { market: "abi" as const, recent: [rate(1_760_094_000, 0.0003, -0.00027, 75000, 25000), rate(1_760_090_400, -0.0002, 0.0002, 0, 0)], current: rate(1_760_094_000, 0.0003, -0.00027, 75000, 25000), next: 1_760_097_600 };
 const NOW = { hour: 1_760_094_000, long: 0.0003, short: -0.00027, skew: 0.5, next: 1_760_097_600 };
 const POS_LIQ = liqPrice({ side: "long", margin: 1000, notional: 2000, entry: 990 }, 0);
 const VIEW: PilotAccountView = {
-  open: true, misconfigured: false, regiMin: 1_000_000, regiSnapshot: false, address: ME, regi: { ok: true, snapshot: true, now: true }, account: { balance: 9000, equity: 9998.8, season: 1 },
-  positions: [{ id: 7, side: "long", margin: 1000, lev: 2, notional: 2000, entry: 990, liq: POS_LIQ, openedAt: 1_760_097_000, fee: 0.2, funding: 0.6, borrow: 0.02, pnl: 20.2 }],
+  market: "abi", open: true, misconfigured: false, regiMin: 1_000_000, regiSnapshot: false, address: ME, regi: { ok: true, snapshot: true, now: true }, account: { balance: 9000, equity: 9998.8, season: 1 },
+  positions: [{ id: 7, market: "abi", side: "long", margin: 1000, lev: 2, notional: 2000, entry: 990, liq: POS_LIQ, openedAt: 1_760_097_000, fee: 0.2, funding: 0.6, borrow: 0.02, mark: 1000, pnl: 20.2 }],
   pending: [],
   mark: MARK,
   funding: NOW,
 };
 const ECONOMY: EconomyView = {
+  market: "abi",
   ts: 1_760_097_600,
   rates: { current: { ...FUNDING.current, L: 70000, S: 30000, houseExposure: -40000, cut: 0.42 }, recent: FUNDING.recent },
   borrowApr: 0.1,
@@ -129,7 +130,7 @@ const ticket = (p: Partial<TicketProps> = {}) => renderToStaticMarkup(createElem
 const tables = (p: Partial<PilotTablesProps> = {}) =>
   renderToStaticMarkup(createElement(PilotTables, {
     tab: "positions", onTab: noop, address: ME, positions: VIEW.positions, mark: 1000, closing: null, onClose: noop, funding: FUNDING,
-    history: [{ id: 3, side: "short", margin: 500, lev: 3, notional: 1500, entry: 1000, openedAt: 1, closedAt: 1_760_090_000, exit: 1470, pnl: -705, funding: -1.5, borrow: 0.75, fee: 0.3, returned: 0, net: -500.15, reason: "liquidation" }],
+    history: [{ id: 3, market: "abi", side: "short", margin: 500, lev: 3, notional: 1500, entry: 1000, openedAt: 1, closedAt: 1_760_090_000, exit: 1470, pnl: -705, funding: -1.5, borrow: 0.75, fee: 0.3, returned: 0, net: -500.15, reason: "liquidation" }],
     board: [{ rank: 1, address: "0x1234…5678", equity: 10500 }, { rank: 2, address: "0xabcd…ef01", equity: 9000 }],
     ...p,
   }));
@@ -279,7 +280,7 @@ describe("account polling (D1 budget)", () => {
     expect(accountPollMs(null)).toBeNull();
     expect(accountPollMs({ address: null, pending: [] })).toBeNull();
     expect(accountPollMs({ address: ME, pending: [] })).toBe(15_000);
-    expect(accountPollMs({ address: ME, pending: [{ id: 1, kind: "open", status: "pending", side: "long", margin: 10, lev: 1, positionId: null, arrivedMs: 0, fillPx: null, error: null }] })).toBe(2_000);
+    expect(accountPollMs({ address: ME, pending: [{ id: 1, market: "abi", kind: "open", status: "pending", side: "long", margin: 10, lev: 1, positionId: null, arrivedMs: 0, fillPx: null, error: null }] })).toBe(2_000);
   });
   test("the Funding tab waits for the edge-cached endpoint", () => {
     expect(tables({ tab: "funding", funding: null })).toContain("Loading…");

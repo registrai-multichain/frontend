@@ -82,13 +82,15 @@ export interface EdgeCacheDeps {
 
 /**
  * A public GET through the edge cache, keyed by the request's path alone (the query
- * string is ignored). Only a 200 or a 404 is kept, for PUBLIC_GET_CACHE_S; anything
- * else (400, 5xx) goes straight back. Never for /api/admin/*.
+ * string is ignored) plus `variant`, a value the caller has already validated (e.g. the
+ * pilot's market): never raw query text, so a query can't multiply the cache entries.
+ * Only a 200 or a 404 is kept, for PUBLIC_GET_CACHE_S; anything else (400, 5xx) goes
+ * straight back. Never for /api/admin/*.
  */
-export async function edgeCachedGet(req: Request, deps: EdgeCacheDeps, produce: () => Promise<Response>, ttlSeconds: number = PUBLIC_GET_CACHE_S): Promise<Response> {
+export async function edgeCachedGet(req: Request, deps: EdgeCacheDeps, produce: () => Promise<Response>, ttlSeconds: number = PUBLIC_GET_CACHE_S, variant?: string): Promise<Response> {
   const cache = deps.cache === undefined ? edgeCache() : deps.cache;
   const u = new URL(req.url);
-  const key = new Request(`${u.origin}${u.pathname}`, { method: "GET" });
+  const key = new Request(`${u.origin}${u.pathname}${variant ? `?v=${encodeURIComponent(variant)}` : ""}`, { method: "GET" });
   const hit = cache ? await cache.match(key) : undefined;
   if (hit) return hit;
   const res = await produce();

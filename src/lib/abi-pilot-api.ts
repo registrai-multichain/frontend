@@ -6,6 +6,24 @@
  * Pure. RELATIVE IMPORTS ONLY: wrangler bundles this file into the Pages Functions.
  */
 import type { Side } from "./abi-pilot";
+import { ABI_INDEX_IDS, ABI_INDICES, type AbiIndexId } from "./builders-index";
+
+// ───────────────────────────── markets ─────────────────────────────
+
+/**
+ * The pilot's markets (plan 2026-10-12 R1, spec §9.16): one per Arc index, ABI, AII and AEI. One points balance per
+ * wallet across them; mark, bars, rates, house, insurance and split are per market.
+ */
+export type PilotMarket = AbiIndexId;
+export const PILOT_MARKETS: readonly PilotMarket[] = ABI_INDEX_IDS;
+export const DEFAULT_MARKET: PilotMarket = "abi";
+/** A request's market: absent (undefined / null / "") is ABI; anything else must be one of PILOT_MARKETS (else null). */
+export function marketOf(v: unknown): PilotMarket | null {
+  if (v === undefined || v === null || v === "") return DEFAULT_MARKET;
+  return typeof v === "string" && (PILOT_MARKETS as readonly string[]).includes(v) ? (v as PilotMarket) : null;
+}
+/** "ABI", "AII", "AEI" */
+export const marketCode = (m: PilotMarket) => ABI_INDICES[m].code;
 
 // ───────────────────────────── sign-in ─────────────────────────────
 
@@ -69,6 +87,9 @@ export const BALANCE_OF_SELECTOR = "0x70a08231";
 export const REGI_CACHE_S = 10 * 60;
 
 // ───────────────────────────── API ─────────────────────────────
+
+/** `path` for one market (ABI is the default and needs no parameter, so today's URLs stay as they are). */
+export const withMarket = (path: string, m: PilotMarket) => (m === DEFAULT_MARKET ? path : `${path}?market=${m}`);
 
 export const PILOT_PATHS = {
   auth: "/api/pilot/auth",
@@ -134,6 +155,7 @@ export interface PilotMark {
 
 export interface OpenPositionView {
   id: number;
+  market: PilotMarket;
   side: Side;
   margin: number;
   lev: number;
@@ -147,12 +169,15 @@ export interface OpenPositionView {
   funding: number;
   /** Borrow fee paid so far (points). */
   borrow: number;
-  /** At the latest mark (null without one). */
+  /** The position's market's latest mark (null without one). */
+  mark: number | null;
+  /** At its market's latest mark (null without one). */
   pnl: number | null;
 }
 
 export interface ClosedPositionView {
   id: number;
+  market: PilotMarket;
   side: Side;
   margin: number;
   lev: number;
@@ -176,6 +201,7 @@ export interface ClosedPositionView {
 
 export interface OrderView {
   id: number;
+  market: PilotMarket;
   kind: "open" | "close";
   status: "pending" | "filled" | "refused";
   side: Side | null;
@@ -232,6 +258,7 @@ export interface RateView {
 
 /** GET /api/pilot/funding (public, edge-cached). */
 export interface FundingView {
+  market: PilotMarket;
   /** Newest first, the last 24. */
   recent: RateView[];
   /** The hour in force now, if fixed. */
@@ -247,6 +274,8 @@ export interface EconomyWindow {
 
 /** GET /api/pilot/economy (public, edge-cached 30 s). Everything in points. */
 export interface EconomyView {
+  /** The market (?market=, default ABI): every figure is that market's. */
+  market: PilotMarket;
   ts: number;
   rates: { current: RateView | null; recent: RateView[] };
   borrowApr: number;
@@ -278,6 +307,8 @@ export interface EconomyView {
 }
 
 export interface PilotAccountView {
+  /** The market the view's mark and funding are for (?market=, default ABI); positions and orders cover every market. */
+  market: PilotMarket;
   /** PILOT_OPEN = "1" and the pilot's settings are valid: new orders accepted. */
   open: boolean;
   /** PILOT_OPEN = "1" but a setting is invalid (the snapshot block, PILOT_REGI_MIN, PILOT_MAX_LEV): every order is refused. */
@@ -288,9 +319,12 @@ export interface PilotAccountView {
   regiSnapshot: boolean;
   address: string | null;
   regi: RegiView | null;
+  /** One balance across markets; equity = balance + every open position at its own market's latest mark. */
   account: { balance: number; equity: number | null; season: number } | null;
+  /** Open positions in every market. */
   positions: OpenPositionView[];
   pending: OrderView[];
+  /** The view's market's mark and this hour's rates. */
   mark: PilotMark | null;
   funding: FundingNow;
 }
