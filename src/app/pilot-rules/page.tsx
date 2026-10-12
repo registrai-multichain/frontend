@@ -29,9 +29,10 @@ export default function PilotRulesPage() {
         <H>Who can join</H>
         <ul className="pa-list">
           <li>You must be 18 or older and accept the Terms; sign-in asks you to confirm both.</li>
-          <li>{PILOT_COPY.holdRegi(REGI_MIN_DEFAULT)} The wallet must have held that amount at the pilot snapshot block and still hold it.</li>
+          <li>{PILOT_COPY.holdRegi(REGI_MIN_DEFAULT)} You must hold it when you place each order; the balance is checked at that moment. Closing a position needs no REGI.</li>
+          <li>The leaderboard lists only wallets that currently hold the REGI minimum.</li>
           <li>One person, one wallet. Starting balance {RULES.startBalance.toLocaleString("en-US")} points, once per wallet per season.</li>
-          <li>{PILOT_COPY.signInTip(REGI_MIN_DEFAULT)}</li>
+          <li>{PILOT_COPY.signInNote}</li>
         </ul>
 
         <H>Orders and leverage</H>

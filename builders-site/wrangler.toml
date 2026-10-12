@@ -49,13 +49,14 @@ PROPOSALS_ALLOWED_ORIGIN = "https://app.registrai.cc"
 # with 403 {error:"pilot closed"} and the ticket says "The points pilot is not open yet."
 # Sign-in, closes, reads and the mark ingest work either way.
 PILOT_OPEN = "0"
-# The REGI holding window (spec §8.4): a wallet may open positions only if it held PILOT_REGI_MIN REGI at this Arc
-# block AND still does. Set it to a block IN THE PAST, before the opening is announced (owner decision 2026-10-11).
-# With PILOT_OPEN = "1", an empty, non-numeric, future (above the mark's head) or pre-REGI (< 22419071) block makes
-# the pilot "misconfigured": every order is refused with "pilot misconfigured", the ticket says so, and the Worker
-# logs it once per isolate (audit PE-7).
+# Optional REGI snapshot (spec §8.4). Empty (the default; owner decision 2026-10-12: REGI is checked when each order
+# is placed, not at a snapshot): no snapshot check. Set to a block IN THE PAST, a wallet may also open positions only
+# if it held PILOT_REGI_MIN REGI at that Arc block. With PILOT_OPEN = "1", a non-numeric, future (above the mark's head)
+# or pre-REGI (< 22419071) block makes the pilot "misconfigured": every order is refused with "pilot misconfigured",
+# the ticket says so, and the Worker logs it once per isolate (audit PE-7).
 PILOT_REGI_SNAPSHOT_BLOCK = ""
-# Whole REGI a wallet must hold at the snapshot block and now (owner decision 2026-10-11: 1,000,000; audit PE-3).
+# Whole REGI a wallet must hold when it places each order, read fresh from the RPC (owner decisions 2026-10-11:
+# 1,000,000, audit PE-3; 2026-10-12: at order time), and at the snapshot block if one is set.
 # Not a positive whole number = misconfigured.
 PILOT_REGI_MIN = "1000000"
 # The pilot's leverage cap, applied after the engine's (volatility, jump): the ticket offers no level above it,

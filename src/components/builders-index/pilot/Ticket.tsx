@@ -20,7 +20,7 @@ export interface TicketProps {
 }
 
 /** Sign-in needs the 18+ and Terms confirmation first; the signed message repeats it (PILOT_LOGIN_NOTE). */
-function SignInRow({ label, busy, regiMin, onSignIn }: { label: string; busy?: boolean; regiMin: number; onSignIn: () => void }) {
+function SignInRow({ label, busy, regiMin, regiSnapshot, onSignIn }: { label: string; busy?: boolean; regiMin: number; regiSnapshot: boolean; onSignIn: () => void }) {
   const [agreed, setAgreed] = useState(false);
   return (
     <>
@@ -31,18 +31,21 @@ function SignInRow({ label, busy, regiMin, onSignIn }: { label: string; busy?: b
       </label>
       <div className="abi-pt-row">
         <button type="button" className="abi-pt-primary" onClick={onSignIn} disabled={busy || !agreed}>{busy ? PILOT_COPY.signingIn : label}</button>
-        <InfoBubble label="About sign-in">{PILOT_COPY.signInTip(regiMin)}</InfoBubble>
+        <InfoBubble label="About sign-in">{PILOT_COPY.signInTip(regiMin, regiSnapshot)}</InfoBubble>
       </div>
     </>
   );
 }
 
-/** The REGI line for a signed-in wallet that may not trade: unknown is never shown as "no REGI". */
-function regiLine(view: PilotAccountView): string | null {
+/**
+ * The last known REGI state of a signed-in wallet, as a note: unknown is never shown as "no REGI". The server decides
+ * at each order on a fresh read (owner decision 2026-10-12), so only a missed snapshot (it can't change) hides the form.
+ */
+function regiLine(view: PilotAccountView): { text: string; final: boolean } | null {
   const r = view.regi;
   if (!r || r.ok === true) return null;
-  if (r.ok === null) return PILOT_COPY.regiUnchecked;
-  return r.snapshot === false ? PILOT_COPY.notAtSnapshot : PILOT_COPY.holdRegi(view.regiMin);
+  if (r.snapshot === false) return { text: PILOT_COPY.notAtSnapshot, final: true };
+  return { text: r.ok === null ? PILOT_COPY.regiUnchecked : PILOT_COPY.holdRegi(view.regiMin), final: false };
 }
 
 /** This hour's funding per side, signed with its direction (+ pays, − receives); "–" until the hour's rates are set. */
@@ -66,7 +69,7 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
   const [marginText, setMarginText] = useState("100");
   const m = view.mark;
   const acct = view.account;
-  const blocked = regiLine(view);
+  const regi = regiLine(view);
 
   const head = (
     <div className="abi-ph">
@@ -83,15 +86,15 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
     body = (
       <div className="abi-pt">
         <p className="abi-pt-note">{view.open ? PILOT_COPY.holdRegi(view.regiMin) : closedLine}</p>
-        {view.open && <SignInRow label={signInLabel} busy={signingIn} regiMin={view.regiMin} onSignIn={onSignIn} />}
+        {view.open && <SignInRow label={signInLabel} busy={signingIn} regiMin={view.regiMin} regiSnapshot={view.regiSnapshot} onSignIn={onSignIn} />}
         {error && <p className="abi-pt-err" role="alert">{error}</p>}
         {disclaimer}
       </div>
     );
-  } else if (!view.open || blocked) {
+  } else if (!view.open || regi?.final) {
     body = (
       <div className="abi-pt">
-        <p className="abi-pt-note">{!view.open ? closedLine : blocked}</p>
+        <p className="abi-pt-note">{!view.open ? closedLine : regi!.text}</p>
         <dl className="abi-kv abi-pt-kv">
           {acct && <><dt>Balance</dt><dd>{fmtPts(acct.balance)} pts</dd></>}
           <FundingRows view={view} />
@@ -130,6 +133,7 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
     const maxMargin = Math.max(0, Math.floor((balance / (1 + levUse * RULES.feeRate)) * 100) / 100);
     body = (
       <form className="abi-pt" onSubmit={(e) => { e.preventDefault(); if (!problem && !busy) onOrder({ side, margin, lev: levUse }); }}>
+        {regi && <p className="abi-pt-note" role="status">{regi.text}</p>}
         <div className="abi-pt-side" role="group" aria-label="Side">
           <button type="button" className="long" aria-pressed={side === "long"} onClick={() => setSide("long")}>Long</button>
           <button type="button" className="short" aria-pressed={side === "short"} onClick={() => setSide("short")}>Short</button>

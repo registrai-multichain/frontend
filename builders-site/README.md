@@ -15,8 +15,8 @@ older than `out/` or than the last commit, and it prints the commit it deploys.
 | `PILOT_DB` | D1 `registrai-pilot` | ABI points pilot: accounts, positions, minute bars, latest mark |
 | `ADMIN_ADDRESSES`, `ONBOARDER_ADDRESSES`, `SITE_ORIGIN`, `PROPOSALS_ALLOWED_ORIGIN` | var | admin sign-in, CSRF, CORS |
 | `PILOT_OPEN` | var, default `"0"` | pilot kill switch: `"1"` accepts new orders |
-| `PILOT_REGI_SNAPSHOT_BLOCK` | var, default `""` | REGI holding window: a block in the past, ≥ 22,419,071 (REGI's deploy); with `PILOT_OPEN = "1"`, empty / malformed / future / pre-REGI = "pilot misconfigured" (every order refused, logged once per isolate) |
-| `PILOT_REGI_MIN` | var, default `"1000000"` | whole REGI a wallet must hold at the snapshot block and now |
+| `PILOT_REGI_SNAPSHOT_BLOCK` | var, default `""` | optional REGI snapshot: empty = none (the default). Set, a wallet must also have held the minimum at this block, which must be in the past and ≥ 22,419,071 (REGI's deploy); with `PILOT_OPEN = "1"`, malformed / future / pre-REGI = "pilot misconfigured" (every order refused, logged once per isolate) |
+| `PILOT_REGI_MIN` | var, default `"1000000"` | whole REGI a wallet must hold when it places each order (read fresh from the RPC; an RPC failure refuses the order; closes need none); the leaderboard lists only wallets holding it now |
 | `PILOT_MAX_LEV` | var, default `"10"` | the pilot's leverage cap after the engine's (ticket, `POST /api/pilot/order`, `maxLev` in `/api/index/mark`) |
 | `PILOT_BLOCKED_WALLETS` | var, default `""` | comma-separated lowercase wallets that may not open positions (milestone recorders); closes still work |
 | `NONCE_SECRET` | secret | sign-in nonces (admin and pilot) |
@@ -59,8 +59,8 @@ npx tsx builders-site/scripts/d1-guard-check.mjs            # remote (wrangler l
 npx tsx builders-site/scripts/d1-guard-check.mjs --local    # dry run on a throwaway local D1
 ```
 
-To open: set `PILOT_REGI_SNAPSHOT_BLOCK` (an Arc block in the past, taken before the opening is announced) and
-`PILOT_OPEN = "1"` in `wrangler.toml`, check `PILOT_REGI_MIN`, `PILOT_MAX_LEV` and `PILOT_BLOCKED_WALLETS`, redeploy.
+To open: set `PILOT_OPEN = "1"` in `wrangler.toml`, check `PILOT_REGI_MIN`, `PILOT_MAX_LEV`,
+`PILOT_BLOCKED_WALLETS` and (optional, empty by default) `PILOT_REGI_SNAPSHOT_BLOCK`, redeploy.
 `PILOT_OPEN` anything but `"1"` keeps new orders closed; a wrong setting with `"1"` refuses them as "pilot
 misconfigured" (the ticket shows it). Closes, reads and the mark ingest keep working either way.
 

@@ -62,9 +62,13 @@ describe("pilot copy lint (R7)", () => {
     expect(PILOT_COPY.closed).toBe("The points pilot is not open yet.");
     // owner decision 2026-10-11 (audit PE-3): the gate is 1,000,000 REGI, and the copy says so
     expect(PILOT_COPY.holdRegi(1_000_000)).toBe("Hold 1,000,000 REGI to join the points pilot.");
-    expect(PILOT_COPY.signInTip(1_000_000)).toContain("held at least 1,000,000 REGI on Arc at the pilot snapshot block");
+    // owner decision 2026-10-12: REGI is checked when each order is placed; the snapshot only when one is set
+    expect(PILOT_COPY.signInTip(1_000_000)).toContain("The wallet needs at least 1,000,000 REGI on Arc when it places each order.");
+    expect(PILOT_COPY.signInTip(1_000_000)).toContain("The leaderboard shows only wallets that currently hold it.");
+    expect(PILOT_COPY.signInTip(1_000_000)).not.toContain("snapshot");
+    expect(PILOT_COPY.signInTip(1_000_000, true)).toContain("when it places each order and must have held that amount at the pilot snapshot block.");
     expect(PILOT_COPY.misconfigured).toBe("The points pilot is misconfigured; new orders are refused.");
-    for (const s of [PILOT_COPY.holdRegi(1_000_000), PILOT_COPY.signInTip(1_000_000), PILOT_COPY.misconfigured]) expect(banned(s)).toBeUndefined();
+    for (const s of [PILOT_COPY.holdRegi(1_000_000), PILOT_COPY.signInTip(1_000_000), PILOT_COPY.signInTip(1_000_000, true), PILOT_COPY.misconfigured]) expect(banned(s)).toBeUndefined();
     expect(PILOT_COPY.rulesTip).toContain("One direction at a time: close your longs before opening a short, and the reverse.");
     // §9.15 (audit PE-2): the long rate includes the milestone premium, and the funding tip says so
     expect(PILOT_COPY.fundingTip).toContain("Milestone premium: longs also pay the mean hourly milestone step of the last 30 days, to the house; it is part of the long rate.");
@@ -98,7 +102,7 @@ const FUNDING = { recent: [rate(1_760_094_000, 0.0003, -0.00027, 75000, 25000), 
 const NOW = { hour: 1_760_094_000, long: 0.0003, short: -0.00027, skew: 0.5, next: 1_760_097_600 };
 const POS_LIQ = liqPrice({ side: "long", margin: 1000, notional: 2000, entry: 990 }, 0);
 const VIEW: PilotAccountView = {
-  open: true, misconfigured: false, regiMin: 1_000_000, address: ME, regi: { ok: true, snapshot: true, now: true }, account: { balance: 9000, equity: 9998.8, season: 1 },
+  open: true, misconfigured: false, regiMin: 1_000_000, regiSnapshot: false, address: ME, regi: { ok: true, snapshot: true, now: true }, account: { balance: 9000, equity: 9998.8, season: 1 },
   positions: [{ id: 7, side: "long", margin: 1000, lev: 2, notional: 2000, entry: 990, liq: POS_LIQ, openedAt: 1_760_097_000, fee: 0.2, funding: 0.6, borrow: 0.02, pnl: 20.2 }],
   pending: [],
   mark: MARK,
@@ -193,11 +197,9 @@ describe("ticket", () => {
       [{ ...VIEW, open: false }, PILOT_COPY.closed],
       [{ ...VISITOR, open: false }, PILOT_COPY.closed],
       [VISITOR, PILOT_COPY.holdRegi(1_000_000)],
-      [{ ...VIEW, regi: { ok: false, snapshot: true, now: false } }, PILOT_COPY.holdRegi(1_000_000)],
       [{ ...VIEW, open: false, misconfigured: true }, PILOT_COPY.misconfigured],
       [{ ...VISITOR, open: false, misconfigured: true }, PILOT_COPY.misconfigured],
-      [{ ...VIEW, regi: { ok: false, snapshot: false, now: true } }, PILOT_COPY.notAtSnapshot],
-      [{ ...VIEW, regi: { ok: null, snapshot: true, now: null } }, PILOT_COPY.regiUnchecked],
+      [{ ...VIEW, regiSnapshot: true, regi: { ok: false, snapshot: false, now: true } }, PILOT_COPY.notAtSnapshot],
     ];
     for (const [view, line] of states) {
       const h = ticket({ view });
@@ -205,6 +207,17 @@ describe("ticket", () => {
       expect(h).toContain(PILOT_DISCLAIMER);
       expect(h).toContain(PILOT_JUMP_NOTE);
       expect(h).not.toContain('type="submit"');
+      expect(banned(visible(h))).toBeUndefined();
+    }
+    // owner decision 2026-10-12: the last known REGI state is a note; the order (a fresh read) decides, so the form stays
+    for (const [view, line] of [
+      [{ ...VIEW, regi: { ok: false, snapshot: null, now: false } }, PILOT_COPY.holdRegi(1_000_000)],
+      [{ ...VIEW, regi: { ok: null, snapshot: null, now: null } }, PILOT_COPY.regiUnchecked],
+    ] as [PilotAccountView, string][]) {
+      const h = ticket({ view });
+      expect(h).toContain(esc(line));
+      expect(h).toContain('type="submit"');
+      expect(h).toContain(PILOT_DISCLAIMER);
       expect(banned(visible(h))).toBeUndefined();
     }
     // a possible holder whose check failed is never told to hold REGI

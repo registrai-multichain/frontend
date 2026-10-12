@@ -3,7 +3,7 @@
  * session. The admin session is restricted to the admin / onboarder allowlists, so the pilot has a separate one:
  *
  *   GET    /api/pilot/auth   -> { nonce }            stateless (NONCE_SECRET), no write
- *   POST   /api/pilot/auth   { message, signature }  -> { address, regi } + cookie
+ *   POST   /api/pilot/auth   { message, signature }  -> { address } + cookie (no REGI read: eligibility is per order)
  *   DELETE /api/pilot/auth                           -> 204, every session of the wallet ended
  *
  * Cookie __Host-rb_pilot = "<wallet>.<epoch>.<exp>.<mac>", mac = HMAC-SHA256(PILOT_SESSION_SECRET,
@@ -12,11 +12,14 @@
  * /api/admin. The sign-in message names the wallet; only plain (EOA) signatures that recover to it are accepted
  * (smart-contract wallets are refused). A nonce is single use (D1 used_nonces, written at a successful sign-in).
  *
- * REGI gate (spec §8.4; audit PE-3): balanceOf ≥ PILOT_REGI_MIN REGI (default 1,000,000) at
- * PILOT_REGI_SNAPSHOT_BLOCK (the balance cached permanently per wallet and block, so a changed minimum needs no
- * re-read) AND now (cached ≤ 10 min). An RPC failure is "unknown" (null), never "no REGI", and backs the wallet off
- * the RPC for 30 s. With PILOT_OPEN "1", a missing, malformed, future or pre-REGI snapshot block (or a malformed
- * PILOT_REGI_MIN / PILOT_MAX_LEV) makes the pilot "misconfigured": every order is refused, loudly (audit PE-7).
+ * REGI gate (spec §8.4; audit PE-3; owner decision 2026-10-12: "not connect time, better at order signing time"):
+ * every new order reads the wallet's balanceOf fresh from the RPC (no cache) and needs ≥ PILOT_REGI_MIN REGI
+ * (default 1,000,000); closes need none, and sign-in reads nothing. Only when PILOT_REGI_SNAPSHOT_BLOCK is set must
+ * the wallet also have held the minimum at that block (cached permanently per wallet and block, so a changed minimum
+ * needs no re-read). The account view shows the last known state (cached ≤ 10 min). An RPC failure is "unknown"
+ * (null), never "no REGI": the order is refused, and the wallet is backed off the RPC for 30 s. With PILOT_OPEN "1",
+ * a malformed, future or pre-REGI snapshot block (an empty one is fine: no snapshot), or a malformed PILOT_REGI_MIN /
+ * PILOT_MAX_LEV, makes the pilot "misconfigured": every order is refused, loudly (audit PE-7).
  */
 import { recoverMessageAddress, type Hex } from "viem";
 import { issuedFresh } from "../../src/lib/builders-admin";
@@ -59,7 +62,7 @@ export interface PilotDeps {
 export const nowMsOf = (deps: PilotDeps) => (deps.now ?? Date.now)();
 export const nowSOf = (deps: PilotDeps) => Math.floor(nowMsOf(deps) / 1000);
 
-/** PILOT_REGI_SNAPSHOT_BLOCK as a block number, or null (unset / not a block number). */
+/** PILOT_REGI_SNAPSHOT_BLOCK as a block number, or null (unset / not a block number). Unset = no snapshot check. */
 export function snapshotBlock(env: Env): number | null {
   const s = (env.PILOT_REGI_SNAPSHOT_BLOCK ?? "").trim();
   return /^\d{1,15}$/.test(s) ? Number(s) : null;
@@ -98,10 +101,10 @@ export function pilotProblem(env: Env, head: number | null): string | null {
   if ((env.PILOT_OPEN ?? "").trim() !== "1") return null;
   const raw = (env.PILOT_REGI_SNAPSHOT_BLOCK ?? "").trim();
   const b = snapshotBlock(env);
-  if (raw === "") return "PILOT_REGI_SNAPSHOT_BLOCK is empty";
-  if (b === null) return `PILOT_REGI_SNAPSHOT_BLOCK is not a block number (${raw.slice(0, 40)})`;
-  if (b < REGI_DEPLOY_BLOCK) return `PILOT_REGI_SNAPSHOT_BLOCK ${b} is before REGI existed (block ${REGI_DEPLOY_BLOCK})`;
-  if (head !== null && b > head) return `PILOT_REGI_SNAPSHOT_BLOCK ${b} is in the future (head ${head})`;
+  // empty: no snapshot requirement (owner decision 2026-10-12); set, it must be a real past block
+  if (raw !== "" && b === null) return `PILOT_REGI_SNAPSHOT_BLOCK is not a block number (${raw.slice(0, 40)})`;
+  if (b !== null && b < REGI_DEPLOY_BLOCK) return `PILOT_REGI_SNAPSHOT_BLOCK ${b} is before REGI existed (block ${REGI_DEPLOY_BLOCK})`;
+  if (b !== null && head !== null && b > head) return `PILOT_REGI_SNAPSHOT_BLOCK ${b} is in the future (head ${head})`;
   if (regiMinOf(env) === null) return `PILOT_REGI_MIN is not a positive whole number of REGI (${(env.PILOT_REGI_MIN ?? "").slice(0, 40)})`;
   if (maxLevSetting(env) === null) return `PILOT_MAX_LEV is not an integer ≥ 1 (${(env.PILOT_MAX_LEV ?? "").slice(0, 40)})`;
   return null;
@@ -268,10 +271,11 @@ export async function ensureAccount(db: D1Database, wallet: string, nowS: number
 }
 
 /**
- * The REGI gate for an account: the snapshot answer (the whole-REGI balance at the snapshot block, permanent per
- * block) and the current balance (≤ REGI_CACHE_S old), each from the cache or the RPC, against PILOT_REGI_MIN.
- * ok = both true; false if either is false; else null. During the 30 s back-off after an RPC failure nothing stale is
- * re-read (it stays null).
+ * The REGI gate for an account: the snapshot answer (only when PILOT_REGI_SNAPSHOT_BLOCK is set: the whole-REGI
+ * balance at that block, permanent per block; else null and not required) and the current balance (≤ REGI_CACHE_S
+ * old, or always fresh from the RPC with forceNow, as an order needs), against PILOT_REGI_MIN. ok = every required
+ * answer true; false if one is false; else null. During the 30 s back-off after an RPC failure nothing is re-read
+ * (it stays null).
  */
 export async function regiStatus(db: D1Database, acct: AccountRow, env: Env, nowS: number, deps: PilotDeps, opts: { forceNow?: boolean } = {}): Promise<RegiView> {
   const f = deps.fetch ?? fetch;
@@ -310,7 +314,8 @@ export async function regiStatus(db: D1Database, acct: AccountRow, env: Env, now
     acct.regi_retry_at = nowS + PILOT_LIMITS.regiRetryS;
     await db.prepare("UPDATE accounts SET regi_retry_at = ? WHERE wallet = ?").bind(acct.regi_retry_at, acct.wallet).run();
   }
-  const ok = snapshot === false || now === false ? false : snapshot === true && now === true ? true : null;
+  const snapOk = snapBlock === null ? true : snapshot;
+  const ok = snapOk === false || now === false ? false : snapOk === true && now === true ? true : null;
   return { ok, snapshot, now };
 }
 
@@ -363,11 +368,10 @@ export async function handlePilotLogin(req: Request, env: Env, deps: PilotDeps =
   const used = await db.prepare(SQL.nonceUse).bind(login.nonce, nowS + Math.ceil(NONCE_MAX_AGE_MS / 1000) + 60).run();
   if (used.meta.changes !== 1) return errorJson(401, "nonce already used; sign in again");
 
+  // no REGI read: sign-in neither refuses nor flags a wallet for REGI; every order checks it (owner decision 2026-10-12)
   const acct = await ensureAccount(db, wallet, nowS);
-  // a misconfigured pilot (audit PE-7) reads no REGI: the account view says so instead
-  const regi = pilotState(env, null) === "misconfigured" ? null : await regiStatus(db, acct, env, nowS, deps, { forceNow: true });
   const token = await makePilotSession(env.PILOT_SESSION_SECRET!, wallet, acct.session_epoch, nowS);
-  return json({ address: wallet, regi }, 200, { "set-cookie": pilotCookie(token) });
+  return json({ address: wallet }, 200, { "set-cookie": pilotCookie(token) });
 }
 
 /** Sign-out: bumps the wallet's session epoch (every session of it ends), then clears the cookie. */

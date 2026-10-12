@@ -77,12 +77,13 @@ export interface Env {
   /** Kill switch: "1" accepts new pilot orders (if the settings below are valid); anything else (the default) refuses them with 403 {error:"pilot closed"}. Closes and reads always work. */
   PILOT_OPEN?: string;
   /**
-   * The pilot's REGI snapshot block (spec §8.4): a wallet trades only if it held PILOT_REGI_MIN at this Arc block and
-   * still does. With PILOT_OPEN "1" it must be a block number from REGI's deploy (22,419,071) up to the current head,
-   * else the pilot is misconfigured and refuses every order (audit PE-7).
+   * Optional REGI snapshot block (spec §8.4). Empty or unset (the default, owner decision 2026-10-12): no snapshot
+   * check. Set: a wallet may open positions only if it also held PILOT_REGI_MIN at this Arc block; with PILOT_OPEN "1"
+   * it must then be a block number from REGI's deploy (22,419,071) up to the current head, else the pilot is
+   * misconfigured and refuses every order (audit PE-7).
    */
   PILOT_REGI_SNAPSHOT_BLOCK?: string;
-  /** Whole REGI a wallet must hold at the snapshot block and now. Default "1000000". Not a positive integer = misconfigured. */
+  /** Whole REGI a wallet must hold when it places each order (read fresh), and at the snapshot block if one is set. Default "1000000". Not a positive integer = misconfigured. */
   PILOT_REGI_MIN?: string;
   /** The pilot's leverage cap, applied after the engine's. Default "10". Not an integer ≥ 1 = misconfigured. */
   PILOT_MAX_LEV?: string;

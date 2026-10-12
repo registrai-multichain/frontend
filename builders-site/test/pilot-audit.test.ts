@@ -77,6 +77,7 @@ describe("PILOT_REGI_MIN (owner decision: ≥ 1,000,000 REGI)", () => {
     const alice = await t.signIn(); // 2,000,000 at the snapshot, 5,000,000 now
     await t.mark(1000);
     const snapReads = () => t.rpc.tags.filter((x) => x !== "latest").length;
+    await t.account(alice);
     expect(snapReads()).toBe(1);
     t.env.PILOT_REGI_MIN = "3000000";
     const r = await t.submit(alice, LONG(2));
@@ -101,7 +102,6 @@ describe("PILOT_REGI_MIN (owner decision: ≥ 1,000,000 REGI)", () => {
 
 describe("audit PE-7: a wrong snapshot block refuses every order, says so, and logs once", () => {
   test.each([
-    ["empty", ""],
     ["not a number", "0x15f0a3f"],
     ["before REGI existed", "22419070"],
     ["in the future", "99999999999"],

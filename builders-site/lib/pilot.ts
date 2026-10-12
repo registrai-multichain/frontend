@@ -7,13 +7,14 @@
  *   POST /api/index/mark          producer (Bearer ABI_PUSH_TOKEN, live/mark.py) → 200 { last_minute, … }
  *   GET  /api/index/mark          public: the latest mark (edge-cached 5 s)
  *   GET  /api/pilot/account       session optional: open?, REGI, balance, positions, pending orders, mark, funding
- *   POST /api/pilot/order         { side, margin, lev } → 202 a pending order (session + REGI + open); 30/min, at most
+ *   POST /api/pilot/order         { side, margin, lev } → 202 a pending order (session + REGI read now + open); 30/min, at most
  *                                 3 pending per wallet, leverage ≤ PILOT_MAX_LEV, not a PILOT_BLOCKED_WALLETS wallet
  *   GET  /api/pilot/order?id=     the order's status (pending / filled / refused)
  *   POST /api/pilot/close         { id } → 202 a pending close order (session only); 60/min
  *   GET  /api/pilot/positions     session: open positions
  *   GET  /api/pilot/history       session: the last 100 closed positions
- *   GET  /api/pilot/leaderboard   public: top 50 by equity at the latest mark, shortened addresses, cached 60 s
+ *   GET  /api/pilot/leaderboard   public: top 50 by equity at the latest mark among wallets holding the REGI minimum
+ *                                 now, shortened addresses, cached 60 s
  *   GET  /api/pilot/funding       public: the last 24 hourly rates, cached 60 s
  *   GET  /api/pilot/economy       public: skew, funding, the house, fee pool, insurance, weekly split, cached 30 s
  *
@@ -44,7 +45,9 @@ import { RULES, type FundingRate, type MinuteBar, type PilotPosition, type Side 
 import {
   holdRegiText,
   PILOT_LIMITS,
+  REGI_CACHE_S,
   REGI_MIN_DEFAULT,
+  REGI_UNIT,
   shortWallet,
   type ClosedPositionView,
   type EconomyView,
@@ -72,10 +75,12 @@ import {
   pilotMaxLev,
   pilotState,
   pilotWallet,
+  regiBalance,
   regiMinOf,
   rateOk,
   sessionOf,
   regiStatus,
+  snapshotBlock,
   tooMany,
   type PilotDeps,
 } from "./pilot-auth";
@@ -131,6 +136,7 @@ export const WEEK = 7 * 86400;
 
 /** "Hold 1,000,000 REGI to join the points pilot." (PILOT_REGI_MIN). */
 export const holdRegi = (env: Env) => holdRegiText(regiMinOf(env) ?? REGI_MIN_DEFAULT);
+/** Only when PILOT_REGI_SNAPSHOT_BLOCK is set and the wallet didn't hold the minimum there. */
 export const NOT_AT_SNAPSHOT = "This wallet didn't hold REGI at the pilot snapshot block.";
 export const REGI_UNCHECKED = "Couldn't check REGI right now";
 export const PRICE_UPDATING = "price updating";
@@ -1469,11 +1475,12 @@ export async function handleAccount(req: Request, env: Env, deps: PilotDeps = {}
   if (m && me) await maybeSplit(db, nowS, m.last_split);
   const state = pilotState(env, m ? m.head : null);
   const base: PilotAccountView = {
-    open: state === "open", misconfigured: state === "misconfigured", regiMin: regiMinOf(env) ?? REGI_MIN_DEFAULT,
+    open: state === "open", misconfigured: state === "misconfigured", regiMin: regiMinOf(env) ?? REGI_MIN_DEFAULT, regiSnapshot: snapshotBlock(env) !== null,
     address: null, regi: null, account: null, positions: [], pending: [], mark: markView(m, nowS, pilotMaxLev(env)), funding: fundingNow(m, nowS),
   };
   if (!me) return json(base);
-  // misconfigured: no REGI read (a future block only fails, a pre-REGI one reads 0 for everyone)
+  // the last known REGI state (cached ≤ 10 min); an order re-reads it. misconfigured: no REGI read (a future block only
+  // fails, a pre-REGI one reads 0 for everyone)
   const regi = state === "misconfigured" ? null : await regiStatus(db, me.acct, env, nowS, deps);
   let open = me.open, balance = me.acct.balance;
   if ((await lazyLiquidate(db, me.wallet, nowS, m, open)) > 0) {
@@ -1551,7 +1558,9 @@ export async function handleOrder(req: Request, env: Env, deps: PilotDeps = {}):
   if (lev > pilotMaxLev(env)) return errorJson(400, LEV_ABOVE_CAP);
   const pending = await pendingOf(db, wallet, nowMs);
   if (pending.all >= PILOT_LIMITS.pendingPerWallet) return errorJson(409, TOO_MANY_PENDING);
-  const regi = await regiStatus(db, me.acct, env, nowS, deps);
+  // owner decision 2026-10-12: eligibility is decided here, on the balance read fresh from the RPC (no cache); an RPC
+  // failure refuses the order (fail closed)
+  const regi = await regiStatus(db, me.acct, env, nowS, deps, { forceNow: true });
   if (regi.ok === null) return errorJson(503, REGI_UNCHECKED);
   if (!regi.ok) return errorJson(403, regi.snapshot === false ? NOT_AT_SNAPSHOT : holdRegi(env));
   let { open: rows, acct } = me;
@@ -1624,21 +1633,86 @@ export async function handleHistory(req: Request, env: Env, deps: PilotDeps = {}
   return json({ history: rows.map(closedView) });
 }
 
-/** Top 50 by equity at the latest mark, funding and borrow included (accounts that have opened at least one position). */
-export async function leaderboard(db: D1Database, nowS: number): Promise<{ ts: number | null; rows: LeaderboardRow[] }> {
+/** A leaderboard build's RPC wave checks at least this many stale wallets (fewer, slower waves otherwise). */
+const LEADERBOARD_WAVE_MIN = 10;
+
+interface Ranked {
+  wallet: string;
+  equity: number;
+  regi_ok: number;
+  regi_checked: number;
+}
+
+/**
+ * The first `want` of `ranked` (in its order) that hold PILOT_REGI_MIN now (owner decision 2026-10-12: one REGI stash
+ * rotated between wallets shows up once). A check ≤ REGI_CACHE_S old is reused; older ones are re-read from the RPC in
+ * parallel waves, each about as large as the free places (at most PILOT_LIMITS.leaderboardRegiChecks calls per build),
+ * and their regi_ok / regi_checked written back. A wallet whose read fails, or that would need a read past the cap,
+ * is left out (fail closed). The snapshot block is not consulted (a wallet without it could never have opened).
+ */
+export async function regiHolders(db: D1Database, env: Env, nowS: number, deps: PilotDeps, ranked: readonly Ranked[], want: number): Promise<Ranked[]> {
+  const f = deps.fetch ?? fetch;
+  const min = BigInt(regiMinOf(env) ?? REGI_MIN_DEFAULT) * REGI_UNIT;
+  let budget = PILOT_LIMITS.leaderboardRegiChecks;
+  const out: Ranked[] = [];
+  const fresh: { wallet: string; ok: boolean }[] = [];
+  let i = 0;
+  while (out.length < want && i < ranked.length) {
+    // the next wave, in rank order: enough wallets to fill the free places if every one passes
+    const target = Math.max(want - out.length, LEADERBOARD_WAVE_MIN);
+    const wave: { row: Ranked; read: boolean }[] = [];
+    let maybe = 0, reads = 0;
+    while (i < ranked.length && maybe < target) {
+      const row = ranked[i++];
+      if (row.regi_checked > 0 && nowS - row.regi_checked <= REGI_CACHE_S) {
+        if (row.regi_ok === 1) { wave.push({ row, read: false }); maybe++; }
+      } else if (reads < budget) {
+        wave.push({ row, read: true });
+        reads++;
+        maybe++;
+      } // stale and over the cap: left out of this build
+    }
+    budget -= reads;
+    const held = await Promise.all(wave.map(async ({ row, read }) => {
+      if (!read) return true;
+      try {
+        const ok = (await regiBalance(row.wallet, f)) >= min;
+        fresh.push({ wallet: row.wallet, ok });
+        return ok;
+      } catch {
+        return false; // RPC failure: left out (fail closed)
+      }
+    }));
+    wave.forEach(({ row }, k) => { if (held[k]) out.push(row); });
+  }
+  if (fresh.length) {
+    await db.batch(fresh.map((x) => db.prepare("UPDATE accounts SET regi_ok = ?, regi_checked = ? WHERE wallet = ?").bind(x.ok ? 1 : 0, nowS, x.wallet)));
+  }
+  return out.slice(0, want);
+}
+
+/**
+ * Top 50 by equity at the latest mark, funding and borrow included (accounts that have opened at least one position),
+ * among the wallets that hold the REGI minimum now (regiHolders).
+ */
+export async function leaderboard(db: D1Database, env: Env, nowS: number, deps: PilotDeps = {}): Promise<{ ts: number | null; rows: LeaderboardRow[] }> {
   const m = await loadMark(db);
   if (!m) return { ts: null, rows: [] };
   await maybeSplit(db, nowS, m.last_split);
-  const accts = (await db.prepare("SELECT wallet, balance FROM accounts a WHERE EXISTS (SELECT 1 FROM positions p WHERE p.wallet = a.wallet)").all<{ wallet: string; balance: number }>()).results;
+  const accts = (
+    await db
+      .prepare("SELECT wallet, balance, regi_ok, regi_checked FROM accounts a WHERE EXISTS (SELECT 1 FROM positions p WHERE p.wallet = a.wallet)")
+      .all<{ wallet: string; balance: number; regi_ok: number; regi_checked: number }>()
+  ).results;
   const open = await allOpen(db);
   const rates = await ratesFor(db, open);
   const by = new Map<string, PilotPosition[]>();
   for (const r of open) by.set(r.wallet, [...(by.get(r.wallet) ?? []), toEngine(r)]);
-  const scored = accts
-    .map((a) => ({ wallet: a.wallet, equity: Engine.equity(a.balance, by.get(a.wallet) ?? [], m.px, nowS, rates) }))
-    .sort((x, y) => y.equity - x.equity || (x.wallet < y.wallet ? -1 : 1))
-    .slice(0, PILOT_LIMITS.leaderboard);
-  return { ts: m.ts, rows: scored.map((s, i) => ({ rank: i + 1, address: shortWallet(s.wallet), equity: s.equity })) };
+  const ranked = accts
+    .map((a) => ({ wallet: a.wallet, equity: Engine.equity(a.balance, by.get(a.wallet) ?? [], m.px, nowS, rates), regi_ok: a.regi_ok, regi_checked: a.regi_checked }))
+    .sort((x, y) => y.equity - x.equity || (x.wallet < y.wallet ? -1 : 1));
+  const top = await regiHolders(db, env, nowS, deps, ranked, PILOT_LIMITS.leaderboard);
+  return { ts: m.ts, rows: top.map((s, i) => ({ rank: i + 1, address: shortWallet(s.wallet), equity: s.equity })) };
 }
 
 /** Public, edge-cached 60 s: the D1 query runs about once a minute per edge location. */
@@ -1646,5 +1720,5 @@ export async function handleLeaderboard(req: Request, env: Env, deps: PilotDeps 
   if (req.method.toUpperCase() !== "GET") return errorJson(405, "method not allowed");
   const db = env.PILOT_DB;
   if (!db) return unconfigured();
-  return edgeCachedGet(req, deps, async () => json(await leaderboard(db, nowSOf(deps))), PILOT_LIMITS.leaderboardCacheS);
+  return edgeCachedGet(req, deps, async () => json(await leaderboard(db, env, nowSOf(deps), deps)), PILOT_LIMITS.leaderboardCacheS);
 }

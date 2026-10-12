@@ -5,7 +5,7 @@ import { pilotLoginMessage, PILOT_SESSION_COOKIE } from "../../src/lib/abi-pilot
 import {
   handleFunding, handleLeaderboard, handleOrder, handlePositions, handlePublicMark, handlePushMark, validateMark, HISTORY_SQL,
 } from "../lib/pilot";
-import { handlePilotLogin, handlePilotLogout, handlePilotNonce, makePilotSession, verifyPilotSession } from "../lib/pilot-auth";
+import { handlePilotLogin, handlePilotLogout, handlePilotNonce, makePilotSession, pilotProblem, verifyPilotSession } from "../lib/pilot-auth";
 import { MemoryCache } from "./memory-cache";
 import { ALICE, BOB, lc, ONE, ORIGIN, PUSH, SESSION_SECRET, setup, SNAP, T0, type Json } from "./pilot-harness";
 
@@ -227,15 +227,22 @@ describe("mark ingest (R4, spec §8.5)", () => {
 });
 
 describe("sign-in and session (R6)", () => {
-  test("nonce + personal_sign: a 12 h HttpOnly, Secure, SameSite=Strict cookie; REGI read at the snapshot block and now", async () => {
+  test("nonce + personal_sign: a 12 h HttpOnly, Secure, SameSite=Strict cookie; no REGI read at sign-in", async () => {
     const t = setup();
+    t.balances.set(`${lc(ALICE)}@latest`, 0n); // sign-in neither refuses nor flags a wallet for REGI (owner decision 2026-10-12)
     const res = await t.loginWith(ALICE);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ address: lc(ALICE), regi: { ok: true, snapshot: true, now: true } });
+    expect(await res.json()).toEqual({ address: lc(ALICE) });
     expect(res.headers.get("set-cookie")).toMatch(new RegExp(`^${PILOT_SESSION_COOKIE}=0x[0-9a-f]{40}\\.0\\.\\d+\\.[A-Za-z0-9_-]+; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=43200$`));
+    expect(t.rpc.calls).toBe(0);
+    expect(t.db.q("SELECT balance, season, regi_ok, regi_checked, regi_snap FROM accounts")).toEqual([{ balance: 10000, season: 1, regi_ok: 0, regi_checked: 0, regi_snap: null }]);
+    // the account view reads it: regi_snap is the whole REGI held at the snapshot block (2,000,000), so a changed
+    // PILOT_REGI_MIN needs no re-read
+    t.balances.set(`${lc(ALICE)}@latest`, 5n * ONE);
+    const cookie = res.headers.get("set-cookie")!.split(";")[0];
+    expect((await t.account(cookie)).body.regi).toEqual({ ok: true, snapshot: true, now: true });
     expect(t.rpc.tags).toEqual([`0x${SNAP.toString(16)}`, "latest"]);
-    // regi_snap: the whole REGI held at the snapshot block (2,000,000), so a changed PILOT_REGI_MIN needs no re-read
-    expect(t.db.q("SELECT balance, season, regi_ok, regi_snap, regi_snap_block FROM accounts")).toEqual([{ balance: 10000, season: 1, regi_ok: 1, regi_snap: 2_000_000, regi_snap_block: SNAP }]);
+    expect(t.db.q("SELECT regi_ok, regi_snap, regi_snap_block FROM accounts")).toEqual([{ regi_ok: 1, regi_snap: 2_000_000, regi_snap_block: SNAP }]);
   });
 
   test("a nonce is single use", async () => {
@@ -315,23 +322,98 @@ describe("sign-in and session (R6)", () => {
   });
 });
 
-describe("REGI gate (R6, spec §8.4)", () => {
-  test("not holding now: 'Hold 1,000,000 REGI to join the points pilot.'", async () => {
-    const t = setup();
+describe("REGI gate at order time (owner decision 2026-10-12, spec §8.4)", () => {
+  const latestReads = (t: ReturnType<typeof setup>) => t.rpc.tags.filter((x) => x === "latest").length;
+
+  test("an order without the minimum is refused 'Hold 1,000,000 REGI to join the points pilot.'; with it, accepted", async () => {
+    const t = setup({ snapshot: null });
     t.balances.set(`${lc(BOB)}@latest`, ONE - 1n);
     const bob = await t.signIn(BOB);
     await t.mark(1000);
-    expect((await t.account(bob)).body.regi).toEqual({ ok: false, snapshot: true, now: false });
     const r = await t.submit(bob, LONG2);
     expect(r.status).toBe(403);
     expect(r.body.error).toBe("Hold 1,000,000 REGI to join the points pilot.");
+    t.balances.set(`${lc(BOB)}@latest`, ONE);
+    expect((await t.submit(bob, LONG2)).status).toBe(202);
   });
 
-  test("holding now but not at the snapshot block: refused; the snapshot answer is cached for good", async () => {
+  test("every order reads the balance fresh from the RPC, even with a cached ok", async () => {
+    const t = setup({ snapshot: null });
+    const alice = await t.signIn();
+    await t.mark(1000);
+    expect((await t.account(alice)).body.regi).toEqual({ ok: true, snapshot: null, now: true }); // cached ok, ≤ 10 min old
+    expect(latestReads(t)).toBe(1);
+    t.balances.set(`${lc(ALICE)}@latest`, 0n); // moved away a second later
+    t.tick(1000);
+    const r = await t.submit(alice, LONG2);
+    expect(r.status).toBe(403);
+    expect(r.body.error).toBe("Hold 1,000,000 REGI to join the points pilot.");
+    expect(latestReads(t)).toBe(2);
+    expect(t.db.q("SELECT regi_ok, regi_checked FROM accounts WHERE wallet = ?", lc(ALICE))).toEqual([{ regi_ok: 0, regi_checked: t.nowS() }]);
+    t.balances.set(`${lc(ALICE)}@latest`, ONE);
+    expect((await t.submit(alice, LONG2)).status).toBe(202);
+    expect((await t.submit(alice, LONG2)).status).toBe(202);
+    expect(latestReads(t)).toBe(4); // one read per order
+  });
+
+  test("an RPC failure refuses the order ('Couldn't check REGI right now'), even with a cached ok; the RPC is left alone for 30 s", async () => {
+    const t = setup({ snapshot: null });
+    const alice = await t.signIn();
+    await t.mark(1000);
+    expect((await t.account(alice)).body.regi.ok).toBe(true);
+    t.rpc.down = true;
+    const r = await t.submit(alice, LONG2);
+    expect(r.status).toBe(503);
+    expect(r.body.error).toBe("Couldn't check REGI right now");
+    expect(t.db.q("SELECT COUNT(*) AS n FROM orders")).toEqual([{ n: 0 }]);
+    const calls = t.rpc.calls;
+    t.rpc.down = false;
+    t.tick(10_000);
+    expect((await t.submit(alice, LONG2)).body.error).toBe("Couldn't check REGI right now"); // backed off: no read, still refused
+    expect(t.rpc.calls).toBe(calls);
+    t.tick(21_000);
+    await t.mark(1000);
+    expect((await t.submit(alice, LONG2)).status).toBe(202);
+    expect(t.rpc.calls).toBe(calls + 1);
+  });
+
+  test("a close needs no REGI: none held, or the RPC down", async () => {
+    const t = setup({ snapshot: null });
+    const alice = await t.signIn();
+    await t.mark(1000);
+    const o1 = await t.open(alice, LONG2);
+    const o2 = await t.open(alice, LONG2);
+    t.balances.set(`${lc(ALICE)}@latest`, 0n);
+    expect((await t.submit(alice, LONG2)).status).toBe(403);
+    const calls = t.rpc.calls;
+    expect((await t.close(alice, o1.body.order.positionId)).body.order.status).toBe("filled");
+    t.rpc.down = true;
+    expect((await t.close(alice, o2.body.order.positionId)).body.order.status).toBe("filled");
+    expect(t.rpc.calls).toBe(calls);
+  });
+
+  test("no PILOT_REGI_SNAPSHOT_BLOCK (unset or empty): not misconfigured, no snapshot read, only the current balance counts", async () => {
+    for (const snapshot of [null, "", "  "]) {
+      const t = setup({ snapshot });
+      expect(pilotProblem(t.env, 10 ** 12)).toBeNull();
+      const alice = await t.signIn();
+      await t.mark(1000);
+      expect((await t.account(alice)).body).toMatchObject({ open: true, misconfigured: false, regiSnapshot: false, regi: { ok: true, snapshot: null, now: true } });
+      expect((await t.submit(alice, LONG2)).status).toBe(202);
+      t.balances.set(`${lc(ALICE)}@latest`, 0n);
+      expect((await t.submit(alice, LONG2)).body.error).toBe("Hold 1,000,000 REGI to join the points pilot.");
+      expect(t.rpc.tags.every((x) => x === "latest")).toBe(true);
+      expect(t.db.q("SELECT regi_snap, regi_snap_block FROM accounts")).toEqual([{ regi_snap: null, regi_snap_block: null }]);
+    }
+  });
+
+  test("a set snapshot block is still enforced: holding now but not there is refused, and the answer is cached for good", async () => {
     const t = setup();
+    expect(pilotProblem(t.env, 10 ** 12)).toBeNull();
     t.balances.set(`${lc(BOB)}@0x${SNAP.toString(16)}`, 0n);
     const bob = await t.signIn(BOB);
     await t.mark(1000);
+    expect((await t.account(bob)).body).toMatchObject({ regiSnapshot: true, regi: { ok: false, snapshot: false, now: null } });
     const r = await t.submit(bob, LONG2);
     expect(r.status).toBe(403);
     expect(r.body.error).toBe("This wallet didn't hold REGI at the pilot snapshot block.");
@@ -339,53 +421,13 @@ describe("REGI gate (R6, spec §8.4)", () => {
     t.tick(11 * 60_000);
     await t.account(bob);
     expect(t.rpc.tags.filter((x) => x !== "latest")).toHaveLength(1);
-  });
-
-  test("the current balance is cached 10 minutes; selling REGI blocks new orders but closes still fill", async () => {
-    const t = setup();
+    // held at the snapshot but not now: the current balance still decides
     const alice = await t.signIn();
-    expect(t.rpc.calls).toBe(2);
-    await t.mark(1000);
-    const o = await t.open(alice, LONG2);
-    expect(o.body.order.status).toBe("filled");
-    expect(t.rpc.calls).toBe(2);
     t.balances.set(`${lc(ALICE)}@latest`, 0n);
-    t.tick(10 * 60_000 + 1000);
     await t.mark(1000);
-    expect((await t.submit(alice, LONG2)).status).toBe(403);
-    expect(t.rpc.calls).toBe(3);
-    const c = await t.close(alice, o.body.order.positionId);
-    expect(c.body.order.status).toBe("filled");
-  });
-
-  test("RPC down: unknown is not 'no' ('Couldn't check REGI right now'), and the RPC is left alone for 30 s", async () => {
-    const t = setup();
-    const alice = await t.signIn();
-    t.tick(11 * 60_000);
-    await t.mark(1000);
-    t.rpc.down = true;
-    const r = await t.submit(alice, LONG2);
-    expect(r.status).toBe(503);
-    expect(r.body.error).toBe("Couldn't check REGI right now");
-    const calls = t.rpc.calls;
-    t.tick(10_000);
-    expect((await t.account(alice)).body.regi).toEqual({ ok: null, snapshot: true, now: null });
-    expect(t.rpc.calls).toBe(calls); // backed off
-    t.tick(21_000);
-    t.rpc.down = false;
-    expect((await t.account(alice)).body.regi).toEqual({ ok: true, snapshot: true, now: true });
-    expect(t.rpc.calls).toBe(calls + 1);
-  });
-
-  test("no PILOT_REGI_SNAPSHOT_BLOCK with PILOT_OPEN \"1\": the pilot is misconfigured (audit PE-7)", async () => {
-    const t = setup({ snapshot: null });
-    const alice = await t.signIn();
-    await t.mark(1000);
-    expect((await t.submit(alice, LONG2)).body).toEqual({ error: "pilot misconfigured" });
-    expect((await t.account(alice)).body).toMatchObject({ open: false, misconfigured: true });
-    t.env.PILOT_OPEN = "0";
-    expect((await t.submit(alice, LONG2)).body).toEqual({ error: "pilot closed" });
-    expect((await t.account(alice)).body).toMatchObject({ open: false, misconfigured: false });
+    expect((await t.submit(alice, LONG2)).body.error).toBe("Hold 1,000,000 REGI to join the points pilot.");
+    t.balances.set(`${lc(ALICE)}@latest`, ONE);
+    expect((await t.submit(alice, LONG2)).status).toBe(202);
   });
 });
 
@@ -933,7 +975,7 @@ describe("leaderboard and history (R8)", () => {
     await t.open(bob, { side: "short", margin: 1000, lev: 3 });
     for (let i = 0; i < 60; i++) {
       const w = "0x" + i.toString(16).padStart(40, "0");
-      t.db.q("INSERT INTO accounts (wallet, balance, season, created) VALUES (?, ?, 1, 0)", w, 5000 + i);
+      t.db.q("INSERT INTO accounts (wallet, balance, season, created, regi_ok, regi_checked) VALUES (?, ?, 1, 0, 1, ?)", w, 5000 + i, t.nowS()); // held REGI 5 s ago
       t.db.q("INSERT INTO positions (wallet, side, margin, lev, notional, entry, liq, opened_at, closed_at, fee, returned, reason, exit, pnl) VALUES (?, 'long', 10, 1, 10, 1000, 1, 0, 1, 0, 10, 'close', 1000, 0)", w);
     }
     t.db.q("INSERT INTO accounts (wallet, balance, season, created) VALUES ('0x00000000000000000000000000000000000000ff', 99999, 1, 0)");
@@ -955,6 +997,88 @@ describe("leaderboard and history (R8)", () => {
     t.db.q("UPDATE accounts SET balance = 1e9 WHERE wallet = ?", lc(BOB));
     const again = (await (await handleLeaderboard(t.req("/api/pilot/leaderboard"), t.env, { ...t.deps, cache: cache as unknown as Cache })).json()) as Json;
     expect(again.rows[0].address).toBe(body.rows[0].address);
+  });
+
+  /** n accounts with a closed position (so they rank), balance base − i; checked: regi_checked (0 = never). */
+  function ranked(t: ReturnType<typeof setup>, n: number, o: { base?: number; prefix?: string; ok?: number; checked?: number; held?: (i: number) => bigint } = {}) {
+    const ws: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const w = "0x" + (o.prefix ?? "a") + i.toString(16).padStart(39, "0");
+      ws.push(w);
+      t.db.q("INSERT INTO accounts (wallet, balance, season, created, regi_ok, regi_checked) VALUES (?, ?, 1, 0, ?, ?)", w, (o.base ?? 50_000) - i, o.ok ?? 0, o.checked ?? 0);
+      t.db.q("INSERT INTO positions (wallet, side, margin, lev, notional, entry, liq, opened_at, closed_at, fee, returned, reason, exit, pnl) VALUES (?, 'long', 10, 1, 10, 1000, 1, 0, 1, 0, 10, 'close', 1000, 0)", w);
+      if (o.held) t.balances.set(`${w}@latest`, o.held(i));
+    }
+    return ws;
+  }
+  const board = async (t: ReturnType<typeof setup>) => ((await (await handleLeaderboard(t.req("/api/pilot/leaderboard"), t.env, t.deps)).json()) as Json).rows as Json[];
+  const short = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`;
+
+  test("only wallets holding the minimum now: a wallet that moved its REGI away drops out; stale checks are re-read and stored", async () => {
+    const t = setup({ snapshot: null });
+    const alice = await t.signIn();
+    const bob = await t.signIn(BOB);
+    await t.mark(1000);
+    await t.open(alice, { side: "long", margin: 1000, lev: 3 });
+    await t.open(bob, { side: "short", margin: 1000, lev: 3 });
+    // one stash rotated between wallets: x held it 11 minutes ago (stale ok), y holds it now (never checked)
+    const [x] = ranked(t, 1, { prefix: "b", base: 99_000, ok: 1, checked: t.nowS() });
+    const [y] = ranked(t, 1, { prefix: "c", base: 98_000, held: () => ONE });
+    t.balances.set(`${lc(BOB)}@latest`, 0n);
+    t.tick(11 * 60_000);
+    await t.mark(1000);
+    const calls = t.rpc.calls;
+    const rows = await board(t);
+    expect(rows.map((r) => r.address)).toEqual([short(y), short(lc(ALICE))]);
+    expect(t.rpc.calls - calls).toBe(4); // x, y, Alice and Bob were all older than 10 minutes
+    const now = t.nowS();
+    expect(t.db.q("SELECT wallet, regi_ok, regi_checked FROM accounts ORDER BY wallet")).toEqual(
+      [{ wallet: lc(BOB), regi_ok: 0, regi_checked: now }, { wallet: lc(ALICE), regi_ok: 1, regi_checked: now }, { wallet: x, regi_ok: 0, regi_checked: now }, { wallet: y, regi_ok: 1, regi_checked: now }]
+        .sort((a, b) => (a.wallet < b.wallet ? -1 : 1)),
+    );
+    // within 10 minutes the stored answers are reused: no RPC call
+    t.tick(5 * 60_000);
+    await t.mark(1000);
+    expect((await board(t)).map((r) => r.address)).toEqual([short(y), short(lc(ALICE))]);
+    expect(t.rpc.calls - calls).toBe(4);
+  });
+
+  test("a wallet whose check fails (RPC error) is left out of that build; fresh answers still count", async () => {
+    const t = setup({ snapshot: null });
+    await t.mark(1000);
+    const [fresh] = ranked(t, 1, { prefix: "b", base: 1000, ok: 1, checked: t.nowS() });
+    const stale = ranked(t, 3, { prefix: "c", base: 9000, held: () => ONE });
+    t.rpc.down = true;
+    expect((await board(t)).map((r) => r.address)).toEqual([short(fresh)]);
+    expect(t.db.q("SELECT COUNT(*) AS n FROM accounts WHERE regi_checked > 0")).toEqual([{ n: 1 }]); // nothing stored for a failure
+    t.rpc.down = false;
+    expect((await board(t)).map((r) => r.address)).toEqual([...stale.map(short), short(fresh)]);
+  });
+
+  test("at most 60 RPC calls per build, in rank order; over the cap a stale wallet is left out", async () => {
+    const t = setup({ snapshot: null });
+    await t.mark(1000);
+    // 100 never-checked wallets: the top 70 hold nothing, the rest hold the minimum; 3 checked just now at the bottom
+    ranked(t, 100, { held: (i) => (i < 70 ? 0n : ONE) });
+    const low = ranked(t, 3, { prefix: "b", base: 100, ok: 1, checked: t.nowS() });
+    const calls = t.rpc.calls;
+    expect((await board(t)).map((r) => r.address)).toEqual(low.map(short));
+    expect(t.rpc.calls - calls).toBe(60);
+    // the next build reuses the 60 stored answers and reads the 40 wallets left: ranks 71–100 hold, then the 3
+    const next = await board(t);
+    expect(t.rpc.calls - calls).toBe(100);
+    expect(next).toHaveLength(33);
+    expect(next.map((r) => r.rank)).toEqual(Array.from({ length: 33 }, (_, i) => i + 1));
+  });
+
+  test("everyone holding: one wave of 50 reads fills the top 50", async () => {
+    const t = setup({ snapshot: null });
+    await t.mark(1000);
+    const ws = ranked(t, 100, { held: () => ONE });
+    const calls = t.rpc.calls;
+    const rows = await board(t);
+    expect(rows.map((r) => r.address)).toEqual(ws.slice(0, 50).map(short));
+    expect(t.rpc.calls - calls).toBe(50);
   });
 
   test("history: the last 100 closed positions, newest first", async () => {

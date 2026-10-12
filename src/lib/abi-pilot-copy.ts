@@ -16,6 +16,15 @@ export const PILOT_DISCLAIMERS = [PILOT_DISCLAIMER, PILOT_LIQ_NOTE, PILOT_JUMP_N
 const pct = (x: number) => `${+(x * 100).toFixed(3)}%`;
 const top = RULES.levels[RULES.levels.length - 1];
 
+/**
+ * Owner decision 2026-10-12: REGI is checked when each order is placed, not at sign-in. snapshot: a
+ * PILOT_REGI_SNAPSHOT_BLOCK is set, so the wallet must also have held the minimum there.
+ */
+const regiRule = (min: number, snapshot = false) =>
+  `The wallet needs at least ${min.toLocaleString("en-US")} REGI on Arc when it places each order${snapshot ? " and must have held that amount at the pilot snapshot block" : ""}. ` +
+  "The leaderboard shows only wallets that currently hold it.";
+const SIGN_IN_NOTE = "Sign in with a one-time message: it is not a transaction and costs nothing. The session lasts 12 hours. Smart-contract wallets aren't supported yet.";
+
 export const PILOT_COPY = {
   heading: "Points pilot",
   closed: "The points pilot is not open yet.",
@@ -33,8 +42,11 @@ export const PILOT_COPY = {
   agreeAfter: ".",
   signingIn: "Check your wallet…",
   signOut: "Sign out",
-  signInTip: (min: number) =>
-    `Sign a one-time message with a wallet that held at least ${min.toLocaleString("en-US")} REGI on Arc at the pilot snapshot block and still does. It is not a transaction and costs nothing. The session lasts 12 hours. Smart-contract wallets aren't supported yet.`,
+  /** The REGI rule, behind the sign-in "i" and on the Pilot rules page. */
+  regiRule,
+  /** Sign-in itself (the Pilot rules page lists it apart from the REGI rule). */
+  signInNote: SIGN_IN_NOTE,
+  signInTip: (min: number, snapshot = false) => `${regiRule(min, snapshot)} ${SIGN_IN_NOTE}`,
   rulesTip:
     `Market orders fill at the first ABI mark posted after the order (the mark updates every 5 s); with no mark within ${RULES.markMaxAgeS} s the order is refused. ` +
     `Leverage ${RULES.levels.join(", ")}×, capped at the lower of ${RULES.volTarget} ÷ σ_24h and 1 ÷ (${pct(RULES.jump)} + ${pct(RULES.mm)}), so a ${pct(RULES.jump)} milestone step stays inside the margin; from 1× to ${top}×. ` +
@@ -65,7 +77,7 @@ export const PILOT_COPY = {
     `${pct(RULES.split.buybackOfTreasury)} of which is set aside for a REGI buyback. All in points; nothing is bought during the pilot.`,
   insuranceTip: "Covers losses beyond a position's margin when the index jumps past its liquidation price, up to its balance; the house carries the rest. No position loses more than its margin.",
   noEconomy: "No economy data yet.",
-  leaderboardTip: "Balance plus open positions (with funding and borrow) at the latest mark. Top 50, refreshed every minute.",
+  leaderboardTip: "Balance plus open positions (with funding and borrow) at the latest mark. Only wallets that currently hold the REGI minimum. Top 50, refreshed every minute.",
   priceUpdating: "Price updating",
   paused: `Paused: ABI moved more than max(${RULES.pauseSigmas}σ_1h, ${pct(RULES.pauseFloor)}) in the last hour.`,
   basePaused: "Paused for a minute around the hour's base sample.",

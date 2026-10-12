@@ -58,14 +58,14 @@ export const REGI_ADDRESS = "0x93D5b8c53ee763C2c4522bF0d958ce51Af4360ae";
 export const REGI_UNIT = 10n ** 18n;
 /** The gate (owner decision 2026-10-11, audit PE-3): a wallet must hold at least this many REGI (PILOT_REGI_MIN overrides it). */
 export const REGI_MIN_DEFAULT = 1_000_000;
-/** REGI's contract has code from this Arc block on (audit PE-7): a snapshot block before it is a misconfiguration. */
+/** REGI's contract has code from this Arc block on (audit PE-7): a snapshot block (when one is set) before it is a misconfiguration. */
 export const REGI_DEPLOY_BLOCK = 22_419_071;
 /** The pilot's leverage cap on top of the engine's (owner decision 2026-10-11, audit F2; PILOT_MAX_LEV overrides it). */
 export const PILOT_MAX_LEV_DEFAULT = 10;
 /** "Hold 1,000,000 REGI to join the points pilot." */
 export const holdRegiText = (min: number) => `Hold ${min.toLocaleString("en-US")} REGI to join the points pilot.`;
 export const BALANCE_OF_SELECTOR = "0x70a08231";
-/** A cached REGI check is reused for at most this long. */
+/** A cached REGI check is reused for at most this long (the account view, the leaderboard; never an order). */
 export const REGI_CACHE_S = 10 * 60;
 
 // ───────────────────────────── API ─────────────────────────────
@@ -95,6 +95,8 @@ export const PILOT_LIMITS = {
   leaderboard: 50,
   history: 100,
   leaderboardCacheS: 60,
+  /** One leaderboard build re-checks at most this many stale REGI balances on the RPC (in parallel waves). */
+  leaderboardRegiChecks: 60,
   fundingCacheS: 60,
   economyCacheS: 30,
   /** REGI RPC back-off after a failure. */
@@ -186,8 +188,12 @@ export interface OrderView {
 }
 
 export interface RegiView {
-  /** Eligible: held the minimum REGI (regiMin) at the snapshot block and now. null = couldn't check. */
+  /**
+   * The last known state (the account view; an order always re-reads the balance): holds the minimum REGI (regiMin)
+   * now and, when a snapshot block is set, held it there. null = couldn't check.
+   */
   ok: boolean | null;
+  /** Held the minimum at PILOT_REGI_SNAPSHOT_BLOCK; null when no snapshot block is set or it couldn't be checked. */
   snapshot: boolean | null;
   now: boolean | null;
 }
@@ -276,8 +282,10 @@ export interface PilotAccountView {
   open: boolean;
   /** PILOT_OPEN = "1" but a setting is invalid (the snapshot block, PILOT_REGI_MIN, PILOT_MAX_LEV): every order is refused. */
   misconfigured: boolean;
-  /** The REGI a wallet must hold (whole REGI). */
+  /** The REGI a wallet must hold when it places each order (whole REGI). */
   regiMin: number;
+  /** A PILOT_REGI_SNAPSHOT_BLOCK is set: the wallet must also have held regiMin at that block. */
+  regiSnapshot: boolean;
   address: string | null;
   regi: RegiView | null;
   account: { balance: number; equity: number | null; season: number } | null;
