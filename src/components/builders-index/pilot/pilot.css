@@ -49,3 +49,5 @@
 .abi-pt-agree { display: flex; align-items: flex-start; gap: 6px; font-size: 12px; line-height: 1.4; color: var(--abi-mute); margin-bottom: 8px; }
 .abi-pt-agree input { margin-top: 2px; }
 .abi-pt-agree a { color: var(--abi-fg); text-decoration: underline; }
+/* the market the Funding and Economy tabs show (the index tab's) */
+.abi-t .abi-pt-mkt { font-family: var(--abi-mono); font-size: 11px; color: var(--abi-mute); padding: 1px 6px; border: 1px solid var(--abi-line2); border-radius: 4px; }

@@ -46,7 +46,7 @@ export const ABI_LIMITS = {
   fxCurrencies: 20,
 } as const;
 
-/** Spec §17: three indices with one method and one file shape. ABI = builders + base layer (the points pilot runs on it);
+/** Spec §17: three indices with one method and one file shape. ABI = builders + base layer;
  * AII = integrated products only; AEI = everything. Each has its own KV keys and endpoints. */
 export const ABI_INDEX_IDS = ["abi", "aii", "aei"] as const;
 export type AbiIndexId = (typeof ABI_INDEX_IDS)[number];

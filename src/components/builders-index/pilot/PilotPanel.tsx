@@ -15,6 +15,8 @@ import {
   type LeaderboardRow,
   type OrderView,
   type PilotAccountView,
+  type PilotMarket,
+  withMarket,
 } from "@/lib/abi-pilot-api";
 import { PILOT_COPY } from "@/lib/abi-pilot-copy";
 import { PilotTables, type PilotTab } from "./PilotTables";
@@ -50,11 +52,12 @@ const userError = (e: unknown) => {
 };
 
 /**
- * The ABI points pilot on the terminal page: ticket, positions, history, leaderboard, funding, economy.
- * Renders nothing until mounted in the browser, and nothing at all where the pilot API is not
- * deployed (the static page stays data only). Sign-in is a personal_sign message; no transactions.
+ * The points pilot on the terminal page: ticket, positions, history, leaderboard, funding, economy. `market` is the
+ * index tab's (ABI, AII or AEI): the ticket trades it and the Funding and Economy tabs show it; positions, history and
+ * the leaderboard cover every market. Renders nothing until mounted in the browser, and nothing at all where the pilot
+ * API is not deployed (the static page stays data only). Sign-in is a personal_sign message; no transactions.
  */
-export function PilotPanel() {
+export function PilotPanel({ market = "abi" }: { market?: PilotMarket }) {
   const { address, connect, isConnecting, walletClient, error: walletError } = useWallet();
   const [view, setView] = useState<PilotAccountView | null>(null);
   const [tab, setTab] = useState<PilotTab>("positions");
@@ -70,10 +73,11 @@ export function PilotPanel() {
   const live = useRef(true);
 
   const refresh = useCallback(async () => {
-    const r = await api<PilotAccountView>(PILOT_PATHS.account);
+    const r = await api<PilotAccountView>(withMarket(PILOT_PATHS.account, market));
     if (!live.current) return;
-    if (r.status === 200) setView(r.body);
-  }, []);
+    // a reply for a tab the page has since left is dropped (the next refresh is for the new market)
+    if (r.status === 200 && r.body.market === market) setView(r.body);
+  }, [market]);
   const loadHistory = useCallback(async () => {
     const r = await api<{ history: ClosedPositionView[] }>(PILOT_PATHS.history);
     if (live.current && r.status === 200) setHistory(r.body.history);
@@ -83,13 +87,15 @@ export function PilotPanel() {
     if (live.current && r.status === 200) setBoard(r.body.rows);
   }, []);
   const loadFunding = useCallback(async () => {
-    const r = await api<FundingView>(PILOT_PATHS.funding);
-    if (live.current && r.status === 200) setFunding(r.body);
-  }, []);
+    const r = await api<FundingView>(withMarket(PILOT_PATHS.funding, market));
+    if (live.current && r.status === 200 && r.body.market === market) setFunding(r.body);
+  }, [market]);
   const loadEconomy = useCallback(async () => {
-    const r = await api<EconomyView>(PILOT_PATHS.economy);
-    if (live.current && r.status === 200) setEconomy(r.body);
-  }, []);
+    const r = await api<EconomyView>(withMarket(PILOT_PATHS.economy, market));
+    if (live.current && r.status === 200 && r.body.market === market) setEconomy(r.body);
+  }, [market]);
+  // another index tab: its funding and economy load afresh (the account view refreshes through `refresh`)
+  useEffect(() => { setFunding(null); setEconomy(null); }, [market]);
 
   useEffect(() => {
     live.current = true;
@@ -168,7 +174,7 @@ export function PilotPanel() {
     setBusy(true);
     setFilling(true);
     setError(undefined);
-    const err = await settle(await api<{ order?: OrderView }>(PILOT_PATHS.order, { method: "POST", body: o }));
+    const err = await settle(await api<{ order?: OrderView }>(PILOT_PATHS.order, { method: "POST", body: { market: view?.market ?? market, ...o } }));
     if (!live.current) return;
     setFilling(false);
     if (err) setError(err);
@@ -196,9 +202,9 @@ export function PilotPanel() {
       <PilotTables
         tab={tab}
         onTab={setTab}
+        market={market}
         address={view.address}
         positions={view.positions}
-        mark={view.mark ? view.mark.mark : null}
         history={history}
         board={board}
         funding={funding}

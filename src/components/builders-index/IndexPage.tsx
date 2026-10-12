@@ -577,7 +577,7 @@ export function IndexPage() {
   const tabs = id ? <IndexTabs active={ix.id} values={values} pick={pick} /> : null;
 
   if (state.kind === "ready") {
-    return <Terminal d={state.data} R={res} closedLocal={closedLocal} st={status(state.data, res, failures, engineOn, now, stale)} pilot={ix.id === "abi" ? <PilotPanel /> : null} ix={ix} tabs={tabs} />;
+    return <Terminal d={state.data} R={res} closedLocal={closedLocal} st={status(state.data, res, failures, engineOn, now, stale)} pilot={<PilotPanel market={ix.id} />} ix={ix} tabs={tabs} />;
   }
   return (
     <>

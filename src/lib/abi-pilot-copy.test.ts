@@ -58,7 +58,8 @@ describe("pilot copy lint (R7)", () => {
   test("the disclaimers are the exact required strings", () => {
     expect(PILOT_DISCLAIMER).toBe("Points only. No deposits, no prizes; points have no value.");
     expect(PILOT_LIQ_NOTE).toBe("Liquidation only takes the position's margin.");
-    expect(PILOT_JUMP_NOTE).toBe("Recorded milestones move ABI at once and can liquidate leveraged positions."); // audit L4
+    // audit L4; plan 2026-10-12 R8: index-neutral, the same line on every market's ticket
+    expect(PILOT_JUMP_NOTE).toBe("Recorded milestones move the index at once and can liquidate leveraged positions.");
     expect(PILOT_COPY.closed).toBe("The points pilot is not open yet.");
     // owner decision 2026-10-11 (audit PE-3): the gate is 1,000,000 REGI, and the copy says so
     expect(PILOT_COPY.holdRegi(1_000_000)).toBe("Hold 1,000,000 REGI to join the points pilot.");
@@ -69,7 +70,17 @@ describe("pilot copy lint (R7)", () => {
     expect(PILOT_COPY.signInTip(1_000_000, true)).toContain("when it places each order and must have held that amount at the pilot snapshot block.");
     expect(PILOT_COPY.misconfigured).toBe("The points pilot is misconfigured; new orders are refused.");
     for (const s of [PILOT_COPY.holdRegi(1_000_000), PILOT_COPY.signInTip(1_000_000), PILOT_COPY.signInTip(1_000_000, true), PILOT_COPY.misconfigured]) expect(banned(s)).toBeUndefined();
-    expect(PILOT_COPY.rulesTip).toContain("One direction at a time: close your longs before opening a short, and the reverse.");
+    expect(PILOT_COPY.rulesTip).toContain("One direction at a time in each market: close your longs there before opening a short, and the reverse.");
+    // plan 2026-10-12 R9: three markets, one balance, one direction per market, the economy per market
+    expect(PILOT_COPY.marketsRule).toBe(
+      "The pilot trades ABI, AII and AEI. One points balance per wallet covers all three markets. " +
+      `You hold one direction at a time in each market, and up to ${RULES.maxOpen} open positions per market. ` +
+      "Each market has its own mark, funding rates, house, fee pool, insurance and weekly split.",
+    );
+    for (const s of [PILOT_COPY.marketsRule, PILOT_COPY.rulesTip, PILOT_COPY.fundingTip, PILOT_COPY.economyTip, PILOT_COPY.leaderboardTip, PILOT_COPY.paused, PILOT_COPY.capped(5, "AII")]) {
+      expect(banned(s)).toBeUndefined();
+      expect(s).not.toMatch(/\bABI's\b|first ABI mark|ABI moved/); // index-neutral (the markets list names ABI)
+    }
     // §9.15 (audit PE-2): the long rate includes the milestone premium, and the funding tip says so
     expect(PILOT_COPY.fundingTip).toContain("Milestone premium: longs also pay the mean hourly milestone step of the last 30 days, to the house; it is part of the long rate.");
   });
@@ -129,7 +140,7 @@ const noop = () => undefined;
 const ticket = (p: Partial<TicketProps> = {}) => renderToStaticMarkup(createElement(Ticket, { view: VIEW, signInLabel: "Sign in", onSignIn: noop, onSignOut: noop, onOrder: noop, ...p }));
 const tables = (p: Partial<PilotTablesProps> = {}) =>
   renderToStaticMarkup(createElement(PilotTables, {
-    tab: "positions", onTab: noop, address: ME, positions: VIEW.positions, mark: 1000, closing: null, onClose: noop, funding: FUNDING,
+    tab: "positions", onTab: noop, market: "abi", address: ME, positions: VIEW.positions, closing: null, onClose: noop, funding: FUNDING,
     history: [{ id: 3, market: "abi", side: "short", margin: 500, lev: 3, notional: 1500, entry: 1000, openedAt: 1, closedAt: 1_760_090_000, exit: 1470, pnl: -705, funding: -1.5, borrow: 0.75, fee: 0.3, returned: 0, net: -500.15, reason: "liquidation" }],
     board: [{ rank: 1, address: "0x1234…5678", equity: 10500 }, { rank: 2, address: "0xabcd…ef01", equity: 9000 }],
     ...p,
@@ -149,7 +160,8 @@ describe("ticket", () => {
     const pos = { side: "long" as const, margin: 100, notional: 100, entry: 1000, openedAt: 0 };
     expect(h).toContain(`${fmtPx(liqPrice(pos, 0))} · ${fmtPx(liqPrice(pos, borrowPaid(pos, 86400) + 0.0003 * 100 * 24))} in 24 h`);
     expect(borrowPerDay(30000, 1000)).toBeCloseTo(29000 * 0.1 / 365, 12);
-    expect(h).toContain(`>${openLabel("long", 1)}</button>`);
+    expect(h).toContain(`>${openLabel("long", 1, "ABI")}</button>`);
+    expect(openLabel("short", 5, "AII")).toBe("Open short AII 5×");
     const button = h.indexOf('type="submit"');
     expect(h.indexOf(PILOT_DISCLAIMER)).toBeGreaterThan(-1);
     expect(h.indexOf(PILOT_DISCLAIMER)).toBeLessThan(button);
@@ -168,17 +180,18 @@ describe("ticket", () => {
     expect(capped).toMatch(/disabled="">30×<\/button>/);
     expect(ticket()).not.toMatch(/disabled="">30×<\/button>/);
     expect(capped).not.toMatch(/disabled="">5×<\/button>/);
-    expect(capped).toContain(esc(PILOT_COPY.capped(5)));
+    expect(capped).toContain(esc(PILOT_COPY.capped(5, "ABI")));
+    expect(PILOT_COPY.capped(5, "AII")).toBe("Max 5× at AII's current volatility.");
     // the pilot's own cap (PILOT_MAX_LEV, owner decision: 10×): no level above it is offered, and no volatility note
     const pilotCap = ticket({ view: { ...VIEW, mark: { ...MARK, maxLev: 10, levCap: 10 } } });
     for (const l of [1, 2, 3, 5, 10]) expect(pilotCap).toContain(`>${l}×</button>`);
     for (const l of [20, 30]) expect(pilotCap).not.toContain(`>${l}×</button>`);
     expect(pilotCap).not.toMatch(/disabled="">10×<\/button>/);
-    expect(pilotCap).not.toContain(esc(PILOT_COPY.capped(10)));
+    expect(pilotCap).not.toContain(esc(PILOT_COPY.capped(10, "ABI")));
     const both = ticket({ view: { ...VIEW, mark: { ...MARK, maxLev: 5, levCap: 10 } } });
     expect(both).not.toContain(">20×</button>");
     expect(both).toMatch(/disabled="">10×<\/button>/);
-    expect(both).toContain(esc(PILOT_COPY.capped(5)));
+    expect(both).toContain(esc(PILOT_COPY.capped(5, "ABI")));
     for (const [mark, text] of [[{ ...MARK, paused: true }, PILOT_COPY.paused], [{ ...MARK, basePaused: true }, PILOT_COPY.basePaused], [{ ...MARK, fresh: false }, PILOT_COPY.priceUpdating]] as const) {
       const h = ticket({ view: { ...VIEW, mark } });
       expect(h).toContain(esc(text));
@@ -228,15 +241,54 @@ describe("ticket", () => {
   });
 });
 
+describe("three markets (plan 2026-10-12 R8)", () => {
+  const AII_MARK = { ...MARK, mark: 2000, maxLev: 5 };
+  test.each([["aii", "AII"], ["aei", "AEI"]] as const)("the ticket on the %s tab trades that market and says so", (market, code) => {
+    const h = ticket({ view: { ...VIEW, market, mark: AII_MARK } });
+    expect(h).toContain(`Points pilot · ${code}`);
+    expect(h).toContain(`aria-label="Points pilot ticket, ${code}"`);
+    expect(h).toContain(`>${openLabel("long", 1, code)}</button>`);
+    expect(h).toContain(`Open long ${code} 1×`);
+    expect(h).toContain(`${code} mark`);
+    expect(h).toContain(fmtPx(2000));
+    expect(h).toContain(esc(PILOT_COPY.capped(5, code)));
+    // the disclaimers, inline above the button, on every market's ticket
+    const button = h.indexOf('type="submit"');
+    for (const d of [PILOT_DISCLAIMER, esc(PILOT_LIQ_NOTE), PILOT_JUMP_NOTE]) {
+      expect(h.indexOf(d)).toBeGreaterThan(-1);
+      expect(h.indexOf(d)).toBeLessThan(button);
+    }
+    expect(banned(visible(h))).toBeUndefined();
+  });
+  test("one direction per market: a long held in ABI doesn't block a short on the AII ticket; it does on ABI's", () => {
+    const aii = ticket({ view: { ...VIEW, market: "aii" } });
+    expect(aii).not.toContain(PILOT_COPY.closeFirst("long"));
+    const five = Array.from({ length: RULES.maxOpen }, (_, i) => ({ ...VIEW.positions[0], id: 100 + i }));
+    expect(ticket({ view: { ...VIEW, positions: five } })).toContain(`Up to ${RULES.maxOpen} open positions`);
+    expect(ticket({ view: { ...VIEW, market: "aei", positions: five } })).not.toContain(`Up to ${RULES.maxOpen} open positions`);
+  });
+  test("positions in several markets each show their market and their own mark; funding and economy name the tab's market", () => {
+    const positions = [VIEW.positions[0], { ...VIEW.positions[0], id: 8, market: "aii" as const, side: "short" as const, mark: 2010, entry: 2000, pnl: -10 }];
+    const h = tables({ positions, market: "aii" });
+    expect(h).toContain(">ABI</td>");
+    expect(h).toContain(">AII</td>");
+    expect(h).toContain(fmtPx(2010));
+    expect(h).toContain(fmtPx(1000));
+    expect(tables({ tab: "funding", market: "aii" })).toContain('<span class="abi-pt-mkt">AII</span>');
+    expect(tables({ tab: "economy", market: "aei", economy: { ...ECONOMY, market: "aei" } })).toContain('<span class="abi-pt-mkt">AEI</span>');
+    expect(tables({ tab: "leaderboard", market: "aii" })).not.toContain("abi-pt-mkt"); // one board
+  });
+});
+
 describe("positions, history, leaderboard, funding", () => {
   test("positions: entry, mark, PnL, funding, borrow, liquidation price and Close", () => {
     const h = tables();
-    for (const t of ["Positions (1)", "History", "Leaderboard", "Funding", "Economy", "Long 2×", "990.00", "1,000.00", "+20.20", "+0.60", "Borrow", "0.02", "Liq. price", ">Close</button>"]) expect(h).toContain(t);
+    for (const t of ["Positions (1)", "History", "Leaderboard", "Funding", "Economy", "Market", ">ABI</td>", "Long 2×", "990.00", "1,000.00", "+20.20", "+0.60", "Borrow", "0.02", "Liq. price", ">Close</button>"]) expect(h).toContain(t);
     expect(banned(visible(h))).toBeUndefined();
   });
   test("history: funding, net result and liquidations", () => {
     const h = tables({ tab: "history" });
-    for (const t of ["Short 3×", fmtWhen(1_760_090_000), fmtSigned(-1.5), "0.75", fmtSigned(-500.15), "Liquidated"]) expect(h).toContain(t);
+    for (const t of ["Short 3×", "<th>Market</th>", ">ABI</td>", fmtWhen(1_760_090_000), fmtSigned(-1.5), "0.75", fmtSigned(-500.15), "Liquidated"]) expect(h).toContain(t);
     expect(banned(visible(h))).toBeUndefined();
   });
   test("leaderboard: shortened addresses, own row marked, the disclaimer under it; visible signed out", () => {

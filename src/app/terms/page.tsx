@@ -34,7 +34,7 @@ export default function TermsPage() {
         <ul className="pa-list">
           <li><strong>Builder registry and project data.</strong> Profiles of projects on Arc, built from public on-chain data and public sources, each fact with its evidence. See <Link href="/how-we-publish/">How we publish</Link>.</li>
           <li><strong>Arc indices.</strong> ABI (Arc Builders Index), AII (Arc Integrations Index) and AEI (Arc Ecosystem Index): hourly figures computed from public Arc data by the published method.</li>
-          <li><strong>Points pilot.</strong> A game in which signed-in wallets take long or short positions on ABI with play points. It is closed until we announce it open.</li>
+          <li><strong>Points pilot.</strong> A game in which signed-in wallets take long or short positions on ABI, AII and AEI with play points. It is closed until we announce it open.</li>
         </ul>
         <p>The site never asks you to send a transaction, deposit funds or approve a token. Signing in is a free message signature.</p>
 
@@ -56,6 +56,7 @@ export default function TermsPage() {
         <H>4. The points pilot</H>
         <ul className="pa-list">
           <li><strong>Points only.</strong> Points have no value. They can&apos;t be bought, sold, transferred, exchanged or withdrawn, and they give no right to any payment, token, prize or other benefit. There are no deposits and no prizes.</li>
+          <li><strong>Markets.</strong> The pilot trades ABI, AII and AEI. One points balance per wallet covers all three. You hold one direction at a time in each market. The economy (house, fee pool, insurance and weekly split) is kept per market.</li>
           <li><strong>Accounting shown in points.</strong> The economy figures (house, fee pool, insurance, weekly split, including the treasury share and its buyback line) are bookkeeping in points inside the game. They are not payments and not a commitment to buy REGI or anything else.</li>
           <li><strong>Eligibility.</strong> You must hold the required amount of REGI in the wallet when you place each order; closing a position needs none. The leaderboard lists only wallets that currently hold it. Holding REGI is only an eligibility check; it gives no rights in the pilot. We don&apos;t sell REGI.</li>
           <li><strong>One person, one wallet.</strong> Running several wallets to improve leaderboard places is not allowed.</li>

@@ -1,5 +1,5 @@
 /**
- * ABI points pilot: the page copy and number formats. Plain labels; explanations sit behind an "i"
+ * Points pilot (ABI, AII and AEI): the page copy and number formats. Plain labels; explanations sit behind an "i"
  * bubble; the disclaimers are always visible above the order button (plan R7; economy v3 plan R8; audit L4).
  * The copy lint (src/lib/abi-pilot-copy.test.ts) bans prize-type words everywhere in pilot copy except
  * inside these two exact disclaimer strings.
@@ -9,8 +9,8 @@ import { holdRegiText } from "./abi-pilot-api";
 
 export const PILOT_DISCLAIMER = "Points only. No deposits, no prizes; points have no value.";
 export const PILOT_LIQ_NOTE = "Liquidation only takes the position's margin.";
-/** Audit L4: the risk that decides outcomes at high leverage, inline (never only behind "i"). */
-export const PILOT_JUMP_NOTE = "Recorded milestones move ABI at once and can liquidate leveraged positions.";
+/** Audit L4: the risk that decides outcomes at high leverage, inline (never only behind "i"). Index-neutral: every market. */
+export const PILOT_JUMP_NOTE = "Recorded milestones move the index at once and can liquidate leveraged positions.";
 export const PILOT_DISCLAIMERS = [PILOT_DISCLAIMER, PILOT_LIQ_NOTE, PILOT_JUMP_NOTE] as const;
 
 const pct = (x: number) => `${+(x * 100).toFixed(3)}%`;
@@ -25,8 +25,15 @@ const regiRule = (min: number, snapshot = false) =>
   "The leaderboard shows only wallets that currently hold it.";
 const SIGN_IN_NOTE = "Sign in with a one-time message: it is not a transaction and costs nothing. The session lasts 12 hours. Smart-contract wallets aren't supported yet.";
 
+/** Plan 2026-10-12 R9: what the pilot trades and what is shared or per market (the rules page, the Terms, the "i"). */
+const MARKETS_RULE =
+  "The pilot trades ABI, AII and AEI. One points balance per wallet covers all three markets. " +
+  `You hold one direction at a time in each market, and up to ${RULES.maxOpen} open positions per market. ` +
+  "Each market has its own mark, funding rates, house, fee pool, insurance and weekly split.";
+
 export const PILOT_COPY = {
   heading: "Points pilot",
+  marketsRule: MARKETS_RULE,
   closed: "The points pilot is not open yet.",
   misconfigured: "The points pilot is misconfigured; new orders are refused.",
   /** "Hold 1,000,000 REGI to join the points pilot." */
@@ -48,16 +55,16 @@ export const PILOT_COPY = {
   signInNote: SIGN_IN_NOTE,
   signInTip: (min: number, snapshot = false) => `${regiRule(min, snapshot)} ${SIGN_IN_NOTE}`,
   rulesTip:
-    `Market orders fill at the first ABI mark posted after the order (the mark updates every 5 s); with no mark within ${RULES.markMaxAgeS} s the order is refused. ` +
+    `Market orders fill at the first mark of the order's index posted after the order (the mark updates every 5 s); with no mark within ${RULES.markMaxAgeS} s the order is refused. ` +
     `Leverage ${RULES.levels.join(", ")}×, capped at the lower of ${RULES.volTarget} ÷ σ_24h and 1 ÷ (${pct(RULES.jump)} + ${pct(RULES.mm)}), so a ${pct(RULES.jump)} milestone step stays inside the margin; from 1× to ${top}×. ` +
-    `New orders pause while the last hour moved more than max(${RULES.pauseSigmas}σ_1h, ${pct(RULES.pauseFloor)}), for a minute around each hour's base sample. Orders and closes wait for each hour's funding to be set (about 15 s); liquidation checks don't. ` +
+    `New orders pause while the index moved more than max(${RULES.pauseSigmas}σ_1h, ${pct(RULES.pauseFloor)}) in the last hour, and for a minute around each hour's base sample (ABI and AEI; AII has no base layer). Orders and closes wait for each hour's funding to be set (about 15 s); liquidation checks don't. ` +
     `Fee ${(RULES.feeRate * 100).toFixed(2)}% of size per side. Borrow ${pct(RULES.borrowApr)} a year on size − margin, per hour held. ` +
     `Maintenance margin ${pct(RULES.mm)}; liquidation is checked on one-minute bars and moves with funding and borrow. ` +
-    "One direction at a time: close your longs before opening a short, and the reverse. " +
-    `Minimum margin ${RULES.minMargin} pts, up to ${RULES.maxOpen} open positions. Starting balance ${RULES.startBalance.toLocaleString("en-US")} pts, once per wallet.`,
+    "One direction at a time in each market: close your longs there before opening a short, and the reverse. " +
+    `Minimum margin ${RULES.minMargin} pts. Starting balance ${RULES.startBalance.toLocaleString("en-US")} pts, once per wallet.`,
   fundingTip:
-    "Each hour's rates are set at the start of the hour from the open positions, per point of size per hour held. " +
-    `Trend: longs pay and shorts receive ABI's mean hourly move over the last ${RULES.window} closed hours, with milestone steps taken out. ` +
+    "Each market's rates are set at the start of every hour from its open positions, per point of size per hour held. " +
+    `Trend: longs pay and shorts receive the index's mean hourly move over the last ${RULES.window} closed hours, with milestone steps taken out. ` +
     `Milestone premium: longs also pay the mean hourly milestone step of the last ${RULES.premiumWindow / 24} days, to the house; it is part of the long rate. ` +
     `Skew: the larger side pays up to max(${RULES.rMaxMult}σ_1h, ${pct(RULES.rMinFloor)}) an hour, in proportion to the imbalance; ` +
     `the smaller side and the house receive ${pct(1 - RULES.fundingCut)} of that per point and the pilot keeps ${pct(RULES.fundingCut)}. ` +
@@ -70,6 +77,7 @@ export const PILOT_COPY = {
     "True-up: the difference to the exact result of each position, booked every hour and when it closes. " +
     "Liquidations: equity left at a liquidation, less gaps insurance could not cover.",
   economyTip:
+    "Each market has its own house, fee pool, insurance and weekly split; this tab shows the market of the index above. " +
     "The house takes the other side of the net imbalance between longs and shorts, under the same funding rules. " +
     "Trading fees, borrow, the funding cut and the house's realized result (from closed and liquidated positions) form the fee pool; " +
     "its result on open positions stays in its book until they close, and a loss carries over. " +
@@ -77,13 +85,14 @@ export const PILOT_COPY = {
     `${pct(RULES.split.buybackOfTreasury)} of which is set aside for a REGI buyback. All in points; nothing is bought during the pilot.`,
   insuranceTip: "Covers losses beyond a position's margin when the index jumps past its liquidation price, up to its balance; the house carries the rest. No position loses more than its margin.",
   noEconomy: "No economy data yet.",
-  leaderboardTip: "Balance plus open positions (with funding and borrow) at the latest mark. Only wallets that currently hold the REGI minimum. Top 50, refreshed every minute.",
+  leaderboardTip: "Balance plus open positions in every market (with funding and borrow), each at its market's latest mark. Only wallets that currently hold the REGI minimum. Top 50, refreshed every minute.",
   priceUpdating: "Price updating",
-  paused: `Paused: ABI moved more than max(${RULES.pauseSigmas}σ_1h, ${pct(RULES.pauseFloor)}) in the last hour.`,
+  paused: `Paused: the index moved more than max(${RULES.pauseSigmas}σ_1h, ${pct(RULES.pauseFloor)}) in the last hour.`,
   basePaused: "Paused for a minute around the hour's base sample.",
   milestonePaused: "Paused: index milestone",
   milestoneTip: "Recorded milestones change the index at once; orders pause for a minute so nobody trades on stale prices.",
-  capped: (max: number) => `Max ${max}× at ABI's current volatility.`,
+  /** "Max 5× at AII's current volatility." */
+  capped: (max: number, code = "ABI") => `Max ${max}× at ${code}'s current volatility.`,
   closeFirst: (held: "long" | "short") => `Close your ${held} first`,
   filling: "Filling at the next mark…",
   signInForPositions: "Sign in to see your positions.",
@@ -114,8 +123,8 @@ export const fmtHour = (unixS: number) => {
   return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
 };
 
-/** "Open long 2×" */
-export const openLabel = (side: "long" | "short", lev: number) => `Open ${side} ${lev}×`;
+/** "Open long AII 2×": the button names the market it trades (plan 2026-10-12 R8). */
+export const openLabel = (side: "long" | "short", lev: number, code = "ABI") => `Open ${side} ${code} ${lev}×`;
 
 export function fmtPts(n: number): string {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

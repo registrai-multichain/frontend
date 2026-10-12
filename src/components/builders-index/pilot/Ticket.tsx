@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { InfoBubble } from "@/components/InfoBubble";
 import { borrowPaid, liqPrice, RULES, type Side } from "@/lib/abi-pilot";
-import type { PilotAccountView } from "@/lib/abi-pilot-api";
+import { marketCode, type PilotAccountView } from "@/lib/abi-pilot-api";
 import { borrowPerDay, fmtHour, fmtPts, fmtPx, fmtSideRate, openLabel, PILOT_COPY, PILOT_DISCLAIMER, PILOT_JUMP_NOTE, PILOT_LIQ_NOTE } from "@/lib/abi-pilot-copy";
 
 export interface TicketProps {
@@ -62,7 +62,11 @@ function FundingRows({ view }: { view: PilotAccountView }) {
   );
 }
 
-/** The trade ticket: Long / Short, margin, leverage (capped), liquidation price with costs, fee, borrow, funding. */
+/**
+ * The trade ticket for the page's market (view.market: the index tab): Long / Short, margin, leverage (capped),
+ * liquidation price with costs, fee, borrow, funding. One balance across markets; one direction and the open-position
+ * limit per market.
+ */
 export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onSignIn, onSignOut, onOrder }: TicketProps) {
   const [side, setSide] = useState<Side>("long");
   const [lev, setLev] = useState(1);
@@ -70,11 +74,12 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
   const m = view.mark;
   const acct = view.account;
   const regi = regiLine(view);
+  const code = marketCode(view.market);
 
   const head = (
     <div className="abi-ph">
-      <h2>{PILOT_COPY.heading}</h2>
-      <InfoBubble label="About the points pilot">{PILOT_COPY.rulesTip}</InfoBubble>
+      <h2>{PILOT_COPY.heading} · {code}</h2>
+      <InfoBubble label="About the points pilot">{PILOT_COPY.marketsRule} {PILOT_COPY.rulesTip}</InfoBubble>
       {view.address && <span className="sp"><button type="button" className="abi-pt-link" onClick={onSignOut}>{PILOT_COPY.signOut}</button></span>}
     </div>
   );
@@ -118,8 +123,9 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
     const liq24 = pos ? liqPrice(pos, borrowPaid(pos, 86400) + (sideRate ?? 0) * notional * 24) : null;
     const borrowDay = margin > 0 ? borrowPerDay(notional, margin) : 0;
     const balance = acct?.balance ?? 0;
-    const full = view.positions.length >= RULES.maxOpen;
-    const held = view.positions[0]?.side;
+    const here = view.positions.filter((p) => p.market === view.market);
+    const full = here.length >= RULES.maxOpen;
+    const held = here[0]?.side;
     const problem =
       !m || !m.fresh ? PILOT_COPY.priceUpdating
         : m.paused ? PILOT_COPY.paused
@@ -154,9 +160,9 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
             ))}
           </div>
         </div>
-        {m && maxLev < m.levCap && <p className="abi-pt-note">{PILOT_COPY.capped(maxLev)}</p>}
+        {m && maxLev < m.levCap && <p className="abi-pt-note">{PILOT_COPY.capped(maxLev, code)}</p>}
         <dl className="abi-kv abi-pt-kv">
-          <dt>Mark</dt><dd>{m ? fmtPx(m.mark) : "–"}</dd>
+          <dt>{code} mark</dt><dd>{m ? fmtPx(m.mark) : "–"}</dd>
           <dt>Size</dt><dd>{fmtPts(notional)} pts</dd>
           <dt>Fee</dt><dd>{fmtPts(fee)} pts</dd>
           <dt>Borrow <InfoBubble label="About borrow">{PILOT_COPY.borrowTip}</InfoBubble></dt><dd>{fmtPts(borrowDay)} pts/day</dd>
@@ -167,7 +173,7 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
           {acct?.equity !== null && acct?.equity !== undefined && (<><dt>Equity</dt><dd>{fmtPts(acct.equity)} pts</dd></>)}
         </dl>
         <div className="abi-pt-disc"><p>{PILOT_DISCLAIMER}</p><p>{PILOT_LIQ_NOTE}</p><p>{PILOT_JUMP_NOTE}</p></div>
-        <button type="submit" className={`abi-pt-primary ${side}`} disabled={Boolean(problem) || busy}>{filling ? PILOT_COPY.filling : openLabel(side, levUse)}</button>
+        <button type="submit" className={`abi-pt-primary ${side}`} disabled={Boolean(problem) || busy}>{filling ? PILOT_COPY.filling : openLabel(side, levUse, code)}</button>
         {problem && (
           <p className="abi-pt-note" role="status">
             {problem}
@@ -180,7 +186,7 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
   }
 
   return (
-    <aside className="abi-panel abi-pt-panel" aria-label="Points pilot ticket">
+    <aside className="abi-panel abi-pt-panel" aria-label={`Points pilot ticket, ${code}`}>
       {head}
       {body}
     </aside>

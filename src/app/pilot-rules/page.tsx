@@ -7,11 +7,11 @@ import { RULES } from "@/lib/abi-pilot";
 
 export const metadata: Metadata = {
   title: "Points pilot rules · Registrai",
-  description: "How the ABI points pilot works: eligibility, orders, leverage, funding, borrow, liquidation and the points economy.",
+  description: "How the points pilot on ABI, AII and AEI works: eligibility, markets, orders, leverage, funding, borrow, liquidation and the points economy.",
   alternates: { canonical: "/pilot-rules" },
   // own share tags: the root layout's carry the landing page's line and image (audit L12)
-  openGraph: { type: "website", siteName: "Registrai", title: "Points pilot rules · Registrai", description: "How the ABI points pilot works: eligibility, orders, leverage, funding, borrow, liquidation and the points economy.", url: "https://builder.registrai.cc/pilot-rules/" },
-  twitter: { card: "summary", title: "Points pilot rules · Registrai", description: "How the ABI points pilot works: eligibility, orders, leverage, funding, borrow, liquidation and the points economy." },
+  openGraph: { type: "website", siteName: "Registrai", title: "Points pilot rules · Registrai", description: "How the points pilot on ABI, AII and AEI works: eligibility, markets, orders, leverage, funding, borrow, liquidation and the points economy.", url: "https://builder.registrai.cc/pilot-rules/" },
+  twitter: { card: "summary", title: "Points pilot rules · Registrai", description: "How the points pilot on ABI, AII and AEI works: eligibility, markets, orders, leverage, funding, borrow, liquidation and the points economy." },
 };
 
 const H = ({ children }: { children: React.ReactNode }) => <h2 className="pa-h2 mt-8 mb-2">{children}</h2>;
@@ -34,8 +34,16 @@ export default function PilotRulesPage() {
           <li>You must be 18 or older and accept the Terms; sign-in asks you to confirm both.</li>
           <li>{PILOT_COPY.holdRegi(REGI_MIN_DEFAULT)} You must hold it when you place each order; the balance is checked at that moment. Closing a position needs no REGI.</li>
           <li>The leaderboard lists only wallets that currently hold the REGI minimum.</li>
-          <li>One person, one wallet. Starting balance {RULES.startBalance.toLocaleString("en-US")} points, once per wallet per season.</li>
+          <li>One person, one wallet. Starting balance {RULES.startBalance.toLocaleString("en-US")} points, once per wallet per season, for all three markets.</li>
           <li>{PILOT_COPY.signInNote}</li>
+        </ul>
+
+        <H>Markets</H>
+        <ul className="pa-list">
+          <li>The pilot trades three markets, one per Arc index: ABI (Arc Builders Index), AII (Arc Integrations Index) and AEI (Arc Ecosystem Index).</li>
+          <li>One points balance per wallet covers all three. Every open and close is paid from and back to it.</li>
+          <li>One direction at a time in each market: you can be long ABI and short AII, not long and short ABI. Up to {RULES.maxOpen} open positions per market.</li>
+          <li>Each market has its own mark, funding rates, house, fee pool, insurance and weekly split. The same rules apply in all three. AII has no base layer, so the base-sample pause doesn&apos;t apply there.</li>
         </ul>
 
         <H>Orders and leverage</H>
