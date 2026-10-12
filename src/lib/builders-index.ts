@@ -92,7 +92,7 @@ export type AbiLive = {
   /** audit F1 (absent in older files): payments under min_pay are ignored; only a payment of new_payer_min or more
    * earns (and marks) the new-payer bonus, at most new_payer_max_h per member-hour; entry_step phases the entry in */
   min_pay?: number; new_payer_min?: number; new_payer_max_h?: number; entry_step?: number;
-  /** §21 (absent in older files = today's rule): payment cap per wallet-hour, USD per volume point, base-layer cap */
+  /** §21 (absent in older files = today's rule): payment cap per payer per hour, USD per volume point, base-layer cap */
   vol_cap?: number; vol_unit?: number; base_cap?: number;
   /** "close the gaps": the contract map lives in its own file (/api/index/…/contracts); this pins its version */
   contracts_sha256?: string; contracts_count?: number;
