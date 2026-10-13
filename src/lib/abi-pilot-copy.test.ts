@@ -61,15 +61,15 @@ describe("pilot copy lint (R7)", () => {
     // audit L4; plan 2026-10-12 R8: index-neutral, the same line on every market's ticket
     expect(PILOT_JUMP_NOTE).toBe("Recorded milestones move the index at once and can liquidate leveraged positions.");
     expect(PILOT_COPY.closed).toBe("The points pilot is not open yet.");
-    // owner decision 2026-10-11 (audit PE-3): the gate is 1,000,000 REGI, and the copy says so
-    expect(PILOT_COPY.holdRegi(1_000_000)).toBe("Hold 1,000,000 REGI to join the points pilot.");
-    // owner decision 2026-10-12: REGI is checked when each order is placed; the snapshot only when one is set
-    expect(PILOT_COPY.signInTip(1_000_000)).toContain("The wallet needs at least 1,000,000 REGI on Arc when it places each order.");
-    expect(PILOT_COPY.signInTip(1_000_000)).toContain("The leaderboard shows only wallets that currently hold it.");
-    expect(PILOT_COPY.signInTip(1_000_000)).not.toContain("snapshot");
-    expect(PILOT_COPY.signInTip(1_000_000, true)).toContain("when it places each order and must have held that amount at the pilot snapshot block.");
+    // owner decisions 2026-10-13: $10 of REGI at sign-in and at each order, at the 24 h median; the snapshot only when one is set
+    expect(PILOT_COPY.holdRegi(10)).toBe("Hold at least $10 of REGI to join the points pilot.");
+    expect(PILOT_COPY.signInTip(10)).toContain("The wallet needs at least $10 of REGI on Arc at sign-in and when it places each order.");
+    expect(PILOT_COPY.signInTip(10)).toContain("REGI is priced at the median of the REGI/USDC pool over the last 24 hours.");
+    expect(PILOT_COPY.signInTip(10)).toContain("The leaderboard shows only wallets that currently hold the amount.");
+    expect(PILOT_COPY.signInTip(10)).not.toContain("snapshot");
+    expect(PILOT_COPY.signInTip(10, true)).toContain("when it places each order, and must have held that amount at the pilot snapshot block.");
     expect(PILOT_COPY.misconfigured).toBe("The points pilot is misconfigured; new orders are refused.");
-    for (const s of [PILOT_COPY.holdRegi(1_000_000), PILOT_COPY.signInTip(1_000_000), PILOT_COPY.signInTip(1_000_000, true), PILOT_COPY.misconfigured]) expect(banned(s)).toBeUndefined();
+    for (const s of [PILOT_COPY.holdRegi(10), PILOT_COPY.signInTip(10), PILOT_COPY.signInTip(10, true), PILOT_COPY.misconfigured]) expect(banned(s)).toBeUndefined();
     expect(PILOT_COPY.rulesTip).toContain("One direction at a time in each market: close your longs there before opening a short, and the reverse.");
     // plan 2026-10-12 R9: three markets, one balance, one direction per market, the economy per market
     expect(PILOT_COPY.marketsRule).toBe(
@@ -113,8 +113,8 @@ const FUNDING = { market: "abi" as const, recent: [rate(1_760_094_000, 0.0003, -
 const NOW = { hour: 1_760_094_000, long: 0.0003, short: -0.00027, skew: 0.5, next: 1_760_097_600 };
 const POS_LIQ = liqPrice({ side: "long", margin: 1000, notional: 2000, entry: 990 }, 0);
 const VIEW: PilotAccountView = {
-  market: "abi", open: true, misconfigured: false, regiMin: 1_000_000, regiSnapshot: false, address: ME, regi: { ok: true, snapshot: true, now: true }, account: { balance: 9000, equity: 9998.8, season: 1 },
-  positions: [{ id: 7, market: "abi", side: "long", margin: 1000, lev: 2, notional: 2000, entry: 990, liq: POS_LIQ, openedAt: 1_760_097_000, fee: 0.2, funding: 0.6, borrow: 0.02, mark: 1000, pnl: 20.2 }],
+  market: "abi", open: true, misconfigured: false, admitUsd: 10, lockUsd: 50, price: 1e-5, admitRegi: (10n ** 24n).toString(), lockRegi: (5n * 10n ** 24n).toString(), lockFactory: "0x00000000000000000000000000000000000fac70", regiSnapshot: false, address: ME, regi: { ok: true, snapshot: true, now: true }, account: { balance: 9000, equity: 9998.8, season: 1 },
+  positions: [{ id: 7, market: "abi", side: "long", margin: 1000, lev: 2, notional: 2000, entry: 990, liq: POS_LIQ, openedAt: 1_760_097_000, fee: 0.2, funding: 0.6, borrow: 0.02, mark: 1000, pnl: 20.2, lockReq: (5n * 10n ** 24n).toString() }],
   pending: [],
   mark: MARK,
   funding: NOW,
@@ -210,7 +210,7 @@ describe("ticket", () => {
     const states: [PilotAccountView, string][] = [
       [{ ...VIEW, open: false }, PILOT_COPY.closed],
       [{ ...VISITOR, open: false }, PILOT_COPY.closed],
-      [VISITOR, PILOT_COPY.holdRegi(1_000_000)],
+      [VISITOR, PILOT_COPY.holdRegi(10)],
       [{ ...VIEW, open: false, misconfigured: true }, PILOT_COPY.misconfigured],
       [{ ...VISITOR, open: false, misconfigured: true }, PILOT_COPY.misconfigured],
       [{ ...VIEW, regiSnapshot: true, regi: { ok: false, snapshot: false, now: true } }, PILOT_COPY.notAtSnapshot],
@@ -225,7 +225,7 @@ describe("ticket", () => {
     }
     // owner decision 2026-10-12: the last known REGI state is a note; the order (a fresh read) decides, so the form stays
     for (const [view, line] of [
-      [{ ...VIEW, regi: { ok: false, snapshot: null, now: false } }, PILOT_COPY.holdRegi(1_000_000)],
+      [{ ...VIEW, regi: { ok: false, snapshot: null, now: false } }, PILOT_COPY.holdRegi(10)],
       [{ ...VIEW, regi: { ok: null, snapshot: null, now: null } }, PILOT_COPY.regiUnchecked],
     ] as [PilotAccountView, string][]) {
       const h = ticket({ view });
@@ -235,7 +235,7 @@ describe("ticket", () => {
       expect(banned(visible(h))).toBeUndefined();
     }
     // a possible holder whose check failed is never told to hold REGI
-    expect(ticket({ view: { ...VIEW, regi: { ok: null, snapshot: null, now: null } } })).not.toContain(PILOT_COPY.holdRegi(1_000_000));
+    expect(ticket({ view: { ...VIEW, regi: { ok: null, snapshot: null, now: null } } })).not.toContain(PILOT_COPY.holdRegi(10));
     expect(ticket({ view: VISITOR })).toContain(">Sign in</button>");
     expect(ticket({ view: VISITOR })).toContain('aria-label="About sign-in"');
   });

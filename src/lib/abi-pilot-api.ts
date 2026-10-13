@@ -74,17 +74,104 @@ export const ARC_RPC_URL = "https://rpc.mainnet.arc.io";
 export const REGI_ADDRESS = "0x93D5b8c53ee763C2c4522bF0d958ce51Af4360ae";
 /** REGI has 18 decimals. */
 export const REGI_UNIT = 10n ** 18n;
-/** The gate (owner decision 2026-10-11, audit PE-3): a wallet must hold at least this many REGI (PILOT_REGI_MIN overrides it). */
-export const REGI_MIN_DEFAULT = 1_000_000;
 /** REGI's contract has code from this Arc block on (audit PE-7): a snapshot block (when one is set) before it is a misconfiguration. */
 export const REGI_DEPLOY_BLOCK = 22_419_071;
 /** The pilot's leverage cap on top of the engine's (owner decision 2026-10-11, audit F2; PILOT_MAX_LEV overrides it). */
 export const PILOT_MAX_LEV_DEFAULT = 10;
-/** "Hold 1,000,000 REGI to join the points pilot." */
-export const holdRegiText = (min: number) => `Hold ${min.toLocaleString("en-US")} REGI to join the points pilot.`;
 export const BALANCE_OF_SELECTOR = "0x70a08231";
 /** A cached REGI check is reused for at most this long (the account view, the leaderboard; never an order). */
 export const REGI_CACHE_S = 10 * 60;
+
+// ───────────────────────────── REGI in dollars (plan 2026-10-13 R1–R3) ─────────────────────────────
+
+/**
+ * Owner decisions 2026-10-13: holding $10 of REGI admits a wallet (at sign-in and at each order; PILOT_ADMIT_USD), and
+ * $50 of REGI locked in the wallet's own vault unlocks leverage (PILOT_LOCK_USD). Dollars are converted at the median
+ * of the last 24 h of the site's own REGI/USDC pool samples.
+ */
+export const PILOT_ADMIT_USD_DEFAULT = 10;
+export const PILOT_LOCK_USD_DEFAULT = 50;
+/** The REGI/USDC Uniswap v4 pool on Arc: currency0 USDC (0x3600…, 6 decimals), currency1 REGI (18 decimals). */
+export const REGI_POOL_ID = "0x0530f18eb32d732cc8b067bbd0b2ba7e5d807d4f5cf4f7d74429f2a78d3120c8";
+export const POOL_MANAGER = "0x8366a39CC670B4001A1121B8F6A443A643e40951";
+/** keccak256(abi.encode(REGI_POOL_ID, 6)): the pool's slot0 in the PoolManager (v4-core StateLibrary, POOLS_SLOT = 6). */
+export const REGI_POOL_SLOT0 = "0xbfb2c46a4308e57a10d2c1bd1de3d26f82e89e6a8d840e77e53def66f1f0f999";
+/** Function selectors (test: src/lib/abi-pilot-lock.test.ts checks each against its signature). */
+export const SELECTORS = {
+  /** PoolManager.extsload(bytes32) */
+  extsload: "0x1e2eaeaf",
+  /** RegiLockFactory.lockedOf(address) */
+  lockedOf: "0xa5f1e282",
+} as const;
+/** RegiLockFactory's Withdrawn(address indexed owner, address indexed vault, uint256 amount). */
+export const WITHDRAWN_TOPIC = "0xd1c19fbcd4551a5edfb66d43d2e337c04837afda3482b42bdf569a8fccdae5fb";
+/** The site samples the pool at most once per this many seconds (one sample per slot of this length). */
+export const PRICE_SAMPLE_S = 10 * 60;
+/** The price is the median of the samples of this window… */
+export const PRICE_WINDOW_S = 24 * 3600;
+/** …and unknown (fail closed) with fewer samples than this in it. */
+export const PRICE_MIN_SAMPLES = 6;
+/** The withdrawal watch runs at most once per this many seconds, and reads logs in chunks of at most LOG_CHUNK blocks. */
+export const LOCK_WATCH_S = 60;
+export const LOG_CHUNK = 5000;
+/** The lock form's default amount: the requirement plus this share. */
+export const LOCK_HEADROOM = 0.05;
+/**
+ * The lock factory's address for the static pages (the Pilot rules); the server's is PILOT_LOCK_FACTORY. Empty until
+ * the owner deploys the factory: set both to the same address.
+ */
+export const LOCK_FACTORY_ADDRESS = "";
+
+/**
+ * USD per REGI from the pool's sqrtPriceX96: (sqrtP / 2^96)^2 is raw REGI per raw USDC, so REGI per USDC is that
+ * × 10^6 / 10^18, and USD per REGI its inverse. null when the pool has no price (0).
+ */
+export function usdPerRegiOf(sqrtPriceX96: bigint): number | null {
+  if (sqrtPriceX96 <= 0n) return null;
+  const rawRegiPerRawUsdc = (Number(sqrtPriceX96) / 2 ** 96) ** 2;
+  const usd = 1e12 / rawRegiPerRawUsdc;
+  return Number.isFinite(usd) && usd > 0 ? usd : null;
+}
+
+/** The low 160 bits of the pool's slot0 word (hex): sqrtPriceX96. */
+export const sqrtPriceOfSlot0 = (word: string) => BigInt(word) & ((1n << 160n) - 1n);
+
+/** Median of finite positive numbers (the mean of the two middle ones for an even count); null when empty. */
+export function median(xs: readonly number[]): number | null {
+  const v = xs.filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
+  if (!v.length) return null;
+  const h = v.length >> 1;
+  return v.length % 2 ? v[h] : (v[h - 1] + v[h]) / 2;
+}
+
+/**
+ * The REGI (raw, 18 decimals) that `usd` dollars buy at `usdPerRegi`, rounded UP to a millionth of a REGI. A quotient
+ * within one part in 10^14 of a whole millionth is taken as that millionth, so float noise (10 / 1e-5 =
+ * 1000000.0000000001) never adds one; any real fraction (below 10^8 REGI) still rounds up.
+ */
+export function regiFor(usd: number, usdPerRegi: number): bigint {
+  const x = (usd / usdPerRegi) * 1e6;
+  const r = Math.round(x);
+  const micro = Math.abs(x - r) <= x * 1e-14 ? r : Math.ceil(x);
+  return BigInt(micro) * 10n ** 12n;
+}
+
+/** Whole REGI, floored, for display. */
+export const wholeRegiOf = (raw: bigint | string) => Number(BigInt(raw) / REGI_UNIT);
+/** "1,234,567 REGI" (rounded up when `up`, so a requirement is never shown short). */
+export function fmtRegi(raw: bigint | string, up = false): string {
+  const r = BigInt(raw);
+  const whole = r / REGI_UNIT + (up && r % REGI_UNIT > 0n ? 1n : 0n);
+  return `${Number(whole).toLocaleString("en-US")} REGI`;
+}
+/** "$10" / "$12.50" */
+export const fmtUsd = (usd: number) => `$${usd.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(usd) ? 0 : 2, maximumFractionDigits: 2 })}`;
+/** "Hold at least $10 of REGI to join the points pilot." (PILOT_ADMIT_USD) */
+export const holdUsdText = (usd: number) => `Hold at least ${fmtUsd(usd)} of REGI to join the points pilot.`;
+/** "Lock at least $50 of REGI to trade with leverage." (PILOT_LOCK_USD) */
+export const lockUsdText = (usd: number) => `Lock at least ${fmtUsd(usd)} of REGI to trade with leverage.`;
+/** Both the admission and the leverage check answer this while the price is unknown (fewer than PRICE_MIN_SAMPLES). */
+export const REGI_PRICE_UPDATING = "REGI price updating";
 
 // ───────────────────────────── API ─────────────────────────────
 
@@ -173,6 +260,8 @@ export interface OpenPositionView {
   mark: number | null;
   /** At its market's latest mark (null without one). */
   pnl: number | null;
+  /** The REGI lock requirement in force when it opened (raw, decimal string; "0" at 1×). Withdrawing below it closes the position. */
+  lockReq: string;
 }
 
 export interface ClosedPositionView {
@@ -196,7 +285,8 @@ export interface ClosedPositionView {
   returned: number;
   /** returned − margin − open fee. */
   net: number;
-  reason: "close" | "liquidation";
+  /** "lock withdrawn": closed by the site (normal close settlement) because the wallet withdrew REGI below the position's lock requirement. */
+  reason: "close" | "liquidation" | "lock withdrawn";
 }
 
 export interface OrderView {
@@ -215,7 +305,7 @@ export interface OrderView {
 
 export interface RegiView {
   /**
-   * The last known state (the account view; an order always re-reads the balance): holds the minimum REGI (regiMin)
+   * The last known state (the account view; an order always re-reads the balance): holds the admission amount (admitRegi)
    * now and, when a snapshot block is set, held it there. null = couldn't check.
    */
   ok: boolean | null;
@@ -311,11 +401,20 @@ export interface PilotAccountView {
   market: PilotMarket;
   /** PILOT_OPEN = "1" and the pilot's settings are valid: new orders accepted. */
   open: boolean;
-  /** PILOT_OPEN = "1" but a setting is invalid (the snapshot block, PILOT_REGI_MIN, PILOT_MAX_LEV): every order is refused. */
+  /** PILOT_OPEN = "1" but a setting is invalid (the snapshot block, PILOT_ADMIT_USD, PILOT_LOCK_USD, PILOT_LOCK_FACTORY, PILOT_MAX_LEV): every order is refused. */
   misconfigured: boolean;
-  /** The REGI a wallet must hold when it places each order (whole REGI). */
-  regiMin: number;
-  /** A PILOT_REGI_SNAPSHOT_BLOCK is set: the wallet must also have held regiMin at that block. */
+  /** PILOT_ADMIT_USD: the REGI (in dollars) a wallet must hold at sign-in and when it places each order. */
+  admitUsd: number;
+  /** PILOT_LOCK_USD: the REGI (in dollars) a wallet must have locked in its vault to use leverage above 1×. */
+  lockUsd: number;
+  /** USD per REGI: the median of the last 24 h of pool samples; null while unknown (fewer than PRICE_MIN_SAMPLES). */
+  price: number | null;
+  /** The admission and the lock requirement in raw REGI (18 decimals, decimal strings) at `price`; null while it is unknown. */
+  admitRegi: string | null;
+  lockRegi: string | null;
+  /** PILOT_LOCK_FACTORY (lowercase), or null while the lock factory is not deployed: leverage above 1× is refused. */
+  lockFactory: string | null;
+  /** A PILOT_REGI_SNAPSHOT_BLOCK is set: the wallet must also have held the admission amount at that block. */
   regiSnapshot: boolean;
   address: string | null;
   regi: RegiView | null;

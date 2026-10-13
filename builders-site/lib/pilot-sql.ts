@@ -7,13 +7,13 @@
 
 export const TABLES = [
   "accounts", "positions", "orders", "bars", "gaps", "funding", "mark", "used_nonces", "ratelimit",
-  "rates", "ledger", "pools", "splits", "house_hours",
+  "rates", "ledger", "pools", "splits", "house_hours", "regi_price", "lock_cursor",
 ] as const;
 export const INDEXES = ["positions_wallet", "positions_open", "positions_market", "orders_pending", "orders_wallet", "bars_l", "bars_h", "ledger_ref", "ledger_kind_ts"] as const;
 /** Migration 0004 rebuilds these tables through a `<name>_v4` copy (the guard check prefixes those names too). */
 export const REBUILT = ["mark", "bars", "gaps", "rates", "house_hours", "pools", "splits"] as const;
 /** The migrations, in order (the guard check and the D1 test double apply all of them). */
-export const MIGRATIONS = ["0001_pilot.sql", "0002_pilot_v3.sql", "0003_pilot_premium.sql", "0004_pilot_markets.sql"] as const;
+export const MIGRATIONS = ["0001_pilot.sql", "0002_pilot_v3.sql", "0003_pilot_premium.sql", "0004_pilot_markets.sql", "0005_pilot_regi_usd_lock.sql"] as const;
 
 /**
  * The guards (R4), each a row `g` that exists only for the batch that owns the event: a position settled under its
@@ -45,10 +45,13 @@ export const SQL = {
     "AND (SELECT COUNT(*) FROM positions WHERE wallet = ? AND closed_at IS NULL AND market = ?) < ? " +
     "AND NOT EXISTS (SELECT 1 FROM positions WHERE wallet = ? AND closed_at IS NULL AND market = ? AND side <> ?) " +
     "AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')",
-  /** Open fill, 2/3 — bind: wallet, market, side, margin, lev, notional, entry, liq, opened_at, fee, booked_to (= opened_at). Only after the debit. */
+  /**
+   * Open fill, 2/3 — bind: wallet, market, side, margin, lev, notional, entry, liq, opened_at, fee, booked_to (= opened_at),
+   * lock_req (the order's: raw REGI as a canonical decimal string, '0' at 1×). Only after the debit.
+   */
   openInsert:
-    "INSERT INTO positions (wallet, market, side, margin, lev, notional, entry, liq, opened_at, fee, booked_to) " +
-    "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1 RETURNING id",
+    "INSERT INTO positions (wallet, market, side, margin, lev, notional, entry, liq, opened_at, fee, booked_to, lock_req) " +
+    "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1 RETURNING id",
   /** Open fill, 3/3 — bind: fill_px, filled_at, orderId. Only after the insert. */
   openFilled:
     "UPDATE orders SET status = 'filled', position_id = last_insert_rowid(), fill_px = ?, filled_at = ? " +
@@ -68,6 +71,19 @@ export const SQL = {
     "UPDATE positions SET closed_at = ?, exit = ?, pnl = ?, accrued = ?, fee = fee + ?, returned = ?, borrow = ?, fill = ?, settle = ?, " +
     "booked = ?, booked_cut = ?, booked_to = ?, reason = 'close' " +
     "WHERE id = ? AND wallet = ? AND closed_at IS NULL AND booked_to = ? AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')",
+  /**
+   * R4: the site closes a position because its wallet withdrew REGI from the lock — the normal close settlement (as
+   * closeSettle, reason 'close', close_note 'lock withdrawn'), with no order. Only an open position whose booking has
+   * not moved since it was read and whose lock requirement is ABOVE the remaining lock: lock_req and the remaining
+   * lock are canonical decimal strings of raw REGI, so "above" is a longer string, or as long and greater as text —
+   * bind: closed_at, exit, pnl, accrued, closeFee, returned, borrow, fill, settle, booked, booked_cut, booked_to,
+   * positionId, wallet, booked_to (as read), locked, locked, locked. Then closeCredit and the ledger rows under `settle`.
+   */
+  lockClose:
+    "UPDATE positions SET closed_at = ?, exit = ?, pnl = ?, accrued = ?, fee = fee + ?, returned = ?, borrow = ?, fill = ?, settle = ?, " +
+    "booked = ?, booked_cut = ?, booked_to = ?, reason = 'close', close_note = 'lock withdrawn' " +
+    "WHERE id = ? AND wallet = ? AND closed_at IS NULL AND booked_to = ? AND lock_req <> '0' " +
+    "AND (length(lock_req) > length(?) OR (length(lock_req) = length(?) AND lock_req > ?))",
   /** Close fill, 2/3 — bind: returned, wallet. Credits only when the settle changed a row. */
   closeCredit: "UPDATE accounts SET balance = balance + ? WHERE wallet = ? AND changes() = 1",
   /** Close fill, 3/3 — bind: fill_px, filled_at, orderId. */
@@ -179,6 +195,14 @@ export const SQL = {
     "ON CONFLICT (market, minute_from) DO NOTHING",
   /** bind: market, minute_from, post. The gap got its gap bar in the same batch (by the post that won the gap's market). */
   gapClose: "DELETE FROM gaps WHERE market = ? AND minute_from = ? AND (SELECT post FROM mark WHERE market = gaps.market) = ?",
+  /** R1: one REGI/USDC pool sample per 10-minute slot — bind: slot start, usd_per_regi. changes = 1 only for the slot's first. */
+  priceInsert: "INSERT INTO regi_price (ts, usd_per_regi) VALUES (?, ?) ON CONFLICT (ts) DO NOTHING",
+  /** R1: the samples since a time, ascending by price (the median is taken in code) — bind: since. */
+  priceWindow: "SELECT usd_per_regi AS p FROM regi_price WHERE ts > ? ORDER BY usd_per_regi",
+  /** R4: claims this minute's withdrawal watch — bind: now, now − 60. changes = 1 for one caller per minute. */
+  lockClaim: "UPDATE lock_cursor SET checked = ? WHERE id = 1 AND checked <= ?",
+  /** R4: the watch handled every Withdrawn log up to a block; the cursor only moves forward — bind: block. */
+  lockAdvance: "UPDATE lock_cursor SET block = MAX(COALESCE(block, -1), ?) WHERE id = 1",
   /** bind: wallet. Ends every session of the wallet. */
   sessionBump: "UPDATE accounts SET session_epoch = session_epoch + 1 WHERE wallet = ?",
   /** Liquidation candidates (a superset; the engine decides), one page of LIQ_PAGE from a cursor — bind: market, bound, from minute. */

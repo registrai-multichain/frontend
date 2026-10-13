@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
-import { PILOT_MAX_LEV_DEFAULT, REGI_MIN_DEFAULT } from "@/lib/abi-pilot-api";
+import { PILOT_ADMIT_USD_DEFAULT, PILOT_MAX_LEV_DEFAULT } from "@/lib/abi-pilot-api";
 import { PILOT_COPY, PILOT_DISCLAIMERS } from "@/lib/abi-pilot-copy";
 import { RULES } from "@/lib/abi-pilot";
 
@@ -32,7 +32,7 @@ export default function PilotRulesPage() {
         <H>Who can join</H>
         <ul className="pa-list">
           <li>You must be 18 or older and accept the Terms; sign-in asks you to confirm both.</li>
-          <li>{PILOT_COPY.holdRegi(REGI_MIN_DEFAULT)} You must hold it when you place each order; the balance is checked at that moment. Closing a position needs no REGI.</li>
+          <li>{PILOT_COPY.holdRegi(PILOT_ADMIT_USD_DEFAULT)} You must hold it when you sign in and when you place each order; the balance is checked at those moments. Closing a position needs no REGI.</li>
           <li>The leaderboard lists only wallets that currently hold the REGI minimum.</li>
           <li>One person, one wallet. Starting balance {RULES.startBalance.toLocaleString("en-US")} points, once per wallet per season, for all three markets.</li>
           <li>{PILOT_COPY.signInNote}</li>

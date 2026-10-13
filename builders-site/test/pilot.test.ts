@@ -227,21 +227,25 @@ describe("mark ingest (R4, spec §8.5)", () => {
 });
 
 describe("sign-in and session (R6)", () => {
-  test("nonce + personal_sign: a 12 h HttpOnly, Secure, SameSite=Strict cookie; no REGI read at sign-in", async () => {
+  test("nonce + personal_sign: a 12 h HttpOnly, Secure, SameSite=Strict cookie; the admission REGI read fresh at sign-in", async () => {
     const t = setup();
-    t.balances.set(`${lc(ALICE)}@latest`, 0n); // sign-in neither refuses nor flags a wallet for REGI (owner decision 2026-10-12)
+    // plan 2026-10-13 R2: a wallet holding less than $10 of REGI is refused at sign-in (no account, no cookie)
+    t.balances.set(`${lc(ALICE)}@latest`, ONE - 1n);
+    const no = await t.loginWith(ALICE);
+    expect([no.status, await no.json(), no.headers.get("set-cookie")]).toEqual([403, { error: "Hold at least $10 of REGI to join the points pilot." }, null]);
+    expect(t.db.q("SELECT COUNT(*) AS n FROM accounts")).toEqual([{ n: 0 }]);
+    t.balances.set(`${lc(ALICE)}@latest`, 5n * ONE);
     const res = await t.loginWith(ALICE);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ address: lc(ALICE) });
     expect(res.headers.get("set-cookie")).toMatch(new RegExp(`^${PILOT_SESSION_COOKIE}=0x[0-9a-f]{40}\\.0\\.\\d+\\.[A-Za-z0-9_-]+; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=43200$`));
-    expect(t.rpc.calls).toBe(0);
-    expect(t.db.q("SELECT balance, season, regi_ok, regi_checked, regi_snap FROM accounts")).toEqual([{ balance: 10000, season: 1, regi_ok: 0, regi_checked: 0, regi_snap: null }]);
-    // the account view reads it: regi_snap is the whole REGI held at the snapshot block (2,000,000), so a changed
-    // PILOT_REGI_MIN needs no re-read
-    t.balances.set(`${lc(ALICE)}@latest`, 5n * ONE);
+    expect(t.rpc.tags).toEqual(["latest", "latest"]); // one fresh read per sign-in
+    expect(t.db.q("SELECT balance, season, regi_ok, regi_checked, regi_snap FROM accounts")).toEqual([{ balance: 10000, season: 1, regi_ok: 1, regi_checked: t.nowS(), regi_snap: null }]);
+    // the account view reads the snapshot: regi_snap is the whole REGI held at the snapshot block (2,000,000), so a
+    // changed price or PILOT_ADMIT_USD needs no re-read
     const cookie = res.headers.get("set-cookie")!.split(";")[0];
     expect((await t.account(cookie)).body.regi).toEqual({ ok: true, snapshot: true, now: true });
-    expect(t.rpc.tags).toEqual([`0x${SNAP.toString(16)}`, "latest"]);
+    expect(t.rpc.tags).toEqual(["latest", "latest", `0x${SNAP.toString(16)}`]);
     expect(t.db.q("SELECT regi_ok, regi_snap, regi_snap_block FROM accounts")).toEqual([{ regi_ok: 1, regi_snap: 2_000_000, regi_snap_block: SNAP }]);
   });
 
@@ -322,17 +326,17 @@ describe("sign-in and session (R6)", () => {
   });
 });
 
-describe("REGI gate at order time (owner decision 2026-10-12, spec §8.4)", () => {
+describe("REGI gate at each order (plan 2026-10-13 R2: $10 of REGI at the 24 h median)", () => {
   const latestReads = (t: ReturnType<typeof setup>) => t.rpc.tags.filter((x) => x === "latest").length;
 
-  test("an order without the minimum is refused 'Hold 1,000,000 REGI to join the points pilot.'; with it, accepted", async () => {
+  test("an order without $10 of REGI is refused 'Hold at least $10 of REGI to join the points pilot.'; with it, accepted", async () => {
     const t = setup({ snapshot: null });
+    const bob = await t.signIn(BOB); // ONE: exactly $10 at the harness price
     t.balances.set(`${lc(BOB)}@latest`, ONE - 1n);
-    const bob = await t.signIn(BOB);
     await t.mark(1000);
     const r = await t.submit(bob, LONG2);
     expect(r.status).toBe(403);
-    expect(r.body.error).toBe("Hold 1,000,000 REGI to join the points pilot.");
+    expect(r.body.error).toBe("Hold at least $10 of REGI to join the points pilot.");
     t.balances.set(`${lc(BOB)}@latest`, ONE);
     expect((await t.submit(bob, LONG2)).status).toBe(202);
   });
@@ -347,7 +351,7 @@ describe("REGI gate at order time (owner decision 2026-10-12, spec §8.4)", () =
     t.tick(1000);
     const r = await t.submit(alice, LONG2);
     expect(r.status).toBe(403);
-    expect(r.body.error).toBe("Hold 1,000,000 REGI to join the points pilot.");
+    expect(r.body.error).toBe("Hold at least $10 of REGI to join the points pilot.");
     expect(latestReads(t)).toBe(2);
     expect(t.db.q("SELECT regi_ok, regi_checked FROM accounts WHERE wallet = ?", lc(ALICE))).toEqual([{ regi_ok: 0, regi_checked: t.nowS() }]);
     t.balances.set(`${lc(ALICE)}@latest`, ONE);
@@ -401,7 +405,7 @@ describe("REGI gate at order time (owner decision 2026-10-12, spec §8.4)", () =
       expect((await t.account(alice)).body).toMatchObject({ open: true, misconfigured: false, regiSnapshot: false, regi: { ok: true, snapshot: null, now: true } });
       expect((await t.submit(alice, LONG2)).status).toBe(202);
       t.balances.set(`${lc(ALICE)}@latest`, 0n);
-      expect((await t.submit(alice, LONG2)).body.error).toBe("Hold 1,000,000 REGI to join the points pilot.");
+      expect((await t.submit(alice, LONG2)).body.error).toBe("Hold at least $10 of REGI to join the points pilot.");
       expect(t.rpc.tags.every((x) => x === "latest")).toBe(true);
       expect(t.db.q("SELECT regi_snap, regi_snap_block FROM accounts")).toEqual([{ regi_snap: null, regi_snap_block: null }]);
     }
@@ -413,7 +417,8 @@ describe("REGI gate at order time (owner decision 2026-10-12, spec §8.4)", () =
     t.balances.set(`${lc(BOB)}@0x${SNAP.toString(16)}`, 0n);
     const bob = await t.signIn(BOB);
     await t.mark(1000);
-    expect((await t.account(bob)).body).toMatchObject({ regiSnapshot: true, regi: { ok: false, snapshot: false, now: null } });
+    // the sign-in read (holds $10 now) is the cached "now"; the snapshot decides
+    expect((await t.account(bob)).body).toMatchObject({ regiSnapshot: true, regi: { ok: false, snapshot: false, now: true } });
     const r = await t.submit(bob, LONG2);
     expect(r.status).toBe(403);
     expect(r.body.error).toBe("This wallet didn't hold REGI at the pilot snapshot block.");
@@ -425,7 +430,7 @@ describe("REGI gate at order time (owner decision 2026-10-12, spec §8.4)", () =
     const alice = await t.signIn();
     t.balances.set(`${lc(ALICE)}@latest`, 0n);
     await t.mark(1000);
-    expect((await t.submit(alice, LONG2)).body.error).toBe("Hold 1,000,000 REGI to join the points pilot.");
+    expect((await t.submit(alice, LONG2)).body.error).toBe("Hold at least $10 of REGI to join the points pilot.");
     t.balances.set(`${lc(ALICE)}@latest`, ONE);
     expect((await t.submit(alice, LONG2)).status).toBe(202);
   });
@@ -911,7 +916,8 @@ describe("D1 usage", () => {
     expect(sql.filter((x) => /FROM bars/.test(x))).toEqual([]);
     expect(sql.filter((x) => /FROM funding ORDER BY hour_start DESC/.test(x))).toEqual([]);
     expect(sql.filter((x) => /^\s*(INSERT|UPDATE|DELETE)/i.test(x))).toEqual([]); // a poll writes nothing (REGI cached)
-    expect(sql.length).toBeLessThanOrEqual(4);
+    expect(sql.filter((x) => /FROM regi_price/.test(x))).toHaveLength(1); // R6: the 24 h median, one query
+    expect(sql.length).toBeLessThanOrEqual(5);
   });
 
   test("history, a wallet's open positions and its pending orders read through their indexes (no sort, no scan)", () => {

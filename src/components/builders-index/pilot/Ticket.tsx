@@ -20,7 +20,7 @@ export interface TicketProps {
 }
 
 /** Sign-in needs the 18+ and Terms confirmation first; the signed message repeats it (PILOT_LOGIN_NOTE). */
-function SignInRow({ label, busy, regiMin, regiSnapshot, onSignIn }: { label: string; busy?: boolean; regiMin: number; regiSnapshot: boolean; onSignIn: () => void }) {
+function SignInRow({ label, busy, admitUsd, regiSnapshot, onSignIn }: { label: string; busy?: boolean; admitUsd: number; regiSnapshot: boolean; onSignIn: () => void }) {
   const [agreed, setAgreed] = useState(false);
   return (
     <>
@@ -31,7 +31,7 @@ function SignInRow({ label, busy, regiMin, regiSnapshot, onSignIn }: { label: st
       </label>
       <div className="abi-pt-row">
         <button type="button" className="abi-pt-primary" onClick={onSignIn} disabled={busy || !agreed}>{busy ? PILOT_COPY.signingIn : label}</button>
-        <InfoBubble label="About sign-in">{PILOT_COPY.signInTip(regiMin, regiSnapshot)}</InfoBubble>
+        <InfoBubble label="About sign-in">{PILOT_COPY.signInTip(admitUsd, regiSnapshot)}</InfoBubble>
       </div>
     </>
   );
@@ -45,7 +45,7 @@ function regiLine(view: PilotAccountView): { text: string; final: boolean } | nu
   const r = view.regi;
   if (!r || r.ok === true) return null;
   if (r.snapshot === false) return { text: PILOT_COPY.notAtSnapshot, final: true };
-  return { text: r.ok === null ? PILOT_COPY.regiUnchecked : PILOT_COPY.holdRegi(view.regiMin), final: false };
+  return { text: r.ok === null ? PILOT_COPY.regiUnchecked : PILOT_COPY.holdRegi(view.admitUsd), final: false };
 }
 
 /** This hour's funding per side, signed with its direction (+ pays, − receives); "–" until the hour's rates are set. */
@@ -90,8 +90,8 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
   if (!view.address) {
     body = (
       <div className="abi-pt">
-        <p className="abi-pt-note">{view.open ? PILOT_COPY.holdRegi(view.regiMin) : closedLine}</p>
-        {view.open && <SignInRow label={signInLabel} busy={signingIn} regiMin={view.regiMin} regiSnapshot={view.regiSnapshot} onSignIn={onSignIn} />}
+        <p className="abi-pt-note">{view.open ? PILOT_COPY.holdRegi(view.admitUsd) : closedLine}</p>
+        {view.open && <SignInRow label={signInLabel} busy={signingIn} admitUsd={view.admitUsd} regiSnapshot={view.regiSnapshot} onSignIn={onSignIn} />}
         {error && <p className="abi-pt-err" role="alert">{error}</p>}
         {disclaimer}
       </div>

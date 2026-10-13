@@ -5,7 +5,7 @@
  * inside these two exact disclaimer strings.
  */
 import { RULES } from "./abi-pilot";
-import { holdRegiText } from "./abi-pilot-api";
+import { fmtUsd, holdUsdText } from "./abi-pilot-api";
 
 export const PILOT_DISCLAIMER = "Points only. No deposits, no prizes; points have no value.";
 export const PILOT_LIQ_NOTE = "Liquidation only takes the position's margin.";
@@ -17,12 +17,12 @@ const pct = (x: number) => `${+(x * 100).toFixed(3)}%`;
 const top = RULES.levels[RULES.levels.length - 1];
 
 /**
- * Owner decision 2026-10-12: REGI is checked when each order is placed, not at sign-in. snapshot: a
- * PILOT_REGI_SNAPSHOT_BLOCK is set, so the wallet must also have held the minimum there.
+ * Owner decisions 2026-10-13: $10 of REGI (PILOT_ADMIT_USD) at sign-in and when each order is placed, at the 24 h
+ * median price. snapshot: a PILOT_REGI_SNAPSHOT_BLOCK is set, so the wallet must also have held the amount there.
  */
-const regiRule = (min: number, snapshot = false) =>
-  `The wallet needs at least ${min.toLocaleString("en-US")} REGI on Arc when it places each order${snapshot ? " and must have held that amount at the pilot snapshot block" : ""}. ` +
-  "The leaderboard shows only wallets that currently hold it.";
+const regiRule = (usd: number, snapshot = false) =>
+  `The wallet needs at least ${fmtUsd(usd)} of REGI on Arc at sign-in and when it places each order${snapshot ? ", and must have held that amount at the pilot snapshot block" : ""}. ` +
+  "REGI is priced at the median of the REGI/USDC pool over the last 24 hours. The leaderboard shows only wallets that currently hold the amount.";
 const SIGN_IN_NOTE = "Sign in with a one-time message: it is not a transaction and costs nothing. The session lasts 12 hours. Smart-contract wallets aren't supported yet.";
 
 /** Plan 2026-10-12 R9: what the pilot trades and what is shared or per market (the rules page, the Terms, the "i"). */
@@ -36,8 +36,8 @@ export const PILOT_COPY = {
   marketsRule: MARKETS_RULE,
   closed: "The points pilot is not open yet.",
   misconfigured: "The points pilot is misconfigured; new orders are refused.",
-  /** "Hold 1,000,000 REGI to join the points pilot." */
-  holdRegi: holdRegiText,
+  /** "Hold at least $10 of REGI to join the points pilot." */
+  holdRegi: holdUsdText,
   notAtSnapshot: "This wallet didn't hold REGI at the pilot snapshot block.",
   regiUnchecked: "Couldn't check REGI right now",
   signIn: "Sign in",
@@ -53,7 +53,7 @@ export const PILOT_COPY = {
   regiRule,
   /** Sign-in itself (the Pilot rules page lists it apart from the REGI rule). */
   signInNote: SIGN_IN_NOTE,
-  signInTip: (min: number, snapshot = false) => `${regiRule(min, snapshot)} ${SIGN_IN_NOTE}`,
+  signInTip: (usd: number, snapshot = false) => `${regiRule(usd, snapshot)} ${SIGN_IN_NOTE}`,
   rulesTip:
     `Market orders fill at the first mark of the order's index posted after the order (the mark updates every 5 s); with no mark within ${RULES.markMaxAgeS} s the order is refused. ` +
     `Leverage ${RULES.levels.join(", ")}×, capped at the lower of ${RULES.volTarget} ÷ σ_24h and 1 ÷ (${pct(RULES.jump)} + ${pct(RULES.mm)}), so a ${pct(RULES.jump)} milestone step stays inside the margin; from 1× to ${top}×. ` +
@@ -85,7 +85,7 @@ export const PILOT_COPY = {
     `${pct(RULES.split.buybackOfTreasury)} of which is set aside for a REGI buyback. All in points; nothing is bought during the pilot.`,
   insuranceTip: "Covers losses beyond a position's margin when the index jumps past its liquidation price, up to its balance; the house carries the rest. No position loses more than its margin.",
   noEconomy: "No economy data yet.",
-  leaderboardTip: "Balance plus open positions in every market (with funding and borrow), each at its market's latest mark. Only wallets that currently hold the REGI minimum. Top 50, refreshed every minute.",
+  leaderboardTip: "Balance plus open positions in every market (with funding and borrow), each at its market's latest mark. Only wallets that currently hold the REGI needed to join. Top 50, refreshed every minute.",
   priceUpdating: "Price updating",
   paused: `Paused: the index moved more than max(${RULES.pauseSigmas}σ_1h, ${pct(RULES.pauseFloor)}) in the last hour.`,
   basePaused: "Paused for a minute around the hour's base sample.",

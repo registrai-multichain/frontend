@@ -78,13 +78,21 @@ export interface Env {
   PILOT_OPEN?: string;
   /**
    * Optional REGI snapshot block (spec §8.4). Empty or unset (the default, owner decision 2026-10-12): no snapshot
-   * check. Set: a wallet may open positions only if it also held PILOT_REGI_MIN at this Arc block; with PILOT_OPEN "1"
+   * check. Set: a wallet may open positions only if it also held the admission amount (PILOT_ADMIT_USD at today's median) at this Arc block; with PILOT_OPEN "1"
    * it must then be a block number from REGI's deploy (22,419,071) up to the current head, else the pilot is
    * misconfigured and refuses every order (audit PE-7).
    */
   PILOT_REGI_SNAPSHOT_BLOCK?: string;
-  /** Whole REGI a wallet must hold when it places each order (read fresh), and at the snapshot block if one is set. Default "1000000". Not a positive integer = misconfigured. */
-  PILOT_REGI_MIN?: string;
+  /**
+   * Dollars of REGI a wallet must hold at sign-in and when it places each order (read fresh; plan 2026-10-13 R2), at
+   * the 24 h median pool price; also at the snapshot block if one is set. Default "10". Not a positive number (up to 2
+   * decimals) = misconfigured.
+   */
+  PILOT_ADMIT_USD?: string;
+  /** Dollars of REGI a wallet must have locked in its RegiVault to place an order above 1× (R3). Default "50". Not a positive number = misconfigured. */
+  PILOT_LOCK_USD?: string;
+  /** The RegiLockFactory address (R3). Empty (the default, until the owner deploys it): leverage above 1× is refused. Set but not an address = misconfigured. */
+  PILOT_LOCK_FACTORY?: string;
   /** The pilot's leverage cap, applied after the engine's. Default "10". Not an integer ≥ 1 = misconfigured. */
   PILOT_MAX_LEV?: string;
   /** Comma-separated lowercase addresses that may not open positions (milestone recorders, audit F4). Closes still work. */

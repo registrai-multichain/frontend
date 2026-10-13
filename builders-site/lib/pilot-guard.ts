@@ -53,7 +53,7 @@ export async function runGuardChecks(db: D1Database, migrations: string | readon
     // open fill: debit → insert → order filled → open fee to the ledger and the market's pool, each only after the one before changed a row
     const fill = (orderId: number, side = "long", market = A, cost = 1001) => db.batch([
       q(SQL.openDebit).bind(cost, W, cost, W, market, 5, W, market, side, orderId),
-      q(SQL.openInsert).bind(W, market, side, 1000, 2, 2000, 1000, 505, 100, 1, 100),
+      q(SQL.openInsert).bind(W, market, side, 1000, 2, 2000, 1000, 505, 100, 1, 100, "5000000000000000000000000"),
       q(SQL.openFilled).bind(1000, 100, orderId),
       q(SQL.openFeeLedger).bind(100, 1, orderId),
       q(SQL.openFeePool).bind(1, 1, orderId),
@@ -75,6 +75,7 @@ export async function runGuardChecks(db: D1Database, migrations: string | readon
     check("open fill: balance debited once", await balance(), 499);
     const pos = (await q("SELECT position_id FROM orders WHERE id = ?").bind(o1).first<{ position_id: number }>())!.position_id;
     check("open fill: the order points at its position (last_insert_rowid)", pos, (f1[1].results[0] as { id: number }).id);
+    check("open fill: the position keeps its lock requirement (raw REGI as text, past INTEGER range)", await q("SELECT lock_req, typeof(lock_req) AS t FROM positions WHERE id = ?").bind(pos).first(), { lock_req: "5000000000000000000000000", t: "text" });
     check("open fill: one fee row (ref open:<position>) and the pool moved once", [await ledgerOf(`open:${pos}`), await pool("fee")], [[{ kind: "fee", amount: 1 }], { balance: 1, gross: 1 }]);
     check("refuse: only a pending order", [(await q(SQL.refuse).bind("x", o1).run()).meta.changes, (await q(SQL.refuse).bind("x", o2).run()).meta.changes], [0, 1]);
 
@@ -222,6 +223,35 @@ export async function runGuardChecks(db: D1Database, migrations: string | readon
     check("gaps: closed by the accepted post", changes(closeGap), [1, 1, 0]);
     check("liquidation candidates: INDEXED BY runs, per market", [(await q(SQL.liqCandidatesLong).bind(A, 995, 0).all()).results.length, (await q(SQL.liqCandidatesLong).bind("aei", 995, 0).all()).results.length], [1, 0]);
     check("sign-out: session epoch bumped", (await q(SQL.sessionBump).bind(W).run()).meta.changes, 1);
+
+    // plan 2026-10-13 R4, R5: a close by withdrawal happens once, and only for positions whose lock requirement is
+    // ABOVE the remaining lock (canonical decimal strings of raw REGI: longer, or as long and greater as text)
+    const M5 = "5000000000000000000000000", M1 = "1000000000000000000000000", K900 = "900000000000000000000000";
+    const lockPos = async (req: string) => (await q("INSERT INTO positions (wallet, market, side, margin, lev, notional, entry, liq, opened_at, fee, booked_to, lock_req) VALUES (?, ?, 'long', 100, 2, 200, 1000, 505, 0, 0, 0, ?) RETURNING id").bind(W, A, req).first<{ id: number }>())!.id;
+    const [big, small, flat] = [await lockPos(M5), await lockPos(K900), await lockPos("0")];
+    const lockClose = (id: number, token: string, locked: string) => db.batch([
+      q(SQL.lockClose).bind(300, 1000, 0, 0, 0.2, 99.8, 0, 1000, token, 0, 0, 300, id, W, 0, locked, locked, locked),
+      q(SQL.closeCredit).bind(99.8, W),
+      q(SQL.ledgerSettled).bind(300, "fee", 0.2, `close:${id}`, id, token),
+      q(SQL.poolSettled).bind(0.2, 0.2, "fee", id, token),
+    ]);
+    const before = await balance();
+    check("lock close: a requirement below the remaining lock (a shorter string) closes nothing", changes(await lockClose(small, "k1", M1)), [0, 0, 0, 0]);
+    check("lock close: a requirement equal to the remaining lock closes nothing", changes(await lockClose(big, "k2", M5)), [0, 0, 0, 0]);
+    check("lock close: a 1× position (lock_req '0') is never closed, even with nothing locked", changes(await lockClose(flat, "k3", "0")), [0, 0, 0, 0]);
+    check("lock close: a requirement above the remaining lock (as long, greater): settled, credited, booked", changes(await lockClose(big, "k4", M1)), [1, 1, 1, 1]);
+    check("lock close: the same position again settles nothing and books nothing", changes(await lockClose(big, "k5", "0")), [0, 0, 0, 0]);
+    check("lock close: a requirement above an empty lock (a longer string) is closed", changes(await lockClose(small, "k6", "0")), [1, 1, 1, 1]);
+    check("lock close: reason close, note 'lock withdrawn'; the 1× position stays open; credited exactly twice",
+      [(await q("SELECT reason, close_note FROM positions WHERE id IN (?, ?) ORDER BY id").bind(big, small).all()).results, await q("SELECT closed_at FROM positions WHERE id = ?").bind(flat).first(), +((await balance()) - before).toFixed(6)],
+      [[{ reason: "close", close_note: "lock withdrawn" }, { reason: "close", close_note: "lock withdrawn" }], { closed_at: null }, 199.6]);
+
+    // R1: one price sample per 10-minute slot; R4: one watch per minute, and the cursor only moves forward
+    check("price: one sample per slot", [(await q(SQL.priceInsert).bind(600, 1e-5).run()).meta.changes, (await q(SQL.priceInsert).bind(600, 2e-5).run()).meta.changes, await q("SELECT usd_per_regi AS p FROM regi_price WHERE ts = 600").first()], [1, 0, { p: 1e-5 }]);
+    check("lock watch: claimed once per minute", [(await q(SQL.lockClaim).bind(1000, 940).run()).meta.changes, (await q(SQL.lockClaim).bind(1010, 950).run()).meta.changes, (await q(SQL.lockClaim).bind(1060, 1000).run()).meta.changes], [1, 0, 1]);
+    await q(SQL.lockAdvance).bind(100).run();
+    await q(SQL.lockAdvance).bind(50).run();
+    check("lock watch: the cursor never moves back", await q("SELECT block FROM lock_cursor WHERE id = 1").first(), { block: 100 });
   } catch (e) {
     out.push({ name: "run", ok: false, detail: String((e as Error)?.message ?? e) });
   } finally {

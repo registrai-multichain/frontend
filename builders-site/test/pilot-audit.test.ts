@@ -7,7 +7,7 @@ import { ALICE, BOB, lc, ONE, ORIGIN, setup, SNAP, T0, type Json } from "./pilot
 
 /**
  * Audit fixes, site batch (docs/superpowers/plans/2026-10-11-audit-site-fixes.md), group A: the pilot's leverage cap,
- * the REGI minimum, loud snapshot misconfiguration (PE-7), the recorder block list (F4), the pending-order cap (SS-5)
+ * the REGI admission amount, loud snapshot misconfiguration (PE-7), the recorder block list (F4), the pending-order cap (SS-5)
  * and the ingest's invocation-wide statement budget (review R3).
  */
 const LONG = (lev: number) => ({ side: "long", margin: 1000, lev });
@@ -62,39 +62,41 @@ describe("PILOT_MAX_LEV (owner decision 2026-10-11: 10× until F1 is live and re
   });
 });
 
-describe("PILOT_REGI_MIN (owner decision: ≥ 1,000,000 REGI)", () => {
-  test("default 1,000,000: one REGI short of it is refused with the amount in the message", async () => {
+describe("PILOT_ADMIT_USD (plan 2026-10-13 R2: $10 of REGI at the 24 h median)", () => {
+  test("default $10: one raw unit short of it is refused with the amount in the message", async () => {
     const t = setup();
-    t.balances.set(`${lc(BOB)}@latest`, ONE - 10n ** 18n);
     const bob = await t.signIn(BOB);
+    t.balances.set(`${lc(BOB)}@latest`, ONE - 1n);
+    t.tick(11 * 60_000); // the sign-in check is older than the 10-minute cache
     await t.mark(1000);
-    expect((await t.account(bob)).body).toMatchObject({ regiMin: 1_000_000, regi: { ok: false, snapshot: true, now: false } });
-    expect((await t.submit(bob, LONG(2))).body.error).toBe("Hold 1,000,000 REGI to join the points pilot.");
+    expect((await t.account(bob)).body).toMatchObject({ admitUsd: 10, admitRegi: ONE.toString(), price: 1e-5, regi: { ok: false, snapshot: true, now: false } });
+    expect((await t.submit(bob, LONG(2))).body.error).toBe("Hold at least $10 of REGI to join the points pilot.");
   });
 
-  test("a changed minimum applies to the cached snapshot balance without another snapshot read", async () => {
+  test("a changed amount applies to the cached snapshot balance without another snapshot read", async () => {
     const t = setup();
-    const alice = await t.signIn(); // 2,000,000 at the snapshot, 5,000,000 now
+    const alice = await t.signIn(); // 2,000,000 at the snapshot ($20), 5,000,000 now
     await t.mark(1000);
     const snapReads = () => t.rpc.tags.filter((x) => x !== "latest").length;
     await t.account(alice);
     expect(snapReads()).toBe(1);
-    t.env.PILOT_REGI_MIN = "3000000";
+    t.env.PILOT_ADMIT_USD = "30";
     const r = await t.submit(alice, LONG(2));
     expect(r.status).toBe(403);
     expect(r.body.error).toBe("This wallet didn't hold REGI at the pilot snapshot block.");
-    t.env.PILOT_REGI_MIN = "2000000";
+    t.env.PILOT_ADMIT_USD = "20";
     expect((await t.submit(alice, LONG(2))).status).toBe(202);
     expect(snapReads()).toBe(1);
-    expect((await t.account(alice)).body.regiMin).toBe(2_000_000);
+    expect((await t.account(alice)).body).toMatchObject({ admitUsd: 20, admitRegi: (2n * ONE).toString() });
   });
 
-  test("not a positive whole number: misconfigured", async () => {
-    for (const bad of ["0", "1e6", "lots"]) {
-      const t = setup({ regiMin: bad });
+  test("not a positive number of dollars (or a bad lock setting): misconfigured", async () => {
+    for (const [k, bad] of [["admitUsd", "0"], ["admitUsd", "1e6"], ["admitUsd", "ten"], ["admitUsd", "1.234"], ["lockUsd", "-5"], ["lockUsd", "50 usd"], ["lockFactory", "0x1234"]] as const) {
+      const t = setup();
       const alice = await t.signIn();
+      t.env[k === "admitUsd" ? "PILOT_ADMIT_USD" : k === "lockUsd" ? "PILOT_LOCK_USD" : "PILOT_LOCK_FACTORY"] = bad;
       await t.mark(1000);
-      expect((await t.submit(alice, LONG(1))).body).toEqual({ error: "pilot misconfigured" });
+      expect((await t.submit(alice, LONG(1))).body, `${k}=${bad}`).toEqual({ error: "pilot misconfigured" });
       expect((await t.account(alice)).body).toMatchObject({ open: false, misconfigured: true, regi: null });
     }
   });
@@ -352,6 +354,7 @@ describe("audit SS-2: sign-in and anonymous reads", () => {
     const t = setup();
     await t.mark(1000);
     t.tick(8 * 86400_000); // a new week: a split is due
+    t.topUpPrice(); // (the harness's own price samples for the new day, before counting)
     const before = changesSoFar(t), calls = t.rpc.calls;
     const a = await t.account();
     expect(a.status).toBe(200);

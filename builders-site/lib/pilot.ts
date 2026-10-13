@@ -12,16 +12,18 @@
  *   POST /api/index/mark          producer (Bearer ABI_PUSH_TOKEN, live/mark.py) → 200 { last_minute, … }; "index"
  *                                 (absent: abi) names the market, and the ingest touches that market only
  *   GET  /api/index/mark?index=   public: the market's latest mark (edge-cached 5 s)
- *   GET  /api/pilot/account?market=  session optional: open?, REGI, balance, positions (every market, each at its own
- *                                 mark), pending orders, and the market's mark and funding
- *   POST /api/pilot/order         { market, side, margin, lev } → 202 a pending order (session + REGI read now + open);
+ *   GET  /api/pilot/account?market=  session optional: open?, the REGI amounts in dollars and REGI at the 24 h median, the
+ *                                 lock factory, REGI, balance, positions (every market, each at its own mark), pending
+ *                                 orders, and the market's mark and funding
+ *   POST /api/pilot/order         { market, side, margin, lev } → 202 a pending order (session + $ of REGI read now + open;
+ *                                 above 1×, $ of REGI locked, lockedOf read now: plan 2026-10-13 R2, R3);
  *                                 30/min, at most 3 pending per wallet, leverage ≤ PILOT_MAX_LEV, not a PILOT_BLOCKED_WALLETS wallet
  *   GET  /api/pilot/order?id=     the order's status (pending / filled / refused)
  *   POST /api/pilot/close         { id } → 202 a pending close order in the position's market (session only); 60/min
  *   GET  /api/pilot/positions     session: open positions (every market)
  *   GET  /api/pilot/history       session: the last 100 closed positions (every market)
  *   GET  /api/pilot/leaderboard   public: top 50 by equity (balance + open positions at their markets' latest marks)
- *                                 among wallets holding the REGI minimum now, shortened addresses, cached 60 s
+ *                                 among wallets holding the admission REGI now, shortened addresses, cached 60 s
  *   GET  /api/pilot/funding?market=  public: the market's last 24 hourly rates, cached 60 s
  *   GET  /api/pilot/economy?market=  public: the market's skew, funding, house, fee pool, insurance, weekly split, cached 30 s
  *
@@ -43,6 +45,12 @@
  *
  * Weekly split (R5): per market, lazily, on the first ingest or /api/pilot read after Monday 00:00 UTC (maybeSplit()).
  *
+ * REGI in dollars and the REGI lock (plan 2026-10-13 R1–R4; lib/pilot-regi.ts): ABI posts sample the REGI/USDC pool
+ * once per 10 minutes; the 24 h median converts PILOT_ADMIT_USD (sign-in and every order) and PILOT_LOCK_USD (orders
+ * above 1×; the requirement stays on the position as lock_req). Once a minute a post runs the withdrawal watch: the
+ * lock factory's Withdrawn logs since the cursor, and every open position whose lock_req is above its owner's remaining
+ * lock is closed at its market's mark (the normal close settlement, close note "lock withdrawn").
+ *
  * Every balance / position write is one conditional statement or one batch() (a D1 transaction), guarded by
  * the order still being pending and the position still being open (lib/pilot-sql.ts): no overspend, no double
  * settle, no double fill.
@@ -50,12 +58,15 @@
 import * as Engine from "../../src/lib/abi-pilot";
 import { RULES, type FundingRate, type MinuteBar, type PilotPosition, type Side } from "../../src/lib/abi-pilot";
 import {
-  holdRegiText,
+  lockUsdText,
+  LOCK_WATCH_S,
+  LOG_CHUNK,
   marketOf,
+  PILOT_ADMIT_USD_DEFAULT,
   PILOT_LIMITS,
+  PILOT_LOCK_USD_DEFAULT,
   REGI_CACHE_S,
-  REGI_MIN_DEFAULT,
-  REGI_UNIT,
+  REGI_PRICE_UPDATING,
   shortWallet,
   type ClosedPositionView,
   type EconomyView,
@@ -75,8 +86,10 @@ import { readCapped } from "./builders-index";
 import type { D1Database, D1PreparedStatement, D1Result, Env } from "./env";
 import { csrfFailure, edgeCachedGet, errorJson, json, randomHex, siteOrigin } from "./http";
 import {
+  admitMin,
   blockedWallet,
   getAccount,
+  holdRegi,
   type AccountRow,
   nowMsOf,
   nowSOf,
@@ -85,7 +98,7 @@ import {
   pilotState,
   pilotWallet,
   regiBalance,
-  regiMinOf,
+  REGI_UNCHECKED,
   rateOk,
   sessionOf,
   regiStatus,
@@ -93,6 +106,7 @@ import {
   tooMany,
   type PilotDeps,
 } from "./pilot-auth";
+import { admitUsdOf, blockNumber, lockedOf, lockFactoryOf, lockReqString, lockUsdOf, regiAt, regiPrice, samplePrice, withdrawnOwners } from "./pilot-regi";
 import { LIQ_PAGE, SQL } from "./pilot-sql";
 
 export const MARK_MAX_SKEW_S = 30;
@@ -140,14 +154,22 @@ const OPEN_FILL_STATEMENTS = 9;
 const CLOSE_FILL_STATEMENTS = 35;
 /** Room kept for the rate fix and at least one booked hour when liquidations are capped. */
 const FIX_RESERVE = 3 + 7 + 2 * 20;
+/** The hourly prune's statements (bars, nonces, rate windows, orders, gaps, REGI price samples). */
+const PRUNE_STATEMENTS = 6;
+/** REGI price samples are kept this long (the price uses the last 24 h). */
+const PRICE_KEEP_S = 7 * 86400;
 export const HOUR = 3600;
 export const WEEK = 7 * 86400;
 
-/** "Hold 1,000,000 REGI to join the points pilot." (PILOT_REGI_MIN). */
-export const holdRegi = (env: Env) => holdRegiText(regiMinOf(env) ?? REGI_MIN_DEFAULT);
-/** Only when PILOT_REGI_SNAPSHOT_BLOCK is set and the wallet didn't hold the minimum there. */
+export { holdRegi, REGI_UNCHECKED };
+/** Only when PILOT_REGI_SNAPSHOT_BLOCK is set and the wallet didn't hold the admission amount there. */
 export const NOT_AT_SNAPSHOT = "This wallet didn't hold REGI at the pilot snapshot block.";
-export const REGI_UNCHECKED = "Couldn't check REGI right now";
+/** R3: an order above 1× while PILOT_LOCK_FACTORY is empty (the lock is not deployed yet). */
+export const LOCK_NOT_LIVE = "Leverage above 1× opens when the REGI lock is live.";
+/** R3: lockedOf could not be read (fail closed). */
+export const LOCK_UNCHECKED = "Couldn't check the REGI lock right now";
+/** R4: the close note of a position the site closed because its wallet withdrew REGI below the position's lock requirement. */
+export const LOCK_WITHDRAWN = "lock withdrawn";
 export const PRICE_UPDATING = "price updating";
 export const PILOT_CLOSED = "pilot closed";
 /** PILOT_OPEN is "1" but a setting is wrong (audit PE-7): every order is refused. */
@@ -490,9 +512,13 @@ interface PositionRow {
   booked: number;
   booked_cut: number;
   booked_to: number;
+  /** R3: raw REGI (canonical decimal string) the lock had to hold when it opened; '0' at 1×. */
+  lock_req: string;
+  /** R4: 'lock withdrawn' when the site closed it; else null. */
+  close_note: string | null;
 }
 
-const POS_COLS = "id, wallet, market, side, margin, lev, notional, entry, liq, opened_at, closed_at, exit, pnl, accrued, fee, returned, reason, borrow, fill, booked, booked_cut, booked_to";
+const POS_COLS = "id, wallet, market, side, margin, lev, notional, entry, liq, opened_at, closed_at, exit, pnl, accrued, fee, returned, reason, borrow, fill, booked, booked_cut, booked_to, lock_req, close_note";
 
 const toEngine = (r: PositionRow): PilotPosition => ({
   side: r.side, margin: r.margin, lev: r.lev, notional: r.notional, entry: r.entry, openedAt: r.opened_at, liq: r.liq,
@@ -700,7 +726,7 @@ function openView(r: PositionRow, mark: number | null, rates: readonly StoredRat
   const fp = Engine.fundingPaid(pos, rates, nowS), bp = Engine.borrowPaid(pos, nowS);
   return {
     id: r.id, market: r.market, side: r.side, margin: r.margin, lev: r.lev, notional: r.notional, entry: r.entry, liq: Engine.liqPrice(pos, fp + bp),
-    openedAt: r.opened_at, fee: r.fee, funding: -fp, borrow: bp, mark, pnl: mark === null ? null : Engine.pnl(pos, mark),
+    openedAt: r.opened_at, fee: r.fee, funding: -fp, borrow: bp, mark, pnl: mark === null ? null : Engine.pnl(pos, mark), lockReq: r.lock_req ?? "0",
   };
 }
 
@@ -710,7 +736,7 @@ function closedView(r: PositionRow): ClosedPositionView {
     id: r.id, market: r.market, side: r.side, margin: r.margin, lev: r.lev, notional: r.notional, entry: r.entry, openedAt: r.opened_at,
     closedAt: r.closed_at!, exit: r.exit!, pnl: r.pnl!, funding: r.accrued ?? 0, borrow: r.borrow ?? 0, fee: r.fee, returned,
     net: returned - r.margin - r.notional * RULES.feeRate,
-    reason: r.reason === "liquidation" ? "liquidation" : "close",
+    reason: r.reason === "liquidation" ? "liquidation" : r.close_note === LOCK_WITHDRAWN ? LOCK_WITHDRAWN : "close",
   };
 }
 
@@ -722,6 +748,11 @@ interface PrevRow extends MarkRow {
   has_rates: number;
   last_split: number | null;
   booked_hour: number | null;
+  /** R1: the newest REGI price sample's slot (null: none yet). */
+  price_ts: number | null;
+  /** R4: the withdrawal watch's cursor block and when it last ran. */
+  lock_block: number | null;
+  lock_checked: number | null;
 }
 
 /**
@@ -760,7 +791,8 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
     .prepare(
       `SELECT ${MARK_SEL}, EXISTS (SELECT 1 FROM orders WHERE market = ? AND status = 'pending') AS has_pending, EXISTS (SELECT 1 FROM gaps WHERE market = ?) AS has_gaps, ` +
         "EXISTS (SELECT 1 FROM rates WHERE market = ? AND hour = ?) AS has_rates, (SELECT MAX(week) FROM splits WHERE market = ?) AS last_split, " +
-        "(SELECT MAX(hour) FROM house_hours WHERE market = ?) AS booked_hour FROM (SELECT 1) AS one LEFT JOIN mark m ON m.market = ?",
+        "(SELECT MAX(hour) FROM house_hours WHERE market = ?) AS booked_hour, (SELECT MAX(ts) FROM regi_price) AS price_ts, " +
+        "(SELECT block FROM lock_cursor WHERE id = 1) AS lock_block, (SELECT checked FROM lock_cursor WHERE id = 1) AS lock_checked FROM (SELECT 1) AS one LEFT JOIN mark m ON m.market = ?",
     )
     .bind(M, M, M, d.hour_start, M, M, M)
     .first<PrevRow>();
@@ -833,7 +865,7 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
   if (prev && prev.bars_minute !== null && (prev.swept_minute === null || prev.swept_minute < prev.bars_minute)) {
     // what the rest of this post needs at least: its reads, the mark / bar / gap / prune / split statements, and a
     // rate fix with its close's reads
-    const rest = POST_NET_READS + 1 + merged.length + unresolved.length + closedGaps.length + SPLIT_STATEMENTS + 5 + FIX_RESERVE + CLOSE_READS;
+    const rest = POST_NET_READS + 1 + merged.length + unresolved.length + closedGaps.length + SPLIT_STATEMENTS + PRUNE_STATEMENTS + FIX_RESERVE + CLOSE_READS;
     const net = await sweepUnswept(db, await allOpen(db, M), nowS, prev, () => INGEST_MAX_STATEMENTS - rest - meter.statements);
     netDone = net.done;
     netLiquidated = net.n;
@@ -895,7 +927,7 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
   // INGEST_MAX_STATEMENTS after the reads so far and the hourly close's own. Liquidations beyond the cap wait (the
   // swept watermark is held back, so the next post's safety net picks them up); the hourly booking takes what is left.
   const batchCap = Math.min(MAX_BATCH_STATEMENTS, INGEST_MAX_STATEMENTS - meter.statements - (fixing ? CLOSE_READS : 0));
-  const base = 1 + merged.length + unresolved.length + closedGaps.length + split.length + (pruned ? 5 : 0);
+  const base = 1 + merged.length + unresolved.length + closedGaps.length + split.length + (pruned ? PRUNE_STATEMENTS : 0);
   const liqCap = Math.max(1, Math.floor((batchCap - base - (fixing ? FIX_RESERVE : 0)) / LIQ_STATEMENTS));
   const taken = hits.slice(0, liqCap);
   const heldBack = !netDone || taken.length < hits.length;
@@ -935,6 +967,7 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
     stmts.push(db.prepare("DELETE FROM ratelimit WHERE slot < ?").bind(Math.floor(nowS / 60) - 1));
     stmts.push(db.prepare("DELETE FROM orders WHERE market = ? AND status <> 'pending' AND arrived_ms < ?").bind(M, nowMs - ORDERS_KEEP_MS));
     stmts.push(db.prepare("DELETE FROM gaps WHERE market = ? AND minute_to < ?").bind(M, nowS - BARS_KEEP_S)); // older than any kept bar
+    stmts.push(db.prepare("DELETE FROM regi_price WHERE ts < ?").bind(nowS - PRICE_KEEP_S)); // R1: only the last 24 h count
   }
   let res: D1Result[];
   try {
@@ -955,9 +988,12 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
   const fills = (!prev || prev.has_pending) && !heldBack
     ? await fillOrders(db, env, d, gapsLeft > 0, hourFixed, nowMs, openBar, () => INGEST_MAX_STATEMENTS - meter.statements)
     : { filled: 0, refused: 0, deferred: 0 };
+  // R1 + R4: the REGI price sample (ABI posts, once per 10 min) and the withdrawal watch (any post, once a minute), in
+  // what is left of the invocation's statement budget
+  const chores = await regiChores(db, env, d, nowS, deps, probe, heldBack, () => INGEST_MAX_STATEMENTS - meter.statements);
   return json({
     ok: true, index: M, last_minute: ackMinute(barsMinute, d.ts), ts: d.ts, bars: d.bars.length, stored: merged.length, gapBars: gapBars.length,
-    gaps: gapsLeft, liquidated, netLiquidated, ...fills, heldBack, pruned, fixed: fixing, statements: stmts.length, queries: meter.statements, rows: rows(),
+    gaps: gapsLeft, liquidated, netLiquidated, ...fills, heldBack, pruned, fixed: fixing, ...chores, statements: stmts.length, queries: meter.statements, rows: rows(),
   });
 }
 
@@ -1391,8 +1427,10 @@ interface OrderRow {
   error: string | null;
   fill_px: number | null;
   filled_at: number | null;
+  /** R3: the lock requirement checked when the order was placed (raw REGI, decimal string; '0' at 1×). */
+  lock_req: string;
 }
-const ORDER_COLS = "id, wallet, market, kind, side, margin, lev, position_id, arrived_ms, status, error, fill_px, filled_at";
+const ORDER_COLS = "id, wallet, market, kind, side, margin, lev, position_id, arrived_ms, status, error, fill_px, filled_at, lock_req";
 
 const orderView = (o: OrderRow): OrderView => ({
   id: o.id, market: o.market, kind: o.kind, status: o.status, side: o.side, margin: o.margin, lev: o.lev, positionId: o.position_id,
@@ -1402,28 +1440,55 @@ const orderView = (o: OrderRow): OrderView => ({
 const refuseStmt = (db: D1Database, id: number, error: string) => db.prepare(SQL.refuse).bind(error, id);
 
 /**
- * A close fill's statements (R3): margin + PnL − funding − borrow − exit fee back to the balance (never below 0),
- * the fee and the borrow to the fee pool, the house's and the cut's remaining claim, and any negative equity covered
- * by insurance up to its balance (the rest a house loss). Settles only while the order is pending and the position's
- * booking is as read.
+ * The close settlement at `at` (R3): the settle binds up to booked_to, the settle token, and the statements after the
+ * settle (the ledger rows under the token and any negative equity covered by insurance up to its balance, the rest a
+ * house loss). margin + PnL − funding − borrow − exit fee goes back to the balance (never below 0); the fee and the
+ * borrow go to the fee pool; the house's and the cut's remaining claim are booked.
  */
-export function closeStmts(db: D1Database, row: PositionRow, o: Pick<OrderRow, "id" | "wallet">, d: Pick<MarkPost, "mark" | "ts">, rates: readonly StoredRate[]): D1PreparedStatement[] {
+function settlement(db: D1Database, row: PositionRow, at: { mark: number; ts: number }, rates: readonly StoredRate[]) {
   const pos = toEngine(row), token = randomHex(8);
-  const c = Engine.close(pos, d.mark, d.ts, rates);
-  const claim = claimAt(pos, rates, d.ts, d.mark);
+  const c = Engine.close(pos, at.mark, at.ts, rates);
+  const claim = claimAt(pos, rates, at.ts, at.mark);
   const eq = pos.margin + c.pnl + c.funding - c.borrow - c.fee;
+  return {
+    binds: [at.ts, at.mark, c.pnl, c.funding, c.fee, c.payout, c.borrow, at.mark, token, claim.house, claim.cut, at.ts],
+    payout: c.payout,
+    after: [
+      ...ledgerStmts(db, "settle", [row.id, token], at.ts, [
+        { kind: "fee", amount: c.fee, ref: `close:${row.id}` },
+        { kind: "borrow", amount: c.borrow, ref: `borrow:${row.id}` },
+        { kind: "house_trueup", amount: claim.house - row.booked, ref: `settle:${row.id}` },
+        { kind: "cut", amount: claim.cut - row.booked_cut, ref: `settle:${row.id}` },
+      ]),
+      // a deficit (equity below the exit fee): insurance covers what it can, the rest is a carried house loss
+      ...gapStmts(db, row.id, token, at.ts, -eq, "house_trueup", `gap:${row.id}`),
+    ],
+  };
+}
+
+/** A close fill's statements: the settlement, only while the order is pending and the position's booking is as read. */
+export function closeStmts(db: D1Database, row: PositionRow, o: Pick<OrderRow, "id" | "wallet">, d: Pick<MarkPost, "mark" | "ts">, rates: readonly StoredRate[]): D1PreparedStatement[] {
+  const st = settlement(db, row, d, rates);
   return [
-    db.prepare(SQL.closeSettle).bind(d.ts, d.mark, c.pnl, c.funding, c.fee, c.payout, c.borrow, d.mark, token, claim.house, claim.cut, d.ts, row.id, o.wallet, row.booked_to, o.id),
-    db.prepare(SQL.closeCredit).bind(c.payout, o.wallet),
+    db.prepare(SQL.closeSettle).bind(...st.binds, row.id, o.wallet, row.booked_to, o.id),
+    db.prepare(SQL.closeCredit).bind(st.payout, o.wallet),
     db.prepare(SQL.closeFilled).bind(d.mark, d.ts, o.id),
-    ...ledgerStmts(db, "settle", [row.id, token], d.ts, [
-      { kind: "fee", amount: c.fee, ref: `close:${row.id}` },
-      { kind: "borrow", amount: c.borrow, ref: `borrow:${row.id}` },
-      { kind: "house_trueup", amount: claim.house - row.booked, ref: `settle:${row.id}` },
-      { kind: "cut", amount: claim.cut - row.booked_cut, ref: `settle:${row.id}` },
-    ]),
-    // a deficit (equity below the exit fee): insurance covers what it can, the rest is a carried house loss
-    ...gapStmts(db, row.id, token, d.ts, -eq, "house_trueup", `gap:${row.id}`),
+    ...st.after,
+  ];
+}
+
+/**
+ * R4: the site's close of a position whose wallet withdrew REGI below its lock requirement: the same settlement at
+ * the market's mark, with no order, only while the position is open, its booking is as read and its lock_req is
+ * above `locked` (the remaining lock read from the factory). Never a liquidation.
+ */
+export function lockCloseStmts(db: D1Database, row: PositionRow, at: { mark: number; ts: number }, rates: readonly StoredRate[], locked: bigint): D1PreparedStatement[] {
+  const st = settlement(db, row, at, rates);
+  const l = lockReqString(locked);
+  return [
+    db.prepare(SQL.lockClose).bind(...st.binds, row.id, row.wallet, row.booked_to, l, l, l),
+    db.prepare(SQL.closeCredit).bind(st.payout, row.wallet),
+    ...st.after,
   ];
 }
 
@@ -1469,7 +1534,7 @@ async function fillOrders(
       const p = r.position, cost = p.margin + r.fee;
       const res = await db.batch([
         db.prepare(SQL.openDebit).bind(cost, o.wallet, cost, o.wallet, M, RULES.maxOpen, o.wallet, M, p.side, o.id),
-        db.prepare(SQL.openInsert).bind(o.wallet, M, p.side, p.margin, p.lev, p.notional, p.entry, p.liq, p.openedAt, r.fee, p.openedAt),
+        db.prepare(SQL.openInsert).bind(o.wallet, M, p.side, p.margin, p.lev, p.notional, p.entry, p.liq, p.openedAt, r.fee, p.openedAt, p.lev > 1 ? o.lock_req : "0"),
         db.prepare(SQL.openFilled).bind(d.mark, d.ts, o.id),
         db.prepare(SQL.openFeeLedger).bind(d.ts, r.fee, o.id),
         db.prepare(SQL.openFeePool).bind(r.fee, r.fee, o.id),
@@ -1502,6 +1567,123 @@ async function fillOrders(
   return { filled, refused, deferred };
 }
 
+// ───────────────────────────── REGI price and the lock watch (plan 2026-10-13 R1, R4) ─────────────────────────────
+
+/** Statements one lock close may take at most: the mark and gap reads, the safety-net check, a re-read, rates, a 14-statement settlement. */
+const LOCK_CLOSE_STATEMENTS = 40;
+/** Log chunks (of LOG_CHUNK blocks) one watch reads at most; the rest follow the next minute. */
+const LOCK_MAX_CHUNKS = 4;
+
+export interface LockWatchResult {
+  /** The cursor after this run (the last block whose Withdrawn logs are fully handled). */
+  cursor: number | null;
+  /** Owners with Withdrawn logs looked at, and positions closed. */
+  owners: number;
+  closed: number;
+  /** Caught up to the head. false: something waits (an RPC failure, the statement budget, a market not settleable now). */
+  done: boolean;
+}
+
+/**
+ * R4, after the ingest's fills: the REGI price sample (R1: ABI posts only, once per 10-minute slot) and, at most once
+ * a minute (any market's post), the withdrawal watch. Never while this post holds liquidations back. Failures are
+ * logged and change nothing (the next post tries again).
+ */
+async function regiChores(
+  db: D1Database, env: Env, d: MarkPost, nowS: number, deps: PilotDeps, probe: PrevRow | null, heldBack: boolean, room: () => number,
+): Promise<{ priceSampled: boolean; lockWatch: LockWatchResult | null }> {
+  const f = deps.fetch ?? fetch;
+  let priceSampled = false, lock: LockWatchResult | null = null;
+  try {
+    if (d.market === "abi" && room() >= 1) priceSampled = await samplePrice(db, nowS, f, probe?.price_ts ?? null);
+    const factory = lockFactoryOf(env);
+    if (factory && !heldBack && (probe?.lock_checked ?? 0) <= nowS - LOCK_WATCH_S && room() >= 1 + LOCK_CLOSE_STATEMENTS) {
+      const claimed = (await db.prepare(SQL.lockClaim).bind(nowS, nowS - LOCK_WATCH_S).run()).meta.changes === 1;
+      if (claimed) lock = await lockWatch(db, factory, nowS, f, probe?.lock_block ?? null, room);
+    }
+  } catch (e) {
+    console.error(`pilot ingest (${d.market}): REGI chores failed: ${String((e as Error)?.message ?? e)}`);
+  }
+  return { priceSampled, lockWatch: lock };
+}
+
+/**
+ * R4: the factory's Withdrawn logs from the block after `cursor` (a new watch starts one chunk before the head) to the
+ * head, in chunks of at most LOG_CHUNK blocks. Each owner's open positions with a lock requirement above lockedOf(owner)
+ * are closed at their market's mark (closeBelowLock). The cursor moves past a chunk only once every owner in it is
+ * fully handled; anything that can't be done now (an RPC failure, the statement budget, a market whose mark is not
+ * settleable) leaves the cursor before that chunk, so the next run reads it again. Closes are guarded (lockCloseStmts),
+ * so a chunk read twice, or two watches at once, settle each position at most once.
+ */
+export async function lockWatch(db: D1Database, factory: string, nowS: number, f: typeof fetch, cursor: number | null, room: () => number): Promise<LockWatchResult> {
+  const out: LockWatchResult = { cursor, owners: 0, closed: 0, done: false };
+  let head: number;
+  try {
+    head = await blockNumber(f);
+  } catch {
+    return out;
+  }
+  let from = cursor === null ? Math.max(0, head - LOG_CHUNK + 1) : cursor + 1;
+  for (let i = 0; i < LOCK_MAX_CHUNKS && from <= head; i++) {
+    const to = Math.min(head, from + LOG_CHUNK - 1);
+    let owners: string[];
+    try {
+      owners = await withdrawnOwners(factory, from, to, f);
+    } catch {
+      return out;
+    }
+    for (const owner of owners) {
+      const r = await closeBelowLock(db, factory, owner, nowS, f, room);
+      out.owners++;
+      out.closed += r.closed;
+      if (!r.done) return out;
+    }
+    if (room() < 1) return out;
+    await db.prepare(SQL.lockAdvance).bind(to).run();
+    out.cursor = to;
+    from = to + 1;
+  }
+  out.done = from > head;
+  return out;
+}
+
+/**
+ * R4 for one owner: lockedOf(owner) read fresh, then every open position whose lock_req is above it is closed at its
+ * market's mark (the normal close settlement, close note "lock withdrawn"; never a liquidation). A position the
+ * market's unswept bars liquidate is left to that. A price move alone never closes anything: lock_req is fixed at open.
+ * done = false: something must wait for the next run.
+ */
+async function closeBelowLock(db: D1Database, factory: string, owner: string, nowS: number, f: typeof fetch, room: () => number): Promise<{ closed: number; done: boolean }> {
+  if (room() < 1) return { closed: 0, done: false };
+  const rows = (await db.prepare(`SELECT ${POS_COLS} FROM positions WHERE wallet = ? AND closed_at IS NULL AND lock_req <> '0' ORDER BY id`).bind(owner).all<PositionRow>()).results;
+  if (!rows.length) return { closed: 0, done: true };
+  let locked: bigint;
+  try {
+    locked = await lockedOf(factory, owner, f);
+  } catch {
+    return { closed: 0, done: false };
+  }
+  let closed = 0;
+  for (const r of rows) {
+    if (!(BigInt(r.lock_req) > locked)) continue;
+    if (room() < LOCK_CLOSE_STATEMENTS) return { closed, done: false };
+    const m = await loadMark(db, r.market);
+    // the same readiness a close order needs: a live mark, the hour's rates fixed, bars caught up, no gap, no base pause
+    if (!m || (await markProblem(db, m, nowS)) !== null) return { closed, done: false };
+    if ((await lazyLiquidate(db, owner, nowS, m, [r])) > 0) continue;
+    const row = await db.prepare(`SELECT ${POS_COLS} FROM positions WHERE id = ?`).bind(r.id).first<PositionRow>();
+    if (!row || row.closed_at !== null) continue;
+    const res = await db.batch(lockCloseStmts(db, row, { mark: m.px, ts: m.ts }, await loadRates(db, row.market, row.opened_at), locked));
+    if (res[0].meta.changes === 1) closed++;
+    else {
+      // nothing settled: closed meanwhile (another watch), or its booking moved (an hourly close): try again next run
+      const now = await db.prepare("SELECT closed_at FROM positions WHERE id = ?").bind(r.id).first<{ closed_at: number | null }>();
+      if (now && now.closed_at === null) return { closed, done: false };
+    }
+  }
+  return { closed, done: true };
+}
+
 // ───────────────────────────── handlers ─────────────────────────────
 
 async function readBody(req: Request): Promise<Record<string, unknown> | null> {
@@ -1527,10 +1709,10 @@ async function markProblem(db: D1Database, m: MarkRow | null, nowS: number): Pro
   return null;
 }
 
-async function insertOrder(db: D1Database, wallet: string, market: Market, kind: "open" | "close", f: { side?: Side; margin?: number; lev?: number; positionId?: number }, nowMs: number): Promise<OrderRow> {
+async function insertOrder(db: D1Database, wallet: string, market: Market, kind: "open" | "close", f: { side?: Side; margin?: number; lev?: number; positionId?: number; lockReq?: string }, nowMs: number): Promise<OrderRow> {
   const r = await db
-    .prepare(`INSERT INTO orders (wallet, market, kind, side, margin, lev, position_id, arrived_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING ${ORDER_COLS}`)
-    .bind(wallet, market, kind, f.side ?? null, f.margin ?? null, f.lev ?? null, f.positionId ?? null, nowMs)
+    .prepare(`INSERT INTO orders (wallet, market, kind, side, margin, lev, position_id, arrived_ms, lock_req) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING ${ORDER_COLS}`)
+    .bind(wallet, market, kind, f.side ?? null, f.margin ?? null, f.lev ?? null, f.positionId ?? null, nowMs, f.lockReq ?? "0")
     .first<OrderRow>();
   return r!;
 }
@@ -1567,14 +1749,20 @@ export async function handleAccount(req: Request, env: Env, deps: PilotDeps = {}
   // audit SS-2: a visitor without a session reads only (no split, no account row, no REGI call)
   if (me) await splitsDue(db, marks, nowS);
   const state = pilotState(env, m ? m.head : null);
+  // R2, R3, R6: the dollar amounts, the 24 h median price and what they are in REGI now (null while the price is unknown)
+  const price = await regiPrice(db, nowS);
+  const admitUsd = admitUsdOf(env) ?? PILOT_ADMIT_USD_DEFAULT, lockUsd = lockUsdOf(env) ?? PILOT_LOCK_USD_DEFAULT;
+  const admit = regiAt(admitUsd, price), lockNeed = regiAt(lockUsd, price);
   const base: PilotAccountView = {
-    market, open: state === "open", misconfigured: state === "misconfigured", regiMin: regiMinOf(env) ?? REGI_MIN_DEFAULT, regiSnapshot: snapshotBlock(env) !== null,
+    market, open: state === "open", misconfigured: state === "misconfigured", admitUsd, lockUsd, price,
+    admitRegi: admit === null ? null : lockReqString(admit), lockRegi: lockNeed === null ? null : lockReqString(lockNeed), lockFactory: lockFactoryOf(env) ?? null,
+    regiSnapshot: snapshotBlock(env) !== null,
     address: null, regi: null, account: null, positions: [], pending: [], mark: markView(m, nowS, pilotMaxLev(env)), funding: fundingNow(m, nowS),
   };
   if (!me) return json(base);
   // the last known REGI state (cached ≤ 10 min); an order re-reads it. misconfigured: no REGI read (a future block only
   // fails, a pre-REGI one reads 0 for everyone)
-  const regi = state === "misconfigured" ? null : await regiStatus(db, me.acct, env, nowS, deps);
+  const regi = state === "misconfigured" ? null : await regiStatus(db, me.acct, env, nowS, deps, { min: admit });
   let open = me.open, balance = me.acct.balance;
   if ((await lazyLiquidateAll(db, me.wallet, nowS, marks, open)) > 0) {
     const again = (await accountWithOpen(db, me.wallet))!;
@@ -1656,11 +1844,30 @@ export async function handleOrder(req: Request, env: Env, deps: PilotDeps = {}):
   if (lev > pilotMaxLev(env)) return errorJson(400, LEV_ABOVE_CAP);
   const pending = await pendingOf(db, wallet, market, nowMs);
   if (pending.all >= PILOT_LIMITS.pendingPerWallet) return errorJson(409, TOO_MANY_PENDING);
-  // owner decision 2026-10-12: eligibility is decided here, on the balance read fresh from the RPC (no cache); an RPC
-  // failure refuses the order (fail closed)
-  const regi = await regiStatus(db, me.acct, env, nowS, deps, { forceNow: true });
+  // R2 (owner decisions 2026-10-13): PILOT_ADMIT_USD of REGI at the 24 h median price, on the balance read fresh from
+  // the RPC (no cache); an unknown price or an RPC failure refuses the order (fail closed)
+  const price = await regiPrice(db, nowS);
+  if (price === null) return errorJson(503, REGI_PRICE_UPDATING);
+  const regi = await regiStatus(db, me.acct, env, nowS, deps, { forceNow: true, min: regiAt(admitUsdOf(env) ?? PILOT_ADMIT_USD_DEFAULT, price) });
   if (regi.ok === null) return errorJson(503, REGI_UNCHECKED);
   if (!regi.ok) return errorJson(403, regi.snapshot === false ? NOT_AT_SNAPSHOT : holdRegi(env));
+  // R3: above 1×, PILOT_LOCK_USD of REGI locked in the wallet's vault, lockedOf read fresh (fail closed). The
+  // requirement is stored with the order and kept by the position (lock_req): withdrawing below it closes the position
+  let lockReq = "0";
+  if (lev > 1) {
+    const factory = lockFactoryOf(env);
+    if (!factory) return errorJson(403, LOCK_NOT_LIVE);
+    const usd = lockUsdOf(env) ?? PILOT_LOCK_USD_DEFAULT;
+    const need = regiAt(usd, price)!;
+    let locked: bigint;
+    try {
+      locked = await lockedOf(factory, wallet, deps.fetch ?? fetch);
+    } catch {
+      return errorJson(503, LOCK_UNCHECKED);
+    }
+    if (locked < need) return errorJson(403, lockUsdText(usd));
+    lockReq = lockReqString(need);
+  }
   let { open: all, acct } = me;
   if ((await lazyLiquidate(db, wallet, nowS, m, all)) > 0) ({ open: all, acct } = (await accountWithOpen(db, wallet))!);
   const problem = await markProblem(db, m, nowS);
@@ -1671,7 +1878,7 @@ export async function handleOrder(req: Request, env: Env, deps: PilotDeps = {}):
   const rows = all.filter((r) => r.market === market);
   const pre = Engine.open({ balance: acct.balance, open: rows.length + pending.opens, side: rows[0]?.side ?? null }, { side, margin, lev, mark: m!.px, now: m!.ts, risk: riskOf(m!) });
   if (!pre.ok) return errorJson(["insufficient balance", "too many open positions", HEDGE].includes(pre.error) ? 409 : 400, engineError(pre.error, rows));
-  const o = await insertOrder(db, wallet, market, "open", { side, margin, lev }, nowMs);
+  const o = await insertOrder(db, wallet, market, "open", { side, margin, lev, lockReq }, nowMs);
   return json({ order: orderView(o) }, 202);
 }
 
@@ -1748,7 +1955,7 @@ interface Ranked {
 }
 
 /**
- * The first `want` of `ranked` (in its order) that hold PILOT_REGI_MIN now (owner decision 2026-10-12: one REGI stash
+ * The first `want` of `ranked` (in its order) that hold the admission amount (PILOT_ADMIT_USD at today's median) now (owner decision 2026-10-12: one REGI stash
  * rotated between wallets shows up once). A check ≤ REGI_CACHE_S old is reused; older ones are re-read from the RPC in
  * parallel waves, each about as large as the free places (at most PILOT_LIMITS.leaderboardRegiChecks calls per build),
  * and their regi_ok / regi_checked written back. A wallet whose read fails, or that would need a read past the cap,
@@ -1756,7 +1963,8 @@ interface Ranked {
  */
 export async function regiHolders(db: D1Database, env: Env, nowS: number, deps: PilotDeps, ranked: readonly Ranked[], want: number): Promise<Ranked[]> {
   const f = deps.fetch ?? fetch;
-  const min = BigInt(regiMinOf(env) ?? REGI_MIN_DEFAULT) * REGI_UNIT;
+  // R2: the admission amount at today's median; while the price is unknown only checks ≤ REGI_CACHE_S old count
+  const min = await admitMin(db, env, nowS);
   let budget = PILOT_LIMITS.leaderboardRegiChecks;
   const out: Ranked[] = [];
   const fresh: { wallet: string; ok: boolean }[] = [];
@@ -1770,7 +1978,7 @@ export async function regiHolders(db: D1Database, env: Env, nowS: number, deps: 
       const row = ranked[i++];
       if (row.regi_checked > 0 && nowS - row.regi_checked <= REGI_CACHE_S) {
         if (row.regi_ok === 1) { wave.push({ row, read: false }); maybe++; }
-      } else if (reads < budget) {
+      } else if (min !== null && reads < budget) {
         wave.push({ row, read: true });
         reads++;
         maybe++;
@@ -1780,7 +1988,7 @@ export async function regiHolders(db: D1Database, env: Env, nowS: number, deps: 
     const held = await Promise.all(wave.map(async ({ row, read }) => {
       if (!read) return true;
       try {
-        const ok = (await regiBalance(row.wallet, f)) >= min;
+        const ok = (await regiBalance(row.wallet, f)) >= min!;
         fresh.push({ wallet: row.wallet, ok });
         return ok;
       } catch {

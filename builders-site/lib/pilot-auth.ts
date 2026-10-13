@@ -3,7 +3,7 @@
  * session. The admin session is restricted to the admin / onboarder allowlists, so the pilot has a separate one:
  *
  *   GET    /api/pilot/auth   -> { nonce }            stateless (NONCE_SECRET), no write
- *   POST   /api/pilot/auth   { message, signature }  -> { address } + cookie (no REGI read: eligibility is per order)
+ *   POST   /api/pilot/auth   { message, signature }  -> { address } + cookie (the wallet must hold the admission REGI)
  *   DELETE /api/pilot/auth                           -> 204, every session of the wallet ended
  *
  * Cookie __Host-rb_pilot = "<wallet>.<epoch>.<exp>.<mac>", mac = HMAC-SHA256(PILOT_SESSION_SECRET,
@@ -12,14 +12,15 @@
  * /api/admin. The sign-in message names the wallet; only plain (EOA) signatures that recover to it are accepted
  * (smart-contract wallets are refused). A nonce is single use (D1 used_nonces, written at a successful sign-in).
  *
- * REGI gate (spec §8.4; audit PE-3; owner decision 2026-10-12: "not connect time, better at order signing time"):
- * every new order reads the wallet's balanceOf fresh from the RPC (no cache) and needs ≥ PILOT_REGI_MIN REGI
- * (default 1,000,000); closes need none, and sign-in reads nothing. Only when PILOT_REGI_SNAPSHOT_BLOCK is set must
- * the wallet also have held the minimum at that block (cached permanently per wallet and block, so a changed minimum
- * needs no re-read). The account view shows the last known state (cached ≤ 10 min). An RPC failure is "unknown"
- * (null), never "no REGI": the order is refused, and the wallet is backed off the RPC for 30 s. With PILOT_OPEN "1",
- * a malformed, future or pre-REGI snapshot block (an empty one is fine: no snapshot), or a malformed PILOT_REGI_MIN /
- * PILOT_MAX_LEV, makes the pilot "misconfigured": every order is refused, loudly (audit PE-7).
+ * REGI gate (owner decisions 2026-10-13, plan 2026-10-13 R2): a wallet must hold PILOT_ADMIT_USD (default $10) of REGI,
+ * converted at the 24 h median pool price (lib/pilot-regi.ts), at sign-in AND when it places each order; both read the
+ * balance fresh from the RPC (no cache) and fail closed (an RPC failure or an unknown price refuses). A wallet with
+ * open positions may always sign in, since closes never need REGI. Only when PILOT_REGI_SNAPSHOT_BLOCK is set must the
+ * wallet also have held the admission amount at that block (the whole REGI held there is cached permanently per wallet
+ * and block). The account view shows the last known state (cached ≤ 10 min). An RPC failure is "unknown" (null),
+ * never "no REGI", and backs the wallet off the RPC for 30 s. With PILOT_OPEN "1", a malformed, future or pre-REGI
+ * snapshot block (an empty one is fine: no snapshot), or a malformed PILOT_ADMIT_USD / PILOT_LOCK_USD /
+ * PILOT_LOCK_FACTORY / PILOT_MAX_LEV, makes the pilot "misconfigured": every order is refused, loudly (audit PE-7).
  */
 import { recoverMessageAddress, type Hex } from "viem";
 import { issuedFresh } from "../../src/lib/builders-admin";
@@ -32,9 +33,11 @@ import {
   PILOT_MAX_LEV_DEFAULT,
   REGI_ADDRESS,
   REGI_CACHE_S,
+  PILOT_ADMIT_USD_DEFAULT,
   REGI_DEPLOY_BLOCK,
-  REGI_MIN_DEFAULT,
+  REGI_PRICE_UPDATING,
   REGI_UNIT,
+  holdUsdText,
   parsePilotLoginMessage,
   type RegiView,
 } from "../../src/lib/abi-pilot-api";
@@ -43,6 +46,7 @@ import { makeNonce, nonceProblem, NONCE_MAX_AGE_MS, NONCE_SECRET_MISSING } from 
 import { readCapped } from "./builders-index";
 import type { D1Database, Env } from "./env";
 import { csrfFailure, errorJson, getCookie, json, siteOrigin } from "./http";
+import { admitUsdOf, lockFactoryOf, lockUsdOf, regiAt, regiPrice } from "./pilot-regi";
 import { SQL } from "./pilot-sql";
 
 export const PILOT_SEASON = 1;
@@ -68,12 +72,6 @@ export function snapshotBlock(env: Env): number | null {
   return /^\d{1,15}$/.test(s) ? Number(s) : null;
 }
 
-/** PILOT_REGI_MIN in whole REGI (unset: REGI_MIN_DEFAULT), or null when it is not a positive integer. */
-export function regiMinOf(env: Env): number | null {
-  const s = (env.PILOT_REGI_MIN ?? "").trim();
-  if (s === "") return REGI_MIN_DEFAULT;
-  return /^\d{1,12}$/.test(s) && Number(s) >= 1 ? Number(s) : null;
-}
 
 /** PILOT_MAX_LEV as a raw number (unset: PILOT_MAX_LEV_DEFAULT), or null when it is not an integer ≥ 1. */
 function maxLevSetting(env: Env): number | null {
@@ -105,7 +103,9 @@ export function pilotProblem(env: Env, head: number | null): string | null {
   if (raw !== "" && b === null) return `PILOT_REGI_SNAPSHOT_BLOCK is not a block number (${raw.slice(0, 40)})`;
   if (b !== null && b < REGI_DEPLOY_BLOCK) return `PILOT_REGI_SNAPSHOT_BLOCK ${b} is before REGI existed (block ${REGI_DEPLOY_BLOCK})`;
   if (b !== null && head !== null && b > head) return `PILOT_REGI_SNAPSHOT_BLOCK ${b} is in the future (head ${head})`;
-  if (regiMinOf(env) === null) return `PILOT_REGI_MIN is not a positive whole number of REGI (${(env.PILOT_REGI_MIN ?? "").slice(0, 40)})`;
+  if (admitUsdOf(env) === null) return `PILOT_ADMIT_USD is not a positive number of dollars (${(env.PILOT_ADMIT_USD ?? "").slice(0, 40)})`;
+  if (lockUsdOf(env) === null) return `PILOT_LOCK_USD is not a positive number of dollars (${(env.PILOT_LOCK_USD ?? "").slice(0, 40)})`;
+  if (lockFactoryOf(env) === undefined) return `PILOT_LOCK_FACTORY is not an address (${(env.PILOT_LOCK_FACTORY ?? "").slice(0, 60)})`;
   if (maxLevSetting(env) === null) return `PILOT_MAX_LEV is not an integer ≥ 1 (${(env.PILOT_MAX_LEV ?? "").slice(0, 40)})`;
   return null;
 }
@@ -273,19 +273,20 @@ export async function ensureAccount(db: D1Database, wallet: string, nowS: number
 /**
  * The REGI gate for an account: the snapshot answer (only when PILOT_REGI_SNAPSHOT_BLOCK is set: the whole-REGI
  * balance at that block, permanent per block; else null and not required) and the current balance (≤ REGI_CACHE_S
- * old, or always fresh from the RPC with forceNow, as an order needs), against PILOT_REGI_MIN. ok = every required
- * answer true; false if one is false; else null. During the 30 s back-off after an RPC failure nothing is re-read
- * (it stays null).
+ * old, or always fresh from the RPC with forceNow, as sign-in and an order need), against `min`: the admission
+ * amount in raw REGI at today's median price (plan 2026-10-13 R2). min null (the price is unknown): nothing is
+ * decided (all null). ok = every required answer true; false if one is false; else null. During the 30 s back-off
+ * after an RPC failure nothing is re-read (it stays null).
  */
-export async function regiStatus(db: D1Database, acct: AccountRow, env: Env, nowS: number, deps: PilotDeps, opts: { forceNow?: boolean } = {}): Promise<RegiView> {
+export async function regiStatus(db: D1Database, acct: AccountRow, env: Env, nowS: number, deps: PilotDeps, opts: { forceNow?: boolean; min: bigint | null }): Promise<RegiView> {
+  const min = opts.min;
+  if (min === null) return { ok: null, snapshot: null, now: null };
   const f = deps.fetch ?? fetch;
   const snapBlock = snapshotBlock(env);
-  const minWhole = regiMinOf(env) ?? REGI_MIN_DEFAULT;
-  const min = BigInt(minWhole) * REGI_UNIT;
   const backoff = acct.regi_retry_at > nowS;
   let snapshot: boolean | null = null, now: boolean | null = null, failed = false;
   if (snapBlock !== null) {
-    if (acct.regi_snap !== null && acct.regi_snap_block === snapBlock) snapshot = acct.regi_snap >= minWhole;
+    if (acct.regi_snap !== null && acct.regi_snap_block === snapBlock) snapshot = BigInt(acct.regi_snap) * REGI_UNIT >= min;
     else if (!backoff) {
       try {
         const held = await regiBalance(acct.wallet, f, snapBlock);
@@ -318,6 +319,14 @@ export async function regiStatus(db: D1Database, acct: AccountRow, env: Env, now
   const ok = snapOk === false || now === false ? false : snapOk === true && now === true ? true : null;
   return { ok, snapshot, now };
 }
+
+/** The admission amount in raw REGI at today's median (null while the price is unknown). */
+export async function admitMin(db: D1Database, env: Env, nowS: number): Promise<bigint | null> {
+  return regiAt(admitUsdOf(env) ?? PILOT_ADMIT_USD_DEFAULT, await regiPrice(db, nowS));
+}
+/** "Hold at least $10 of REGI to join the points pilot." (PILOT_ADMIT_USD) */
+export const holdRegi = (env: Env) => holdUsdText(admitUsdOf(env) ?? PILOT_ADMIT_USD_DEFAULT);
+export const REGI_UNCHECKED = "Couldn't check REGI right now";
 
 // ───────────────────────────── handlers ─────────────────────────────
 
@@ -368,8 +377,27 @@ export async function handlePilotLogin(req: Request, env: Env, deps: PilotDeps =
   const used = await db.prepare(SQL.nonceUse).bind(login.nonce, nowS + Math.ceil(NONCE_MAX_AGE_MS / 1000) + 60).run();
   if (used.meta.changes !== 1) return errorJson(401, "nonce already used; sign in again");
 
-  // no REGI read: sign-in neither refuses nor flags a wallet for REGI; every order checks it (owner decision 2026-10-12)
+  // R2 (owner decision 2026-10-13): the wallet must hold the admission amount now (a fresh read, fail closed). A wallet
+  // with open positions is let in regardless: closes never need REGI
+  const known = await getAccount(db, wallet);
+  const holding = known !== null && (await db.prepare("SELECT 1 AS x FROM positions WHERE wallet = ? AND closed_at IS NULL LIMIT 1").bind(wallet).first()) !== null;
+  let held: bigint | null = null;
+  if (!holding) {
+    if (admitUsdOf(env) === null) return errorJson(503, "pilot misconfigured");
+    const min = await admitMin(db, env, nowS);
+    if (min === null) return errorJson(503, REGI_PRICE_UPDATING);
+    try {
+      held = await regiBalance(wallet, deps.fetch ?? fetch);
+    } catch {
+      return errorJson(503, REGI_UNCHECKED);
+    }
+    if (held < min) {
+      if (known) await db.prepare("UPDATE accounts SET regi_ok = 0, regi_checked = ? WHERE wallet = ?").bind(nowS, wallet).run();
+      return errorJson(403, holdRegi(env));
+    }
+  }
   const acct = await ensureAccount(db, wallet, nowS);
+  if (held !== null) await db.prepare("UPDATE accounts SET regi_ok = 1, regi_checked = ? WHERE wallet = ?").bind(nowS, wallet).run();
   const token = await makePilotSession(env.PILOT_SESSION_SECRET!, wallet, acct.session_epoch, nowS);
   return json({ address: wallet }, 200, { "set-cookie": pilotCookie(token) });
 }
