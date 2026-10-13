@@ -444,3 +444,21 @@ describe("R2: the leaderboard on the $10 admission", () => {
     expect(t.rpc.calls).toBe(calls);
   });
 });
+
+describe("lock watch: start block and a throttled RPC", () => {
+  test("lockFromBlockOf parses PILOT_LOCK_FROM_BLOCK", async () => {
+    const { lockFromBlockOf } = await import("../lib/pilot-regi");
+    expect(lockFromBlockOf({ PILOT_LOCK_FROM_BLOCK: "25737926" } as never)).toBe(25737926);
+    expect(lockFromBlockOf({ PILOT_LOCK_FROM_BLOCK: "" } as never)).toBeNull();
+    expect(lockFromBlockOf({ PILOT_LOCK_FROM_BLOCK: "0x1" } as never)).toBeNull();
+  });
+  test("rpcCall retries once on 429, then reports it", async () => {
+    const { rpcCall } = await import("../lib/pilot-regi");
+    let n = 0;
+    const once429 = (async () => (++n === 1 ? new Response("", { status: 429 }) : Response.json({ jsonrpc: "2.0", id: 1, result: "0x10" }))) as unknown as typeof fetch;
+    expect(await rpcCall(once429, "eth_blockNumber", [])).toBe("0x10");
+    expect(n).toBe(2);
+    const always429 = (async () => new Response("", { status: 429 })) as unknown as typeof fetch;
+    await expect(rpcCall(always429, "eth_blockNumber", [])).rejects.toThrow("rpc 429");
+  });
+});

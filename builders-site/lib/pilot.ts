@@ -107,7 +107,7 @@ import {
   tooMany,
   type PilotDeps,
 } from "./pilot-auth";
-import { admitUsdOf, blockNumber, lockedOf, lockFactoryOf, lockReqString, lockUsdOf, regiAt, regiPrice, samplePrice, withdrawnLogs } from "./pilot-regi";
+import { admitUsdOf, blockNumber, lockedOf, lockFactoryOf, lockFromBlockOf, lockReqString, lockUsdOf, regiAt, regiPrice, samplePrice, withdrawnLogs } from "./pilot-regi";
 import { LIQ_PAGE, SQL } from "./pilot-sql";
 
 export const MARK_MAX_SKEW_S = 30;
@@ -1619,7 +1619,10 @@ async function regiChores(
     const factory = lockFactoryOf(env);
     if (factory && !heldBack && (probe?.lock_checked ?? 0) <= nowS - LOCK_WATCH_S && room() >= 1 + LOCK_CLOSE_STATEMENTS) {
       const claimed = (await db.prepare(SQL.lockClaim).bind(nowS, nowS - LOCK_WATCH_S).run()).meta.changes === 1;
-      if (claimed) lock = await lockWatch(db, factory, nowS, f, probe?.lock_block ?? null, room, lockUsdText(lockUsdOf(env) ?? PILOT_LOCK_USD_DEFAULT));
+      // no cursor yet: start at the factory's deploy block (PILOT_LOCK_FROM_BLOCK), not LOG_CHUNK back from the head
+      const fromBlock = lockFromBlockOf(env);
+      const cursor = probe?.lock_block ?? (fromBlock !== null ? fromBlock - 1 : null);
+      if (claimed) lock = await lockWatch(db, factory, nowS, f, cursor, room, lockUsdText(lockUsdOf(env) ?? PILOT_LOCK_USD_DEFAULT));
     }
   } catch (e) {
     console.error(`pilot ingest (${d.market}): REGI chores failed: ${String((e as Error)?.message ?? e)}`);

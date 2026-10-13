@@ -41,6 +41,13 @@ export const admitUsdOf = (env: Env) => usdSetting(env.PILOT_ADMIT_USD, PILOT_AD
 /** PILOT_LOCK_USD in dollars (unset: 50), or null when it is not a positive number with at most 2 decimals. */
 export const lockUsdOf = (env: Env) => usdSetting(env.PILOT_LOCK_USD, PILOT_LOCK_USD_DEFAULT);
 /** PILOT_LOCK_FACTORY lowercase; null when unset or empty (not deployed yet); undefined when it is not an address (misconfigured). */
+/** PILOT_LOCK_FROM_BLOCK: the factory's deploy block. The watch's first run starts there (no Withdrawn log can be
+ * older), so it reads a small range instead of the last LOG_CHUNK blocks. null = unset or not a block number. */
+export function lockFromBlockOf(env: Env): number | null {
+  const s = (env.PILOT_LOCK_FROM_BLOCK ?? "").trim();
+  return /^[0-9]{1,12}$/.test(s) ? Number(s) : null;
+}
+
 export function lockFactoryOf(env: Env): string | null | undefined {
   const s = (env.PILOT_LOCK_FACTORY ?? "").trim();
   if (s === "") return null;
@@ -52,13 +59,20 @@ export function lockFactoryOf(env: Env): string | null | undefined {
 const RPC_TIMEOUT_MS = 5000;
 
 /** One JSON-RPC call to the Arc RPC; throws unless it answers cleanly. */
+/** The public Arc RPC rate-limits Cloudflare's shared egress now and then: one short retry on 429. */
+export const RPC_RETRY_MS = 300;
 export async function rpcCall(fetchFn: typeof fetch, method: string, params: unknown[]): Promise<unknown> {
-  const res = await fetchFn(ARC_RPC_URL, {
+  const send = () => fetchFn(ARC_RPC_URL, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
     signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
   });
+  let res = await send();
+  if (res.status === 429) {
+    await new Promise((r) => setTimeout(r, RPC_RETRY_MS));
+    res = await send();
+  }
   if (!res.ok) throw new Error(`rpc ${res.status}`);
   const j = (await res.json()) as { result?: unknown; error?: unknown };
   if (j.error !== undefined || j.result === undefined) throw new Error("rpc: bad answer");

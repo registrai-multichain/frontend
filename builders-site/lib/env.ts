@@ -93,6 +93,8 @@ export interface Env {
   PILOT_LOCK_USD?: string;
   /** The RegiLockFactory address (R3). Empty (the default, until the owner deploys it): leverage above 1× is refused. Set but not an address = misconfigured. */
   PILOT_LOCK_FACTORY?: string;
+  /** The factory's deploy block: the withdrawal watch's first run starts there. */
+  PILOT_LOCK_FROM_BLOCK?: string;
   /** The pilot's leverage cap, applied after the engine's. Default "10". Not an integer ≥ 1 = misconfigured. */
   PILOT_MAX_LEV?: string;
   /** Comma-separated lowercase addresses that may not open positions (milestone recorders, audit F4). Closes still work. */
