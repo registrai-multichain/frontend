@@ -115,7 +115,7 @@ export function SuggestForm() {
       {field("website", "Website", { placeholder: "https://acme.xyz", required: true })}
       {field("x", "Project's X account", { placeholder: "@acme or x.com/acme", hint: "Social proof: this, or the link below." })}
       {field("social", "…or another public link", { placeholder: "https://warpcast.com/acme · t.me/… · discord.gg/…", hint: "When the project has no X account." })}
-      {field("github", "GitHub repo", { placeholder: "github.com/acme/app", optional: true, hint: "Markets on a project count its GitHub releases." })}
+      {field("github", "GitHub repo", { placeholder: "github.com/acme/app", optional: true })}
       <label className="vf-field">
         <span>Why it belongs (optional)</span>
         <textarea value={f.why} onChange={set("why")} maxLength={SUGGEST_LIMITS.why} rows={3} placeholder="What are they building on Arc?" />

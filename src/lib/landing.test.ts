@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import postcss, { type AtRule } from "postcss";
 import { describe, expect, it } from "vitest";
 import { VERDICT_WORDS } from "./facts";
-import { CONTACT_EMAIL, FOOTER_BRAND_LINE, FOOTER_PAUSE_LINE, HERO, HOW_WE_PUBLISH, HOW_WE_PUBLISH_URL, STRIP, TRACK_RECORD_URL, TIERS, TIERS_SECTION, VERIFY_URL, contactHref } from "./landing";
+import { CONTACT_EMAIL, FOOTER_BRAND_LINE, HERO, HOW_WE_PUBLISH, HOW_WE_PUBLISH_URL, STRIP, TRACK_RECORD_URL, TIERS, TIERS_SECTION, VERIFY_URL, contactHref } from "./landing";
 
 function strings(v: unknown, out: string[] = []): string[] {
   if (typeof v === "string") out.push(v);
@@ -11,7 +11,7 @@ function strings(v: unknown, out: string[] = []): string[] {
   else if (v && typeof v === "object") Object.values(v).forEach((x) => strings(x, out));
   return out;
 }
-const all = strings([HERO, STRIP, TIERS, TIERS_SECTION, HOW_WE_PUBLISH, FOOTER_BRAND_LINE, FOOTER_PAUSE_LINE]);
+const all = strings([HERO, STRIP, TIERS, TIERS_SECTION, HOW_WE_PUBLISH, FOOTER_BRAND_LINE]);
 const word = (w: string, flags: string) => new RegExp(`\\b${w.replace(" ", "\\s+")}\\b`, flags);
 
 describe("landing copy", () => {
@@ -38,9 +38,6 @@ describe("landing copy", () => {
     expect(VERIFY_URL).toBe("https://builder.registrai.cc/verify/");
     expect(HOW_WE_PUBLISH_URL).toBe("https://builder.registrai.cc/how-we-publish/");
     expect(TRACK_RECORD_URL).toBe("https://builder.registrai.cc/track-record/");
-  });
-  it("has a footer pause line", () => {
-    expect(FOOTER_PAUSE_LINE.trim().length).toBeGreaterThan(0);
   });
 });
 

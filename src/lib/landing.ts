@@ -82,4 +82,3 @@ export const HOW_WE_PUBLISH = {
 };
 
 export const FOOTER_BRAND_LINE = "Tabula by Registrai · the proof layer, anchored on Arc";
-export const FOOTER_PAUSE_LINE = "Perennial is paused until the team clears all legal risks.";

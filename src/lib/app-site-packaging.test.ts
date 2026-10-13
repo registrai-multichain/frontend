@@ -4,15 +4,12 @@ import { expect, test } from "vitest";
 
 const FRONTEND = resolve(__dirname, "../..");
 
-test("app.registrai.cc: built for mainnet, ships only the markets app, deploys to registrai-app", () => {
+test("app.registrai.cc: retired, ships redirects only, deploys to registrai-app", () => {
   const pkg = JSON.parse(readFileSync(resolve(FRONTEND, "package.json"), "utf8"));
-  expect(pkg.scripts["deploy:app"]).toMatch(/^NEXT_PUBLIC_PERENNIAL_NETWORK=mainnet next build && bash scripts\/build-app-site\.sh && wrangler pages deploy dist-app --project-name=registrai-app --branch=main$/);
+  expect(pkg.scripts["deploy:app"]).toBe("bash scripts/build-app-site.sh && wrangler pages deploy dist-app --project-name=registrai-app --branch=main");
   const build = readFileSync(resolve(FRONTEND, "scripts/build-app-site.sh"), "utf8");
-  const shipped = /for x in ([^;]*); do/s.exec(build)![1].replace(/\\\n/g, " ").split(/\s+/).filter(Boolean);
-  for (const r of ["perennial", "rounds", "atlas", "_next"]) expect(shipped).toContain(r);
-  for (const r of ["transparency", "bridge", "builders", "verify", "admin", "markets", "lending", "data", "legacy"]) expect(shipped).not.toContain(r);
   expect(build).toContain("appSiteRedirects()");
-  expect(build).toMatch(/connect-src 'self' https:\/\/rpc\.mainnet\.arc\.io/);
+  expect(build).not.toMatch(/cp -R/);
 });
 
 test("dashboard.registrai.cc: built for mainnet, ships only the transparency page at its root, deploys to registrai-dashboard", () => {
@@ -25,15 +22,4 @@ test("dashboard.registrai.cc: built for mainnet, ships only the transparency pag
   expect(build).toContain('cp out/transparency/index.html "$D/index.html"');
   expect(build).toContain("dashboardSiteRedirects()");
   expect(build).toMatch(/connect-src 'self' https:\/\/rpc\.mainnet\.arc\.io https:\/\/api\.dexscreener\.com;/);
-});
-
-test("the app site ships /propose and lets it reach the proposals API", () => {
-  const sh = readFileSync(resolve(FRONTEND, "scripts/build-app-site.sh"), "utf8");
-  expect(sh).toMatch(/for x in [^\n]*\bpropose\b/);
-  expect(sh).toContain("connect-src 'self' https://rpc.mainnet.arc.io https://rpc.testnet.arc.io https://api.exchange.coinbase.com wss://ws-feed.exchange.coinbase.com https://builder.registrai.cc");
-});
-
-test("the app site lets the Builders page load site icons from the builders site's icon API", () => {
-  const sh = readFileSync(resolve(FRONTEND, "scripts/build-app-site.sh"), "utf8");
-  expect(sh).toContain("img-src 'self' data: blob: https://avatars.githubusercontent.com https://builder.registrai.cc;");
 });

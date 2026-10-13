@@ -3,10 +3,8 @@ import type { ReactNode } from "react";
 import { BrandLockup } from "../Brand";
 import { WalletButton } from "../WalletButton";
 import { Toasts } from "../paper/Toasts";
-import { FreezeBanner } from "../FreezeNotice";
 import { BUILDERS } from "@/lib/builders-network";
-import { MARKETS_FROZEN } from "@/lib/freeze";
-import { APP_URL, HOME_URL } from "@/lib/site-nav";
+import { BUILDERS_URL, HOME_URL } from "@/lib/site-nav";
 
 // Keep the server-to-client prop JSON-safe (viem's chain object carries functions).
 const WALLET_CHAIN = { id: BUILDERS.chain.id, name: BUILDERS.chain.name, shortName: BUILDERS.chain.shortName };
@@ -26,8 +24,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      {MARKETS_FROZEN && <FreezeBanner />}
-
       <main className="pa-main w-full flex-1">{children}</main>
 
       <footer className="pa-foot">
@@ -35,7 +31,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           <span>Read live from Arc mainnet</span>
           <span className="flex flex-wrap gap-4">
             <a href={HOME_URL}>registrai.cc ↗</a>
-            <a href={APP_URL}>App ↗</a>
+            <a href={BUILDERS_URL}>Builders ↗</a>
             <a href="https://github.com/registrai-multichain" target="_blank" rel="noreferrer">GitHub ↗</a>
           </span>
         </div>

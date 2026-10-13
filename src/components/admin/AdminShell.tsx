@@ -17,7 +17,7 @@ export interface AdminNavItem {
 }
 
 /**
- * The builders admin's frame (/admin and /admin/proposals): the approved mockup's
+ * The builders admin's frame (/admin): the approved mockup's
  * left rail — "Registrai admin", the section links (the active one in ink), who is
  * signed in — and the main column. Below 1200 px the rail is a top bar.
  * `foot`: extra rail content under the signed-in line (the /admin wallet and session buttons).

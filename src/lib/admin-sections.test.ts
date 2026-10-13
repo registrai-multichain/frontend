@@ -49,15 +49,12 @@ describe("sectionFromHash", () => {
 
 describe("adminNav", () => {
   const sections = adminSections(adminView("admin"), ALL);
-  test("hash links on /admin, /admin/#… links from /admin/proposals, then Market proposals", () => {
+  test("hash links on /admin, /admin/#… links from elsewhere, no Market proposals", () => {
     const here = adminNav(sections, "");
     expect(here[0]).toEqual({ key: "invites", label: "Invites", href: "#invites", count: null, busy: false, current: "location" });
-    expect(here.at(-1)).toEqual({ key: "proposals", label: "Market proposals", href: "/admin/proposals/", count: null, busy: false, current: "page" });
-    const there = adminNav(sections, "/admin/", { proposals: 0 });
-    // The hashes /admin/proposals always linked to keep working.
+    expect(here.map((i) => i.key)).not.toContain("proposals");
+    const there = adminNav(sections, "/admin/");
     expect(there.slice(0, 3).map((i) => i.href)).toEqual(["/admin/#invites", "/admin/#register-requests", "/admin/#suggestions"]);
-    expect(there.at(-1)?.count).toBe(0);
-    // From /admin/proposals the sections are other pages.
     expect(there[0].current).toBe("page");
   });
   test("a section with work in progress is marked busy", () => {

@@ -9,7 +9,7 @@ const NAV = [
   { key: "invites", label: "Invites", href: "#invites", current: "location" as const },
   { key: "suggestions", label: "Project suggestions", href: "#suggestions", count: 3, current: "location" as const },
   { key: "onboarding", label: "Onboarding", href: "#onboarding", busy: true, current: "location" as const },
-  { key: "proposals", label: "Market proposals", href: "/admin/proposals/", count: null },
+  { key: "facts", label: "Project facts", href: "/admin/#facts", current: "page" as const },
 ];
 
 function render(active: string | null, who: { address: string; role: "admin" | "onboarder" } | null) {
@@ -28,7 +28,7 @@ describe("AdminShell", () => {
     const { html, links } = render("invites", null);
     expect(html).toMatch(/<nav [^>]*aria-label="Admin"/);
     expect(html).toContain("Registrai admin");
-    expect(links.map((l) => l.attrs.match(/href="([^"]+)"/)?.[1])).toEqual(["#invites", "#suggestions", "#onboarding", "/admin/proposals/"]);
+    expect(links.map((l) => l.attrs.match(/href="([^"]+)"/)?.[1])).toEqual(["#invites", "#suggestions", "#onboarding", "/admin/#facts"]);
     expect(html).toContain("<main");
     expect(html).toContain("<p>body</p>");
   });
@@ -38,7 +38,7 @@ describe("AdminShell", () => {
     expect(current).toHaveLength(1);
     expect(current[0].text).toContain("Project suggestions");
     expect(current[0].attrs).toContain('aria-current="location"');
-    const page = render("proposals", null).links.filter((l) => l.attrs.includes("aria-current"));
+    const page = render("facts", null).links.filter((l) => l.attrs.includes("aria-current"));
     expect(page).toHaveLength(1);
     expect(page[0].attrs).toContain('aria-current="page"');
     // No active section (the sign-in screen): nothing is current.
@@ -49,7 +49,7 @@ describe("AdminShell", () => {
     expect(active.text).toMatch(/Project suggestions\s*3$/);
     const inactive = render("invites", null).links.find((l) => l.text.startsWith("Project suggestions"))!;
     expect(inactive.text).toMatch(/Project suggestions\s*3$/);
-    expect(render("invites", null).links.find((l) => l.text.startsWith("Market proposals"))!.text.trim()).toBe("Market proposals");
+    expect(render("invites", null).links.find((l) => l.text.startsWith("Invites"))!.text.trim()).toBe("Invites");
   });
   test("a busy section shows a working dot and label, active or not", () => {
     const item = (active: string) => render(active, null).links.find((l) => l.text.startsWith("Onboarding"))!;

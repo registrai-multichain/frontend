@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { BuybackPanel } from "./BuybackPanel";
-import { CommonMarketsPanel } from "./CommonMarketsPanel";
 import { BIG, Donut, Swatch } from "./parts";
 import { parseAbi, type Address, type PublicClient } from "viem";
 import { CopyButton } from "@/components/perennial/CopyButton";
@@ -13,7 +12,7 @@ import { BUILDERS } from "@/lib/builders-network";
 import { usdText, who } from "@/lib/plain-words";
 import { badgeAbi } from "@/lib/verified-builder-badge";
 import {
-  BUYBACK, CONTRACTS, DEPLOY, DEX_PAIR_API, FEE_SPLITS, RECORD, ROLES, TRADE_FEE_PCT, WALLETS, compactNumber, holderLabel, nativeToUsdc, parseDexPair,
+  BUYBACK, CONTRACTS, DEPLOY, DEX_PAIR_API, RECORD, ROLES, WALLETS, compactNumber, holderLabel, nativeToUsdc, parseDexPair,
   roleDiffs, agoText, LIVE_REFRESH_MS, sumBy, supplySplit,
 } from "@/lib/transparency";
 
@@ -119,7 +118,6 @@ function usdLoose(n: number): string {
 }
 
 const SUPPLY_COLORS = { burned: "var(--fg)", protocol: "var(--accent)", public: "var(--line-strong)" } as const;
-const LEG_COLORS = ["var(--up)", "var(--accent)", "var(--line-strong)"];
 
 /** A compact rule tile: label, one big value, one short line. */
 function Tile({ label, value, sub, tone }: { label: string; value: string; sub: string; tone?: "up" | "down" }) {
@@ -233,7 +231,7 @@ export function Transparency() {
       <BuybackPanel className="lg:col-span-5" />
 
       {/* How much sits on protocol-owned addresses */}
-      <section className={`${card} lg:col-span-7`} aria-labelledby="t-held">
+      <section className={`${card} lg:col-span-12`} aria-labelledby="t-held">
         <h2 id="t-held" className="pa-h2">On protocol addresses</h2>
         <div className="pa-card overflow-x-auto">
           <div className="grid grid-cols-2 gap-3 border-b border-line pb-3">
@@ -268,34 +266,6 @@ export function Transparency() {
           </p>
         </div>
       </section>
-
-      {/* Shares */}
-      <section className={`${card} lg:col-span-5`} aria-labelledby="t-shares">
-        <h2 id="t-shares" className="pa-h2">Who gets each fee</h2>
-        <p className="pa-muted pa-small">
-          <b className="text-fg">{TRADE_FEE_PCT}%</b> on every buy and sell. Collected so far: <b className="text-fg tnum">$0</b>. Markets are frozen, so no fees come in.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-          {FEE_SPLITS.map((s) => (
-            <article key={s.market} className="pa-card flex items-center gap-4">
-              <Donut label={`${s.short} fee split`} size={92} stroke={14} parts={s.legs.map((l, i) => ({ key: l.who, share: l.pct, color: LEG_COLORS[i] }))}>
-                <span className="pa-small tnum">{TRADE_FEE_PCT}%</span>
-              </Donut>
-              <div className="flex min-w-0 flex-col gap-1">
-                <h3 className="pa-h3">{s.short}</h3>
-                {s.legs.map((l, i) => (
-                  <span key={l.who} className="inline-flex items-baseline gap-2 pa-small" title={l.to}>
-                    <b className="pa-serif tnum" style={{ fontSize: 18, lineHeight: 1, fontWeight: 400 }}>{l.pct}%</b>
-                    <span className="inline-flex items-center gap-1.5"><Swatch color={LEG_COLORS[i]} />{l.who}</span>
-                  </span>
-                ))}
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <CommonMarketsPanel marketsClass="lg:col-span-7" oracleClass="lg:col-span-5" />
 
       {/* Rules: one strip of compact tiles */}
       <section className={`${card} lg:col-span-12`} aria-labelledby="t-rules">
@@ -394,7 +364,7 @@ export function Transparency() {
         </ul>
         <p className="pa-muted pa-small">
           Builder contracts: deployed {DEPLOY.date} (block {DEPLOY.block.toLocaleString("en-US")}), audited, source verified. NanoLedger, buyback and
-          splitter: deployed 2026-09-27 after an internal review; external audit to come. Markets go live later.
+          splitter: deployed 2026-09-27 after an internal review; external audit to come.
         </p>
       </section>
 

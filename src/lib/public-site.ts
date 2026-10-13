@@ -1,7 +1,7 @@
 /**
  * What the PUBLIC registrai.cc serves: the landing and the USDC bridge. The
- * builder registry lives on builder.registrai.cc and the markets app (Markets,
- * Rounds, Propose, Builders, Atlas, How it works) on app.registrai.cc, built for mainnet;
+ * builder app lives on builder.registrai.cc. The old markets app (app.registrai.cc)
+ * is retired: its routes redirect to builder.registrai.cc on every site;
  * every other app route runs on testnet and redirects to the landing (the team uses the full app at testnet.registrai.cc, behind
  * Cloudflare Access). scripts/write-public-redirects.ts writes the Pages
  * `_redirects` from this at deploy time (registrai-web only, never the
@@ -10,7 +10,6 @@
  */
 
 export const BUILDERS_SITE = "https://builder.registrai.cc";
-export const APP_SITE = "https://app.registrai.cc";
 export const DASHBOARD_SITE = "https://dashboard.registrai.cc";
 export const PUBLIC_SITE = "https://registrai.cc";
 
@@ -20,8 +19,13 @@ export const PUBLIC_ROUTES = ["bridge"] as const;
 /** App routes that move to the builders site (same path). */
 export const BUILDERS_SITE_ROUTES = ["builders", "verify", "admin", "guide", "suggest", "project", "how-we-publish", "track-record", "record", "builders-index", "terms", "privacy", "pilot-rules"] as const;
 
-/** App routes that move to the markets app, app.registrai.cc (same path; built for mainnet). */
-export const APP_SITE_ROUTES = ["atlas", "perennial", "rounds", "propose"] as const;
+/** Routes of the retired markets app: every site sends them to the builders site's root. */
+export const RETIRED_ROUTES = ["atlas", "perennial", "rounds", "propose"] as const;
+
+/** Every retired route lands on the builders site's root. */
+const toBuilders = (lines: string[]) => {
+  for (const r of RETIRED_ROUTES) lines.push(`/${r} ${BUILDERS_SITE}/ 301`, `/${r}/* ${BUILDERS_SITE}/ 301`);
+};
 
 /** App routes served by the transparency dashboard, dashboard.registrai.cc (at its root; built for mainnet). */
 export const DASHBOARD_SITE_ROUTES = ["transparency"] as const;
@@ -62,9 +66,7 @@ export function publicRedirects(): string {
   for (const r of BUILDERS_SITE_ROUTES) {
     lines.push(`/${r} ${BUILDERS_SITE}/${r}/ 302`, `/${r}/* ${BUILDERS_SITE}/${r}/:splat 302`);
   }
-  for (const r of APP_SITE_ROUTES) {
-    lines.push(`/${r} ${APP_SITE}/${r}/ 302`, `/${r}/* ${APP_SITE}/${r}/:splat 302`);
-  }
+  toBuilders(lines);
   toDashboard(lines);
   for (const r of [...new Set([...TESTNET_ROUTES, ...TESTNET_STATIC, "seasons"])].sort()) {
     lines.push(`/${r} / 302`, `/${r}/* / 302`);
@@ -73,27 +75,28 @@ export function publicRedirects(): string {
 }
 
 /**
- * Pure: the `_redirects` of app.registrai.cc (scripts/build-app-site.sh): its
- * root opens Markets; the bridge goes back to registrai.cc and the builder
- * pages to builder.registrai.cc. The app's own routes are served, not redirected.
+ * Pure: the `_redirects` of app.registrai.cc (scripts/build-app-site.sh), which is
+ * retired: the bridge goes back to registrai.cc, builder pages keep their path on
+ * builder.registrai.cc, and everything else lands on builder.registrai.cc's root.
  */
 export function appSiteRedirects(): string {
-  const lines = ["# Written by scripts/build-app-site.sh (src/lib/public-site.ts). app.registrai.cc only.", "/ /perennial/ 302", "/index.html /perennial/ 302"];
-  for (const r of PUBLIC_ROUTES) lines.push(`/${r} ${PUBLIC_SITE}/${r}/ 302`, `/${r}/* ${PUBLIC_SITE}/${r}/:splat 302`);
-  for (const r of BUILDERS_SITE_ROUTES) lines.push(`/${r} ${BUILDERS_SITE}/${r}/ 302`, `/${r}/* ${BUILDERS_SITE}/${r}/:splat 302`);
+  const lines = ["# Written by scripts/build-app-site.sh (src/lib/public-site.ts). app.registrai.cc only: retired."];
+  for (const r of PUBLIC_ROUTES) lines.push(`/${r} ${PUBLIC_SITE}/${r}/ 301`, `/${r}/* ${PUBLIC_SITE}/${r}/:splat 301`);
+  for (const r of BUILDERS_SITE_ROUTES) lines.push(`/${r} ${BUILDERS_SITE}/${r}/ 301`, `/${r}/* ${BUILDERS_SITE}/${r}/:splat 301`);
   toDashboard(lines);
+  lines.push(`/* ${BUILDERS_SITE}/ 301`);
   return `${lines.join("\n")}\n`;
 }
 
 /**
  * Pure: the `_redirects` of dashboard.registrai.cc (scripts/build-dashboard-site.sh).
  * Its root IS the transparency page, so /transparency folds into it; the shared
- * nav's other pages go to the app, the builders site and the bridge.
+ * nav's other pages go to the builders site and the bridge.
  */
 export function dashboardSiteRedirects(): string {
   const lines = ["# Written by scripts/build-dashboard-site.sh (src/lib/public-site.ts). dashboard.registrai.cc only."];
   for (const r of DASHBOARD_SITE_ROUTES) lines.push(`/${r} / 301`, `/${r}/* / 301`);
-  for (const r of APP_SITE_ROUTES) lines.push(`/${r} ${APP_SITE}/${r}/ 302`, `/${r}/* ${APP_SITE}/${r}/:splat 302`);
+  toBuilders(lines);
   for (const r of BUILDERS_SITE_ROUTES) lines.push(`/${r} ${BUILDERS_SITE}/${r}/ 302`, `/${r}/* ${BUILDERS_SITE}/${r}/:splat 302`);
   for (const r of PUBLIC_ROUTES) lines.push(`/${r} ${PUBLIC_SITE}/${r}/ 302`, `/${r}/* ${PUBLIC_SITE}/${r}/:splat 302`);
   return `${lines.join("\n")}\n`;

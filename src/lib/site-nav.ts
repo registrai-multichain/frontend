@@ -9,5 +9,5 @@ export const APP_NAV: NavItem[] = [
 ];
 
 export const DASHBOARD_URL = "https://dashboard.registrai.cc/";
-export const APP_URL = "https://app.registrai.cc/";
+export const BUILDERS_URL = "https://builder.registrai.cc/";
 export const HOME_URL = "https://registrai.cc/";

@@ -10,7 +10,7 @@ import { txUrl } from "@/lib/chains";
 import { shortAddr } from "@/lib/format";
 import { humanizeError } from "@/lib/humanize-error";
 import { PERENNIAL_WRITES_ENABLED } from "@/lib/perennial";
-import { BUILDERS, MARKETS_OPEN_ON_BUILDERS_NETWORK } from "@/lib/builders-network";
+import { BUILDERS } from "@/lib/builders-network";
 import { browserProjectProof, parseSourceParam } from "@/lib/builders-gallery";
 import {
   MAX_PROJECTS_PER_BUILDER,
@@ -34,14 +34,11 @@ import { PublishGuide } from "./PublishGuide";
 import { sendBuildersTx } from "./sendTx";
 import { buildersClient, useMyBuilder } from "./useMyBuilder";
 
-// Claims register on the BUILDERS network (Arc mainnet in phase 1), which may
-// have no markets yet; nothing here reads or needs a market contract.
+// Claims register on the BUILDERS network (Arc mainnet); nothing here reads a market contract.
 const CHAIN = BUILDERS.chain;
 const REG = BUILDERS.contracts.BuilderRegistry;
 const LABEL = BUILDERS.label;
 const HUMAN = { testnet: CHAIN.testnet, networkName: LABEL };
-/** Milestone feeds and markets exist on the builders network. */
-const MARKETS_OPEN = MARKETS_OPEN_ON_BUILDERS_NETWORK;
 
 type Path = "repo" | "domain";
 type Check =
@@ -457,9 +454,6 @@ export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
               <b>{p === "repo" ? "Open source" : "Closed source"}</b>
               <span>
                 {p === "repo" ? "a file in your GitHub repo" : "a file on your domain"}
-                {MARKETS_OPEN
-                  ? p === "repo" ? "; published releases a day apart count" : "; contracts your deployers create count"
-                  : p === "repo" ? "; published releases a day apart count once milestone tracking starts" : "; contracts your deployers create count once milestone tracking starts"}
               </span>
             </button>
           ))}
@@ -547,7 +541,7 @@ export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
             <p className={deployers.bad.length && !claim ? "vf-error" : "vf-hint"}>
               {deployers.bad.length && !claim
                 ? `Not addresses: ${deployers.bad.join(", ")}`
-                : `Wallets that deploy your contracts directly. Each one signs this claim; your milestone is the number of contracts they create (factory / CREATE2 deploys don't count yet)${MARKETS_OPEN ? "" : `, counted once milestone tracking starts with the markets on ${LABEL}`}. Leave empty to verify the domain only.`}
+                : `Wallets that deploy your contracts directly. Each one signs this claim. Leave empty to verify the domain only.`}
             </p>
           </>
         )}
@@ -662,18 +656,10 @@ export function VerifyFlow({ pick = null }: { pick?: ProjectPick | null }) {
             <p className="vf-ok">
               {claim?.source} is now a project of builder #{myBuilder.id}.
             </p>
-            {MARKETS_OPEN ? (
-              <p className="vf-note">
-                Next, the Registrai multisig assigns our milestone operator as your caretaker in its next onboarding batch (once,
-                for your builder). From then on you show as verified on the atlas and season boards, and this project&apos;s
-                milestone feed is bonded. Markets on it are opened by the community, not by us.
-              </p>
-            ) : (
-              <p className="vf-note">
-                You show as nominated in the builders gallery until the Registrai multisig onboards your builder in its next
-                batch and issues your Verified Builder Badge (one per builder). Milestone tracking starts when markets open on {LABEL}.
-              </p>
-            )}
+            <p className="vf-note">
+              You show as nominated in the builders gallery until the Registrai multisig onboards your builder in its next
+              batch and issues your Verified Builder Badge (one per builder).
+            </p>
             <Link className="vf-link" href={`/builders?builder=${myBuilder.id}`}>see your card in the gallery →</Link>
             {txState.hash && <a className="vf-link" href={txUrl(CHAIN, txState.hash)} target="_blank" rel="noreferrer">view transaction ↗</a>}
           </>

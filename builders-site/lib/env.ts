@@ -101,8 +101,6 @@ export interface Env {
   PILOT_BLOCKED_WALLETS?: string;
   /** Pages SECRET: the HMAC key of the pilot session cookie. Under 32 characters = pilot sign-in fails closed (503). */
   PILOT_SESSION_SECRET?: string;
-  /** https://app.registrai.cc — the only origin /api/market-proposals accepts submissions from (CORS). */
-  PROPOSALS_ALLOWED_ORIGIN?: string;
 }
 
 export interface PagesContext<D extends Record<string, unknown> = Record<string, unknown>> {

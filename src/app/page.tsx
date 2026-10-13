@@ -2,7 +2,7 @@ import { BrandLockup, BrandMark } from "@/components/Brand";
 import { REGISTRAI_X_URL, REGI_CONTRACT, REGI_DEXSCREENER_URL, REGI_EXPLORER_URL } from "@/lib/regi";
 import Link from "next/link";
 
-import { FOOTER_BRAND_LINE, FOOTER_PAUSE_LINE, HERO, HOW_WE_PUBLISH, HOW_WE_PUBLISH_URL, STRIP, TRACK_RECORD_URL, TIERS, TIERS_SECTION, VERIFY_URL } from "@/lib/landing";
+import { FOOTER_BRAND_LINE, HERO, HOW_WE_PUBLISH, HOW_WE_PUBLISH_URL, STRIP, TRACK_RECORD_URL, TIERS, TIERS_SECTION, VERIFY_URL } from "@/lib/landing";
 
 export default function Home() {
   return (
@@ -142,6 +142,6 @@ function RegiBootstrap() {
 
 function Footer() {
   return (
-    <footer className="lp-footer lp-frame"><div><BrandMark className="lp-footer-mark" /></div><div className="lp-footer-links"><a href="https://builder.registrai.cc/builders/">Verified builders →</a><Link href="/bridge">Bridge USDC →</Link><a href={REGI_EXPLORER_URL} target="_blank" rel="noreferrer">$REGI on Arc ↗</a><a href="/brand/registrai-brand-kit-regi.zip" download>Brand kit ↓</a><a href={REGISTRAI_X_URL} target="_blank" rel="me noreferrer">X @registraicc ↗</a><a href="https://github.com/registrai-multichain" target="_blank" rel="noreferrer">GitHub ↗</a><a href="mailto:contact@registrai.cc">contact@registrai.cc</a></div><div className="lp-footer-status"><i /> Building in public<br /><span>Warsaw / 2026</span></div><p className="lp-footer-note">{FOOTER_BRAND_LINE}<br />{FOOTER_PAUSE_LINE}</p></footer>
+    <footer className="lp-footer lp-frame"><div><BrandMark className="lp-footer-mark" /></div><div className="lp-footer-links"><a href="https://builder.registrai.cc/builders/">Verified builders →</a><Link href="/bridge">Bridge USDC →</Link><a href={REGI_EXPLORER_URL} target="_blank" rel="noreferrer">$REGI on Arc ↗</a><a href="/brand/registrai-brand-kit-regi.zip" download>Brand kit ↓</a><a href={REGISTRAI_X_URL} target="_blank" rel="me noreferrer">X @registraicc ↗</a><a href="https://github.com/registrai-multichain" target="_blank" rel="noreferrer">GitHub ↗</a><a href="mailto:contact@registrai.cc">contact@registrai.cc</a></div><div className="lp-footer-status"><i /> Building in public<br /><span>Warsaw / 2026</span></div><p className="lp-footer-note">{FOOTER_BRAND_LINE}</p></footer>
   );
 }

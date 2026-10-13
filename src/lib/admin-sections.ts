@@ -1,6 +1,6 @@
 /**
  * The builders admin's sections (/admin, one at a time, chosen by the URL hash) and
- * its rail, shared by /admin and /admin/proposals (AdminShell). Pure: which sections
+ * its rail (AdminShell). Pure: which sections
  * a session sees follows adminView (builders-admin.ts) exactly as the page gated them
  * before it had a rail.
  */
@@ -131,13 +131,11 @@ export function sectionFromHash(hash: string, available: readonly Pick<AdminSect
   return available.find((s) => s.id === id)?.id ?? available[0]?.id ?? DEFAULT_SECTION;
 }
 
-export const PROPOSALS_HREF = "/admin/proposals/";
-
-/** The rail: the sections (as hash links from `base`), then Market proposals. */
+/** The rail: the sections (as hash links from `base`). */
 export function adminNav(
   sections: readonly AdminSection[],
   base: "" | "/admin/",
-  counts: Partial<Record<AdminSectionId | "proposals", number | null>> = {},
+  counts: Partial<Record<AdminSectionId, number | null>> = {},
   busy: ReadonlySet<string> = new Set(),
 ): { key: string; label: string; href: string; count?: number | null; busy?: boolean; current?: "page" | "location" }[] {
   return [
@@ -150,6 +148,5 @@ export function adminNav(
       busy: busy.has(s.id),
       current: base === "" ? ("location" as const) : ("page" as const),
     })),
-    { key: "proposals", label: "Market proposals", href: PROPOSALS_HREF, count: counts.proposals ?? null, busy: false, current: "page" as const },
   ];
 }

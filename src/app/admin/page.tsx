@@ -14,7 +14,7 @@ export const metadata: Metadata = {
  * builders-site Pages Functions (builders-site/functions), which exists only on
  * builder.registrai.cc. Anywhere else (registrai.cc, a local static build) it
  * only says where admin runs. Its own chrome (AdminShell: the left rail, one
- * section at a time by the URL hash), shared with /admin/proposals.
+ * section at a time by the URL hash).
  */
 export default function AdminPage() {
   return <AdminApp revocationCheckpoint={(live as { revocations?: unknown }).revocations ?? null} />;

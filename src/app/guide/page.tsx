@@ -4,8 +4,6 @@ import { BuildersShell } from "@/components/BuildersShell";
 import { OpenFromHash } from "@/components/builders/OpenFromHash";
 import { BUILDERS, buildersStatusLine } from "@/lib/builders-network";
 import { MAX_PROJECTS_PER_BUILDER } from "@/lib/verified-builders";
-import { WONDER_ON_BUILDERS } from "@/lib/wonder";
-import { WonderExpiryText } from "@/components/wonder/WonderExpiryText";
 
 export const metadata: Metadata = {
   title: "Builder guide · Registrai",
@@ -17,11 +15,9 @@ export const metadata: Metadata = {
 const LABEL = BUILDERS.label;
 const CONTACT = "contact@registrai.cc";
 
-/** Every section, in order: its #anchor and title (the table of contents and the <details> ids).
- *  "Wonder markets" only on a network with wonder markets (a WonderEscrow). */
+/** Every section, in order: its #anchor and title (the table of contents and the <details> ids). */
 const SECTIONS = [
   ["how-it-works", "How verification works"],
-  ...(WONDER_ON_BUILDERS ? ([["wonder", "Wonder markets on your project"]] as const) : []),
   ["publish-proof", "Publishing your proof"],
   ["new-wallet", "Moving to a new wallet"],
   ["lost-wallet", "Lost your wallet (or it was compromised)"],
@@ -92,31 +88,6 @@ export default function GuidePage() {
             </p>
           </details>
 
-          {WONDER_ON_BUILDERS && (
-            <details className="vf-faq gd-section" id="wonder">
-              <summary>Wonder markets on your project</summary>
-              <p>
-                Registrai may nominate a project it has invited, before the team joins. People can then trade markets about
-                it: these are <b>wonder markets</b>, labelled &ldquo;Unclaimed: this team hasn&apos;t joined Registrai and
-                hasn&apos;t endorsed this market.&rdquo;
-              </p>
-              <ol>
-                <li>Half of every trading fee on a wonder market that uses the project&apos;s milestone feed is held for the team.</li>
-                <li>
-                  Claim the project on <Link href="/verify">/verify</Link>. Once Registrai onboards you and your proof has held
-                  for three checks, the keeper queues the release; it arrives 7 days later as your builder income (the Safe can
-                  cancel a release to the wrong claimant within those 7 days). Claim through /verify: it registers the
-        project under the exact spelling its escrow is kept under.
-                </li>
-                <li>Nobody claims it within <WonderExpiryText /> of the first fee: 90% of the escrow goes to the season pool and 10% to the Registrai treasury.</li>
-              </ol>
-              <p>
-                Don&apos;t want your project listed? Email {CONTACT}: it is un-nominated (no new wonder markets; existing ones
-                run to settlement and their escrow is swept the same way: 90% to the season pool, 10% to the treasury).
-              </p>
-            </details>
-          )}
-
           <details className="vf-faq gd-section" id="publish-proof">
             <summary>Publishing your proof</summary>
             <p>
@@ -184,8 +155,7 @@ export default function GuidePage() {
               Deployers (for domain projects) are the wallets that deploy your contracts. They are part of your signed proof
               file, not stored on-chain. To change them, make the claim again on /verify for the same domain with the new list,
               have each deployer sign, and replace <code>/.well-known/registrai.json</code>. The project is already registered,
-              so there is nothing to send and no gas. Deployers only matter for milestone tracking once markets open on{" "}
-              {LABEL}; they do not change your verified status.
+              so there is nothing to send and no gas. Deployers do not change your verified status.
             </p>
           </details>
 

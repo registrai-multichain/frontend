@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
 import { SuggestForm } from "@/components/builders/SuggestForm";
-import { WONDER_ON_BUILDERS } from "@/lib/wonder";
 
 export const metadata: Metadata = {
   title: "Suggest a project · Registrai",
@@ -40,10 +39,8 @@ export default function SuggestPage() {
             <details className="vf-faq">
               <summary>Can a team be listed without joining?</summary>
               <p>
-                Yes. An invited project can be nominated for markets on its GitHub releases whether or not the team replies
-                {WONDER_ON_BUILDERS ? "" : " (once markets are live)"}. Half of each trading fee on those markets is held for the
-                team, and paid out when they claim the project. Every such market says the team hasn&apos;t endorsed it. A team can
-                ask to be removed at contact@registrai.cc.
+                Yes. An invited project shows on the gallery whether or not the team replies. A team can ask to be removed at
+                contact@registrai.cc.
               </p>
             </details>
             <details className="vf-faq">

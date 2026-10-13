@@ -90,9 +90,9 @@ describe("/admin by role", () => {
     const all = ["invites", "register-requests", "suggestions", "onboarding", "badges", "recovery", "projects"];
     const nom = NOMINATIONS ? ["nominations", "facts"] : ["facts"];
     expect(sections(admin)).toEqual([...all, ...nom].sort());
-    expect(rail(admin)).toEqual([...[...all, ...nom].map((s) => `#${s}`), "/admin/proposals/"]);
+    expect(rail(admin)).toEqual([...all, ...nom].map((s) => `#${s}`));
     expect(sections(onboarder)).toEqual(["invites", "register-requests", "suggestions", "onboarding", ...nom].sort());
-    expect(rail(onboarder)).toEqual(["#invites", "#register-requests", "#suggestions", "#onboarding", ...nom.map((s) => `#${s}`), "/admin/proposals/"]);
+    expect(rail(onboarder)).toEqual(["#invites", "#register-requests", "#suggestions", "#onboarding", ...nom.map((s) => `#${s}`)]);
   });
 
   test("every section is mounted; only the active one (Invites, no hash) is shown", () => {
