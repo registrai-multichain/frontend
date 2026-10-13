@@ -209,6 +209,12 @@ export const SQL = {
     "from_block = MIN(lock_due.from_block, excluded.from_block), last_block = MAX(lock_due.last_block, excluded.last_block)",
   /** S1: the owner was fully handled at a block: it leaves, unless a later withdrawal was recorded meanwhile — bind: owner, block. */
   lockDone: "DELETE FROM lock_due WHERE owner = ? AND last_block <= ?",
+  /** Every owner holding leverage (an open position or a pending order with a lock requirement) is due a re-check —
+   *  bind: block. The public Arc RPC throttles eth_getLogs from Workers, so the watch can't rely on Withdrawn logs alone. */
+  lockSweep:
+    "INSERT OR IGNORE INTO lock_due (owner, from_block, last_block) " +
+    "SELECT wallet, ?1, ?1 FROM positions WHERE closed_at IS NULL AND lock_req != '0' " +
+    "UNION SELECT wallet, ?1, ?1 FROM orders WHERE status = 'pending' AND lock_req != '0'",
   /**
    * B1: refuses the owner's pending leveraged opens whose lock requirement is above the remaining lock (the same
    * canonical-string comparison as lockClose); atomic against the fill, which needs the order pending — bind: error,

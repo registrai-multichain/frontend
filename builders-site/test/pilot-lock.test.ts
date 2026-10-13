@@ -263,8 +263,7 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
     const { t } = await opened();
     // REGI halves: the requirement doubles, but lock_req was fixed at open, and no Withdrawn log names the wallet
     t.db.q("UPDATE regi_price SET usd_per_regi = ?", PRICE / 2);
-    t.rpc.locks.set(lc(ALICE), 0n);
-    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ owners: 0, closed: 0 });
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ closed: 0 }); // the sweep re-checks Alice: the lock still covers
     withdraw(t, lc(ALICE), LOCK); // withdrew the extra: exactly the largest requirement left
     expect((await nextMinute(t)).body.lockWatch).toMatchObject({ owners: 1, closed: 0, due: 0, done: true });
     expect(t.db.q("SELECT COUNT(*) AS n FROM positions WHERE closed_at IS NULL")).toEqual([{ n: 3 }]);
@@ -282,19 +281,20 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
     t.rpc.head += 12_000;
     expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - C, done: true });
     expect(t.rpc.ranges.slice(n0)).toEqual([[start + 1, start + 5000], [start + 5001, start + 10_000], [start + 10_001, start + 12_000]]);
-    // a withdrawal in the last 5 blocks is not read yet (a lagging node may not have it); the next run reads it
+    // a withdrawal in the last blocks: its log isn't read yet, but the sweep re-checks the lock of everyone holding
+    // leverage (the mock's lockedOf has no history, so it shows the withdrawal at the pinned block already)
     withdraw(t, lc(ALICE), 0n, 2);
-    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - C, owners: 0, closed: 0 });
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - C, closed: 2 });
     t.rpc.head += C;
-    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ owners: 1, closed: 2, done: true });
-    // getLogs down: the cursor stays; the next minute reads the same range again
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ closed: 0, done: true });
+    // getLogs down (Arc's public RPC throttles it from Workers): the cursor stays, the sweep still closes
     reopen(t);
     const held = cursorOf(t);
     withdraw(t, lc(ALICE), 0n);
     t.rpc.fail.add("eth_getLogs");
-    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: held, closed: 0, done: false });
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: held, closed: 2, done: false });
     t.rpc.fail.delete("eth_getLogs");
-    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - C, closed: 2, done: true });
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - C, closed: 0, done: true });
     // lockedOf down: the logs are read and the cursor moves on; the owner stays due and is handled next run
     reopen(t);
     withdraw(t, lc(ALICE), 0n);
@@ -418,6 +418,20 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
     const r = await t.markJson(1000);
     expect(r.body.lockWatch).toBeNull();
     expect(t.rpc.ranges).toEqual([]);
+  });
+  test("eth_getLogs throttled (rpc 429): the sweep still closes the positions above the remaining lock", async () => {
+    const { t } = await opened();
+    t.rpc.fail.add("eth_getLogs");
+    withdraw(t, lc(ALICE), 0n);
+    const r = await nextMinute(t);
+    expect(r.body.lockWatch).toMatchObject({ closed: 2 });
+    expect(t.db.q<{ n: number }>("SELECT COUNT(*) AS n FROM positions WHERE lock_req != '0' AND closed_at IS NULL")[0].n).toBe(0);
+  });
+  test("eth_getLogs throttled, the lock still covers: the sweep closes nothing and nobody stays due", async () => {
+    const { t } = await opened();
+    t.rpc.fail.add("eth_getLogs");
+    const r = await nextMinute(t);
+    expect(r.body.lockWatch).toMatchObject({ closed: 0, due: 0 });
   });
 });
 

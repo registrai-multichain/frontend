@@ -1673,8 +1673,12 @@ export async function lockWatch(
     from = to + 1;
   }
   const caughtUp = safe !== null && from > safe;
-  if (out.cursor === null || room() < 2) return out;
-  const pinned = out.pinned = out.cursor;
+  // Arc's public RPC throttles eth_getLogs from Cloudflare (rpc 429): besides the Withdrawn logs, every owner holding
+  // leverage is re-checked each run with eth_call (lockedOf, not throttled) at a block a minute old. A lock only
+  // shrinks by a withdrawal, so this closes the same positions the logs would, at most a minute or so later.
+  if (safe === null || room() < 3) return out;
+  const pinned = out.pinned = out.cursor !== null ? Math.min(out.cursor, safe) : safe;
+  await db.prepare(SQL.lockSweep).bind(pinned).run();
   // random order: owners held back by a market that can't settle now can't starve the rest of the list (review R2)
   const due = (await db.prepare("SELECT owner FROM lock_due ORDER BY random() LIMIT ?").bind(LOCK_DUE_PER_RUN).all<{ owner: string }>()).results;
   for (const { owner } of due) {
