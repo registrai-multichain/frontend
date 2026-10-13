@@ -110,10 +110,24 @@ export async function withdrawnOwners(factory: string, from: number, to: number,
 /** The 10-minute slot holding `t` (one sample per slot). */
 export const priceSlot = (t: number) => Math.floor(t / PRICE_SAMPLE_S) * PRICE_SAMPLE_S;
 
-/** USD per REGI: the median of the samples of the last 24 h, or null with fewer than PRICE_MIN_SAMPLES (fail closed). */
+/** The median is reused for this long per isolate and database (an account poll would otherwise scan up to 144 rows). */
+export const PRICE_CACHE_S = 60;
+const priceCache = new WeakMap<D1Database, { at: number; price: number | null }>();
+/** Forget the cached median of `db` (tests that change regi_price under a fixed clock). */
+export const clearPriceCache = (db: D1Database) => priceCache.delete(db);
+
+/**
+ * USD per REGI: the median of the samples of the last 24 h, or null with fewer than PRICE_MIN_SAMPLES (fail closed).
+ * Cached ≤ PRICE_CACHE_S per isolate and database: a new sample lands once per 10 minutes, so the median is at most a
+ * minute behind it.
+ */
 export async function regiPrice(db: D1Database, nowS: number): Promise<number | null> {
+  const hit = priceCache.get(db);
+  if (hit && nowS >= hit.at && nowS - hit.at < PRICE_CACHE_S) return hit.price;
   const rows = (await db.prepare(SQL.priceWindow).bind(nowS - PRICE_WINDOW_S).all<{ p: number }>()).results;
-  return rows.length >= PRICE_MIN_SAMPLES ? median(rows.map((r) => r.p)) : null;
+  const price = rows.length >= PRICE_MIN_SAMPLES ? median(rows.map((r) => r.p)) : null;
+  priceCache.set(db, { at: nowS, price });
+  return price;
 }
 
 /**

@@ -4,7 +4,7 @@ import {
   median, POOL_MANAGER, REGI_POOL_ID, REGI_POOL_SLOT0, regiFor, SELECTORS, sqrtPriceOfSlot0, usdPerRegiOf, WITHDRAWN_TOPIC,
 } from "../../src/lib/abi-pilot-api";
 import { handleLeaderboard, LOCK_NOT_LIVE, LOCK_UNCHECKED, lockWatch, regiHolders } from "../lib/pilot";
-import { priceSlot, readPoolPrice, regiPrice } from "../lib/pilot-regi";
+import { clearPriceCache, PRICE_CACHE_S, priceSlot, readPoolPrice, regiPrice } from "../lib/pilot-regi";
 import { ALICE, BOB, FACTORY, lc, ONE, PRICE, setup, slot0For, type Json } from "./pilot-harness";
 
 /** Plan docs/superpowers/plans/2026-10-13-pilot-regi-usd-gate-and-lock.md R1–R5: REGI in dollars and the REGI lock. */
@@ -86,8 +86,10 @@ describe("R1: the REGI price from the pool", () => {
     [1e-5, 2e-5, 3e-5, 4e-5, 100e-5].forEach((p, k) => put(k, p));
     expect(await regiPrice(t.db, now)).toBeNull(); // 5 samples
     put(5, 0.5e-5);
-    expect(await regiPrice(t.db, now)).toBeCloseTo(2.5e-5, 18); // one wild sample doesn't move the median far
+    expect(await regiPrice(t.db, now)).toBeNull(); // cached for PRICE_CACHE_S (per isolate and database)
+    expect(await regiPrice(t.db, now + PRICE_CACHE_S)).toBeCloseTo(2.5e-5, 18); // one wild sample doesn't move the median far
     put(200, 9e-5); // older than 24 h: not counted
+    clearPriceCache(t.db);
     expect(await regiPrice(t.db, now)).toBeCloseTo(2.5e-5, 18);
     expect(await regiPrice(t.db, now + 86_400)).toBeNull();
   });
@@ -97,9 +99,11 @@ describe("R1: the REGI price from the pool", () => {
     const no = await t.loginWith(ALICE);
     expect([no.status, await no.json()]).toEqual([503, { error: "REGI price updating" }]);
     t.topUpPrice(true);
+    clearPriceCache(t.db);
     const alice = await t.signIn();
     await t.mark(1000);
     t.db.q("DELETE FROM regi_price");
+    clearPriceCache(t.db);
     expect((await t.account(alice)).body).toMatchObject({ price: null, admitRegi: null, lockRegi: null, regi: { ok: null } });
     const calls = t.rpc.calls;
     const r = await t.submit(alice, LONG(1));
@@ -349,6 +353,7 @@ describe("R2: the leaderboard on the $10 admission", () => {
     expect(board.body.rows.map((r: Json) => r.address)).toEqual([`${lc(ALICE).slice(0, 6)}…${lc(ALICE).slice(-4)}`]);
     // unknown price: the fresh (≤ 10 min) check of Alice still counts, a stale one can't be re-read
     t.db.q("DELETE FROM regi_price");
+    clearPriceCache(t.db);
     const ranked = t.db.q<{ wallet: string; regi_ok: number; regi_checked: number }>("SELECT wallet, regi_ok, regi_checked FROM accounts").map((a) => ({ ...a, equity: 1 }));
     expect((await regiHolders(t.db, t.env, t.nowS(), t.deps, ranked, 50)).map((r) => r.wallet)).toEqual([lc(ALICE)]);
     t.tick(11 * 60_000);

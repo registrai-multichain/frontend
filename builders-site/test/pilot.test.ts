@@ -916,8 +916,12 @@ describe("D1 usage", () => {
     expect(sql.filter((x) => /FROM bars/.test(x))).toEqual([]);
     expect(sql.filter((x) => /FROM funding ORDER BY hour_start DESC/.test(x))).toEqual([]);
     expect(sql.filter((x) => /^\s*(INSERT|UPDATE|DELETE)/i.test(x))).toEqual([]); // a poll writes nothing (REGI cached)
-    expect(sql.filter((x) => /FROM regi_price/.test(x))).toHaveLength(1); // R6: the 24 h median, one query
+    // R6: the 24 h median is one query at most, and none while it is cached (≤ 60 s per isolate)
+    expect(sql.filter((x) => /FROM regi_price/.test(x)).length).toBeLessThanOrEqual(1);
     expect(sql.length).toBeLessThanOrEqual(5);
+    const again = t.db.log.length;
+    await t.account(alice);
+    expect(t.db.log.slice(again).filter((x) => /FROM regi_price/.test(x))).toEqual([]);
   });
 
   test("history, a wallet's open positions and its pending orders read through their indexes (no sort, no scan)", () => {
