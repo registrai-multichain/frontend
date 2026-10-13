@@ -287,14 +287,16 @@ describe("§17: AII and AEI endpoints", () => {
 describe("/api/index/summary", () => {
   test("each index's last close, null where there is no file; GET only", async () => {
     const s = setup();
-    await s.kv.put(ABI_KEY, JSON.stringify({ ...indexFixture(), index: 981.41, index_24h_ago: 982, data_until: "2026-10-10T18:00:00Z" }));
+    const hours = Array.from({ length: 200 }, (_, i): [string, number] => [new Date(Date.UTC(2026, 9, 2) + i * 3600e3).toISOString().replace(".000", ""), 1000 + i]);
+    await s.kv.put(ABI_KEY, JSON.stringify({ ...indexFixture(), index: 981.41, index_24h_ago: 982, data_until: "2026-10-10T18:00:00Z", series: hours }));
     await s.kv.put(ABI_INDICES.aii.key, JSON.stringify({ index: 1034.92, data_until: "2026-10-10T18:00:00Z" }));
     await s.kv.put(ABI_INDICES.aei.key, "{not json");
     const r = await handleIndexSummary(new Request(`${ORIGIN}/api/index/summary`), s.env, { cache: null });
     expect(r.status).toBe(200);
+    expect(r.headers.get("access-control-allow-origin")).toBe("*");
     expect(await r.json()).toEqual({
-      abi: { index: 981.41, index_24h_ago: 982, data_until: "2026-10-10T18:00:00Z" },
-      aii: { index: 1034.92, index_24h_ago: null, data_until: "2026-10-10T18:00:00Z" },
+      abi: { index: 981.41, index_24h_ago: 982, data_until: "2026-10-10T18:00:00Z", spark: hours.slice(-168) },
+      aii: { index: 1034.92, index_24h_ago: null, data_until: "2026-10-10T18:00:00Z", spark: [] },
       aei: null,
     });
     expect((await handleIndexSummary(new Request(`${ORIGIN}/api/index/summary`, { method: "POST" }), s.env, { cache: null })).status).toBe(405);

@@ -57,7 +57,9 @@ export const ABI_INDICES: Record<AbiIndexId, AbiIndexDef> = {
   aei: { id: "aei", name: "Arc Ecosystem Index", code: "AEI", label: "Ecosystem", key: "aei:index", seenKey: "aei:seen", contractsKey: "aei:contracts", path: "/api/index/aei", seenPath: "/api/index/aei/seen", contractsPath: "/api/index/aei/contracts", seenBytes: ABI_LIMITS.seenBytesWide },
 };
 /** GET /api/index/summary: each index's last closed value, for the index tabs. null when that index has no file yet. */
-export type AbiIndexSummary = Record<AbiIndexId, { index: number; index_24h_ago: number | null; data_until: string } | null>;
+/** Hourly closes the summary carries per index for a sparkline: the last 7 days. */
+export const ABI_SUMMARY_SPARK_HOURS = 168;
+export type AbiIndexSummary = Record<AbiIndexId, { index: number; index_24h_ago: number | null; data_until: string; spark: [string, number][] } | null>;
 export const ABI_SUMMARY_PATH = "/api/index/summary";
 
 export const isIndexId = (v: unknown): v is AbiIndexId => typeof v === "string" && (ABI_INDEX_IDS as readonly string[]).includes(v);
