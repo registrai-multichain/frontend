@@ -203,12 +203,12 @@ describe("R3: leverage needs $50 of REGI locked", () => {
 });
 
 describe("R4: a withdrawal closes the leveraged positions above the remaining lock", () => {
-  /** Signed in, a mark, the first watch run (it starts one chunk before the head), then three positions. */
+  /** Signed in, a mark, the first watch run (one chunk back from head − 5), then three ABI positions. */
   async function opened() {
     const t = setup();
     const alice = await t.signIn();
-    expect((await t.markJson(1000)).body.lockWatch).toMatchObject({ cursor: t.rpc.head, done: true });
-    expect(t.rpc.ranges).toEqual([[t.rpc.head - 4999, t.rpc.head]]);
+    expect((await t.markJson(1000)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - 5, done: true });
+    expect(t.rpc.ranges).toEqual([[t.rpc.head - 5 - 4999, t.rpc.head - 5]]);
     const a = await t.open(alice, LONG(2)); // lock_req 5,000,000
     t.env.PILOT_LOCK_USD = "20";
     const b = await t.open(alice, LONG(3)); // lock_req 2,000,000
@@ -216,19 +216,29 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
     t.env.PILOT_LOCK_USD = "50";
     return { t, alice, ids: [a, b, c].map((x) => x.body.order.positionId as number) };
   }
-  const withdraw = (t: ReturnType<typeof setup>, owner: string, left: bigint) => {
+  /** A withdrawal that leaves `left` locked, `back` blocks before the new head (≥ 5: the watch sees it). */
+  const withdraw = (t: ReturnType<typeof setup>, owner: string, left: bigint, back = 10) => {
     t.rpc.head += 50;
     t.rpc.locks.set(owner, left);
-    t.rpc.withdrawals.push({ block: t.rpc.head - 10, owner });
+    t.rpc.withdrawals.push({ block: t.rpc.head - back, owner });
   };
   const nextMinute = async (t: ReturnType<typeof setup>, px = 1000) => { t.tick(61_000); return t.markJson(px); };
+  const due = (t: ReturnType<typeof setup>) => t.db.q<{ owner: string }>("SELECT owner FROM lock_due ORDER BY owner").map((r) => r.owner);
+  const cursorOf = (t: ReturnType<typeof setup>) => t.db.q<{ block: number }>("SELECT block FROM lock_cursor")[0].block;
+  /** (Test only) reopens the closed leveraged positions, with their settlement rows gone, to run a scenario again. */
+  const reopen = (t: ReturnType<typeof setup>) => {
+    t.db.q("UPDATE positions SET closed_at = NULL, close_note = NULL, reason = NULL, settle = NULL WHERE lev > 1");
+    t.db.q("DELETE FROM ledger WHERE ref LIKE 'close:%' OR ref LIKE 'settle:%' OR ref LIKE 'borrow:%' OR ref LIKE 'gap:%' OR ref LIKE 'draw:%'");
+  };
 
   test("closes only the positions whose requirement is above the remaining lock, at the mark, as a close (fee, funding, borrow), once", async () => {
     const { t, alice, ids } = await opened();
     withdraw(t, lc(ALICE), 3n * ONE);
     const before = t.balanceOf(lc(ALICE));
     const r = await nextMinute(t, 1010);
-    expect(r.body.lockWatch).toMatchObject({ owners: 1, closed: 1, done: true, cursor: t.rpc.head });
+    expect(r.body.lockWatch).toMatchObject({ owners: 1, closed: 1, due: 0, done: true, cursor: t.rpc.head - 5, pinned: t.rpc.head - 5 });
+    // review S2: lockedOf read at the pinned block, never "latest"
+    expect(t.rpc.lockTags.at(-1)).toBe(`0x${(t.rpc.head - 5).toString(16)}`);
     const rows = t.db.q<Json>("SELECT id, closed_at, exit, reason, close_note, returned, fee FROM positions ORDER BY id");
     expect(rows.map((x) => [x.id, x.closed_at !== null, x.reason, x.close_note])).toEqual([[ids[0], true, "close", "lock withdrawn"], [ids[1], false, null, null], [ids[2], false, null, null]]);
     expect(rows[0].exit).toBe(1010);
@@ -238,10 +248,10 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
     const hist = (await t.history(alice)).body.history;
     expect(hist).toHaveLength(1);
     expect(hist[0]).toMatchObject({ id: ids[0], reason: "lock withdrawn", exit: 1010 });
-    // the same logs read again (a cursor reset) settle nothing twice
-    t.db.q("UPDATE lock_cursor SET block = ?", t.rpc.head - 100);
-    const again = await nextMinute(t, 1010);
-    expect(again.body.lockWatch).toMatchObject({ closed: 0, done: true });
+    expect(due(t)).toEqual([]);
+    // the same owner due again (a log read twice) settles nothing twice
+    t.db.q("INSERT INTO lock_due (owner, from_block, last_block) VALUES (?, 1, 1)", lc(ALICE));
+    expect((await nextMinute(t, 1010)).body.lockWatch).toMatchObject({ owners: 1, closed: 0, due: 0, done: true });
     expect(t.db.q("SELECT COUNT(*) AS n FROM positions WHERE closed_at IS NOT NULL")).toEqual([{ n: 1 }]);
     // everything withdrawn: the other leveraged position closes; the 1× one never
     withdraw(t, lc(ALICE), 0n);
@@ -256,45 +266,116 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
     t.rpc.locks.set(lc(ALICE), 0n);
     expect((await nextMinute(t)).body.lockWatch).toMatchObject({ owners: 0, closed: 0 });
     withdraw(t, lc(ALICE), LOCK); // withdrew the extra: exactly the largest requirement left
-    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ owners: 1, closed: 0, done: true });
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ owners: 1, closed: 0, due: 0, done: true });
     expect(t.db.q("SELECT COUNT(*) AS n FROM positions WHERE closed_at IS NULL")).toEqual([{ n: 3 }]);
   });
 
-  test("at most once a minute; logs in chunks of at most 5,000 blocks; the cursor moves only past handled chunks", async () => {
+  test("at most once a minute; logs in chunks of at most 5,000 blocks up to head − 5; the cursor moves once logs are read", async () => {
     const { t } = await opened();
     const ranges = () => t.rpc.ranges.length;
     const n0 = ranges();
     t.tick(5000);
     expect((await t.markJson(1000)).body.lockWatch).toBeNull(); // same minute
     expect(ranges()).toBe(n0);
-    // the head ran 12,000 blocks ahead: chunks of 5,000
-    const start = t.rpc.head;
+    // the head ran 12,000 blocks ahead: chunks of 5,000, up to 5 blocks behind the head
+    const start = cursorOf(t);
     t.rpc.head += 12_000;
-    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head, done: true });
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - 5, done: true });
     expect(t.rpc.ranges.slice(n0)).toEqual([[start + 1, start + 5000], [start + 5001, start + 10_000], [start + 10_001, start + 12_000]]);
+    // a withdrawal in the last 5 blocks is not read yet (a lagging node may not have it); the next run reads it
+    withdraw(t, lc(ALICE), 0n, 2);
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - 5, owners: 0, closed: 0 });
+    t.rpc.head += 10;
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ owners: 1, closed: 2, done: true });
     // getLogs down: the cursor stays; the next minute reads the same range again
+    reopen(t);
+    const held = cursorOf(t);
     withdraw(t, lc(ALICE), 0n);
     t.rpc.fail.add("eth_getLogs");
-    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: start + 12_000, closed: 0, done: false });
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: held, closed: 0, done: false });
     t.rpc.fail.delete("eth_getLogs");
-    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head, closed: 2, done: true });
-    // lockedOf down: the owner can't be handled, so the cursor waits before that chunk
-    t.db.q("UPDATE positions SET closed_at = NULL, close_note = NULL, reason = NULL WHERE lev > 1"); // (reopen for the check)
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - 5, closed: 2, done: true });
+    // lockedOf down: the logs are read and the cursor moves on; the owner stays due and is handled next run
+    reopen(t);
     withdraw(t, lc(ALICE), 0n);
-    const cursor = t.db.q<{ block: number }>("SELECT block FROM lock_cursor")[0].block;
     t.rpc.fail.add("eth_call:lock");
-    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor, done: false });
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - 5, closed: 0, due: 1, done: false });
+    expect(due(t)).toEqual([lc(ALICE)]);
+    t.rpc.fail.delete("eth_call:lock");
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ closed: 2, due: 0, done: true });
   });
 
-  test("a market whose mark is not settleable now waits (the cursor stays), then closes", async () => {
+  test("review S1: a market that can't settle now holds back only its own positions, never the cursor or other owners", async () => {
     const { t } = await opened();
-    withdraw(t, lc(ALICE), 0n);
+    // Bob: a 2× AEI position; then AEI's producer stops (its mark goes stale)
+    const bob = await t.signIn(BOB);
+    t.tick(1000);
+    await t.markJson(1000, { index: "aei" });
+    const s = await t.submit(bob, { market: "aei", ...LONG(2) });
+    expect(s.status, JSON.stringify(s.body)).toBe(202);
+    t.tick(1000);
+    await t.markJson(1000, { index: "aei" });
+    expect((await t.status(bob, s.body.order.id)).body.order.status).toBe("filled");
+    // Bob withdraws first, Alice after him
+    withdraw(t, lc(BOB), 0n, 20);
+    t.rpc.locks.set(lc(ALICE), 0n);
+    t.rpc.withdrawals.push({ block: t.rpc.head - 10, owner: lc(ALICE) });
+    const r = await nextMinute(t);
+    expect(r.body.lockWatch).toMatchObject({ cursor: t.rpc.head - 5, owners: 2, closed: 2, due: 1, done: false });
+    expect(t.db.q("SELECT wallet, market FROM positions WHERE closed_at IS NULL AND lev > 1")).toEqual([{ wallet: lc(BOB), market: "aei" }]);
+    expect(due(t)).toEqual([lc(BOB)]);
+    // a later withdrawal by Alice (another chunk) is still handled while Bob waits
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ due: 1 });
+    // AEI posts again: Bob's position closes, and he leaves the due list
     t.tick(61_000);
-    // only AII posts this minute: ABI's mark is stale, so ABI positions can't close at it yet
-    const r = await t.markJson(1000, { index: "aii" });
-    expect(r.body.lockWatch).toMatchObject({ closed: 0, done: false });
-    expect(t.db.q("SELECT COUNT(*) AS n FROM positions WHERE closed_at IS NULL")).toEqual([{ n: 3 }]);
-    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ closed: 2, done: true });
+    const back = await t.markJson(1000, { index: "aei" });
+    expect(back.body.lockWatch).toMatchObject({ closed: 1, due: 0, done: true });
+    expect(t.db.q("SELECT COUNT(*) AS n FROM positions WHERE closed_at IS NULL AND lev > 1")).toEqual([{ n: 0 }]);
+  });
+
+  test("review B1: an order placed before a withdrawal never fills into a leveraged position without the lock", async () => {
+    // the reviewer's sequence: the order is pending while the watch processes the withdrawal, then a post fills
+    for (const visible of [true, false]) {
+      const { t, alice } = await opened();
+      t.db.q("UPDATE lock_cursor SET checked = ?", t.nowS()); // the next watch is due in 60 s
+      t.tick(59_000);
+      await t.markJson(1000); // a fresh ABI mark, no watch yet
+      const s = await t.submit(alice, LONG(5));
+      expect(s.status, JSON.stringify(s.body)).toBe(202); // lockedOf passes at submission
+      // the withdrawal lands; `visible`: deep enough for the watch to read now, else only the fill's own read sees it
+      withdraw(t, lc(ALICE), 0n, visible ? 10 : 1);
+      t.tick(1000);
+      const aii = await t.markJson(1000, { index: "aii" }); // the watch runs (a minute since the last)
+      expect(aii.body.lockWatch).not.toBeNull();
+      if (visible) expect(aii.body.lockWatch).toMatchObject({ refused: 1 });
+      t.tick(1000);
+      const abi = await t.markJson(1000);
+      expect(abi.body.filled).toBe(0);
+      const o = (await t.status(alice, s.body.order.id)).body.order;
+      expect([o.status, o.error]).toEqual(["refused", "Lock at least $50 of REGI to trade with leverage."]);
+      expect(t.db.q("SELECT COUNT(*) AS n FROM positions WHERE lev = 5")).toEqual([{ n: 0 }]);
+    }
+  });
+
+  test("review B1: the fill re-reads the lock fresh; a failed read refuses (fail closed); 1× fills need none", async () => {
+    const { t, alice } = await opened();
+    const s = await t.submit(alice, LONG(2));
+    t.rpc.fail.add("eth_call:lock");
+    t.tick(1000);
+    await t.markJson(1000);
+    expect((await t.status(alice, s.body.order.id)).body.order).toMatchObject({ status: "refused", error: LOCK_UNCHECKED });
+    const flat = await t.submit(alice, LONG(1));
+    const reads = t.rpc.lock;
+    t.tick(1000);
+    await t.markJson(1000);
+    expect((await t.status(alice, flat.body.order.id)).body.order.status).toBe("filled");
+    expect(t.rpc.lock).toBe(reads);
+    t.rpc.fail.delete("eth_call:lock");
+    const ok = await t.submit(alice, LONG(2));
+    t.tick(1000);
+    await t.markJson(1000);
+    expect((await t.status(alice, ok.body.order.id)).body.order.status).toBe("filled");
+    expect(t.rpc.lockTags.at(-1)).toBe("latest");
   });
 
   test("idempotent under two concurrent watches and two concurrent ingests: each position settles once", async () => {
@@ -304,11 +385,11 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
     // two ingests of the same minute (ABI and AII): one claims the watch
     const [x, y] = await Promise.all([t.markJson(1000), t.markJson(1000, { index: "aii" })]);
     expect([x.body.lockWatch, y.body.lockWatch].filter(Boolean)).toHaveLength(1);
-    // two watches at once over the same logs (as if both had claimed): the guards settle each position once
-    t.db.q("UPDATE positions SET closed_at = NULL, close_note = NULL, reason = NULL, settle = NULL WHERE lev > 1");
-    t.db.q("DELETE FROM ledger WHERE ref LIKE 'close:%' OR ref LIKE 'settle:%' OR ref LIKE 'borrow:%'");
+    // two watches at once for the same due owner (as if both had claimed): the guards settle each position once
+    reopen(t);
+    t.db.q("INSERT INTO lock_due (owner, from_block, last_block) VALUES (?, 1, 1)", lc(ALICE));
     const bal = t.balanceOf(lc(ALICE));
-    const cursor = t.rpc.head - 100;
+    const cursor = cursorOf(t);
     const [a, b] = await Promise.all([
       lockWatch(t.db, FACTORY, t.nowS(), t.deps.fetch!, cursor, () => 800),
       lockWatch(t.db, FACTORY, t.nowS(), t.deps.fetch!, cursor, () => 800),
@@ -317,16 +398,17 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
     const closed = t.db.q<{ returned: number }>("SELECT returned FROM positions WHERE lev > 1");
     expect(t.balanceOf(lc(ALICE))).toBeCloseTo(bal + closed.reduce((s, r) => s + r.returned, 0), 9);
     expect(t.db.q("SELECT COUNT(*) AS n FROM ledger WHERE ref LIKE 'close:%' AND kind = 'fee'")).toEqual([{ n: 2 }]);
+    expect(due(t)).toEqual([]);
   });
 
-  test("the watch respects the statement budget: what doesn't fit waits for the next run", async () => {
+  test("the watch respects the statement budget: what doesn't fit stays due for the next run", async () => {
     const { t } = await opened();
     withdraw(t, lc(ALICE), 0n);
-    const cursor = t.db.q<{ block: number }>("SELECT block FROM lock_cursor")[0].block;
+    const cursor = cursorOf(t);
     const tight = await lockWatch(t.db, FACTORY, t.nowS(), t.deps.fetch!, cursor, () => 10);
-    expect(tight).toMatchObject({ cursor, closed: 0, done: false });
-    const roomy = await lockWatch(t.db, FACTORY, t.nowS(), t.deps.fetch!, cursor, () => 800);
-    expect(roomy).toMatchObject({ cursor: t.rpc.head, closed: 2, done: true });
+    expect(tight).toMatchObject({ cursor: t.rpc.head - 5, closed: 0, due: 1, done: false });
+    const roomy = await lockWatch(t.db, FACTORY, t.nowS(), t.deps.fetch!, tight.cursor, () => 800);
+    expect(roomy).toMatchObject({ cursor: t.rpc.head - 5, closed: 2, due: 0, done: true });
   });
 
   test("no factory configured: no watch, no RPC", async () => {

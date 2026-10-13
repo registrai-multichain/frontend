@@ -252,6 +252,23 @@ export async function runGuardChecks(db: D1Database, migrations: string | readon
     await q(SQL.lockAdvance).bind(100).run();
     await q(SQL.lockAdvance).bind(50).run();
     check("lock watch: the cursor never moves back", await q("SELECT block FROM lock_cursor WHERE id = 1").first(), { block: 100 });
+
+    // review S1: owners due a re-check keep their earliest and latest withdrawal; one leaves only if nothing later came in
+    await q(SQL.lockDue).bind(W, 120, 120).run();
+    await q(SQL.lockDue).bind(W, 110, 110).run();
+    await q(SQL.lockDue).bind(W, 130, 130).run();
+    check("lock due: one row per owner, earliest and latest block", await q("SELECT from_block, last_block FROM lock_due WHERE owner = ?").bind(W).first(), { from_block: 110, last_block: 130 });
+    check("lock due: handled at an earlier block, the owner stays; at the latest, it leaves",
+      [(await q(SQL.lockDone).bind(W, 125).run()).meta.changes, (await q(SQL.lockDone).bind(W, 130).run()).meta.changes], [0, 1]);
+
+    // review B1: the watch refuses only pending leveraged opens whose requirement is above the remaining lock
+    const lockOrder = async (req: string, status = "pending") =>
+      (await q("INSERT INTO orders (wallet, market, kind, side, margin, lev, arrived_ms, status, lock_req) VALUES (?, 'abi', 'open', 'long', 100, 2, 0, ?, ?) RETURNING id").bind(W, status, req).first<{ id: number }>())!.id;
+    const [hi, lo, one, done] = [await lockOrder(M5), await lockOrder(K900), await lockOrder("0"), await lockOrder(M5, "filled")];
+    const refusedNow = (await q(SQL.lockRefuse).bind("lock", W, M1, M1, M1).run()).meta.changes;
+    check("lock refuse: only the pending order above the remaining lock (not below it, not 1×, not a filled one)",
+      [refusedNow, (await q("SELECT id, status FROM orders WHERE id IN (?, ?, ?, ?) ORDER BY id").bind(hi, lo, one, done).all()).results],
+      [1, [{ id: hi, status: "refused" }, { id: lo, status: "pending" }, { id: one, status: "pending" }, { id: done, status: "filled" }]]);
   } catch (e) {
     out.push({ name: "run", ok: false, detail: String((e as Error)?.message ?? e) });
   } finally {

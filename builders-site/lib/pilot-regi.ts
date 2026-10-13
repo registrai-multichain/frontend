@@ -65,9 +65,9 @@ export async function rpcCall(fetchFn: typeof fetch, method: string, params: unk
   return j.result;
 }
 
-/** eth_call at latest returning one 32-byte word. */
-async function callWord(fetchFn: typeof fetch, to: string, data: string): Promise<bigint> {
-  const r = await rpcCall(fetchFn, "eth_call", [{ to, data }, "latest"]);
+/** eth_call at a block tag (default latest) returning one 32-byte word. */
+async function callWord(fetchFn: typeof fetch, to: string, data: string, tag = "latest"): Promise<bigint> {
+  const r = await rpcCall(fetchFn, "eth_call", [{ to, data }, tag]);
   if (typeof r !== "string" || !/^0x[0-9a-fA-F]{0,64}$/.test(r)) throw new Error("rpc: bad answer");
   return r === "0x" ? 0n : BigInt(r);
 }
@@ -82,8 +82,12 @@ export async function readPoolPrice(fetchFn: typeof fetch): Promise<number> {
   return p;
 }
 
-/** RegiLockFactory.lockedOf(wallet): raw REGI in the wallet's vault (0 when it has none). Throws on an RPC failure. */
-export const lockedOf = (factory: string, wallet: string, fetchFn: typeof fetch) => callWord(fetchFn, factory, SELECTORS.lockedOf + addrArg(wallet));
+/**
+ * RegiLockFactory.lockedOf(wallet): raw REGI in the wallet's vault (0 when it has none), at `block` (default latest; the
+ * watch pins it so a lagging RPC node errors instead of answering an old balance). Throws on an RPC failure.
+ */
+export const lockedOf = (factory: string, wallet: string, fetchFn: typeof fetch, block?: number) =>
+  callWord(fetchFn, factory, SELECTORS.lockedOf + addrArg(wallet), block === undefined ? "latest" : `0x${block.toString(16)}`);
 
 export async function blockNumber(fetchFn: typeof fetch): Promise<number> {
   const r = await rpcCall(fetchFn, "eth_blockNumber", []);
@@ -91,18 +95,21 @@ export async function blockNumber(fetchFn: typeof fetch): Promise<number> {
   return Number(BigInt(r));
 }
 
-/** The owners (lowercase, unique, in log order) of the factory's Withdrawn logs in [from, to]. Throws on an RPC failure. */
-export async function withdrawnOwners(factory: string, from: number, to: number, fetchFn: typeof fetch): Promise<string[]> {
+/** The factory's Withdrawn logs in [from, to]: each owner (lowercase) once, at its latest block in the range. Throws on an RPC failure. */
+export async function withdrawnLogs(factory: string, from: number, to: number, fetchFn: typeof fetch): Promise<{ owner: string; block: number }[]> {
   const r = await rpcCall(fetchFn, "eth_getLogs", [{ address: factory, topics: [WITHDRAWN_TOPIC], fromBlock: `0x${from.toString(16)}`, toBlock: `0x${to.toString(16)}` }]);
   if (!Array.isArray(r)) throw new Error("rpc: bad answer");
-  const out: string[] = [];
-  for (const l of r as { topics?: unknown }[]) {
+  const out = new Map<string, number>();
+  for (const l of r as { topics?: unknown; blockNumber?: unknown }[]) {
     const t = Array.isArray(l?.topics) ? l.topics[1] : undefined;
     if (typeof t !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(t)) throw new Error("rpc: bad log");
+    if (typeof l.blockNumber !== "string" || !/^0x[0-9a-fA-F]{1,16}$/.test(l.blockNumber)) throw new Error("rpc: bad log");
+    const block = Number(BigInt(l.blockNumber));
+    if (block < from || block > to) throw new Error("rpc: log outside the range");
     const owner = `0x${t.slice(-40).toLowerCase()}`;
-    if (!out.includes(owner)) out.push(owner);
+    out.set(owner, Math.max(out.get(owner) ?? block, block));
   }
-  return out;
+  return [...out].map(([owner, block]) => ({ owner, block }));
 }
 
 // ───────────────────────────── price ─────────────────────────────

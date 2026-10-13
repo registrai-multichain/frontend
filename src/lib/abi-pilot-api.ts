@@ -113,6 +113,8 @@ export const PRICE_WINDOW_S = 24 * 3600;
 export const PRICE_MIN_SAMPLES = 6;
 /** The withdrawal watch runs at most once per this many seconds, and reads logs in chunks of at most LOG_CHUNK blocks. */
 export const LOCK_WATCH_S = 60;
+/** The watch reads logs and lock balances this many blocks behind the head (a load-balanced RPC node may lag a little). */
+export const LOCK_CONFIRM_BLOCKS = 5;
 export const LOG_CHUNK = 5000;
 /** The lock form's default amount: the requirement plus this share. */
 export const LOCK_HEADROOM = 0.05;

@@ -285,7 +285,8 @@ describe("review R3 + audit SS-5: one ingest runs at most INGEST_MAX_STATEMENTS 
     for (let i = 0; i < n; i++) {
       const w = `0x${(i + 1).toString(16).padStart(40, "0")}`;
       t.db.q("INSERT INTO accounts (wallet, balance, season, created) VALUES (?, 10000, 1, ?)", w, t.nowS());
-      t.db.q("INSERT INTO orders (wallet, kind, side, margin, lev, arrived_ms) VALUES (?, 'open', 'long', 100, 2, ?)", w, arrived);
+      // (a leveraged order carries the lock requirement checked when it was placed: $50 at the harness price)
+      t.db.q("INSERT INTO orders (wallet, kind, side, margin, lev, arrived_ms, lock_req) VALUES (?, 'open', 'long', 100, 2, ?, ?)", w, arrived, (5n * 10n ** 24n).toString());
     }
     t.tick(1000);
     const a = await t.markJson(1000);

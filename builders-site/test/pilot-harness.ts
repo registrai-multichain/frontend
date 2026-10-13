@@ -91,6 +91,8 @@ export function setup(o: {
     /** lockedOf by wallet (lowercase); a wallet not in the map has defaultLock (5 × ONE: the $50 lock at PRICE). */
     locks: new Map<string, bigint>(), defaultLock: 5n * ONE,
     head: 30_000_000, withdrawals: [] as { block: number; owner: string }[], ranges: [] as [number, number][],
+    /** The block tag of each lockedOf read ("latest", or the watch's pinned block in hex). */
+    lockTags: [] as string[],
   };
   const fakeFetch = (async (url: string, init: RequestInit) => {
     rpc.all++;
@@ -130,6 +132,7 @@ export function setup(o: {
       if (rpc.fail.has("eth_call:lock")) return new Response("bad gateway", { status: 502 });
       expect(data.slice(0, 10)).toBe(SELECTORS.lockedOf);
       const w = `0x${data.slice(-40)}`;
+      rpc.lockTags.push(body.params[1]);
       return word(rpc.locks.get(w) ?? rpc.defaultLock);
     }
     rpc.calls++;

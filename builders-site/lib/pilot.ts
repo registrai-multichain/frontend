@@ -59,6 +59,7 @@ import * as Engine from "../../src/lib/abi-pilot";
 import { RULES, type FundingRate, type MinuteBar, type PilotPosition, type Side } from "../../src/lib/abi-pilot";
 import {
   lockUsdText,
+  LOCK_CONFIRM_BLOCKS,
   LOCK_WATCH_S,
   LOG_CHUNK,
   marketOf,
@@ -106,7 +107,7 @@ import {
   tooMany,
   type PilotDeps,
 } from "./pilot-auth";
-import { admitUsdOf, blockNumber, lockedOf, lockFactoryOf, lockReqString, lockUsdOf, regiAt, regiPrice, samplePrice, withdrawnOwners } from "./pilot-regi";
+import { admitUsdOf, blockNumber, lockedOf, lockFactoryOf, lockReqString, lockUsdOf, regiAt, regiPrice, samplePrice, withdrawnLogs } from "./pilot-regi";
 import { LIQ_PAGE, SQL } from "./pilot-sql";
 
 export const MARK_MAX_SKEW_S = 30;
@@ -986,7 +987,7 @@ export async function handlePushMark(req: Request, env: Env, deps: PilotDeps = {
   // review R3: while liquidations are held back nothing fills (a close must not settle a position an earlier bar
   // liquidates); the orders wait for the next post, within RULES.markMaxAgeS of their arrival
   const fills = (!prev || prev.has_pending) && !heldBack
-    ? await fillOrders(db, env, d, gapsLeft > 0, hourFixed, nowMs, openBar, () => INGEST_MAX_STATEMENTS - meter.statements)
+    ? await fillOrders(db, env, d, gapsLeft > 0, hourFixed, nowMs, openBar, () => INGEST_MAX_STATEMENTS - meter.statements, deps.fetch ?? fetch)
     : { filled: 0, refused: 0, deferred: 0 };
   // R1 + R4: the REGI price sample (ABI posts, once per 10 min) and the withdrawal watch (any post, once a minute), in
   // what is left of the invocation's statement budget
@@ -1501,6 +1502,7 @@ export function lockCloseStmts(db: D1Database, row: PositionRow, at: { mark: num
  */
 async function fillOrders(
   db: D1Database, env: Env, d: MarkPost, gapsOpen: boolean, hourFixed: boolean, nowMs: number, openBar: MarkPost["bars"][number] | null, room: () => number,
+  f: typeof fetch = fetch,
 ): Promise<{ filled: number; refused: number; deferred: number }> {
   if (room() < 1) return { filled: 0, refused: 0, deferred: 0 };
   const M = d.market;
@@ -1526,6 +1528,17 @@ async function fillOrders(
       if (o.lev! > levCap) { await refuse(o, LEV_ABOVE_CAP); continue; }
       if (milestonePaused({ milestone_ts: d.milestoneTs, ts: d.ts })) { await refuse(o, MILESTONE_PAUSED); continue; }
       if (!riskKnown(d.sigma24h, d.sigma1h) || !hourFixed) { await refuse(o, PRICE_UPDATING); continue; }
+      // review B1: a leveraged open re-reads the lock at its fill, so a withdrawal between the order and the fill can't
+      // leave a leveraged position without it (the order's lock_req is the requirement checked at submission; an RPC
+      // failure refuses: fail closed)
+      if (o.lev! > 1) {
+        const factory = lockFactoryOf(env);
+        if (!factory) { await refuse(o, LOCK_NOT_LIVE); continue; }
+        let locked: bigint | null = null;
+        try { locked = await lockedOf(factory, o.wallet, f); } catch { /* refused below */ }
+        if (locked === null) { await refuse(o, LOCK_UNCHECKED); continue; }
+        if (o.lock_req === "0" || locked < BigInt(o.lock_req)) { await refuse(o, lockUsdText(lockUsdOf(env) ?? PILOT_LOCK_USD_DEFAULT)); continue; }
+      }
       const acct = await getAccount(db, o.wallet);
       // R2: one balance across markets; one direction and RULES.maxOpen per market
       const held = (await openRows(db, o.wallet)).filter((x) => x.market === M);
@@ -1573,14 +1586,21 @@ async function fillOrders(
 const LOCK_CLOSE_STATEMENTS = 40;
 /** Log chunks (of LOG_CHUNK blocks) one watch reads at most; the rest follow the next minute. */
 const LOCK_MAX_CHUNKS = 4;
+/** Owners due a re-check that one run looks at, at most (the earliest withdrawals first); the rest follow. */
+const LOCK_DUE_PER_RUN = 50;
 
 export interface LockWatchResult {
-  /** The cursor after this run (the last block whose Withdrawn logs are fully handled). */
+  /** The cursor after this run: every Withdrawn log up to it is read and its owner recorded in lock_due. */
   cursor: number | null;
-  /** Owners with Withdrawn logs looked at, and positions closed. */
+  /** The block this run's lockedOf reads were pinned to (the cursor), or null when no log was ever read. */
+  pinned: number | null;
+  /** Due owners re-checked; positions closed; pending leveraged orders refused. */
   owners: number;
   closed: number;
-  /** Caught up to the head. false: something waits (an RPC failure, the statement budget, a market not settleable now). */
+  refused: number;
+  /** Owners still due after this run (a market not settleable now, an RPC failure, the statement budget). */
+  due: number;
+  /** Caught up to the head − LOCK_CONFIRM_BLOCKS with nobody left due. */
   done: boolean;
 }
 
@@ -1599,7 +1619,7 @@ async function regiChores(
     const factory = lockFactoryOf(env);
     if (factory && !heldBack && (probe?.lock_checked ?? 0) <= nowS - LOCK_WATCH_S && room() >= 1 + LOCK_CLOSE_STATEMENTS) {
       const claimed = (await db.prepare(SQL.lockClaim).bind(nowS, nowS - LOCK_WATCH_S).run()).meta.changes === 1;
-      if (claimed) lock = await lockWatch(db, factory, nowS, f, probe?.lock_block ?? null, room);
+      if (claimed) lock = await lockWatch(db, factory, nowS, f, probe?.lock_block ?? null, room, lockUsdText(lockUsdOf(env) ?? PILOT_LOCK_USD_DEFAULT));
     }
   } catch (e) {
     console.error(`pilot ingest (${d.market}): REGI chores failed: ${String((e as Error)?.message ?? e)}`);
@@ -1608,80 +1628,104 @@ async function regiChores(
 }
 
 /**
- * R4: the factory's Withdrawn logs from the block after `cursor` (a new watch starts one chunk before the head) to the
- * head, in chunks of at most LOG_CHUNK blocks. Each owner's open positions with a lock requirement above lockedOf(owner)
- * are closed at their market's mark (closeBelowLock). The cursor moves past a chunk only once every owner in it is
- * fully handled; anything that can't be done now (an RPC failure, the statement budget, a market whose mark is not
- * settleable) leaves the cursor before that chunk, so the next run reads it again. Closes are guarded (lockCloseStmts),
- * so a chunk read twice, or two watches at once, settle each position at most once.
+ * R4 (with review 2026-10-13 B1, S1, S2): the withdrawal watch.
+ * 1. The factory's Withdrawn logs from the block after `cursor` (a new watch starts one chunk back) up to
+ *    head − LOCK_CONFIRM_BLOCKS, so a load-balanced RPC node a few blocks behind still has them, in chunks of at most
+ *    LOG_CHUNK blocks. Each chunk's owners go into lock_due and the cursor moves past it in the same batch: logs are
+ *    read once, and a market that can't settle now never holds the cursor.
+ * 2. Every owner due a re-check (lock_due), with lockedOf read at the cursor block (pinned: a node that lacks the block
+ *    errors rather than answering an old balance): its pending leveraged opens whose requirement is above the remaining
+ *    lock are refused first (so none fills after the check), then its open positions whose lock_req is above it are
+ *    closed at their market's mark. The owner leaves lock_due once nothing is left to do; otherwise it is looked at
+ *    again next run. Closes and refusals are guarded, so two watches at once settle each position at most once.
+ * refusal: the pending orders' refusal text ("Lock at least $50 of REGI to trade with leverage.").
  */
-export async function lockWatch(db: D1Database, factory: string, nowS: number, f: typeof fetch, cursor: number | null, room: () => number): Promise<LockWatchResult> {
-  const out: LockWatchResult = { cursor, owners: 0, closed: 0, done: false };
-  let head: number;
+export async function lockWatch(
+  db: D1Database, factory: string, nowS: number, f: typeof fetch, cursor: number | null, room: () => number, refusal = lockUsdText(PILOT_LOCK_USD_DEFAULT),
+): Promise<LockWatchResult> {
+  const out: LockWatchResult = { cursor, pinned: null, owners: 0, closed: 0, refused: 0, due: 0, done: false };
+  let safe: number | null = null;
   try {
-    head = await blockNumber(f);
-  } catch {
-    return out;
-  }
-  let from = cursor === null ? Math.max(0, head - LOG_CHUNK + 1) : cursor + 1;
-  for (let i = 0; i < LOCK_MAX_CHUNKS && from <= head; i++) {
-    const to = Math.min(head, from + LOG_CHUNK - 1);
-    let owners: string[];
+    safe = (await blockNumber(f)) - LOCK_CONFIRM_BLOCKS;
+  } catch { /* no head: only the owners already due, at the cursor */ }
+  let from = safe === null ? Infinity : cursor === null ? Math.max(0, safe - LOG_CHUNK + 1) : cursor + 1;
+  for (let i = 0; safe !== null && i < LOCK_MAX_CHUNKS && from <= safe; i++) {
+    const to = Math.min(safe, from + LOG_CHUNK - 1);
+    let logs: { owner: string; block: number }[];
     try {
-      owners = await withdrawnOwners(factory, from, to, f);
+      logs = await withdrawnLogs(factory, from, to, f);
     } catch {
-      return out;
+      break;
     }
-    for (const owner of owners) {
-      const r = await closeBelowLock(db, factory, owner, nowS, f, room);
-      out.owners++;
-      out.closed += r.closed;
-      if (!r.done) return out;
-    }
-    if (room() < 1) return out;
-    await db.prepare(SQL.lockAdvance).bind(to).run();
+    if (room() < logs.length + 1) break;
+    if (logs.length) await db.batch([...logs.map((l) => db.prepare(SQL.lockDue).bind(l.owner, l.block, l.block)), db.prepare(SQL.lockAdvance).bind(to)]);
+    else await db.prepare(SQL.lockAdvance).bind(to).run();
     out.cursor = to;
     from = to + 1;
   }
-  out.done = from > head;
+  const caughtUp = safe !== null && from > safe;
+  if (out.cursor === null || room() < 2) return out;
+  const pinned = out.pinned = out.cursor;
+  const due = (await db.prepare("SELECT owner FROM lock_due ORDER BY from_block, owner LIMIT ?").bind(LOCK_DUE_PER_RUN).all<{ owner: string }>()).results;
+  for (const { owner } of due) {
+    if (room() < 3) break;
+    let r: { closed: number; refused: number; done: boolean };
+    try {
+      r = await settleOwner(db, factory, owner, pinned, nowS, f, room, refusal);
+    } catch (e) {
+      // one owner's failure (a batch that threw) leaves that owner due; the others go on
+      console.error(`pilot lock watch: ${owner} failed: ${String((e as Error)?.message ?? e)}`);
+      r = { closed: 0, refused: 0, done: false };
+    }
+    out.owners++;
+    out.closed += r.closed;
+    out.refused += r.refused;
+    if (r.done) await db.prepare(SQL.lockDone).bind(owner, pinned).run();
+  }
+  out.due = (await db.prepare("SELECT COUNT(*) AS n FROM lock_due").first<{ n: number }>())?.n ?? 0;
+  out.done = caughtUp && out.due === 0;
   return out;
 }
 
 /**
- * R4 for one owner: lockedOf(owner) read fresh, then every open position whose lock_req is above it is closed at its
- * market's mark (the normal close settlement, close note "lock withdrawn"; never a liquidation). A position the
- * market's unswept bars liquidate is left to that. A price move alone never closes anything: lock_req is fixed at open.
- * done = false: something must wait for the next run.
+ * One owner due a re-check, at `block`: lockedOf read there; the owner's pending leveraged opens above it refused
+ * (review B1: an order placed before the withdrawal must not fill after it); then every open position whose lock_req
+ * is above it closed at its market's mark (the normal close settlement, close note "lock withdrawn"; never a
+ * liquidation). A position the market's unswept bars liquidate is left to that. A price move alone never closes
+ * anything: lock_req is fixed at open. done = false: something waits for the next run (a market whose mark is not
+ * settleable now; the other markets go on), an RPC failure, the statement budget.
  */
-async function closeBelowLock(db: D1Database, factory: string, owner: string, nowS: number, f: typeof fetch, room: () => number): Promise<{ closed: number; done: boolean }> {
-  if (room() < 1) return { closed: 0, done: false };
-  const rows = (await db.prepare(`SELECT ${POS_COLS} FROM positions WHERE wallet = ? AND closed_at IS NULL AND lock_req <> '0' ORDER BY id`).bind(owner).all<PositionRow>()).results;
-  if (!rows.length) return { closed: 0, done: true };
+async function settleOwner(
+  db: D1Database, factory: string, owner: string, block: number, nowS: number, f: typeof fetch, room: () => number, refusal: string,
+): Promise<{ closed: number; refused: number; done: boolean }> {
   let locked: bigint;
   try {
-    locked = await lockedOf(factory, owner, f);
+    locked = await lockedOf(factory, owner, f, block);
   } catch {
-    return { closed: 0, done: false };
+    return { closed: 0, refused: 0, done: false };
   }
-  let closed = 0;
+  const l = lockReqString(locked);
+  const refused = (await db.prepare(SQL.lockRefuse).bind(refusal, owner, l, l, l).run()).meta.changes;
+  const rows = (await db.prepare(`SELECT ${POS_COLS} FROM positions WHERE wallet = ? AND closed_at IS NULL AND lock_req <> '0' ORDER BY id`).bind(owner).all<PositionRow>()).results;
+  let closed = 0, done = true;
   for (const r of rows) {
     if (!(BigInt(r.lock_req) > locked)) continue;
-    if (room() < LOCK_CLOSE_STATEMENTS) return { closed, done: false };
+    if (room() < LOCK_CLOSE_STATEMENTS) return { closed, refused, done: false };
     const m = await loadMark(db, r.market);
     // the same readiness a close order needs: a live mark, the hour's rates fixed, bars caught up, no gap, no base pause
-    if (!m || (await markProblem(db, m, nowS)) !== null) return { closed, done: false };
+    if (!m || (await markProblem(db, m, nowS)) !== null) { done = false; continue; }
     if ((await lazyLiquidate(db, owner, nowS, m, [r])) > 0) continue;
     const row = await db.prepare(`SELECT ${POS_COLS} FROM positions WHERE id = ?`).bind(r.id).first<PositionRow>();
     if (!row || row.closed_at !== null) continue;
     const res = await db.batch(lockCloseStmts(db, row, { mark: m.px, ts: m.ts }, await loadRates(db, row.market, row.opened_at), locked));
     if (res[0].meta.changes === 1) closed++;
     else {
-      // nothing settled: closed meanwhile (another watch), or its booking moved (an hourly close): try again next run
+      // nothing settled: closed meanwhile (another watch), or its booking moved (an hourly close): again next run
       const now = await db.prepare("SELECT closed_at FROM positions WHERE id = ?").bind(r.id).first<{ closed_at: number | null }>();
-      if (now && now.closed_at === null) return { closed, done: false };
+      if (now && now.closed_at === null) done = false;
     }
   }
-  return { closed, done: true };
+  return { closed, refused, done };
 }
 
 // ───────────────────────────── handlers ─────────────────────────────

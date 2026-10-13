@@ -7,13 +7,13 @@
 
 export const TABLES = [
   "accounts", "positions", "orders", "bars", "gaps", "funding", "mark", "used_nonces", "ratelimit",
-  "rates", "ledger", "pools", "splits", "house_hours", "regi_price", "lock_cursor",
+  "rates", "ledger", "pools", "splits", "house_hours", "regi_price", "lock_cursor", "lock_due",
 ] as const;
 export const INDEXES = ["positions_wallet", "positions_open", "positions_market", "orders_pending", "orders_wallet", "bars_l", "bars_h", "ledger_ref", "ledger_kind_ts"] as const;
 /** Migration 0004 rebuilds these tables through a `<name>_v4` copy (the guard check prefixes those names too). */
 export const REBUILT = ["mark", "bars", "gaps", "rates", "house_hours", "pools", "splits"] as const;
 /** The migrations, in order (the guard check and the D1 test double apply all of them). */
-export const MIGRATIONS = ["0001_pilot.sql", "0002_pilot_v3.sql", "0003_pilot_premium.sql", "0004_pilot_markets.sql", "0005_pilot_regi_usd_lock.sql"] as const;
+export const MIGRATIONS = ["0001_pilot.sql", "0002_pilot_v3.sql", "0003_pilot_premium.sql", "0004_pilot_markets.sql", "0005_pilot_regi_usd_lock.sql", "0006_pilot_lock_due.sql"] as const;
 
 /**
  * The guards (R4), each a row `g` that exists only for the batch that owns the event: a position settled under its
@@ -201,8 +201,22 @@ export const SQL = {
   priceWindow: "SELECT usd_per_regi AS p FROM regi_price WHERE ts > ? ORDER BY usd_per_regi",
   /** R4: claims this minute's withdrawal watch — bind: now, now − 60. changes = 1 for one caller per minute. */
   lockClaim: "UPDATE lock_cursor SET checked = ? WHERE id = 1 AND checked <= ?",
-  /** R4: the watch handled every Withdrawn log up to a block; the cursor only moves forward — bind: block. */
+  /** R4: the watch read every Withdrawn log up to a block (its owners are in lock_due); the cursor only moves forward — bind: block. */
   lockAdvance: "UPDATE lock_cursor SET block = MAX(COALESCE(block, -1), ?) WHERE id = 1",
+  /** S1: an owner named in a Withdrawn log at a block is due a re-check — bind: owner, block, block. */
+  lockDue:
+    "INSERT INTO lock_due (owner, from_block, last_block) VALUES (?, ?, ?) ON CONFLICT (owner) DO UPDATE SET " +
+    "from_block = MIN(lock_due.from_block, excluded.from_block), last_block = MAX(lock_due.last_block, excluded.last_block)",
+  /** S1: the owner was fully handled at a block: it leaves, unless a later withdrawal was recorded meanwhile — bind: owner, block. */
+  lockDone: "DELETE FROM lock_due WHERE owner = ? AND last_block <= ?",
+  /**
+   * B1: refuses the owner's pending leveraged opens whose lock requirement is above the remaining lock (the same
+   * canonical-string comparison as lockClose); atomic against the fill, which needs the order pending — bind: error,
+   * wallet, locked, locked, locked.
+   */
+  lockRefuse:
+    "UPDATE orders SET status = 'refused', error = ? WHERE wallet = ? AND status = 'pending' AND kind = 'open' AND lock_req <> '0' " +
+    "AND (length(lock_req) > length(?) OR (length(lock_req) = length(?) AND lock_req > ?))",
   /** bind: wallet. Ends every session of the wallet. */
   sessionBump: "UPDATE accounts SET session_epoch = session_epoch + 1 WHERE wallet = ?",
   /** Liquidation candidates (a superset; the engine decides), one page of LIQ_PAGE from a cursor — bind: market, bound, from minute. */

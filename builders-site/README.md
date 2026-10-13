@@ -74,8 +74,12 @@ npx tsx builders-site/scripts/d1-guard-check.mjs --local    # dry run on a throw
 REGI price (migration 0005): ABI mark posts sample the REGI/USDC v4 pool (PoolManager `extsload` of slot0) at most
 once per 10-minute slot into `regi_price`; the price is the median of the last 24 h, unknown below 6 samples. After a
 deploy with 0005 the price is unknown for the first hour (6 samples): sign-in and orders answer "REGI price updating".
-Withdrawal watch: once a minute a mark post reads the factory's `Withdrawn` logs from `lock_cursor` to the head (≤ 5,000
-blocks per call, 4 calls per run), and closes the open positions whose `lock_req` is above the owner's `lockedOf`.
+Withdrawal watch: once a minute a mark post reads the factory's `Withdrawn` logs from `lock_cursor` to head − 5 (≤ 5,000
+blocks per call, 4 calls per run), records each owner in `lock_due` (migration 0006) and moves the cursor on. Each run
+then re-checks the due owners with `lockedOf` pinned to the cursor block: their pending leveraged opens above the
+remaining lock are refused, and their open positions whose `lock_req` is above it are closed; an owner stays due until
+that is done in every market. A leveraged fill also re-reads `lockedOf`. Apply migrations 0005 and 0006 BEFORE
+deploying this code (the mark ingest reads `regi_price` and `lock_cursor`).
 
 To open: set `PILOT_OPEN = "1"` in `wrangler.toml`, check `PILOT_ADMIT_USD`, `PILOT_LOCK_USD`, `PILOT_LOCK_FACTORY`, `PILOT_MAX_LEV`,
 `PILOT_BLOCKED_WALLETS` and (optional, empty by default) `PILOT_REGI_SNAPSHOT_BLOCK`, redeploy.
