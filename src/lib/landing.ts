@@ -12,9 +12,10 @@ export const SITE_TITLE = "Registrai · Data on Arc";
 export const SITE_DESCRIPTION = "Indices, project facts and data on every app built on Arc. Independent; evidence for every number.";
 
 export const HERO = {
-  eyebrow: "REGISTRAI",
-  headline: "The data company for the Arc economy.",
-  subline: "We measure what every app on Arc is actually used for, hour by hour, and publish the facts behind each project with evidence. Every number links to the chain.",
+  eyebrow: "REGISTRAI · DATA ON ARC",
+  headline: "The source of truth for the Arc economy.",
+  headlineAccent: "Arc economy.",
+  subline: "Hourly indices of what every app on Arc is actually used for, and the facts behind each project, with evidence for every number.",
   primaryCta: "See the indices",
   secondaryCta: "Request data",
   secondaryHref: contactHref("Data request"),
@@ -134,3 +135,35 @@ export const HOW_WE_PUBLISH = {
 };
 
 export const FOOTER_BRAND_LINE = "Registrai · data on Arc · Warsaw / 2026 · Independent, not affiliated with Circle or Arc";
+
+// Marquee under the hero: apps the indices measure (names only, no logos). Index members as of 2026-10-13.
+export const MEASURED = [
+  "Uniswap", "Argus", "Relay", "Peach", "OKX DEX", "Tolly", "KyberSwap", "UBI.fun", "0x", "Foci", "LI.FI",
+  "ArcTools", "Across", "Arctide", "Aave", "UnitFlow", "Morpho", "Archery", "Curve", "LIFT", "Aerodrome",
+  "Synthra", "rhino.fi", "Kairo", "OpenSea", "Flipt.fun", "Bungee", "MetaMask", "1inch", "Rango",
+];
+export const MEASURED_LABEL = "Measured every hour";
+
+// "How the index works": three steps (explanations in the bubble, not inline).
+export const STEPS_SECTION = { kicker: "HOW THE INDEX WORKS", headline: "From the chain to one number, every hour." };
+export const STEPS = [
+  { n: "01", title: "Payments on Arc", text: "Every USDC and stablecoin payment into an app's contracts, read from the chain." },
+  { n: "02", title: "Points per app", text: "More wallets and more volume earn points. Idle apps decay with a 21-day half-life." },
+  { n: "03", title: "One index, every hour", text: "Points roll up into three indices, closed on the hour and published with the method." },
+];
+export const STEPS_INFO = "Per payment: log2(1 + amount) + amount / $100, capped per wallet and hour; new paying wallets earn a bonus; each app's weight is the square root of its points, with rise limits per hour. Full method and history are public.";
+
+export const LIVE_BOARD = {
+  title: "Live on Arc",
+  block: "Arc block",
+  indices: [
+    { key: "abi", name: "ABI", label: "Builders" },
+    { key: "aii", name: "AII", label: "Integrations" },
+    { key: "aei", name: "AEI", label: "Ecosystem" },
+  ],
+  summaryUrl: "https://builder.registrai.cc/api/index/summary",
+  rpcUrl: "https://rpc.mainnet.arc.io",
+  fallback: "Live values on the index page",
+  base: "Base 1,000 · 2 Oct 2026",
+};
+

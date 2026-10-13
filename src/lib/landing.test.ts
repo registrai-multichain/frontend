@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import postcss, { type AtRule } from "postcss";
 import { describe, expect, it } from "vitest";
 import { VERDICT_WORDS } from "./facts";
-import { AUDIENCE, CONTACT_EMAIL, FOOTER_BRAND_LINE, HERO, HOW_WE_PUBLISH, HOW_WE_PUBLISH_URL, INDICES_URL, PRODUCTS, SITE_DESCRIPTION, SITE_TITLE, TRACK_RECORD_URL, TIERS, TIERS_SECTION, VERIFY_URL, contactHref } from "./landing";
+import { AUDIENCE, CONTACT_EMAIL, FOOTER_BRAND_LINE, HERO, HOW_WE_PUBLISH, HOW_WE_PUBLISH_URL, INDICES_URL, MEASURED, PRODUCTS, SITE_DESCRIPTION, SITE_TITLE, STEPS, TRACK_RECORD_URL, TIERS, TIERS_SECTION, VERIFY_URL, contactHref } from "./landing";
 
 function strings(v: unknown, out: string[] = []): string[] {
   if (typeof v === "string") out.push(v);
@@ -31,7 +31,8 @@ describe("landing copy", () => {
   });
   it("uses the decided words", () => {
     expect(SITE_TITLE).toBe("Registrai · Data on Arc");
-    expect(HERO.headline).toBe("The data company for the Arc economy.");
+    expect(HERO.headline).toBe("The source of truth for the Arc economy.");
+    expect(HERO.headline.endsWith(HERO.headlineAccent)).toBe(true);
     expect(HERO.microcopy).toBe("Independent. Not affiliated with Circle or Arc.");
     expect([HERO.primaryCta, HERO.secondaryCta]).toEqual(["See the indices", "Request data"]);
     expect(HERO.secondaryHref).toBe("mailto:contact@registrai.cc?subject=Data%20request");
@@ -87,3 +88,15 @@ describe("social preview image", () => {
     expect(png.readUInt32BE(20)).toBe(630);
   });
 });
+
+describe("landing redesign data", () => {
+  it("measures apps by name only and never lists Circle or Arc as an app", () => {
+    expect(MEASURED.length).toBeGreaterThan(10);
+    expect(new Set(MEASURED).size).toBe(MEASURED.length);
+    for (const n of MEASURED) expect(n.toLowerCase()).not.toMatch(/circle|^arc$/);
+  });
+  it("has three index steps", () => {
+    expect(STEPS.map((s) => s.n)).toEqual(["01", "02", "03"]);
+  });
+});
+

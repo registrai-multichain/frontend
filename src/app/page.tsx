@@ -2,8 +2,11 @@ import { BrandLockup, BrandMark } from "@/components/Brand";
 import { REGISTRAI_X_URL, REGI_CONTRACT, REGI_DEXSCREENER_URL, REGI_EXPLORER_URL } from "@/lib/regi";
 import { InfoBubble } from "@/components/InfoBubble";
 import Link from "next/link";
+import { Reveal } from "@/components/landing/Reveal";
+import { LiveBoard, LiveChips } from "@/components/landing/LiveBoard";
+import "./landing.css";
 
-import { AUDIENCE, AUDIENCE_SECTION, FOOTER_BRAND_LINE, HERO, HOW_WE_PUBLISH, HOW_WE_PUBLISH_URL, INDICES_URL, PRODUCTS, PRODUCTS_SECTION, TIERS, TIERS_SECTION } from "@/lib/landing";
+import { AUDIENCE, AUDIENCE_SECTION, FOOTER_BRAND_LINE, HERO, HOW_WE_PUBLISH, HOW_WE_PUBLISH_URL, INDICES_URL, MEASURED, MEASURED_LABEL, PRODUCTS, PRODUCTS_SECTION, STEPS, STEPS_INFO, STEPS_SECTION, TIERS, TIERS_SECTION } from "@/lib/landing";
 
 export default function Home() {
   return (
@@ -11,7 +14,9 @@ export default function Home() {
       <Header />
       <main>
         <Hero />
+        <Measured />
         <Products />
+        <Steps />
         <Audience />
         <Tiers />
         <HowWePublish />
@@ -37,43 +42,92 @@ function Header() {
 }
 
 function Hero() {
+  const [lead, accent] = HERO.headline.endsWith(HERO.headlineAccent)
+    ? [HERO.headline.slice(0, -HERO.headlineAccent.length), HERO.headlineAccent]
+    : [HERO.headline, ""];
   return (
-    <section id="top" className="lp-hero lp-hero--solo lp-frame">
-      <div className="lp-hero-copy">
-        <p className="lp-kicker lp-reveal">{HERO.eyebrow}</p>
-        <h1 className="lp-reveal lp-delay-1">{HERO.headline}</h1>
-        <p className="lp-deck lp-reveal lp-delay-2">{HERO.subline}</p>
-        <div className="lp-cta-row lp-reveal lp-delay-3">
-          <a className="lp-cta lp-cta--primary" href={INDICES_URL}>{HERO.primaryCta} <span>→</span></a>
-          <a className="lp-cta" href={HERO.secondaryHref}>{HERO.secondaryCta} <span>→</span></a>
+    <section id="top" className="lp-x-hero">
+      <div className="lp-x-hero-bg" aria-hidden="true"><i className="lp-x-grid" /><i className="lp-x-glow" /><i className="lp-x-scan" /></div>
+      <div className="lp-frame lp-x-hero-grid">
+        <div className="lp-x-hero-copy">
+          <p className="lp-kicker lp-reveal">{HERO.eyebrow}</p>
+          <h1 className="lp-x-h1">
+            <span className="lp-x-line"><span style={{ ["--i" as string]: 0 }}>{lead}</span></span>
+            {accent && <span className="lp-x-line"><em style={{ ["--i" as string]: 1 }}>{accent}</em></span>}
+          </h1>
+          <p className="lp-deck lp-reveal lp-delay-2">{HERO.subline}</p>
+          <div className="lp-cta-row lp-reveal lp-delay-3">
+            <a className="lp-cta lp-cta--primary lp-x-cta" href={INDICES_URL}>{HERO.primaryCta} <span>→</span></a>
+            <a className="lp-cta lp-x-cta" href={HERO.secondaryHref}>{HERO.secondaryCta} <span>→</span></a>
+          </div>
+          <p className="lp-micro lp-reveal lp-delay-3">{HERO.microcopy}</p>
         </div>
-        <p className="lp-micro lp-reveal lp-delay-3">{HERO.microcopy}</p>
+        <div className="lp-x-hero-board lp-reveal lp-delay-2"><LiveBoard /></div>
       </div>
+    </section>
+  );
+}
+
+function Measured() {
+  const row = [...MEASURED, ...MEASURED];
+  return (
+    <section className="lp-x-marquee" aria-label={MEASURED_LABEL}>
+      <span className="lp-x-marquee-label">{MEASURED_LABEL}</span>
+      <div className="lp-x-marquee-track"><ul>{row.map((n, k) => <li key={k} aria-hidden={k >= MEASURED.length}>{n}</li>)}</ul></div>
     </section>
   );
 }
 
 function Products() {
   return (
-    <section className="lp-fees">
+    <section className="lp-x-products">
       <div className="lp-frame">
-        <p className="lp-kicker">{PRODUCTS_SECTION.kicker}</p>
-        <div className="lp-routes lp-products">
-          {PRODUCTS.map((p) => (
-            <article className="lp-route" key={p.name}>
-              <h3>{p.name}<span className="lp-tag">{p.tag}</span>{p.info && <InfoBubble label={`How the ${p.name.toLowerCase()} work`}>{p.info}</InfoBubble>}</h3>
+        <Reveal className="lp-x-head"><p className="lp-kicker">{PRODUCTS_SECTION.kicker}</p><h2>Four products. One record of Arc.</h2></Reveal>
+        <Reveal className="lp-x-cards">
+          {PRODUCTS.map((p, k) => (
+            <article className={`lp-x-card${k === 0 ? " lp-x-card--wide lp-x-card--dark" : k === 2 ? " lp-x-card--wide" : ""}`} key={p.name} style={{ ["--i" as string]: k }}>
+              <div className="lp-x-card-top">
+                <span className="lp-x-num">0{k + 1}</span>
+                <span className={`lp-x-pill lp-x-pill--${p.tag === "Live" ? "live" : p.tag === "Building now" ? "build" : "later"}`}><i />{p.tag}</span>
+              </div>
+              <h3>{p.name}{p.info && <InfoBubble label={`How the ${p.name.toLowerCase()} work`}>{p.info}</InfoBubble>}</h3>
               {p.line && <p>{p.line}</p>}
               {p.items && (
                 <ul>
                   {p.items.map((i) => (
-                    <li key={i.text}>{i.name && <strong>{i.name}: </strong>}{i.text}{i.tag && <span className="lp-tag">{i.tag}</span>}</li>
+                    <li key={i.text}>{i.name && <strong>{i.name} </strong>}<span>{i.text}</span>{i.tag && <span className={`lp-x-mini lp-x-mini--${i.tag === "Live" ? "live" : "build"}`}>{i.tag}</span>}</li>
                   ))}
                 </ul>
               )}
-              {p.link && <a className="lp-product-link" href={p.link.href}>{p.link.label} <span>→</span></a>}
+              {k === 0 && <LiveChips />}
+              {p.link && <a className="lp-x-link" href={p.link.href}>{p.link.label} <span>→</span></a>}
             </article>
           ))}
-        </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+function Steps() {
+  return (
+    <section className="lp-x-steps">
+      <div className="lp-frame">
+        <Reveal className="lp-x-head lp-x-head--dark">
+          <p className="lp-kicker">{STEPS_SECTION.kicker}<InfoBubble label="The index method">{STEPS_INFO}</InfoBubble></p>
+          <h2>{STEPS_SECTION.headline}</h2>
+        </Reveal>
+        <Reveal className="lp-x-steps-row">
+          <svg className="lp-x-wire" viewBox="0 0 1000 8" preserveAspectRatio="none" aria-hidden="true"><path d="M0 4 H1000" /></svg>
+          {STEPS.map((st, k) => (
+            <div className="lp-x-step" key={st.n} style={{ ["--i" as string]: k }}>
+              <span className="lp-x-step-n">{st.n}</span>
+              <h3>{st.title}</h3>
+              <p>{st.text}</p>
+            </div>
+          ))}
+        </Reveal>
+        <Reveal className="lp-x-steps-cta"><a className="lp-cta lp-cta--primary lp-x-cta" href={INDICES_URL}>Open the indices <span>→</span></a></Reveal>
       </div>
     </section>
   );
@@ -81,11 +135,13 @@ function Products() {
 
 function Audience() {
   return (
-    <section className="lp-audience lp-frame">
-      <p className="lp-kicker">{AUDIENCE_SECTION.kicker}</p>
-      <ul>
-        {AUDIENCE.map((a) => <li key={a.who}><strong>{a.who}:</strong> {a.what}</li>)}
-      </ul>
+    <section className="lp-x-audience">
+      <div className="lp-frame">
+        <Reveal className="lp-x-head"><p className="lp-kicker">{AUDIENCE_SECTION.kicker}</p><h2>Built for the people who need to know what&apos;s real on Arc.</h2></Reveal>
+        <Reveal as="ul" className="lp-x-aud">
+          {AUDIENCE.map((a, k) => <li key={a.who} style={{ ["--i" as string]: k }}><span className="lp-x-num">0{k + 1}</span><strong>{a.who}</strong><span>{a.what.charAt(0).toUpperCase() + a.what.slice(1)}</span></li>)}
+        </Reveal>
+      </div>
     </section>
   );
 }
