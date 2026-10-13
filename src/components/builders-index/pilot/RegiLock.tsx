@@ -6,7 +6,7 @@ import { InfoBubble } from "@/components/InfoBubble";
 import { useWallet } from "@/components/WalletProvider";
 import { ARC_RPC_URL, fmtRegi, REGI_ADDRESS, type PilotAccountView } from "@/lib/abi-pilot-api";
 import { PILOT_COPY } from "@/lib/abi-pilot-copy";
-import { defaultLock, LOCK_FACTORY_ABI, leverageUnlocked, NO_CHAIN, parseRegi, REGI_ABI, regiInput, usdOf, VAULT_ABI, type LockChain } from "@/lib/abi-pilot-lock";
+import { defaultLock, LOCK_FACTORY_ABI, leverageUnlocked, NO_CHAIN, parseRegi, REGI_ABI, regiInput, revertMessage, usdOf, VAULT_ABI, type LockChain } from "@/lib/abi-pilot-lock";
 import { ARC_MAINNET } from "@/lib/chains";
 
 /** The lock reads refresh this often while the page is visible (and after every transaction). */
@@ -102,9 +102,11 @@ export function RegiLock({ view, chain, tx, walletMatches, onLock, onWithdraw, o
   );
 }
 
-const txError = (e: unknown) => {
+/** A failed transaction in plain words: cancelled, a known contract revert (review N5), else the wallet's short message. */
+export const txError = (e: unknown) => {
   const msg = (e as { shortMessage?: string; message?: string })?.shortMessage ?? (e as Error)?.message ?? "";
-  return /reject|denied|cancel/i.test(msg) ? "Cancelled in your wallet." : msg || PILOT_COPY.txFailed;
+  if (/reject|denied|cancel/i.test(msg)) return "Cancelled in your wallet.";
+  return revertMessage(e) ?? (msg || PILOT_COPY.txFailed);
 };
 
 /**

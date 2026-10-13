@@ -1,15 +1,15 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { toFunctionSelector } from "viem";
+import { ContractFunctionExecutionError, ContractFunctionRevertedError, encodeErrorResult, toFunctionSelector } from "viem";
 import { resolve } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 import { PilotTables, type PilotTablesProps } from "@/components/builders-index/pilot/PilotTables";
-import { RegiLock, type RegiLockProps } from "@/components/builders-index/pilot/RegiLock";
+import { RegiLock, txError, type RegiLockProps } from "@/components/builders-index/pilot/RegiLock";
 import { Ticket, type TicketProps } from "@/components/builders-index/pilot/Ticket";
 import { borrowPaid, liqPrice, RULES } from "./abi-pilot";
 import { accountPollMs, type EconomyView, type PilotAccountView, type RateView } from "./abi-pilot-api";
-import { defaultLock, leverageUnlocked, LOCK_FACTORY_ABI, NO_CHAIN, parseRegi, usdOf, VAULT_ABI, type LockChain } from "./abi-pilot-lock";
+import { defaultLock, leverageUnlocked, LOCK_FACTORY_ABI, NO_CHAIN, parseRegi, REVERT_MESSAGES, revertMessage, usdOf, VAULT_ABI, type LockChain } from "./abi-pilot-lock";
 import { borrowPerDay, fmtBook, fmtPts, fmtPx, fmtSideRate, fmtSigned, fmtWhen, openLabel, PILOT_COPY, PILOT_DISCLAIMER, PILOT_DISCLAIMERS, PILOT_JUMP_NOTE, PILOT_LIQ_NOTE } from "./abi-pilot-copy";
 
 /**
@@ -455,6 +455,27 @@ describe("REGI in dollars and the REGI lock (plan 2026-10-13 R6)", () => {
     expect(sel(VAULT_ABI, "claimRewards")).toBe(toFunctionSelector("claimRewards(address)"));
   });
 
+  test("review N5: contract reverts in plain words (ShareNotRecorded and the rest); cancellations; unknown errors pass through", () => {
+    const reverted = (errorName: "ShareNotRecorded" | "NotOwner") => {
+      const abi = errorName === "ShareNotRecorded" ? LOCK_FACTORY_ABI : VAULT_ABI;
+      const cause = new ContractFunctionRevertedError({ abi, data: encodeErrorResult({ abi, errorName }), functionName: errorName === "ShareNotRecorded" ? "lock" : "withdraw" });
+      return new ContractFunctionExecutionError(cause, { abi, functionName: errorName === "ShareNotRecorded" ? "lock" : "withdraw", args: [] });
+    };
+    const share = "The lock didn't go through with enough gas to register your REGI for holder distributions. Try again; your wallet will estimate more gas.";
+    expect(REVERT_MESSAGES.ShareNotRecorded).toBe(share);
+    expect(txError(reverted("ShareNotRecorded"))).toBe(share);
+    expect(txError(reverted("NotOwner"))).toBe(REVERT_MESSAGES.NotOwner);
+    // only the name, or only the 4-byte selector, in a wallet's message
+    expect(revertMessage(new Error("execution reverted: ShareNotRecorded()"))).toBe(share);
+    expect(revertMessage(new Error(`execution reverted with data ${toFunctionSelector("ShareNotRecorded()")}`))).toBe(share);
+    expect(revertMessage(new Error(`reverted: ${toFunctionSelector("ERC20InsufficientBalance(address,uint256,uint256)")}00ab`))).toBe(REVERT_MESSAGES.ERC20InsufficientBalance);
+    expect(txError({ shortMessage: "User rejected the request." })).toBe("Cancelled in your wallet.");
+    expect(txError(new Error("nonce too low"))).toBe("nonce too low");
+    expect(revertMessage(new Error("nonce too low"))).toBeNull();
+    for (const m of Object.values(REVERT_MESSAGES)) expect(banned(m)).toBeUndefined();
+    expect(lockBox({ tx: { action: "lock", stage: "failed", error: share } })).toContain(esc(share));
+  });
+
   test("history: a position closed by a withdrawal says so", () => {
     const h = tables({ tab: "history", history: [{ id: 4, market: "abi", side: "long", margin: 100, lev: 2, notional: 200, entry: 1000, openedAt: 1, closedAt: 1_760_090_000, exit: 1010, pnl: 2, funding: 0, borrow: 0, fee: 0.04, returned: 101.9, net: 1.86, reason: "lock withdrawn" }] });
     expect(h).toContain(`>${PILOT_COPY.lockClosed}</td>`);
@@ -474,11 +495,14 @@ describe("R7: Terms, Pilot rules and Privacy say what the lock is", () => {
     expect(t).not.toContain("There are no deposits");
     expect(t).toContain("at least $10 of REGI in the wallet when you sign in and when you place each order");
     expect(t).toContain("Leverage above 1× needs at least $50 of REGI locked in your own vault");
+    expect(t).toContain("a wallet with open positions can sign in without it, to close them");
   });
   test("Pilot rules: the same rules and how the lock works, with the contract once it is set", () => {
     const r = page("src/app/pilot-rules/page.tsx");
     expect(r).toContain("<H>How the lock works</H>");
-    expect(r).toContain("LOCK_FACTORY_ADDRESS ?");
+    // review N3: the address comes from the server's PILOT_LOCK_FACTORY (the account view), not a second constant
+    expect(r).toContain("<LockContract />");
+    expect(r).toContain("A wallet with open positions can sign in without it, to close them.");
     expect(r).toContain("A change in the REGI price alone never closes a position.");
     expect(r).toContain("You must hold it when you sign in and when you place each order");
   });

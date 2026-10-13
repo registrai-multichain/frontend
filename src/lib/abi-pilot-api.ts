@@ -118,11 +118,6 @@ export const LOCK_CONFIRM_BLOCKS = 5;
 export const LOG_CHUNK = 5000;
 /** The lock form's default amount: the requirement plus this share. */
 export const LOCK_HEADROOM = 0.05;
-/**
- * The lock factory's address for the static pages (the Pilot rules); the server's is PILOT_LOCK_FACTORY. Empty until
- * the owner deploys the factory: set both to the same address.
- */
-export const LOCK_FACTORY_ADDRESS = "";
 
 /**
  * USD per REGI from the pool's sqrtPriceX96: (sqrtP / 2^96)^2 is raw REGI per raw USDC, so REGI per USDC is that

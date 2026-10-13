@@ -65,8 +65,8 @@ PILOT_ADMIT_USD = "10"
 # at the next mark (the withdrawal watch, once a minute during mark posts). Not a positive number = misconfigured.
 PILOT_LOCK_USD = "50"
 # The RegiLockFactory address (contracts repo src/regilock). EMPTY until the owner deploys it: every order above 1× is
-# refused and the ticket says leverage opens when the lock is live. Set it together with LOCK_FACTORY_ADDRESS in
-# src/lib/abi-pilot-api.ts (the Pilot rules page). Set but not an address = misconfigured.
+# refused and the ticket says leverage opens when the lock is live. The Pilot rules page shows this address (read from
+# the account view). Set but not an address = misconfigured.
 PILOT_LOCK_FACTORY = ""
 # The pilot's leverage cap, applied after the engine's (volatility, jump): the ticket offers no level above it,
 # POST /api/pilot/order refuses "leverage above the current cap", and /api/index/mark reports

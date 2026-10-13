@@ -3,7 +3,7 @@ export const LEGAL = {
   operator: "Registrai",
   contact: "contact@registrai.cc",
   site: "builder.registrai.cc",
-  effective: "11 October 2026",
+  effective: "13 October 2026",
   /** The supervisory authority for a Poland-based controller (GDPR Art. 77). */
   authority: "Prezes Urzędu Ochrony Danych Osobowych (UODO), ul. Stawki 2, 00-193 Warszawa, uodo.gov.pl",
   independence: "Independent. Not affiliated with Circle or Arc.",

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
-import { LOCK_FACTORY_ADDRESS, PILOT_ADMIT_USD_DEFAULT, PILOT_LOCK_USD_DEFAULT, PILOT_MAX_LEV_DEFAULT } from "@/lib/abi-pilot-api";
+import { LockContract } from "@/components/builders-index/pilot/LockContract";
+import { PILOT_ADMIT_USD_DEFAULT, PILOT_LOCK_USD_DEFAULT, PILOT_MAX_LEV_DEFAULT } from "@/lib/abi-pilot-api";
 import { PILOT_COPY, PILOT_DISCLAIMERS } from "@/lib/abi-pilot-copy";
 import { RULES } from "@/lib/abi-pilot";
 
@@ -18,7 +19,7 @@ const H = ({ children }: { children: React.ReactNode }) => <h2 className="pa-h2 
 
 /** builder.registrai.cc/pilot-rules: the points pilot's rules in one place. The texts are the ticket's own (abi-pilot-copy.ts), so they
  * follow the engine's RULES; the leverage cap and the dollar amounts shown are the defaults (PILOT_MAX_LEV, PILOT_ADMIT_USD,
- * PILOT_LOCK_USD); the lock contract's address is LOCK_FACTORY_ADDRESS once it is set. */
+ * PILOT_LOCK_USD); the lock contract's address is the server's PILOT_LOCK_FACTORY, read from the account view (LockContract). */
 export default function PilotRulesPage() {
   return (
     <BuildersShell>
@@ -33,7 +34,7 @@ export default function PilotRulesPage() {
         <H>Who can join</H>
         <ul className="pa-list">
           <li>You must be 18 or older and accept the Terms; sign-in asks you to confirm both.</li>
-          <li>{PILOT_COPY.holdRegi(PILOT_ADMIT_USD_DEFAULT)} You must hold it when you sign in and when you place each order; the balance is checked at those moments. Closing a position needs no REGI.</li>
+          <li>{PILOT_COPY.holdRegi(PILOT_ADMIT_USD_DEFAULT)} You must hold it when you sign in and when you place each order; the balance is checked at those moments. A wallet with open positions can sign in without it, to close them. Closing a position needs no REGI.</li>
           <li>Leverage above 1× needs at least ${PILOT_LOCK_USD_DEFAULT} of REGI locked in your own vault (see How the lock works). 1× needs only the REGI to join.</li>
           <li>Dollar amounts are converted at the median of the REGI/USDC pool over the last 24 hours, sampled every 10 minutes. While there are too few samples, sign-in and new orders wait (&quot;REGI price updating&quot;).</li>
           <li>The leaderboard lists only wallets that currently hold the REGI needed to join.</li>
@@ -55,11 +56,7 @@ export default function PilotRulesPage() {
           <li>{PILOT_COPY.lockNote} The pilot never takes or spends it; it only reads how much is in your vault, at each order above 1×.</li>
           <li>Each leveraged position keeps the lock amount needed when it opened. If a withdrawal leaves less than that, the position is closed at the next price of its market, with the normal close fee, funding and borrow. It is not a liquidation. A change in the REGI price alone never closes a position.</li>
           <li>REGI in your vault keeps its REGI holder distributions; you claim them from the vault to your wallet.</li>
-          <li>
-            {LOCK_FACTORY_ADDRESS
-              ? <>Lock contract on Arc: <code>{LOCK_FACTORY_ADDRESS}</code>. Lock, withdraw and claim transactions are public on Arc.</>
-              : <>The lock contract isn&apos;t live yet; until it is, leverage above 1× is closed. Lock, withdraw and claim transactions will be public on Arc.</>}
-          </li>
+          <li><LockContract /></li>
         </ul>
 
         <H>Orders and leverage</H>

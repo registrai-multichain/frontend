@@ -51,7 +51,7 @@ describe("data only: no order-entry words anywhere in the page source", () => {
   test("the glob finds the sources, the stylesheet included", () => {
     // the exemption covers exactly the pilot's own files
     expect(all.filter(isPilot).sort()).toEqual([
-      "src/components/builders-index/pilot/PilotPanel.tsx", "src/components/builders-index/pilot/PilotTables.tsx",
+      "src/components/builders-index/pilot/LockContract.tsx", "src/components/builders-index/pilot/PilotPanel.tsx", "src/components/builders-index/pilot/PilotTables.tsx",
       "src/components/builders-index/pilot/RegiLock.tsx", "src/components/builders-index/pilot/Ticket.tsx", "src/components/builders-index/pilot/pilot.css",
       "src/lib/abi-pilot-api.ts", "src/lib/abi-pilot-copy.ts", "src/lib/abi-pilot-lock.ts", "src/lib/abi-pilot.ts",
     ]);
