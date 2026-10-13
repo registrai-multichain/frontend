@@ -1,70 +1,122 @@
-// Tabula landing copy (registrai.cc home). Words come from docs/superpowers/specs/2026-10-01-tabula-landing-copy.md
-// with the owner's 2026-10-01 decisions applied. Status tags are literal: swap one to "Live" only when that piece ships.
+// registrai.cc home: the data company on Arc. Words come from docs/superpowers/specs/2026-10-13-landing-data-company.md.
+// Status tags are literal: swap one to "Live" only when that piece ships. No live numbers here; link to the live pages.
 export const CONTACT_EMAIL = "contact@registrai.cc";
 export const contactHref = (subject: string) => `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}`;
 
 export const VERIFY_URL = "https://builder.registrai.cc/verify/";
 export const HOW_WE_PUBLISH_URL = "https://builder.registrai.cc/how-we-publish/";
 export const TRACK_RECORD_URL = "https://builder.registrai.cc/track-record/";
+export const INDICES_URL = "https://builder.registrai.cc/builders-index/";
+
+export const SITE_TITLE = "Registrai · Data on Arc";
+export const SITE_DESCRIPTION = "Indices, project facts and data on every app built on Arc. Independent; evidence for every number.";
 
 export const HERO = {
-  eyebrow: "TABULA · BY REGISTRAI",
-  headline: "Proof, mapped.",
-  subline: "Tabula maps who controls a project, where its money goes and what changed, with evidence for every line, anchored on Arc. Facts, not opinions. You judge.",
-  primaryCta: "Verify your project",
-  secondaryCta: "How we publish",
-  microcopy: "Verification is free. The builder registry is live on Arc mainnet.",
+  eyebrow: "REGISTRAI",
+  headline: "The data company for the Arc economy.",
+  subline: "We measure what every app on Arc is actually used for, hour by hour, and publish the facts behind each project with evidence. Every number links to the chain.",
+  primaryCta: "See the indices",
+  secondaryCta: "Request data",
+  secondaryHref: contactHref("Data request"),
+  microcopy: "Independent. Not affiliated with Circle or Arc.",
 };
 
-export const STRIP = {
-  kicker: "HOW IT WORKS",
-  items: [
-    { name: "Radar", line: "Watches a project's contracts and wallets for owner changes, upgrades and large outflows, and alerts the team.", tag: "Building now" },
-    { name: "Trace", line: "Follows funds hop by hop across chains and bridges, with a transaction link for every hop.", tag: "Building now" },
-    { name: "Record", line: "Publishes neutral, evidenced facts and anchors each note's hash and time on Arc, so the record can't be quietly rewritten.", tag: "Building now" },
-  ],
-  note: "Today: the verified builder registry and hand-run investigations. The rest ships piece by piece, and this page will say when.",
-  trackLink: "See the track record",
-};
+export type Status = "Live" | "Building now" | "Later";
+type Line = { name?: string; text: string; tag?: Status };
+export type Product = { name: string; tag: Status; line?: string; items?: Line[]; info?: string; link?: { label: string; href: string } };
 
-type TierItem = { text: string; tag?: string };
+export const PRODUCTS_SECTION = { kicker: "WHAT WE PUBLISH" };
+export const PRODUCTS: Product[] = [
+  {
+    name: "Indices",
+    tag: "Live",
+    line: "Three hourly indices, base 1,000 on 2 Oct 2026.",
+    items: [
+      { name: "Arc Builders Index (ABI)", text: "apps that started on Arc." },
+      { name: "Arc Integrations Index (AII)", text: "products that integrated Arc, such as Uniswap, Relay and KyberSwap." },
+      { name: "Arc Ecosystem Index (AEI)", text: "both, plus the base layer." },
+    ],
+    info: "Points come from USDC and other stablecoin payments into each app's contracts: more wallets and more volume move it up; idle apps decay (21-day half-life). Method and history are public.",
+    link: { label: "Open the indices", href: INDICES_URL },
+  },
+  {
+    name: "Project facts (Tabula)",
+    tag: "Live",
+    line: "Who controls a project, where its money goes and what changed, with an address, transaction or page for every line.",
+    items: [
+      { text: "Facts pages", tag: "Live" },
+      { text: "Investigations (hand-run)", tag: "Live" },
+      { text: "Radar alerts", tag: "Building now" },
+      { text: "Trace (fund tracing)", tag: "Building now" },
+      { text: "Record (hashes anchored on Arc)", tag: "Building now" },
+    ],
+    link: { label: "See the track record", href: TRACK_RECORD_URL },
+  },
+  {
+    name: "Data API",
+    tag: "Building now",
+    items: [
+      { text: "Full Arc history with no pruning or rate-limit walls." },
+      { text: "Decoded stablecoin payments: who paid which app." },
+      { text: "Address labels: which contract belongs to which project or integration." },
+      { text: "Index and per-app activity endpoints." },
+      { text: "Payment webhooks." },
+    ],
+    link: { label: "Join the early access list", href: contactHref("Data API early access") },
+  },
+  {
+    name: "Other chains",
+    tag: "Later",
+    line: "The same method for other chains, measured against Arc.",
+  },
+];
+
+export const AUDIENCE_SECTION = { kicker: "FOR" };
+export const AUDIENCE = [
+  { who: "Funds and market makers", what: "activity that's real versus washed, and who controls what." },
+  { who: "Exchange listing teams", what: "due-diligence packs with evidence." },
+  { who: "Launchpads and DEXs", what: "checks on the projects you host." },
+  { who: "Ecosystem and grant programs", what: "who is building on Arc, and how much it's used." },
+  { who: "Builders", what: "a public facts page, and your app on the index." },
+];
+
+type TierItem = { text: string; tag?: Status };
 export type Tier = { name: string; headline?: string; price: string; items: TierItem[]; cta: string; href: string };
 
 export const TIERS: Tier[] = [
   {
     name: "Community",
-    price: "Free with verification",
+    price: "Free",
     items: [
-      { text: "Radar alerts on your own contracts and wallets", tag: "Building now" },
-      { text: "A public facts page for your project", tag: "Live" },
-      { text: "Right of reply: add context next to any fact, and get errors corrected" },
+      { text: "Indices and methods" },
+      { text: "Public facts pages" },
+      { text: "Verification, plus right of reply on any fact" },
     ],
     cta: "Verify your project",
     href: VERIFY_URL,
   },
   {
     name: "Pro",
-    price: "Per job",
+    price: "Per job / per month",
     items: [
-      { text: "Pre-launch check: who holds each admin power, what your app asks users to sign, and whether the deployed code is the code you shipped" },
-      { text: "Due-diligence pack on any project, for launchpads, DEXs, funds and grant programs: a facts file with evidence, plus what was checked and what wasn't" },
-      { text: "Incident tracing: where funds went after an exploit or a drain, hop by hop" },
+      { text: "Due-diligence packs" },
+      { text: "Pre-launch checks" },
+      { text: "Incident tracing" },
+      { text: "Data API access (early access)" },
     ],
     cta: "Request a job",
-    href: contactHref("Tabula Pro"),
+    href: contactHref("Registrai Pro"),
   },
   {
     name: "Institutional",
-    headline: "Know who can move the money.",
     price: "Talk to us",
     items: [
-      { text: "Control assurance: who can mint, freeze, pause or upgrade, and through which keys (single wallet, multisig or timelock)" },
-      { text: "Change alerts when any of those powers or keys change" },
-      { text: "Evidence reports anchored on Arc, for your team, partners and reviewers" },
-      { text: "Key and front-end review: how admin keys are held, and what your app asks users to sign" },
+      { text: "Data partnerships and custom feeds" },
+      { text: "Control assurance and change alerts" },
+      { text: "Evidence reports anchored on Arc" },
     ],
     cta: "Talk to us",
-    href: contactHref("Tabula Institutional"),
+    href: contactHref("Registrai Institutional"),
   },
 ];
 export const TIERS_SECTION = { kicker: "PLANS", headline: "Start free. Go deeper when you need to." };
@@ -73,12 +125,12 @@ export const HOW_WE_PUBLISH = {
   kicker: "HOW WE PUBLISH",
   headline: "Facts, not opinions.",
   lines: [
-    "Every fact links to its evidence: an address, a transaction or a page.",
+    "Every fact and every index number links to its evidence.",
     "No ratings, no scores, no labels. You judge.",
+    "Methods change only with a published note, and history is restated in the open.",
     "Security issues go to the project privately first.",
-    "Every project can reply next to any fact, and we correct errors.",
   ],
   link: "Read how we publish",
 };
 
-export const FOOTER_BRAND_LINE = "Tabula by Registrai · the proof layer, anchored on Arc";
+export const FOOTER_BRAND_LINE = "Registrai · data on Arc · Warsaw / 2026 · Independent, not affiliated with Circle or Arc";

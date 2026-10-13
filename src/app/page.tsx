@@ -1,8 +1,9 @@
 import { BrandLockup, BrandMark } from "@/components/Brand";
 import { REGISTRAI_X_URL, REGI_CONTRACT, REGI_DEXSCREENER_URL, REGI_EXPLORER_URL } from "@/lib/regi";
+import { InfoBubble } from "@/components/InfoBubble";
 import Link from "next/link";
 
-import { FOOTER_BRAND_LINE, HERO, HOW_WE_PUBLISH, HOW_WE_PUBLISH_URL, STRIP, TRACK_RECORD_URL, TIERS, TIERS_SECTION, VERIFY_URL } from "@/lib/landing";
+import { AUDIENCE, AUDIENCE_SECTION, FOOTER_BRAND_LINE, HERO, HOW_WE_PUBLISH, HOW_WE_PUBLISH_URL, INDICES_URL, PRODUCTS, PRODUCTS_SECTION, TIERS, TIERS_SECTION } from "@/lib/landing";
 
 export default function Home() {
   return (
@@ -10,7 +11,8 @@ export default function Home() {
       <Header />
       <main>
         <Hero />
-        <WhatTabulaDoes />
+        <Products />
+        <Audience />
         <Tiers />
         <HowWePublish />
         <RegiBootstrap />
@@ -26,6 +28,7 @@ function Header() {
       <a href="#top" className="lp-brand" aria-label="Registrai home"><BrandLockup markClassName="lp-brand-mark" wordmarkClassName="lp-brand-name" /></a>
       <div className="lp-nav-center" aria-hidden="true"><span>Verified builders</span><i /><span>Built on Arc</span></div>
       <span className="lp-nav-links">
+        <a href={INDICES_URL} className="lp-bridge-link">Indices <span>→</span></a>
         <a href="https://builder.registrai.cc/builders/" className="lp-bridge-link">Verified builders <span>→</span></a>
         <Link href="/bridge" className="lp-bridge-link">Bridge USDC <span>→</span></Link>
       </span>
@@ -41,8 +44,8 @@ function Hero() {
         <h1 className="lp-reveal lp-delay-1">{HERO.headline}</h1>
         <p className="lp-deck lp-reveal lp-delay-2">{HERO.subline}</p>
         <div className="lp-cta-row lp-reveal lp-delay-3">
-          <a className="lp-cta lp-cta--primary" href={VERIFY_URL} target="_blank" rel="noreferrer">{HERO.primaryCta} <span>→</span></a>
-          <a className="lp-cta" href={HOW_WE_PUBLISH_URL} target="_blank" rel="noreferrer">{HERO.secondaryCta} <span>→</span></a>
+          <a className="lp-cta lp-cta--primary" href={INDICES_URL}>{HERO.primaryCta} <span>→</span></a>
+          <a className="lp-cta" href={HERO.secondaryHref}>{HERO.secondaryCta} <span>→</span></a>
         </div>
         <p className="lp-micro lp-reveal lp-delay-3">{HERO.microcopy}</p>
       </div>
@@ -50,22 +53,39 @@ function Hero() {
   );
 }
 
-function WhatTabulaDoes() {
+function Products() {
   return (
     <section className="lp-fees">
       <div className="lp-frame">
-        <p className="lp-kicker">{STRIP.kicker}</p>
-        <div className="lp-routes">
-          {STRIP.items.map((item) => (
-            <article className="lp-route" key={item.name}>
-              <h3>{item.name}</h3>
-              <p>{item.line}</p>
-              <span className="lp-tag">{item.tag}</span>
+        <p className="lp-kicker">{PRODUCTS_SECTION.kicker}</p>
+        <div className="lp-routes lp-products">
+          {PRODUCTS.map((p) => (
+            <article className="lp-route" key={p.name}>
+              <h3>{p.name}<span className="lp-tag">{p.tag}</span>{p.info && <InfoBubble label={`How the ${p.name.toLowerCase()} work`}>{p.info}</InfoBubble>}</h3>
+              {p.line && <p>{p.line}</p>}
+              {p.items && (
+                <ul>
+                  {p.items.map((i) => (
+                    <li key={i.text}>{i.name && <strong>{i.name}: </strong>}{i.text}{i.tag && <span className="lp-tag">{i.tag}</span>}</li>
+                  ))}
+                </ul>
+              )}
+              {p.link && <a className="lp-product-link" href={p.link.href}>{p.link.label} <span>→</span></a>}
             </article>
           ))}
         </div>
-        <p className="lp-fineprint">{STRIP.note}{" "}<a href={TRACK_RECORD_URL} target="_blank" rel="noreferrer">{STRIP.trackLink}</a></p>
       </div>
+    </section>
+  );
+}
+
+function Audience() {
+  return (
+    <section className="lp-audience lp-frame">
+      <p className="lp-kicker">{AUDIENCE_SECTION.kicker}</p>
+      <ul>
+        {AUDIENCE.map((a) => <li key={a.who}><strong>{a.who}:</strong> {a.what}</li>)}
+      </ul>
     </section>
   );
 }
@@ -142,6 +162,6 @@ function RegiBootstrap() {
 
 function Footer() {
   return (
-    <footer className="lp-footer lp-frame"><div><BrandMark className="lp-footer-mark" /></div><div className="lp-footer-links"><a href="https://builder.registrai.cc/builders/">Verified builders →</a><Link href="/bridge">Bridge USDC →</Link><a href={REGI_EXPLORER_URL} target="_blank" rel="noreferrer">$REGI on Arc ↗</a><a href="/brand/registrai-brand-kit-regi.zip" download>Brand kit ↓</a><a href={REGISTRAI_X_URL} target="_blank" rel="me noreferrer">X @registraicc ↗</a><a href="https://github.com/registrai-multichain" target="_blank" rel="noreferrer">GitHub ↗</a><a href="mailto:contact@registrai.cc">contact@registrai.cc</a></div><div className="lp-footer-status"><i /> Building in public<br /><span>Warsaw / 2026</span></div><p className="lp-footer-note">{FOOTER_BRAND_LINE}</p></footer>
+    <footer className="lp-footer lp-frame"><div><BrandMark className="lp-footer-mark" /></div><div className="lp-footer-links"><a href={INDICES_URL}>Indices →</a><a href="https://builder.registrai.cc/builders/">Verified builders →</a><Link href="/bridge">Bridge USDC →</Link><a href={REGI_EXPLORER_URL} target="_blank" rel="noreferrer">$REGI on Arc ↗</a><a href="/brand/registrai-brand-kit-regi.zip" download>Brand kit ↓</a><a href={REGISTRAI_X_URL} target="_blank" rel="me noreferrer">X @registraicc ↗</a><a href="https://github.com/registrai-multichain" target="_blank" rel="noreferrer">GitHub ↗</a><a href="mailto:contact@registrai.cc">contact@registrai.cc</a></div><div className="lp-footer-status"><i /> Building in public<br /><span>Warsaw / 2026</span></div><p className="lp-footer-note">{FOOTER_BRAND_LINE}</p></footer>
   );
 }

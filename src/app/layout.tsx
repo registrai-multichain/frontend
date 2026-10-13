@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono, Instrument_Serif, Instrument_Sans } from "next/font/google";
 import { Providers } from "@/components/Providers";
-import { HERO } from "@/lib/landing";
+import { SITE_DESCRIPTION, SITE_TITLE } from "@/lib/landing";
 import { REGISTRAI_X_HANDLE } from "@/lib/regi";
 import "./globals.css";
 import "./paper.css";
@@ -32,8 +32,8 @@ const serif = Instrument_Serif({
   display: "swap",
 });
 
-const TITLE = "Tabula by Registrai · Proof, mapped.";
-const DESCRIPTION = HERO.subline;
+const TITLE = SITE_TITLE;
+const DESCRIPTION = SITE_DESCRIPTION;
 
 export const viewport: Viewport = {
   themeColor: "#0d0d0c",
@@ -53,7 +53,7 @@ export const metadata: Metadata = {
     url: "https://registrai.cc/",
     title: TITLE,
     description: DESCRIPTION,
-    images: [{ url: "/social/tabula-og.png", width: 1200, height: 630, alt: "Tabula by Registrai · Proof, mapped. The proof layer, anchored on Arc." }],
+    images: [{ url: "/social/registrai-og.png", width: 1200, height: 630, alt: "Registrai · The data company for the Arc economy." }],
   },
   twitter: {
     card: "summary_large_image",
@@ -61,7 +61,7 @@ export const metadata: Metadata = {
     creator: `@${REGISTRAI_X_HANDLE}`,
     title: TITLE,
     description: DESCRIPTION,
-    images: ["/social/tabula-og.png"],
+    images: ["/social/registrai-og.png"],
   },
 };
 

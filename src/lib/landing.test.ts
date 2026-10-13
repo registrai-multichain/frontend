@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import postcss, { type AtRule } from "postcss";
 import { describe, expect, it } from "vitest";
 import { VERDICT_WORDS } from "./facts";
-import { CONTACT_EMAIL, FOOTER_BRAND_LINE, HERO, HOW_WE_PUBLISH, HOW_WE_PUBLISH_URL, STRIP, TRACK_RECORD_URL, TIERS, TIERS_SECTION, VERIFY_URL, contactHref } from "./landing";
+import { AUDIENCE, CONTACT_EMAIL, FOOTER_BRAND_LINE, HERO, HOW_WE_PUBLISH, HOW_WE_PUBLISH_URL, INDICES_URL, PRODUCTS, SITE_DESCRIPTION, SITE_TITLE, TRACK_RECORD_URL, TIERS, TIERS_SECTION, VERIFY_URL, contactHref } from "./landing";
 
 function strings(v: unknown, out: string[] = []): string[] {
   if (typeof v === "string") out.push(v);
@@ -11,7 +11,7 @@ function strings(v: unknown, out: string[] = []): string[] {
   else if (v && typeof v === "object") Object.values(v).forEach((x) => strings(x, out));
   return out;
 }
-const all = strings([HERO, STRIP, TIERS, TIERS_SECTION, HOW_WE_PUBLISH, FOOTER_BRAND_LINE]);
+const all = strings([SITE_TITLE, SITE_DESCRIPTION, HERO, PRODUCTS, AUDIENCE, TIERS, TIERS_SECTION, HOW_WE_PUBLISH, FOOTER_BRAND_LINE]);
 const word = (w: string, flags: string) => new RegExp(`\\b${w.replace(" ", "\\s+")}\\b`, flags);
 
 describe("landing copy", () => {
@@ -30,14 +30,28 @@ describe("landing copy", () => {
     expect(contactHref("Tabula Pro")).toBe("mailto:contact@registrai.cc?subject=Tabula%20Pro");
   });
   it("uses the decided words", () => {
-    expect(HERO.headline).toBe("Proof, mapped.");
+    expect(SITE_TITLE).toBe("Registrai · Data on Arc");
+    expect(HERO.headline).toBe("The data company for the Arc economy.");
+    expect(HERO.microcopy).toBe("Independent. Not affiliated with Circle or Arc.");
+    expect([HERO.primaryCta, HERO.secondaryCta]).toEqual(["See the indices", "Request data"]);
+    expect(HERO.secondaryHref).toBe("mailto:contact@registrai.cc?subject=Data%20request");
+    expect(PRODUCTS.map((p) => [p.name, p.tag])).toEqual([["Indices", "Live"], ["Project facts (Tabula)", "Live"], ["Data API", "Building now"], ["Other chains", "Later"]]);
+    expect(AUDIENCE.map((a) => a.who)).toEqual(["Funds and market makers", "Exchange listing teams", "Launchpads and DEXs", "Ecosystem and grant programs", "Builders"]);
     expect(TIERS.map((t) => t.name)).toEqual(["Community", "Pro", "Institutional"]);
-    expect(strings(TIERS[2])).toContain("Know who can move the money.");
+    expect(HOW_WE_PUBLISH.headline).toBe("Facts, not opinions.");
+  });
+  it("no paper-trading promotion, no $REGI link to trading, buybacks or rewards, no old slogan", () => {
+    for (const t of all) expect(t, t).not.toMatch(/paper|trading|leverage|buyback|reward|\$?REGI\b|Proof, mapped|proof layer/i);
+  });
+  it("no hard-coded live numbers: the only figures are the index base and its date, and the decay half-life", () => {
+    const nums = all.filter((t) => !/^(https?:|mailto:)/.test(t)).flatMap((t) => t.match(/\d[\d,]*/g) ?? []);
+    expect([...new Set(nums)].sort()).toEqual(["1,000", "2", "2026", "21"].sort());
   });
   it("points at the builder site paths", () => {
     expect(VERIFY_URL).toBe("https://builder.registrai.cc/verify/");
     expect(HOW_WE_PUBLISH_URL).toBe("https://builder.registrai.cc/how-we-publish/");
     expect(TRACK_RECORD_URL).toBe("https://builder.registrai.cc/track-record/");
+    expect(INDICES_URL).toBe("https://builder.registrai.cc/builders-index/");
   });
 });
 
@@ -55,23 +69,20 @@ describe("landing CSS", () => {
   });
 });
 
-it("the public facts page is live; Radar alerts are still building", async () => {
-  const { TIERS } = await import("./landing");
-  const items = TIERS[0].items;
-  expect(items.find((i) => i.text === "A public facts page for your project")?.tag).toBe("Live");
-  expect(items.find((i) => i.text.startsWith("Radar alerts"))?.tag).toBe("Building now");
+it("Tabula's pieces carry their true status: facts pages and investigations live; Radar, Trace and Record still building", () => {
+  const tabula = PRODUCTS.find((p) => p.name === "Project facts (Tabula)")!;
+  expect(tabula.items!.map((i) => [i.text.split(" ")[0], i.tag])).toEqual([["Facts", "Live"], ["Investigations", "Live"], ["Radar", "Building now"], ["Trace", "Building now"], ["Record", "Building now"]]);
 });
 
 describe("social preview image", () => {
   const layout = readFileSync(resolve(__dirname, "../app/layout.tsx"), "utf8");
-  it("layout points openGraph and twitter at tabula-og.png with a launchpad-free alt", () => {
-    expect(layout).toContain("/social/tabula-og.png");
-    const alt = layout.match(/alt: "([^"]*)"/)?.[1] ?? "";
-    expect(alt).toContain("Tabula by Registrai");
-    expect(alt).not.toMatch(/launchpads?/i);
+  it("layout points openGraph and twitter at registrai-og.png with the hero as alt", () => {
+    expect(layout.match(/\/social\/registrai-og\.png/g)).toHaveLength(2);
+    expect(layout).not.toContain("tabula-og");
+    expect(layout.match(/alt: "([^"]*)"/)?.[1]).toBe("Registrai · The data company for the Arc economy.");
   });
   it("the PNG exists and is 1200x630", () => {
-    const png = readFileSync(resolve(__dirname, "../../public/social/tabula-og.png"));
+    const png = readFileSync(resolve(__dirname, "../../public/social/registrai-og.png"));
     expect(png.readUInt32BE(16)).toBe(1200);
     expect(png.readUInt32BE(20)).toBe(630);
   });
