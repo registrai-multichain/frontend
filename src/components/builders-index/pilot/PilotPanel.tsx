@@ -20,6 +20,7 @@ import {
 } from "@/lib/abi-pilot-api";
 import { PILOT_COPY } from "@/lib/abi-pilot-copy";
 import { PilotTables, type PilotTab } from "./PilotTables";
+import { RegiLock, useRegiLock } from "./RegiLock";
 import { Ticket } from "./Ticket";
 import "./pilot.css";
 
@@ -55,7 +56,8 @@ const userError = (e: unknown) => {
  * The points pilot on the terminal page: ticket, positions, history, leaderboard, funding, economy. `market` is the
  * index tab's (ABI, AII or AEI): the ticket trades it and the Funding and Economy tabs show it; positions, history and
  * the leaderboard cover every market. Renders nothing until mounted in the browser, and nothing at all where the pilot
- * API is not deployed (the static page stays data only). Sign-in is a personal_sign message; no transactions.
+ * API is not deployed (the static page stays data only). Sign-in is a personal_sign message. Orders are never
+ * transactions; the only transactions are the wallet's own REGI lock, withdrawal and claim (RegiLock, plan 2026-10-13 R6).
  */
 export function PilotPanel({ market = "abi" }: { market?: PilotMarket }) {
   const { address, connect, isConnecting, walletClient, error: walletError } = useWallet();
@@ -94,6 +96,7 @@ export function PilotPanel({ market = "abi" }: { market?: PilotMarket }) {
     const r = await api<EconomyView>(withMarket(PILOT_PATHS.economy, market));
     if (live.current && r.status === 200 && (r.body.market ?? "abi") === market) setEconomy(r.body);
   }, [market]);
+  const lock = useRegiLock(view, () => void refresh());
   // another index tab: its funding and economy load afresh (the account view refreshes through `refresh`)
   useEffect(() => { setFunding(null); setEconomy(null); }, [market]);
 
@@ -222,6 +225,8 @@ export function PilotPanel({ market = "abi" }: { market?: PilotMarket }) {
         onSignIn={() => void signIn()}
         onSignOut={() => void signOut()}
         onOrder={(o) => void order(o)}
+        lock={lock.chain}
+        lockBox={<RegiLock view={view} chain={lock.chain} tx={lock.tx} walletMatches={lock.walletMatches} onLock={lock.lock} onWithdraw={lock.withdraw} onClaim={lock.claim} />}
       />
     </div>
   );

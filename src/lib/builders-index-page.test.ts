@@ -52,8 +52,8 @@ describe("data only: no order-entry words anywhere in the page source", () => {
     // the exemption covers exactly the pilot's own files
     expect(all.filter(isPilot).sort()).toEqual([
       "src/components/builders-index/pilot/PilotPanel.tsx", "src/components/builders-index/pilot/PilotTables.tsx",
-      "src/components/builders-index/pilot/Ticket.tsx", "src/components/builders-index/pilot/pilot.css",
-      "src/lib/abi-pilot-api.ts", "src/lib/abi-pilot-copy.ts", "src/lib/abi-pilot.ts",
+      "src/components/builders-index/pilot/RegiLock.tsx", "src/components/builders-index/pilot/Ticket.tsx", "src/components/builders-index/pilot/pilot.css",
+      "src/lib/abi-pilot-api.ts", "src/lib/abi-pilot-copy.ts", "src/lib/abi-pilot-lock.ts", "src/lib/abi-pilot.ts",
     ]);
     for (const f of ["src/app/builders-index/page.tsx", "src/components/builders-index/IndexPage.tsx", "src/components/builders-index/terminal.css", "src/lib/abi-live.ts", "src/lib/abi-terminal.ts", "src/lib/builders-index.ts", "builders-site/functions/api/index/seen.ts"]) expect(files).toContain(f);
   });

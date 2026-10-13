@@ -5,7 +5,7 @@
  * inside these two exact disclaimer strings.
  */
 import { RULES } from "./abi-pilot";
-import { fmtUsd, holdUsdText } from "./abi-pilot-api";
+import { fmtUsd, holdUsdText, lockUsdText } from "./abi-pilot-api";
 
 export const PILOT_DISCLAIMER = "Points only. No deposits, no prizes; points have no value.";
 export const PILOT_LIQ_NOTE = "Liquidation only takes the position's margin.";
@@ -102,6 +102,38 @@ export const PILOT_COPY = {
   noFunding: "No funding rates yet.",
   liquidated: "Liquidated",
   closedReason: "Closed",
+  /** History: a position the site closed because the wallet withdrew REGI below its lock requirement (plan 2026-10-13 R4). */
+  lockClosed: "Lock withdrawn",
+
+  // REGI in dollars and the REGI lock (plan 2026-10-13 R2, R3, R6)
+  regiPriceUpdating: "REGI price updating",
+  priceTip: "REGI is priced at the median of the REGI/USDC pool over the last 24 hours, sampled every 10 minutes. The dollar amounts are converted at that price.",
+  /** "Lock at least $50 of REGI to trade with leverage." */
+  lockNeeded: lockUsdText,
+  lockNotLive: "Leverage above 1× opens when the REGI lock is live.",
+  lockHeading: "REGI lock",
+  lockTip: (usd: number) =>
+    "Each wallet gets its own vault contract. Only that wallet can move REGI out of it; the pilot only reads how much it holds. " +
+    `Leverage above 1× needs at least ${fmtUsd(usd)} of REGI locked, at the 24 h median price. Each leveraged position keeps the amount needed when it opened; ` +
+    "a withdrawal that leaves less than that closes the position at the next price.",
+  /** Owner copy (R6), inline next to the lock button. */
+  lockNote: "Locked REGI stays yours. You can withdraw it at any time; withdrawing closes your leveraged positions.",
+  /** R6: inline with the withdraw button. */
+  withdrawWarn: "Withdrawing closes your leveraged positions at the next price.",
+  lockButton: "Lock REGI",
+  withdrawButton: "Withdraw",
+  /** R6: vault.claimRewards; the copy lint bans the contract's word, so the label says what it is. */
+  claimButton: "Claim holder distributions",
+  claimTip: "REGI in your vault still collects its REGI holder distributions from the launch portal. This sends them to your wallet.",
+  wrongWallet: "Switch your wallet to the signed-in address to lock or withdraw.",
+  txApprove: "Approve REGI in your wallet…",
+  txConfirm: "Confirm in your wallet…",
+  txWaiting: "Waiting for confirmation…",
+  txLocked: "Locked.",
+  txWithdrawn: "Withdrawn.",
+  txClaimed: "Claimed.",
+  txFailed: "Transaction failed.",
+  notEnoughRegi: "Not enough REGI in the wallet",
 } as const;
 
 /** "+0.0123%/h" */

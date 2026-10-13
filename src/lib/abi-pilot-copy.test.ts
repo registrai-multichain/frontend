@@ -1,12 +1,15 @@
 import { readdirSync, readFileSync } from "node:fs";
+import { toFunctionSelector } from "viem";
 import { resolve } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 import { PilotTables, type PilotTablesProps } from "@/components/builders-index/pilot/PilotTables";
+import { RegiLock, type RegiLockProps } from "@/components/builders-index/pilot/RegiLock";
 import { Ticket, type TicketProps } from "@/components/builders-index/pilot/Ticket";
 import { borrowPaid, liqPrice, RULES } from "./abi-pilot";
 import { accountPollMs, type EconomyView, type PilotAccountView, type RateView } from "./abi-pilot-api";
+import { defaultLock, leverageUnlocked, LOCK_FACTORY_ABI, NO_CHAIN, parseRegi, usdOf, VAULT_ABI, type LockChain } from "./abi-pilot-lock";
 import { borrowPerDay, fmtBook, fmtPts, fmtPx, fmtSideRate, fmtSigned, fmtWhen, openLabel, PILOT_COPY, PILOT_DISCLAIMER, PILOT_DISCLAIMERS, PILOT_JUMP_NOTE, PILOT_LIQ_NOTE } from "./abi-pilot-copy";
 
 /**
@@ -137,7 +140,13 @@ const ECONOMY: EconomyView = {
 };
 const VISITOR: PilotAccountView = { ...VIEW, address: null, regi: null, account: null, positions: [] };
 const noop = () => undefined;
-const ticket = (p: Partial<TicketProps> = {}) => renderToStaticMarkup(createElement(Ticket, { view: VIEW, signInLabel: "Sign in", onSignIn: noop, onSignOut: noop, onOrder: noop, ...p }));
+const M = 10n ** 24n; // 1,000,000 REGI: $10 at VIEW's price
+const VAULT = "0x00000000000000000000000000000000000000ee";
+/** A holder with the $50 lock: 5,000,000 REGI in the wallet and 5,000,000 locked. */
+const LOCKED: LockChain = { regi: 5n * M, locked: 5n * M, vault: VAULT, allowance: 0n };
+const ticket = (p: Partial<TicketProps> = {}) => renderToStaticMarkup(createElement(Ticket, { view: VIEW, signInLabel: "Sign in", onSignIn: noop, onSignOut: noop, onOrder: noop, lock: LOCKED, ...p }));
+const lockBox = (p: Partial<RegiLockProps> = {}) =>
+  renderToStaticMarkup(createElement(RegiLock, { view: VIEW, chain: LOCKED, tx: null, walletMatches: true, onLock: noop, onWithdraw: noop, onClaim: noop, ...p }));
 const tables = (p: Partial<PilotTablesProps> = {}) =>
   renderToStaticMarkup(createElement(PilotTables, {
     tab: "positions", onTab: noop, market: "abi", address: ME, positions: VIEW.positions, closing: null, onClose: noop, funding: FUNDING,
@@ -339,3 +348,116 @@ describe("account polling (D1 budget)", () => {
   });
 });
 
+
+describe("REGI in dollars and the REGI lock (plan 2026-10-13 R6)", () => {
+  const disabledAbove1 = (h: string) => [2, 3, 5, 10, 20, 30].every((l) => new RegExp(`disabled="">${l}×</button>`).test(h));
+  test("leverage above 1× is disabled without enough REGI locked, without a factory and while the price is unknown; the ticket says why", () => {
+    expect(disabledAbove1(ticket())).toBe(false);
+    for (const [p, line] of [
+      [{ lock: NO_CHAIN }, PILOT_COPY.lockNeeded(50)],
+      [{ lock: { ...LOCKED, locked: 5n * M - 1n } }, PILOT_COPY.lockNeeded(50)],
+      [{ view: { ...VIEW, lockFactory: null } }, PILOT_COPY.lockNotLive],
+      [{ view: { ...VIEW, price: null, admitRegi: null, lockRegi: null } }, PILOT_COPY.regiPriceUpdating],
+    ] as [Partial<TicketProps>, string][]) {
+      const h = ticket(p);
+      expect(disabledAbove1(h)).toBe(true);
+      expect(h).not.toMatch(/disabled="">1×<\/button>/);
+      expect(h).toContain(line);
+      expect(h).toContain(">Open long ABI 1×</button>");
+      expect(banned(visible(h))).toBeUndefined();
+    }
+    expect(PILOT_COPY.lockNeeded(50)).toBe("Lock at least $50 of REGI to trade with leverage.");
+    expect(leverageUnlocked(VIEW, LOCKED)).toBe(true);
+    expect(leverageUnlocked({ ...VIEW, lockFactory: null }, LOCKED)).toBe(false);
+  });
+
+  test("the admission amount in REGI at the 24 h median and the wallet's REGI; visitors see the amount too", () => {
+    const h = ticket();
+    expect(visible(h)).toMatch(/To join\s+About the REGI price\s+i\s+1,000,000 REGI ≈ \$10\s+Your REGI\s+5,000,000 REGI/);
+    const v = ticket({ view: VISITOR });
+    expect(v).toContain(PILOT_COPY.holdRegi(10));
+    expect(v).toContain("1,000,000 REGI ≈ $10");
+    expect(ticket({ view: { ...VISITOR, admitRegi: null, price: null } })).toContain(PILOT_COPY.regiPriceUpdating);
+    // signed in while the price is unknown: said plainly, never "hold REGI"
+    const unknown = ticket({ view: { ...VIEW, price: null, admitRegi: null, lockRegi: null, regi: { ok: null, snapshot: null, now: null } } });
+    expect(unknown).toContain(PILOT_COPY.regiPriceUpdating);
+    expect(unknown).not.toContain(PILOT_COPY.regiUnchecked);
+    expect(PILOT_COPY.priceTip).toContain("median of the REGI/USDC pool over the last 24 hours");
+  });
+
+  test("the lock box: locked REGI and its dollars, leverage status, Lock / Withdraw / Claim; the owner line next to the lock button, the warning next to Withdraw", () => {
+    const h = lockBox();
+    const text = visible(h);
+    expect(text).toMatch(/Locked\s+5,000,000 REGI ≈ \$50\.00\s+Leverage\s+Unlocked/);
+    for (const b of [PILOT_COPY.lockButton, PILOT_COPY.withdrawButton, PILOT_COPY.claimButton]) expect(h).toMatch(new RegExp(`<button type="button" class="[^"]+">${b}</button>`));
+    // the owner's line right after the lock button, the withdrawal warning right after Withdraw / Claim
+    const lockAt = h.indexOf(`>${PILOT_COPY.lockButton}</button>`), noteAt = h.indexOf(PILOT_COPY.lockNote), withdrawAt = h.indexOf(`>${PILOT_COPY.withdrawButton}</button>`), warnAt = h.indexOf(PILOT_COPY.withdrawWarn);
+    expect(lockAt).toBeGreaterThan(-1);
+    expect(noteAt).toBeGreaterThan(lockAt);
+    expect(withdrawAt).toBeGreaterThan(noteAt);
+    expect(warnAt).toBeGreaterThan(withdrawAt);
+    expect(PILOT_COPY.lockNote).toBe("Locked REGI stays yours. You can withdraw it at any time; withdrawing closes your leveraged positions.");
+    expect(PILOT_COPY.withdrawWarn).toBe("Withdrawing closes your leveraged positions at the next price.");
+    expect(h).toContain('aria-label="About the REGI lock"');
+    expect(h).toContain('aria-label="About holder distributions"');
+    expect(h).toContain('value="250000"'); // exactly the requirement: the default tops up to it + 5%
+    expect(banned(text)).toBeUndefined();
+    // "Claim rewards" would fail the lint: the button says what it does instead (the lint is not weakened)
+    expect(banned("Claim rewards")).toBe("rewards");
+    expect(banned(PILOT_COPY.claimButton)).toBeUndefined();
+  });
+
+  test("the lock box disables what can't be done: nothing locked, no vault, another wallet, a transaction in flight, more than the wallet holds, no factory", () => {
+    const btn = (h: string, label: string) => new RegExp(`disabled="">${label}</button>`).test(h);
+    const fresh = lockBox({ chain: { regi: 6n * M, locked: 0n, vault: null, allowance: 0n } });
+    expect([btn(fresh, PILOT_COPY.lockButton), btn(fresh, PILOT_COPY.withdrawButton), btn(fresh, PILOT_COPY.claimButton)]).toEqual([false, true, true]);
+    expect(fresh).toContain('value="5250000"'); // the requirement + 5%
+    expect(visible(fresh)).toMatch(/Leverage\s+Needs 5,000,000 REGI locked/);
+    const poor = lockBox({ chain: { regi: 1n * M, locked: 0n, vault: null, allowance: 0n } });
+    expect(btn(poor, PILOT_COPY.lockButton)).toBe(true);
+    expect(poor).toContain(PILOT_COPY.notEnoughRegi);
+    const other = lockBox({ walletMatches: false });
+    expect([btn(other, PILOT_COPY.lockButton), btn(other, PILOT_COPY.withdrawButton), btn(other, PILOT_COPY.claimButton)]).toEqual([true, true, true]);
+    expect(other).toContain(PILOT_COPY.wrongWallet);
+    for (const stage of ["approve", "confirm", "waiting"] as const) {
+      const h = lockBox({ tx: { action: "lock", stage } });
+      expect([btn(h, PILOT_COPY.lockButton), btn(h, PILOT_COPY.withdrawButton), btn(h, PILOT_COPY.claimButton)]).toEqual([true, true, true]);
+      expect(h).toContain({ approve: PILOT_COPY.txApprove, confirm: PILOT_COPY.txConfirm, waiting: PILOT_COPY.txWaiting }[stage]);
+    }
+    expect(lockBox({ tx: { action: "withdraw", stage: "done" } })).toContain(PILOT_COPY.txWithdrawn);
+    expect(lockBox({ tx: { action: "claim", stage: "failed", error: "Cancelled in your wallet." } })).toContain('<p class="abi-pt-err" role="status">Cancelled in your wallet.</p>');
+    const off = lockBox({ view: { ...VIEW, lockFactory: null }, chain: NO_CHAIN });
+    expect(off).toContain(PILOT_COPY.lockNotLive);
+    expect(off).not.toContain("<button type=\"button\" class=\"abi-pt-primary\"");
+    expect(visible(off)).toMatch(/Leverage\s+1× only/);
+    for (const h of [fresh, poor, other, off]) expect(banned(visible(h))).toBeUndefined();
+  });
+
+  test("the ticket shows the lock box only while signed in", () => {
+    expect(ticket({ lockBox: lockBox() })).toContain(PILOT_COPY.lockNote);
+    expect(ticket({ view: VISITOR, lockBox: lockBox() })).not.toContain(PILOT_COPY.lockNote);
+  });
+
+  test("lock arithmetic and the ABIs the page sends", () => {
+    expect(defaultLock((5n * M).toString(), 0n)).toBe(5_250_000n * 10n ** 18n);
+    expect(defaultLock((5n * M).toString(), 3n * M)).toBe(2_250_000n * 10n ** 18n);
+    expect(defaultLock((5n * M).toString(), 6n * M)).toBe(0n);
+    expect(defaultLock(null, 0n)).toBe(0n);
+    expect(parseRegi("1,234.5")).toBe(1_234_500_000_000_000_000_000n);
+    expect([parseRegi("0"), parseRegi("-1"), parseRegi("1e6"), parseRegi("")]).toEqual([null, null, null, null]);
+    expect(usdOf(5n * M, 1e-5)).toBe("≈ $50.00");
+    expect(usdOf(5n * M, null)).toBeNull();
+    const sel = (abi: readonly { name: string }[], name: string) => toFunctionSelector(abi.find((x) => x.name === name) as Parameters<typeof toFunctionSelector>[0]);
+    expect(sel(LOCK_FACTORY_ABI, "lock")).toBe(toFunctionSelector("lock(uint256)"));
+    expect(sel(LOCK_FACTORY_ABI, "lockedOf")).toBe(toFunctionSelector("lockedOf(address)"));
+    expect(sel(LOCK_FACTORY_ABI, "vaultOf")).toBe(toFunctionSelector("vaultOf(address)"));
+    expect(sel(VAULT_ABI, "withdraw")).toBe(toFunctionSelector("withdraw(uint256,address)"));
+    expect(sel(VAULT_ABI, "claimRewards")).toBe(toFunctionSelector("claimRewards(address)"));
+  });
+
+  test("history: a position closed by a withdrawal says so", () => {
+    const h = tables({ tab: "history", history: [{ id: 4, market: "abi", side: "long", margin: 100, lev: 2, notional: 200, entry: 1000, openedAt: 1, closedAt: 1_760_090_000, exit: 1010, pnl: 2, funding: 0, borrow: 0, fee: 0.04, returned: 101.9, net: 1.86, reason: "lock withdrawn" }] });
+    expect(h).toContain(`>${PILOT_COPY.lockClosed}</td>`);
+    expect(banned(visible(h))).toBeUndefined();
+  });
+});

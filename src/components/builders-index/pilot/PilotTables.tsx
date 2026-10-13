@@ -77,7 +77,7 @@ function History({ rows }: { rows: ClosedPositionView[] | null }) {
             <td className="abi-x">{fmtPts(p.borrow)}</td>
             <td className="abi-x">{fmtPts(p.fee)}</td>
             <td className={cls(p.net)}>{fmtSigned(p.net)}</td>
-            <td className="abi-x dim">{p.reason === "liquidation" ? PILOT_COPY.liquidated : PILOT_COPY.closedReason}</td>
+            <td className="abi-x dim">{p.reason === "liquidation" ? PILOT_COPY.liquidated : p.reason === "lock withdrawn" ? PILOT_COPY.lockClosed : PILOT_COPY.closedReason}</td>
           </tr>
         ))}
       </tbody>

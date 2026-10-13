@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { InfoBubble } from "@/components/InfoBubble";
 import { borrowPaid, liqPrice, RULES, type Side } from "@/lib/abi-pilot";
-import { marketCode, type PilotAccountView } from "@/lib/abi-pilot-api";
+import { fmtRegi, fmtUsd, marketCode, type PilotAccountView } from "@/lib/abi-pilot-api";
+import { leverageUnlocked, NO_CHAIN, type LockChain } from "@/lib/abi-pilot-lock";
 import { borrowPerDay, fmtHour, fmtPts, fmtPx, fmtSideRate, openLabel, PILOT_COPY, PILOT_DISCLAIMER, PILOT_JUMP_NOTE, PILOT_LIQ_NOTE } from "@/lib/abi-pilot-copy";
 
 export interface TicketProps {
@@ -17,6 +18,10 @@ export interface TicketProps {
   onSignIn: () => void;
   onSignOut: () => void;
   onOrder: (o: { side: Side; margin: number; lev: number }) => void;
+  /** The signed-in wallet's REGI and lock, read from Arc by the panel (plan 2026-10-13 R6); unknown by default. */
+  lock?: LockChain;
+  /** The REGI lock box (RegiLock), shown under the ticket while signed in. */
+  lockBox?: ReactNode;
 }
 
 /** Sign-in needs the 18+ and Terms confirmation first; the signed message repeats it (PILOT_LOGIN_NOTE). */
@@ -43,9 +48,21 @@ function SignInRow({ label, busy, admitUsd, regiSnapshot, onSignIn }: { label: s
  */
 function regiLine(view: PilotAccountView): { text: string; final: boolean } | null {
   const r = view.regi;
+  if (view.address && view.price === null) return { text: PILOT_COPY.regiPriceUpdating, final: false };
   if (!r || r.ok === true) return null;
   if (r.snapshot === false) return { text: PILOT_COPY.notAtSnapshot, final: true };
   return { text: r.ok === null ? PILOT_COPY.regiUnchecked : PILOT_COPY.holdRegi(view.admitUsd), final: false };
+}
+
+/** R6: the admission amount in REGI at the 24 h median ("REGI price updating" while it is unknown), and the wallet's REGI. */
+function AdmitRows({ view, regi }: { view: PilotAccountView; regi?: bigint | null }) {
+  return (
+    <>
+      <dt>To join <InfoBubble label="About the REGI price">{PILOT_COPY.priceTip}</InfoBubble></dt>
+      <dd>{view.admitRegi === null ? PILOT_COPY.regiPriceUpdating : `${fmtRegi(view.admitRegi, true)} ≈ ${fmtUsd(view.admitUsd)}`}</dd>
+      {regi !== undefined && (<><dt>Your REGI</dt><dd>{regi === null ? "–" : fmtRegi(regi)}</dd></>)}
+    </>
+  );
 }
 
 /** This hour's funding per side, signed with its direction (+ pays, − receives); "–" until the hour's rates are set. */
@@ -67,7 +84,7 @@ function FundingRows({ view }: { view: PilotAccountView }) {
  * liquidation price with costs, fee, borrow, funding. One balance across markets; one direction and the open-position
  * limit per market.
  */
-export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onSignIn, onSignOut, onOrder }: TicketProps) {
+export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onSignIn, onSignOut, onOrder, lock = NO_CHAIN, lockBox }: TicketProps) {
   const [side, setSide] = useState<Side>("long");
   const [lev, setLev] = useState(1);
   const [marginText, setMarginText] = useState("100");
@@ -91,6 +108,7 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
     body = (
       <div className="abi-pt">
         <p className="abi-pt-note">{view.open ? PILOT_COPY.holdRegi(view.admitUsd) : closedLine}</p>
+        {view.open && <dl className="abi-kv abi-pt-kv"><AdmitRows view={view} /></dl>}
         {view.open && <SignInRow label={signInLabel} busy={signingIn} admitUsd={view.admitUsd} regiSnapshot={view.regiSnapshot} onSignIn={onSignIn} />}
         {error && <p className="abi-pt-err" role="alert">{error}</p>}
         {disclaimer}
@@ -102,6 +120,7 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
         <p className="abi-pt-note">{!view.open ? closedLine : regi!.text}</p>
         <dl className="abi-kv abi-pt-kv">
           {acct && <><dt>Balance</dt><dd>{fmtPts(acct.balance)} pts</dd></>}
+          <AdmitRows view={view} regi={lock.regi} />
           <FundingRows view={view} />
         </dl>
         {error && <p className="abi-pt-err" role="alert">{error}</p>}
@@ -110,7 +129,9 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
     );
   } else {
     const margin = Number(marginText);
-    const maxLev = m ? m.maxLev : 1;
+    // R3: above 1× only with enough REGI locked (read from Arc); the engine's and the pilot's caps on top
+    const unlocked = leverageUnlocked(view, lock);
+    const maxLev = m && unlocked ? m.maxLev : 1;
     // the pilot's cap (PILOT_MAX_LEV): no level above it is offered at all; the engine's lower cap disables levels
     const levels = RULES.levels.filter((l) => l <= (m ? m.levCap : 1));
     const levUse = levels.filter((l) => l <= Math.min(lev, maxLev)).pop() ?? 1;
@@ -160,7 +181,10 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
             ))}
           </div>
         </div>
-        {m && maxLev < m.levCap && <p className="abi-pt-note">{PILOT_COPY.capped(maxLev, code)}</p>}
+        {m && unlocked && maxLev < m.levCap && <p className="abi-pt-note">{PILOT_COPY.capped(maxLev, code)}</p>}
+        {!unlocked && levels.length > 1 && (
+          <p className="abi-pt-note" role="status">{view.lockFactory === null ? PILOT_COPY.lockNotLive : view.lockRegi === null ? PILOT_COPY.regiPriceUpdating : PILOT_COPY.lockNeeded(view.lockUsd)}</p>
+        )}
         <dl className="abi-kv abi-pt-kv">
           <dt>{code} mark</dt><dd>{m ? fmtPx(m.mark) : "–"}</dd>
           <dt>Size</dt><dd>{fmtPts(notional)} pts</dd>
@@ -170,6 +194,7 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
           <dd>{liq === null || liq24 === null ? "–" : <>{fmtPx(liq)} · {fmtPx(liq24)} in 24 h</>}</dd>
           <FundingRows view={view} />
           <dt>Balance</dt><dd>{fmtPts(balance)} pts</dd>
+          <AdmitRows view={view} regi={lock.regi} />
           {acct?.equity !== null && acct?.equity !== undefined && (<><dt>Equity</dt><dd>{fmtPts(acct.equity)} pts</dd></>)}
         </dl>
         <div className="abi-pt-disc"><p>{PILOT_DISCLAIMER}</p><p>{PILOT_LIQ_NOTE}</p><p>{PILOT_JUMP_NOTE}</p></div>
@@ -189,6 +214,7 @@ export function Ticket({ view, busy, filling, error, signInLabel, signingIn, onS
     <aside className="abi-panel abi-pt-panel" aria-label={`Points pilot ticket, ${code}`}>
       {head}
       {body}
+      {view.address && lockBox}
     </aside>
   );
 }
