@@ -67,7 +67,7 @@ PILOT_LOCK_USD = "50"
 # The RegiLockFactory address (contracts repo src/regilock). EMPTY until the owner deploys it: every order above 1× is
 # refused and the ticket says leverage opens when the lock is live. The Pilot rules page shows this address (read from
 # the account view). Set but not an address = misconfigured.
-PILOT_LOCK_FACTORY = ""
+PILOT_LOCK_FACTORY = "0x5E2634D8F21A91A79A435F2D3CC49e8dB37CEb93"
 # The pilot's leverage cap, applied after the engine's (volatility, jump): the ticket offers no level above it,
 # POST /api/pilot/order refuses "leverage above the current cap", and /api/index/mark reports
 # maxLev = min(engine cap, this). Owner decision 2026-10-11: 10 until the F1 fix is live and the attack cost is
