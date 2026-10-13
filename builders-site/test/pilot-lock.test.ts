@@ -1,7 +1,7 @@
 import { encodeAbiParameters, keccak256, toEventSelector, toFunctionSelector } from "viem";
 import { describe, expect, test } from "vitest";
 import {
-  median, POOL_MANAGER, REGI_POOL_ID, REGI_POOL_SLOT0, regiFor, SELECTORS, sqrtPriceOfSlot0, usdPerRegiOf, WITHDRAWN_TOPIC,
+  LOCK_CONFIRM_BLOCKS as C, median, POOL_MANAGER, REGI_POOL_ID, REGI_POOL_SLOT0, regiFor, SELECTORS, sqrtPriceOfSlot0, usdPerRegiOf, WITHDRAWN_TOPIC,
 } from "../../src/lib/abi-pilot-api";
 import { handleLeaderboard, LOCK_NOT_LIVE, LOCK_UNCHECKED, lockWatch, regiHolders } from "../lib/pilot";
 import { clearPriceCache, PRICE_CACHE_S, priceSlot, readPoolPrice, regiPrice } from "../lib/pilot-regi";
@@ -207,8 +207,8 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
   async function opened() {
     const t = setup();
     const alice = await t.signIn();
-    expect((await t.markJson(1000)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - 5, done: true });
-    expect(t.rpc.ranges).toEqual([[t.rpc.head - 5 - 4999, t.rpc.head - 5]]);
+    expect((await t.markJson(1000)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - C, done: true });
+    expect(t.rpc.ranges).toEqual([[t.rpc.head - C - 4999, t.rpc.head - C]]);
     const a = await t.open(alice, LONG(2)); // lock_req 5,000,000
     t.env.PILOT_LOCK_USD = "20";
     const b = await t.open(alice, LONG(3)); // lock_req 2,000,000
@@ -216,9 +216,9 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
     t.env.PILOT_LOCK_USD = "50";
     return { t, alice, ids: [a, b, c].map((x) => x.body.order.positionId as number) };
   }
-  /** A withdrawal that leaves `left` locked, `back` blocks before the new head (≥ 5: the watch sees it). */
-  const withdraw = (t: ReturnType<typeof setup>, owner: string, left: bigint, back = 10) => {
-    t.rpc.head += 50;
+  /** A withdrawal that leaves `left` locked, `back` blocks before the new head (≥ C: the watch sees it). */
+  const withdraw = (t: ReturnType<typeof setup>, owner: string, left: bigint, back = C + 10) => {
+    t.rpc.head += 50 + C;
     t.rpc.locks.set(owner, left);
     t.rpc.withdrawals.push({ block: t.rpc.head - back, owner });
   };
@@ -236,9 +236,9 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
     withdraw(t, lc(ALICE), 3n * ONE);
     const before = t.balanceOf(lc(ALICE));
     const r = await nextMinute(t, 1010);
-    expect(r.body.lockWatch).toMatchObject({ owners: 1, closed: 1, due: 0, done: true, cursor: t.rpc.head - 5, pinned: t.rpc.head - 5 });
+    expect(r.body.lockWatch).toMatchObject({ owners: 1, closed: 1, due: 0, done: true, cursor: t.rpc.head - C, pinned: t.rpc.head - C });
     // review S2: lockedOf read at the pinned block, never "latest"
-    expect(t.rpc.lockTags.at(-1)).toBe(`0x${(t.rpc.head - 5).toString(16)}`);
+    expect(t.rpc.lockTags.at(-1)).toBe(`0x${(t.rpc.head - C).toString(16)}`);
     const rows = t.db.q<Json>("SELECT id, closed_at, exit, reason, close_note, returned, fee FROM positions ORDER BY id");
     expect(rows.map((x) => [x.id, x.closed_at !== null, x.reason, x.close_note])).toEqual([[ids[0], true, "close", "lock withdrawn"], [ids[1], false, null, null], [ids[2], false, null, null]]);
     expect(rows[0].exit).toBe(1010);
@@ -270,7 +270,7 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
     expect(t.db.q("SELECT COUNT(*) AS n FROM positions WHERE closed_at IS NULL")).toEqual([{ n: 3 }]);
   });
 
-  test("at most once a minute; logs in chunks of at most 5,000 blocks up to head − 5; the cursor moves once logs are read", async () => {
+  test("at most once a minute; logs in chunks of at most 5,000 blocks up to head − C; the cursor moves once logs are read", async () => {
     const { t } = await opened();
     const ranges = () => t.rpc.ranges.length;
     const n0 = ranges();
@@ -280,12 +280,12 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
     // the head ran 12,000 blocks ahead: chunks of 5,000, up to 5 blocks behind the head
     const start = cursorOf(t);
     t.rpc.head += 12_000;
-    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - 5, done: true });
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - C, done: true });
     expect(t.rpc.ranges.slice(n0)).toEqual([[start + 1, start + 5000], [start + 5001, start + 10_000], [start + 10_001, start + 12_000]]);
     // a withdrawal in the last 5 blocks is not read yet (a lagging node may not have it); the next run reads it
     withdraw(t, lc(ALICE), 0n, 2);
-    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - 5, owners: 0, closed: 0 });
-    t.rpc.head += 10;
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - C, owners: 0, closed: 0 });
+    t.rpc.head += C;
     expect((await nextMinute(t)).body.lockWatch).toMatchObject({ owners: 1, closed: 2, done: true });
     // getLogs down: the cursor stays; the next minute reads the same range again
     reopen(t);
@@ -294,12 +294,12 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
     t.rpc.fail.add("eth_getLogs");
     expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: held, closed: 0, done: false });
     t.rpc.fail.delete("eth_getLogs");
-    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - 5, closed: 2, done: true });
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - C, closed: 2, done: true });
     // lockedOf down: the logs are read and the cursor moves on; the owner stays due and is handled next run
     reopen(t);
     withdraw(t, lc(ALICE), 0n);
     t.rpc.fail.add("eth_call:lock");
-    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - 5, closed: 0, due: 1, done: false });
+    expect((await nextMinute(t)).body.lockWatch).toMatchObject({ cursor: t.rpc.head - C, closed: 0, due: 1, done: false });
     expect(due(t)).toEqual([lc(ALICE)]);
     t.rpc.fail.delete("eth_call:lock");
     expect((await nextMinute(t)).body.lockWatch).toMatchObject({ closed: 2, due: 0, done: true });
@@ -317,11 +317,11 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
     await t.markJson(1000, { index: "aei" });
     expect((await t.status(bob, s.body.order.id)).body.order.status).toBe("filled");
     // Bob withdraws first, Alice after him
-    withdraw(t, lc(BOB), 0n, 20);
+    withdraw(t, lc(BOB), 0n, C + 20);
     t.rpc.locks.set(lc(ALICE), 0n);
-    t.rpc.withdrawals.push({ block: t.rpc.head - 10, owner: lc(ALICE) });
+    t.rpc.withdrawals.push({ block: t.rpc.head - C - 10, owner: lc(ALICE) });
     const r = await nextMinute(t);
-    expect(r.body.lockWatch).toMatchObject({ cursor: t.rpc.head - 5, owners: 2, closed: 2, due: 1, done: false });
+    expect(r.body.lockWatch).toMatchObject({ cursor: t.rpc.head - C, owners: 2, closed: 2, due: 1, done: false });
     expect(t.db.q("SELECT wallet, market FROM positions WHERE closed_at IS NULL AND lev > 1")).toEqual([{ wallet: lc(BOB), market: "aei" }]);
     expect(due(t)).toEqual([lc(BOB)]);
     // a later withdrawal by Alice (another chunk) is still handled while Bob waits
@@ -343,7 +343,7 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
       const s = await t.submit(alice, LONG(5));
       expect(s.status, JSON.stringify(s.body)).toBe(202); // lockedOf passes at submission
       // the withdrawal lands; `visible`: deep enough for the watch to read now, else only the fill's own read sees it
-      withdraw(t, lc(ALICE), 0n, visible ? 10 : 1);
+      withdraw(t, lc(ALICE), 0n, visible ? C + 10 : 1);
       t.tick(1000);
       const aii = await t.markJson(1000, { index: "aii" }); // the watch runs (a minute since the last)
       expect(aii.body.lockWatch).not.toBeNull();
@@ -406,9 +406,9 @@ describe("R4: a withdrawal closes the leveraged positions above the remaining lo
     withdraw(t, lc(ALICE), 0n);
     const cursor = cursorOf(t);
     const tight = await lockWatch(t.db, FACTORY, t.nowS(), t.deps.fetch!, cursor, () => 10);
-    expect(tight).toMatchObject({ cursor: t.rpc.head - 5, closed: 0, due: 1, done: false });
+    expect(tight).toMatchObject({ cursor: t.rpc.head - C, closed: 0, due: 1, done: false });
     const roomy = await lockWatch(t.db, FACTORY, t.nowS(), t.deps.fetch!, tight.cursor, () => 800);
-    expect(roomy).toMatchObject({ cursor: t.rpc.head - 5, closed: 2, due: 0, done: true });
+    expect(roomy).toMatchObject({ cursor: t.rpc.head - C, closed: 2, due: 0, done: true });
   });
 
   test("no factory configured: no watch, no RPC", async () => {

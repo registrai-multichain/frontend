@@ -1666,7 +1666,8 @@ export async function lockWatch(
   const caughtUp = safe !== null && from > safe;
   if (out.cursor === null || room() < 2) return out;
   const pinned = out.pinned = out.cursor;
-  const due = (await db.prepare("SELECT owner FROM lock_due ORDER BY from_block, owner LIMIT ?").bind(LOCK_DUE_PER_RUN).all<{ owner: string }>()).results;
+  // random order: owners held back by a market that can't settle now can't starve the rest of the list (review R2)
+  const due = (await db.prepare("SELECT owner FROM lock_due ORDER BY random() LIMIT ?").bind(LOCK_DUE_PER_RUN).all<{ owner: string }>()).results;
   for (const { owner } of due) {
     if (room() < 3) break;
     let r: { closed: number; refused: number; done: boolean };
