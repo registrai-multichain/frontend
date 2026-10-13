@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
-import { PILOT_ADMIT_USD_DEFAULT, PILOT_MAX_LEV_DEFAULT } from "@/lib/abi-pilot-api";
+import { LOCK_FACTORY_ADDRESS, PILOT_ADMIT_USD_DEFAULT, PILOT_LOCK_USD_DEFAULT, PILOT_MAX_LEV_DEFAULT } from "@/lib/abi-pilot-api";
 import { PILOT_COPY, PILOT_DISCLAIMERS } from "@/lib/abi-pilot-copy";
 import { RULES } from "@/lib/abi-pilot";
 
@@ -17,7 +17,8 @@ export const metadata: Metadata = {
 const H = ({ children }: { children: React.ReactNode }) => <h2 className="pa-h2 mt-8 mb-2">{children}</h2>;
 
 /** builder.registrai.cc/pilot-rules: the points pilot's rules in one place. The texts are the ticket's own (abi-pilot-copy.ts), so they
- * follow the engine's RULES; the leverage cap and REGI minimum shown are the defaults (PILOT_MAX_LEV, PILOT_REGI_MIN). */
+ * follow the engine's RULES; the leverage cap and the dollar amounts shown are the defaults (PILOT_MAX_LEV, PILOT_ADMIT_USD,
+ * PILOT_LOCK_USD); the lock contract's address is LOCK_FACTORY_ADDRESS once it is set. */
 export default function PilotRulesPage() {
   return (
     <BuildersShell>
@@ -33,7 +34,9 @@ export default function PilotRulesPage() {
         <ul className="pa-list">
           <li>You must be 18 or older and accept the Terms; sign-in asks you to confirm both.</li>
           <li>{PILOT_COPY.holdRegi(PILOT_ADMIT_USD_DEFAULT)} You must hold it when you sign in and when you place each order; the balance is checked at those moments. Closing a position needs no REGI.</li>
-          <li>The leaderboard lists only wallets that currently hold the REGI minimum.</li>
+          <li>Leverage above 1× needs at least ${PILOT_LOCK_USD_DEFAULT} of REGI locked in your own vault (see How the lock works). 1× needs only the REGI to join.</li>
+          <li>Dollar amounts are converted at the median of the REGI/USDC pool over the last 24 hours, sampled every 10 minutes. While there are too few samples, sign-in and new orders wait (&quot;REGI price updating&quot;).</li>
+          <li>The leaderboard lists only wallets that currently hold the REGI needed to join.</li>
           <li>One person, one wallet. Starting balance {RULES.startBalance.toLocaleString("en-US")} points, once per wallet per season, for all three markets.</li>
           <li>{PILOT_COPY.signInNote}</li>
         </ul>
@@ -44,6 +47,19 @@ export default function PilotRulesPage() {
           <li>One points balance per wallet covers all three. Every open and close is paid from and back to it.</li>
           <li>One direction at a time in each market: you can be long ABI and short AII, not long and short ABI. Up to {RULES.maxOpen} open positions per market.</li>
           <li>Each market has its own mark, funding rates, house, fee pool, insurance and weekly split. The same rules apply in all three. AII has no base layer, so the base-sample pause doesn&apos;t apply there.</li>
+        </ul>
+
+        <H>How the lock works</H>
+        <ul className="pa-list">
+          <li>Each wallet gets its own vault contract, made the first time it locks. Locking approves the lock contract to move the amount, then moves it from your wallet into your vault.</li>
+          <li>{PILOT_COPY.lockNote} The pilot never takes or spends it; it only reads how much is in your vault, at each order above 1×.</li>
+          <li>Each leveraged position keeps the lock amount needed when it opened. If a withdrawal leaves less than that, the position is closed at the next price of its market, with the normal close fee, funding and borrow. It is not a liquidation. A change in the REGI price alone never closes a position.</li>
+          <li>REGI in your vault keeps its REGI holder distributions; you claim them from the vault to your wallet.</li>
+          <li>
+            {LOCK_FACTORY_ADDRESS
+              ? <>Lock contract on Arc: <code>{LOCK_FACTORY_ADDRESS}</code>. Lock, withdraw and claim transactions are public on Arc.</>
+              : <>The lock contract isn&apos;t live yet; until it is, leverage above 1× is closed. Lock, withdraw and claim transactions will be public on Arc.</>}
+          </li>
         </ul>
 
         <H>Orders and leverage</H>

@@ -461,3 +461,29 @@ describe("REGI in dollars and the REGI lock (plan 2026-10-13 R6)", () => {
     expect(banned(visible(h))).toBeUndefined();
   });
 });
+
+describe("R7: Terms, Pilot rules and Privacy say what the lock is", () => {
+  const page = (f: string) => readFileSync(resolve(root, f), "utf8").replace(/\s+/g, " ");
+  test("Terms: transactions only for the wallet's own vault; locked REGI stays the wallet's; $10 to join, $50 locked for leverage", () => {
+    const t = page("src/app/terms/page.tsx");
+    expect(t).not.toContain("never asks you to send a transaction");
+    expect(t).toContain("The site asks you to send a transaction only to lock, withdraw or claim REGI in your own vault contract");
+    expect(t).toContain("Orders are never transactions");
+    expect(t).toContain("REGI you lock stays in your own vault contract on Arc");
+    expect(t).toContain("You can withdraw it at any time, and the pilot never takes or spends it.");
+    expect(t).not.toContain("There are no deposits");
+    expect(t).toContain("at least $10 of REGI in the wallet when you sign in and when you place each order");
+    expect(t).toContain("Leverage above 1× needs at least $50 of REGI locked in your own vault");
+  });
+  test("Pilot rules: the same rules and how the lock works, with the contract once it is set", () => {
+    const r = page("src/app/pilot-rules/page.tsx");
+    expect(r).toContain("<H>How the lock works</H>");
+    expect(r).toContain("LOCK_FACTORY_ADDRESS ?");
+    expect(r).toContain("A change in the REGI price alone never closes a position.");
+    expect(r).toContain("You must hold it when you sign in and when you place each order");
+  });
+  test("Privacy: lock transactions are public; the site reads lock balances", () => {
+    const p = page("src/app/privacy/page.tsx");
+    expect(p).toContain("Lock, withdraw and claim transactions you send for the points pilot are public on Arc, and the site reads your vault&apos;s lock balance and its withdrawals.");
+  });
+});

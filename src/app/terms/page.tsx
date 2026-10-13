@@ -36,7 +36,11 @@ export default function TermsPage() {
           <li><strong>Arc indices.</strong> ABI (Arc Builders Index), AII (Arc Integrations Index) and AEI (Arc Ecosystem Index): hourly figures computed from public Arc data by the published method.</li>
           <li><strong>Points pilot.</strong> A game in which signed-in wallets take long or short positions on ABI, AII and AEI with play points. It is closed until we announce it open.</li>
         </ul>
-        <p>The site never asks you to send a transaction, deposit funds or approve a token. Signing in is a free message signature.</p>
+        <p>
+          The site asks you to send a transaction only to lock, withdraw or claim REGI in your own vault contract for the
+          points pilot (locking first approves that contract to move the REGI you lock). Orders are never transactions, and
+          the site never asks you to deposit funds. Signing in is a free message signature.
+        </p>
 
         <H>2. Who may use it</H>
         <p>
@@ -55,10 +59,11 @@ export default function TermsPage() {
 
         <H>4. The points pilot</H>
         <ul className="pa-list">
-          <li><strong>Points only.</strong> Points have no value. They can&apos;t be bought, sold, transferred, exchanged or withdrawn, and they give no right to any payment, token, prize or other benefit. There are no deposits and no prizes.</li>
+          <li><strong>Points only.</strong> Points have no value. They can&apos;t be bought, sold, transferred, exchanged or withdrawn, and they give no right to any payment, token, prize or other benefit. There are no prizes.</li>
+          <li><strong>Locked REGI.</strong> REGI you lock stays in your own vault contract on Arc, which only your wallet can move it out of. You can withdraw it at any time, and the pilot never takes or spends it. The pilot only reads how much is locked. Locked REGI keeps its REGI holder distributions, which you claim from the vault yourself.</li>
           <li><strong>Markets.</strong> The pilot trades ABI, AII and AEI. One points balance per wallet covers all three. You hold one direction at a time in each market. The economy (house, fee pool, insurance and weekly split) is kept per market.</li>
           <li><strong>Accounting shown in points.</strong> The economy figures (house, fee pool, insurance, weekly split, including the treasury share and its buyback line) are bookkeeping in points inside the game. They are not payments and not a commitment to buy REGI or anything else.</li>
-          <li><strong>Eligibility.</strong> You must hold the required amount of REGI in the wallet when you place each order; closing a position needs none. The leaderboard lists only wallets that currently hold it. Holding REGI is only an eligibility check; it gives no rights in the pilot. We don&apos;t sell REGI.</li>
+          <li><strong>Eligibility.</strong> You must hold at least $10 of REGI in the wallet when you sign in and when you place each order; closing a position needs none. Leverage above 1× needs at least $50 of REGI locked in your own vault. Dollar amounts use the median price of the REGI/USDC pool over the last 24 hours. Each leveraged position keeps the lock amount needed when it opened; a withdrawal that leaves less than that closes the position at the next price, with the normal close fee, funding and borrow. The leaderboard lists only wallets that currently hold the amount needed to join. Holding or locking REGI is only an eligibility check; it gives no rights in the pilot. We don&apos;t sell REGI.</li>
           <li><strong>One person, one wallet.</strong> Running several wallets to improve leaderboard places is not allowed.</li>
           <li><strong>Fair play.</strong> Don&apos;t try to move the index to profit in the pilot (for example with self-made or wash payments into tracked contracts), exploit bugs, automate abusive traffic, or interfere with the site. We may reset, adjust or remove points, positions or accounts that result from such conduct or from errors.</li>
           <li><strong>Changes.</strong> We may change the rules and parameters, pause trading, start a new season, reset balances, or end the pilot at any time. The current rules are on the <Link href="/pilot-rules/">Pilot rules</Link> page.</li>
@@ -67,8 +72,9 @@ export default function TermsPage() {
 
         <H>5. Your wallet and signatures</H>
         <p>
-          You are responsible for your wallet and the messages you sign. We never ask for a private key or seed phrase. Check
-          that a sign-in message names this site before you sign it.
+          You are responsible for your wallet and the messages and transactions you sign. We never ask for a private key or
+          seed phrase. Check that a sign-in message names this site before you sign it, and check what your wallet shows before
+          you confirm a lock, withdrawal or claim. Transactions on Arc are public and can&apos;t be reversed.
         </p>
 
         <H>6. Acceptable use of the site and API</H>

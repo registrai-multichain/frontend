@@ -16,7 +16,8 @@ const H = ({ children }: { children: React.ReactNode }) => <h2 className="pa-h2 
 
 const ROWS: [string, string, string, string][] = [
   ["Points pilot sign-in", "Wallet address, the signed sign-in message, a one-time nonce", "To sign you in (Art. 6(1)(b) GDPR)", "Session 12 h; nonces until used or expired"],
-  ["Points pilot account", "Wallet address, points balance, orders, positions and their history, REGI eligibility checks", "To run the game you joined (Art. 6(1)(b))", "For the season, then until you ask us to delete it"],
+  ["Points pilot account", "Wallet address, points balance, orders, positions and their history, REGI eligibility checks, the REGI lock amount each leveraged position needs", "To run the game you joined (Art. 6(1)(b))", "For the season, then until you ask us to delete it"],
+  ["REGI lock", "Your wallet's REGI and locked REGI balances and its withdrawals, read from public Arc data", "To check leverage eligibility and close leveraged positions after a withdrawal (Art. 6(1)(b))", "Read when needed; only the requirement on each position is stored"],
   ["Public leaderboard", "Shortened wallet address (first 6 and last 4 characters) and points", "To show the standings (Art. 6(1)(b))", "While the season's leaderboard is shown"],
   ["Rate limits and abuse prevention", "IP address as a rate-limit key; for project suggestions, a keyed hash of the IP", "Security and preventing abuse (Art. 6(1)(f))", "Rate-limit keys under 1 h; suggestion hashes 90 days"],
   ["Project suggestions", "The suggesting wallet and the suggestion you sign", "To review suggestions (Art. 6(1)(f))", "90 days after the latest suggestion"],
@@ -49,7 +50,8 @@ export default function PrivacyPage() {
         </div>
         <p>
           A wallet address can be personal data when it can be linked to you. Blockchain data is public: we read it from the Arc
-          network, and we can&apos;t change or delete what is on chain.
+          network, and we can&apos;t change or delete what is on chain. Lock, withdraw and claim transactions you send for the
+          points pilot are public on Arc, and the site reads your vault&apos;s lock balance and its withdrawals.
         </p>
 
         <H>Cookies</H>
@@ -64,8 +66,8 @@ export default function PrivacyPage() {
         <ul className="pa-list">
           <li><strong>Cloudflare</strong> hosts the site, its database and storage, and handles every request (including your IP address) as our processor. Cloudflare may process data outside the EEA under the EU–US Data Privacy Framework and standard contractual clauses.</li>
           <li><strong>Hetzner</strong> (Germany) runs the server that computes the indices from public chain data. It processes no visitor data.</li>
-          <li><strong>Arc RPC providers.</strong> The index pages and the pilot read the Arc network directly from your browser (rpc.mainnet.arc.io). That provider receives your IP address and the requests your browser sends; its own privacy terms apply.</li>
-          <li><strong>Your wallet software</strong> sees the messages you choose to sign.</li>
+          <li><strong>Arc RPC providers.</strong> The index pages and the pilot read the Arc network directly from your browser (rpc.mainnet.arc.io), including your REGI and lock balances. That provider receives your IP address and the requests your browser sends; its own privacy terms apply. Our server also asks it for your wallet&apos;s REGI and lock balances when you sign in and place orders.</li>
+          <li><strong>Your wallet software</strong> sees the messages you choose to sign and the transactions you choose to send (lock, withdraw, claim), which it passes to the Arc network.</li>
           <li><strong>Telegram</strong>, only if a project links a chat for Radar alerts: the chat ID and the messages we send there.</li>
         </ul>
         <p>We don&apos;t sell personal data or share it for advertising.</p>
