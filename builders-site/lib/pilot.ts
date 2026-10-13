@@ -1647,17 +1647,23 @@ export async function lockWatch(
   let safe: number | null = null;
   try {
     safe = (await blockNumber(f)) - LOCK_CONFIRM_BLOCKS;
-  } catch { /* no head: only the owners already due, at the cursor */ }
+  } catch (e) {
+    console.warn("lock watch: no head block", String(e)); // only the owners already due, at the cursor
+  }
   let from = safe === null ? Infinity : cursor === null ? Math.max(0, safe - LOG_CHUNK + 1) : cursor + 1;
   for (let i = 0; safe !== null && i < LOCK_MAX_CHUNKS && from <= safe; i++) {
     const to = Math.min(safe, from + LOG_CHUNK - 1);
     let logs: { owner: string; block: number }[];
     try {
       logs = await withdrawnLogs(factory, from, to, f);
-    } catch {
+    } catch (e) {
+      console.warn("lock watch: Withdrawn logs unreadable", from, to, String(e));
       break;
     }
-    if (room() < logs.length + 1) break;
+    if (room() < logs.length + 1) {
+      console.warn("lock watch: no statement room for the cursor", room(), logs.length);
+      break;
+    }
     if (logs.length) await db.batch([...logs.map((l) => db.prepare(SQL.lockDue).bind(l.owner, l.block, l.block)), db.prepare(SQL.lockAdvance).bind(to)]);
     else await db.prepare(SQL.lockAdvance).bind(to).run();
     out.cursor = to;
