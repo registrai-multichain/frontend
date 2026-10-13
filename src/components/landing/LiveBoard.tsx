@@ -57,7 +57,7 @@ export function LiveChips() {
   );
 }
 
-/** Hero card: the latest Arc block (public RPC, every 2.5 s) and the three index closes (builder site summary,
+/** Hero card: the latest Arc block (public RPC, every 6 s while the tab is visible; a failed or rate-limited call keeps the last block) and the three index closes (builder site summary,
  * every 60 s). Nothing is hard-coded: if a fetch fails the card shows a link instead of numbers. */
 export function LiveBoard() {
   const [block, setBlock] = useState<number | null>(null);
@@ -67,6 +67,7 @@ export function LiveBoard() {
   useEffect(() => {
     let alive = true;
     const tick = async () => {
+      if (document.hidden) return;                   // no polling from background tabs
       try {
         const r = await fetch(LIVE_BOARD.rpcUrl, {
           method: "POST",
@@ -78,7 +79,7 @@ export function LiveBoard() {
       } catch { /* keep the last value */ }
     };
     tick();
-    const t = setInterval(tick, 2500);
+    const t = setInterval(tick, 6000);
     return () => { alive = false; clearInterval(t); };
   }, []);
 

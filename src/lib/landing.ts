@@ -139,7 +139,7 @@ export const FOOTER_BRAND_LINE = "Registrai · data on Arc · Warsaw / 2026 · I
 // Marquee under the hero: apps the indices measure (names only, no logos). Index members as of 2026-10-13.
 export const MEASURED = [
   "Uniswap", "Argus", "Relay", "Peach", "OKX DEX", "Tolly", "KyberSwap", "UBI.fun", "0x", "Foci", "LI.FI",
-  "ArcTools", "Across", "Arctide", "Aave", "UnitFlow", "Morpho", "Archery", "Curve", "LIFT", "Aerodrome",
+  "ArcTools", "Across", "Arctide", "Aave", "UnitFlow", "Morpho", "Archery", "LIFT", "Aerodrome",
   "Synthra", "rhino.fi", "Kairo", "OpenSea", "Flipt.fun", "Bungee", "MetaMask", "1inch", "Rango",
 ];
 export const MEASURED_LABEL = "Measured every hour";
