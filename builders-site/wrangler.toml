@@ -34,6 +34,17 @@ database_name = "registrai-pilot"
 database_id = "1f2199be-1828-4ebc-b0ff-d747f5cfc705"
 migrations_dir = "migrations"
 
+# Data API v1 history (lib/data-api*.ts, migrations-data/; spec docs/superpowers/specs/2026-10-14-data-api-v1-design.md).
+# Create it once, then paste its database_id here (run from frontend/builders-site/):
+#   npx wrangler d1 create registrai-data
+#   npx wrangler d1 migrations apply registrai-data --remote
+# scripts/deploy-builders-site.sh refuses to deploy while the id is the placeholder.
+[[d1_databases]]
+binding = "DATA_DB"
+database_name = "registrai-data"
+database_id = "REPLACE_WITH_DATA_D1_ID"
+migrations_dir = "migrations-data"
+
 [vars]
 # Wallets allowed to sign in to /admin: comma-separated, lowercase.
 # Empty = nobody can sign in (the rest of the site works as before).

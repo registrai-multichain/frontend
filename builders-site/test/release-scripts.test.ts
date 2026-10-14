@@ -102,6 +102,15 @@ describe("scripts/deploy-builders-site.sh", () => {
     expect(r.out).toContain("release test commit");
     expect(r.out).toContain("WOULD RUN: npx wrangler pages deploy --branch=main");
   });
+  test("refuses while the DATA_DB (registrai-data) database id is the placeholder", () => {
+    const t = repo(NOW - 600, NOW - 300);
+    expect(t.run("build-builders-site.sh").code).toBe(0);
+    writeFileSync(join(t.dir, "builders-site/wrangler.toml"), 'name = "release-safety-test"\ndatabase_id = "REPLACE_WITH_DATA_D1_ID"\n');
+    const r = t.run("deploy-builders-site.sh");
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/the DATA_DB D1 database id is still the placeholder/);
+    expect(r.out).not.toContain("WOULD RUN");
+  });
   test("refuses a dirty tree", () => {
     const t = repo(NOW - 600, NOW - 300);
     expect(t.run("build-builders-site.sh").code).toBe(0);

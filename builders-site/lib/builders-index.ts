@@ -8,6 +8,7 @@
  */
 import { ABI_INDEX_IDS, ABI_INDICES, ABI_LIMITS, ABI_SUMMARY_SPARK_HOURS, canonicalJson, sha256Hex, validateContracts, validateIndex, validateSeen, type AbiIndexId, type AbiIndexSummary } from "../../src/lib/builders-index";
 import { bearerGuard } from "./bot-auth";
+import { ingestIndexFile } from "./data-api-ingest";
 import type { Env } from "./env";
 import { edgeCachedGet, errorJson, json, type EdgeCacheDeps } from "./http";
 
@@ -70,7 +71,7 @@ async function storedRank<D>(env: Env, key: string, rank: Rank<D>): Promise<numb
   }
 }
 
-async function push<D>(req: Request, env: Env, key: string, maxBytes: number, validate: (raw: unknown) => Checked<D>, summary: (data: D) => Record<string, unknown>, rank: Rank<D>, finalize?: (data: D) => Promise<void>): Promise<Response> {
+async function push<D>(req: Request, env: Env, key: string, maxBytes: number, validate: (raw: unknown) => Checked<D>, summary: (data: D) => Record<string, unknown>, rank: Rank<D>, finalize?: (data: D) => Promise<void>, after?: (data: D) => Promise<unknown>): Promise<Response> {
   const refused = bearerGuard(req, env.ABI_PUSH_TOKEN, "POST", "index publishing");
   if (refused) return refused;
   const header = req.headers.get("content-length");
@@ -95,11 +96,13 @@ async function push<D>(req: Request, env: Env, key: string, maxBytes: number, va
   }
   if (finalize) await finalize(v.data);
   await env.INVITES.put(key, JSON.stringify(v.data));
+  if (after) await after(v.data);
   return json({ ok: true, ...summary(v.data) });
 }
 
 export const handlePushIndex = (req: Request, env: Env, id: AbiIndexId = "abi") =>
-  push(req, env, ABI_INDICES[id].key, ABI_LIMITS.bytes, validateIndex, (d) => ({ index: id, updated: d.updated, points: d.series.length }), dataUntilRank);
+  push(req, env, ABI_INDICES[id].key, ABI_LIMITS.bytes, validateIndex, (d) => ({ index: id, updated: d.updated, points: d.series.length }), dataUntilRank, undefined,
+    (d) => ingestIndexFile(env.DATA_DB, id, d)); // Data API v1 history; never fails the publish
 
 export const handlePushSeen = (req: Request, env: Env, id: AbiIndexId = "abi") =>
   push(req, env, ABI_INDICES[id].seenKey, ABI_INDICES[id].seenBytes, validateSeen, (d) => ({ index: id, hour_start: d.hour_start, sources: Object.keys(d.seen).length }), hourStartRank);

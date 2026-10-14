@@ -74,6 +74,8 @@ export interface Env {
   ABI_PUSH_TOKEN?: string;
   /** D1 "registrai-pilot" (builders-site/migrations): the ABI points pilot's accounts, positions, minute bars and latest mark. Unset = /api/pilot/* and /api/index/mark answer 503. */
   PILOT_DB?: D1Database;
+  /** Data API v1 history (registrai-data; lib/data-api*.ts). */
+  DATA_DB?: D1Database;
   /** Kill switch: "1" accepts new pilot orders (if the settings below are valid); anything else (the default) refuses them with 403 {error:"pilot closed"}. Closes and reads always work. */
   PILOT_OPEN?: string;
   /**
