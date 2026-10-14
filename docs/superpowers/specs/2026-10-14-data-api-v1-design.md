@@ -73,7 +73,16 @@ Today Genara's climate feed reads `/opt/abi/out` on our index server. After v1:
   - at most 744 hours (31 days) per history request.
 - **Errors:** `{ "error": "<plain sentence>" }` with a 4xx/5xx status. A missing upstream returns 503, never an
   empty 200, and a response is never partial.
-- **Gap hours:**
+- **Query parameters:**
+  - `from`, `to`, `since` and `hour` are ISO hour closes (`2026-10-14T19:00:00Z`, URL-encoded, minutes and seconds
+    zero); only ISO is accepted;
+  - `from` and `to` are both **inclusive**;
+  - with neither given, a history endpoint returns the window that ends at `data_until`, sized to its cap (744 h, or
+    168 h on `members/hourly`); with only one given, the window extends from it up to the cap;
+  - `to − from + 1h` above the cap, `from > to`, a non-hour time or an unknown `index` returns 400 with a plain
+    sentence;
+  - `version ≠ 1` means a client must stop.
+
   - an hour the pipeline missed has **no row**; it is never sent as `null`;
   - it may be backfilled later, idempotently;
   - consumers that already moved past it don't have to revisit it.
