@@ -7,7 +7,9 @@ Owner's words:
 - "ask genara session to confirm before building";
 - "it is an api for general public, no just genara. We are dogfooding the data business now".
 
-**Status: DRAFT, waiting on the Genara session's confirmation. Nothing is built yet.**
+**Status: DRAFT.**
+- **Genara session (arc-0a):** confirmed coverage on 2026-10-14. Its asks A–C and the semantics below are folded in.
+- **Waiting on:** the owner's sign-off and questions 4–5. Nothing is built yet.
 
 ## What it is
 
@@ -68,7 +70,20 @@ Today Genara's climate feed reads `/opt/abi/out` on our index server. After v1:
   - a Cloudflare rate limit of 120 requests per minute per IP, returning 429 with `retry-after`;
   - at most 744 hours (31 days) per history request.
 - **Errors:** `{ "error": "<plain sentence>" }` with a 4xx/5xx status. A missing upstream returns 503, never an
-  empty 200.
+  empty 200, and a response is never partial.
+- **Gap hours:**
+  - an hour the pipeline missed has **no row**; it is never sent as `null`;
+  - it may be backfilled later, idempotently;
+  - consumers that already moved past it don't have to revisit it.
+- **`data_until`:**
+  - it is the last closed hour present for that index;
+  - it only ever moves forward;
+  - an older or repeated push never moves it back;
+  - on `/indices`, it is the earliest of the three indices' values, so every hour ≤ `data_until` exists for all
+    three, unless that hour is a gap.
+- **Precision:**
+  - values are served at the precision the index pipeline exports, and are never rounded further by the API;
+  - see "Precision" under "How the data gets in".
 - **Terms:**
   - free to use with attribution ("Data: Registrai");
   - no warranty, not financial advice;
@@ -125,7 +140,7 @@ Every scored member of that index, now:
 One member's hourly rows, oldest first:
 
 ```json
-{ "hour_close": "2026-10-14T19:00:00Z", "hour": 497779, "points": 1142.98,
+{ "hour_close": "2026-10-14T19:00:00Z", "hour": 497779, "points": 9.2, "points_earned": 1123.1,
   "payments": 133, "wallets": 13, "new_payers": 0, "usdc": 21970.75 }
 ```
 
@@ -133,10 +148,18 @@ One member's hourly rows, oldest first:
 - Hours where the member did not exist are absent.
 - **Depth:** member history starts at **2026-10-10T23:00Z**, the oldest archived hour on the server. The docs state
   that date.
+- **Field meanings** (the docs state them exactly):
+  - `points`: the member's points **stock** at the hour's close. This is the index's P after decay and rise limits,
+    the same number as `projects[].points` in that hour's index file. It is not the gain within the hour.
+  - `points_earned`: the raw points the member's payments earned within that hour, before rise limits. This is the
+    index file's hourly activity `points`.
+  - `payments`, `wallets`, `new_payers` and `usdc`: that hour's activity (zero for an hour with no activity).
 
-### 5. `GET /api/v1/members/hourly?index=&hour=`
+### 5. `GET /api/v1/members/hourly?index=&hour=` or `?index=&from=&to=`
 
-Every member's row for one closed hour. It saves a consumer from making N calls per hour (Genara polls this).
+Every member's rows for one closed hour, or for a range of at most 168 hours (Genara's ask A). The shape is
+`{ "rows": [ { "id": ..., <the endpoint 4 row> } ] }`, ordered by hour, then id. A consumer can bootstrap 7 days in
+one call, and poll each new hour with one call.
 
 ### 6. `GET /api/v1/members/new?index=&since=`
 
@@ -170,6 +193,19 @@ Verified projects, keyed by member id:
   - member rows since 10 Oct 23:00, from the server's hourly archives;
   - the script is idempotent.
 - **Size:** about 25 members × 3 indices × 8,760 hours ≈ 650k rows a year, which is small for D1.
+- **Why the site stores it:** the index files keep hourly closes for only 30 days (daily before that), and member
+  stocks only for the current hour. The site stores each hour so nothing is pruned.
+- **Precision (Genara's ask C):** no pipeline change is needed.
+  - **`points`:** taken from the index file's `live.P`, which is full precision (about 15 significant digits). The
+    rounded `projects[].points` is not used.
+  - **`close`:** taken from `candles` (3 dp). `series` rounds to 2 dp, which creates ties when hourly ABI changes are
+    ranked; 3 dp resolves changes of about 0.0001%.
+  - **Event fields** (`points_earned`, `usdc`) are exported at 1 and 2 dp.
+  - The docs state each field's precision.
+- **Timestamps in the index file:** activity events and candles are stamped at the hour's **start**; `series` and
+  `data_until` at its **close**. The API always uses the close: the activity of hour [t, t+1h) is served under
+  `hour_close = t + 1h`.
+  - Backfilled hours keep the precision their archive has.
 
 ## Docs page
 
@@ -197,19 +233,27 @@ Wallet scanning and the signed push to world.genara.life stay in Genara, so play
 
 - **Handler unit tests:** shapes, 405, 503, etag/304, CORS, window caps, from/to validation, URL-encoded ids.
 - **Ingest tests:** upsert on push, re-push replaces, an older hour is ignored, backfill is idempotent.
-- **Contract fixtures:** one JSON fixture per endpoint, used by our tests and handed to Genara.
+- **Contract fixtures:** `docs/superpowers/specs/data-api-v1-fixtures/`, one JSON per endpoint, built by `make.py`
+  from three real archived hours (2026-10-14 19:00–21:00 UTC). Our tests and Genara's adapter both use them.
+  - `verified.json` uses a placeholder id (`domain:example.app`).
+  - `members-new-aii.json` is empty, because nothing joined in those hours; its members use the `members-aii.json`
+    shape.
 - **Live checks after deploy:** curl every endpoint; `indices` must match `/api/index/summary`; one member's last row
   must match the index page.
 
 ## Open questions
 
-**For the Genara session:**
-1. Do endpoints 1–7 cover Plans 2–4?
-2. For the 5-second heat animation, is the existing public `GET /api/index/mark` (ABI only) enough?
-3. Is it OK to poll hourly on 5 and every 5 min on 7?
+**Genara session (answered 2026-10-14):**
+- Endpoints 1–7 cover Plans 2–4.
+- `/api/index/mark` is enough for the heat animation, which is cosmetic only.
+- Hourly polling at :06, and claims every 5 min or hourly, are both fine.
+- Asks A–C are folded in above.
+- Genara will move its feed into a cron Worker, so it needs nothing on our index server.
 
 **For the owner:**
 
 4. **Licence:** CC BY 4.0 ("Data: Registrai") is the assistant's recommendation; the alternative is a custom licence
    that bars resale.
-5. **Free-tier limits:** is 120 requests per minute per IP and a 31-day window per request OK?
+5. **Free-tier limits:** is 120 requests per minute per IP and a 31-day window per request OK? Genara is fine with
+   both.
+
