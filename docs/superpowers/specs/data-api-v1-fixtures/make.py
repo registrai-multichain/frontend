@@ -69,6 +69,8 @@ def main(src):
                                  "rows": [{k: v for k, v in r.items() if k != "id"} for h in hours for r in member_rows(files[h]["index"], h) if r["id"] == mid]})
     write("members-hourly-aii.json", {"version": 1, "index": "aii", "data_until": du,
                                       "rows": [r for h in hours for r in member_rows(files[h]["index-aii"], h)]})
+    write("members-hourly-aei.json", {"version": 1, "index": "aei", "data_until": du,
+                                      "rows": [r for h in hours for r in member_rows(files[h]["index-aei"], h)]})
     write("members-new-aii.json", {"version": 1, "index": "aii", "since": iso(hours[0]), "data_until": du, "members": []})
     write("verified.json", {"version": 1, "updated": iso(last + 180), "verified": [
         {"id": "domain:example.app", "method": "registry", "since": "2026-09-30T12:00:00Z"}]})
