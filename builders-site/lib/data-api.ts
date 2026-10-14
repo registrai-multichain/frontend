@@ -92,3 +92,79 @@ export function handleIndexHourly(req: Request, env: Env, index: IndexId, deps: 
     });
   })();
 }
+const KIND: Record<string, "builder" | "integration" | "base"> = { project: "builder", integration: "integration", base: "base" };
+type MemberRow = { id: string; hour: number; points: number; points_earned: number; payments: number; wallets: number; new_payers: number; usdc: number };
+const rowOut = (r: MemberRow) => ({ hour_close: isoHour(r.hour), hour: r.hour, points: r.points, points_earned: r.points_earned, payments: r.payments, wallets: r.wallets, new_payers: r.new_payers, usdc: r.usdc });
+const unavailable = () => v1Error(503, "History is not available right now. Retry later.");
+const verifiedIds = async (_env: Env, _deps: EdgeCacheDeps) => new Set<string>();   // Task 5 replaces this with the import
+
+async function firstHours(db: D1Database, index: IndexId): Promise<Map<string, number>> {
+  const rows = (await db.prepare("SELECT id, MIN(hour) AS h FROM member_hour WHERE idx = ? GROUP BY id").bind(index).all<{ id: string; h: number }>()).results;
+  return new Map(rows.map((r) => [r.id, r.h]));
+}
+
+async function memberList(env: Env, index: IndexId, deps: EdgeCacheDeps) {
+  const db = env.DATA_DB, f = await indexFile(env, index);
+  if (!db || !f?.live?.P) return null;
+  const until = await dataUntil(db, index);
+  if (until === null) return null;
+  const [first, verified] = await Promise.all([firstHours(db, index), verifiedIds(env, deps)]);
+  const members = f.projects.filter((p) => typeof f.live!.P[p.source] === "number").map((p) => ({
+    id: p.source, name: p.name, kind: KIND[p.kind] ?? "builder", verified: verified.has(p.source), points: f.live!.P[p.source], share: p.share,
+    first_hour: isoHour(first.get(p.source) ?? until),
+    last_24h: { points_earned: p.pts_24h ?? 0, payments: p.pay_24h ?? 0, usdc: p.usdc_24h ?? 0 }, // older files carry no 24 h stats
+  }));
+  return { until, members };
+}
+
+export function handleMembers(req: Request, env: Env, index: IndexId, deps: EdgeCacheDeps = {}): Promise<Response> {
+  return cached(req, deps, `m:${index}`, async () => {
+    const l = await memberList(env, index, deps);
+    return l ? v1Json(req, { index, data_until: isoHour(l.until), members: l.members }) : unavailable();
+  });
+}
+
+export function handleMembersNew(req: Request, env: Env, index: IndexId, deps: EdgeCacheDeps = {}): Promise<Response> {
+  const since = hourOf(new URL(req.url).searchParams.get("since") ?? "");
+  if (since === null) return Promise.resolve(v1Error(400, "since is required, as an ISO hour close like 2026-10-14T19:00:00Z."));
+  return cached(req, deps, `mn:${index}:${since}`, async () => {
+    const l = await memberList(env, index, deps);
+    if (!l) return unavailable();
+    const fresh = l.members.filter((m) => hourOf(m.first_hour)! > since).sort((a, b) => (a.first_hour < b.first_hour ? -1 : a.first_hour > b.first_hour ? 1 : 0));
+    return v1Json(req, { index, since: isoHour(since), data_until: isoHour(l.until), members: fresh });
+  });
+}
+
+export function handleMemberHourly(req: Request, env: Env, index: IndexId, id: string, deps: EdgeCacheDeps = {}): Promise<Response> {
+  return (async () => {
+    const db = env.DATA_DB;
+    if (!db) return unavailable();
+    const until = await dataUntil(db, index);
+    if (until === null) return unavailable();
+    const w = parseWindow(new URL(req.url), until, INDEX_CAP_H);
+    if ("error" in w) return v1Error(400, w.error);
+    return cached(req, deps, `mh:${index}:${id}:${w.from}:${w.to}:${until}`, async () => {
+      const rows = (await db.prepare("SELECT id, hour, points, points_earned, payments, wallets, new_payers, usdc FROM member_hour WHERE idx = ? AND id = ? AND hour BETWEEN ? AND ? ORDER BY hour").bind(index, id, w.from, w.to).all<MemberRow>()).results;
+      if (!rows.length) {
+        const known = await db.prepare("SELECT 1 AS x FROM member_hour WHERE idx = ? AND id = ? LIMIT 1").bind(index, id).first();
+        if (!known) return v1Error(404, "Unknown member for this index.");
+      }
+      return v1Json(req, { index, id, data_until: isoHour(until), rows: rows.map(rowOut) });
+    });
+  })();
+}
+
+export function handleMembersHourly(req: Request, env: Env, index: IndexId, deps: EdgeCacheDeps = {}): Promise<Response> {
+  return (async () => {
+    const db = env.DATA_DB;
+    if (!db) return unavailable();
+    const until = await dataUntil(db, index);
+    if (until === null) return unavailable();
+    const w = parseWindow(new URL(req.url), until, MEMBERS_HOURLY_CAP_H);
+    if ("error" in w) return v1Error(400, w.error);
+    return cached(req, deps, `msh:${index}:${w.from}:${w.to}:${until}`, async () => {
+      const rows = (await db.prepare("SELECT id, hour, points, points_earned, payments, wallets, new_payers, usdc FROM member_hour WHERE idx = ? AND hour BETWEEN ? AND ? ORDER BY hour, id").bind(index, w.from, w.to).all<MemberRow>()).results;
+      return v1Json(req, { index, data_until: isoHour(until), rows: rows.map((r) => ({ id: r.id, ...rowOut(r) })) });
+    });
+  })();
+}

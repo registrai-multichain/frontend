@@ -2,12 +2,16 @@ import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { DATA_MIGRATIONS } from "../lib/data-api-ingest";
 import { handleIndexHourly, handleIndices, parseWindow } from "../lib/data-api";
-import { ABI_INDICES } from "../../src/lib/builders-index";
+import { ABI_INDICES, type AbiData } from "../../src/lib/builders-index";
 import { indexFixture } from "../../src/lib/builders-index-fixture";
 import fixtureIndices from "../../docs/superpowers/specs/data-api-v1-fixtures/indices.json";
 import { MemoryCache } from "./memory-cache";
 import { MemoryD1 } from "./memory-d1";
 import { MemoryKV } from "./memory-kv";
+import { handleMemberHourly, handleMembers, handleMembersHourly, handleMembersNew } from "../lib/data-api";
+import fixtureMembers from "../../docs/superpowers/specs/data-api-v1-fixtures/members-aii.json";
+import fixtureMemberHourly from "../../docs/superpowers/specs/data-api-v1-fixtures/member-hourly.json";
+import fixtureMembersHourly from "../../docs/superpowers/specs/data-api-v1-fixtures/members-hourly-aii.json";
 
 const O = "https://builder.registrai.cc";
 const H = (s: string) => Date.parse(s) / 3600e3;
@@ -86,5 +90,65 @@ describe("/api/v1/indices/{id}/hourly", () => {
     expect((await handleIndexHourly(get("/api/v1/indices/abi/hourly"), { ...(env as object), DATA_DB: undefined } as never, "abi", { cache: null })).status).toBe(503);
     const empty = new MemoryD1(DATA_MIGRATIONS.map((f) => resolve(__dirname, "../migrations-data", f)));
     expect((await handleIndexHourly(get("/api/v1/indices/abi/hourly"), { ...(env as object), DATA_DB: empty } as never, "abi", { cache: null })).status).toBe(503);
+  });
+});
+
+async function seededMembers() {
+  const s = await seeded();
+  const f = indexFixture() as unknown as AbiData;
+  const ids = f.projects.map((p) => p.source);
+  const P = Object.fromEntries(ids.map((id, i) => [id, 100 + i + 0.123456789]));
+  for (const idx of ["abi", "aii", "aei"] as const)
+    await (s.env as { INVITES: MemoryKV }).INVITES.put(ABI_INDICES[idx].key, JSON.stringify({ ...f, data_until: "2026-10-14T21:00:00Z", live: { P }, candles: [["2026-10-14T20:00:00Z", 1, 1, 1, 961.013, 0, 0, 0]] }));
+  for (const [i, id] of ids.entries())
+    for (let h = H("2026-10-14T19:00:00Z") + (i === 1 ? 2 : 0); h <= H("2026-10-14T21:00:00Z"); h++)
+      s.db.sqlite.prepare("INSERT INTO member_hour VALUES ('abi', ?, ?, ?, 1.5, 3, 2, 0, 12.5)").all(id, h, 100 + i);
+  return { ...s, ids };
+}
+
+describe("/api/v1/members*", () => {
+  test("/members: fixture shape, stock from live.P, first_hour from history", async () => {
+    const { env, ids } = await seededMembers();
+    const body = await (await handleMembers(get("/api/v1/members?index=abi"), env, "abi", { cache: null })).json();
+    expect(shape(body)).toEqual(shape(fixtureMembers));
+    const m = body.members.find((x: { id: string }) => x.id === ids[1]);
+    expect(m.points).toBe(101.123456789);
+    expect(m.first_hour).toBe("2026-10-14T21:00:00Z");
+  });
+  test("/members/{id}/hourly: an encoded id with ':' and '.' decodes; unknown id is 404; fixture shape", async () => {
+    const { env, ids } = await seededMembers();
+    const enc = encodeURIComponent(ids[0]);
+    const r = await handleMemberHourly(get(`/api/v1/members/${enc}/hourly?index=abi`), env, "abi", ids[0], { cache: null });
+    const body = await r.json();
+    expect(shape(body)).toEqual(shape(fixtureMemberHourly));
+    expect(body.rows).toHaveLength(3);
+    expect((await handleMemberHourly(get("/api/v1/members/domain%3Anope.example/hourly?index=abi"), env, "abi", "domain:nope.example", { cache: null })).status).toBe(404);
+  });
+  test("/members/hourly: one call returns every member's rows for a range, ordered by hour then id; 168 h cap", async () => {
+    const { env } = await seededMembers();
+    const body = await (await handleMembersHourly(get("/api/v1/members/hourly?index=abi&from=2026-10-14T19:00:00Z&to=2026-10-14T21:00:00Z"), env, "abi", { cache: null })).json();
+    expect(shape(body)).toEqual(shape(fixtureMembersHourly));
+    const keys = body.rows.map((r: { hour: number; id: string }) => `${r.hour}|${r.id}`);
+    expect(keys).toEqual([...keys].sort());
+    expect((await handleMembersHourly(get("/api/v1/members/hourly?index=abi&from=2026-10-01T00:00:00Z&to=2026-10-14T21:00:00Z"), env, "abi", { cache: null })).status).toBe(400);
+  });
+  test("/members/new: members first seen after since; since is required", async () => {
+    const { env, ids } = await seededMembers();
+    const body = await (await handleMembersNew(get("/api/v1/members/new?index=abi&since=2026-10-14T20:00:00Z"), env, "abi", { cache: null })).json();
+    expect(body.members.map((m: { id: string }) => m.id)).toEqual([ids[1]]);
+    expect((await handleMembersNew(get("/api/v1/members/new?index=abi"), env, "abi", { cache: null })).status).toBe(400);
+  });
+});
+describe("/api/v1/members route", () => {
+  test("an encoded id path segment reaches the handler decoded; index is required", async () => {
+    const { onRequest } = await import("../functions/api/v1/members/[[path]]");
+    const { env, ids } = await seededMembers();
+    const ctx = (path: string, params: string[]) => ({ request: get(path), env, params: { path: params }, waitUntil: () => undefined }) as never;
+    const enc = encodeURIComponent(ids[0]);
+    const r = await onRequest(ctx(`/api/v1/members/${enc}/hourly?index=abi`, [enc, "hourly"]));
+    expect(r.status).toBe(200);
+    expect((await r.json()).id).toBe(ids[0]);
+    expect((await onRequest(ctx(`/api/v1/members/${enc}/hourly`, [enc, "hourly"]))).status).toBe(400);
+    expect((await onRequest(ctx("/api/v1/members/x/y/z?index=abi", ["x", "y", "z"]))).status).toBe(404);
   });
 });
