@@ -1,0 +1,61 @@
+/** Data API v1 /verified: projects whose proof validates against the mainnet BuilderRegistry (same rules as the gallery). KV-cached 5 min. */
+import { createPublicClient, http } from "viem";
+import { BUILDERS } from "../../src/lib/builders-network";
+import { proofConfigFromEnv } from "../../src/lib/verified-builders";
+import { makeFetchJson, readBuilderRecords, type BuilderRecord, type RegistryReader } from "../../src/lib/verified-builders-chain";
+import { isoHour } from "./data-api-rows";
+import { cached, v1Error, v1Json } from "./data-api";
+import type { Env } from "./env";
+import type { EdgeCacheDeps } from "./http";
+
+export const VERIFIED_KEY = "data:verified";
+export const VERIFIED_TTL_S = 300;
+export type VerifiedEntry = { id: string; method: "registry"; since: string };
+type Read = () => Promise<BuilderRecord[]>;
+
+export function verifiedFromRecords(records: BuilderRecord[]): VerifiedEntry[] {
+  const best = new Map<string, number>();
+  for (const b of records) {
+    if (!b.active) continue;
+    for (const p of b.projects) {
+      if (p.status !== "verified" || !p.canonical || !p.active) continue;
+      const h = Math.floor(p.addedAt / 3600);
+      best.set(p.source, Math.min(best.get(p.source) ?? Infinity, h));
+    }
+  }
+  return [...best].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([id, h]) => ({ id, method: "registry" as const, since: isoHour(h) }));
+}
+
+const chainRead = (env: Env): Read => async () => {
+  const client = createPublicClient({ chain: BUILDERS.chain.viemChain, transport: http(BUILDERS.rpc, { retryCount: 2, retryDelay: 400 }) });
+  return readBuilderRecords(client as unknown as RegistryReader, {
+    builderRegistry: BUILDERS.contracts.BuilderRegistry!, caretakerRegistry: BUILDERS.contracts.CaretakerRegistry, operator: BUILDERS.operator,
+    chainId: BUILDERS.chainId, proofConfig: proofConfigFromEnv(env as unknown as Record<string, string | undefined>), fetchJson: makeFetchJson({ timeoutMs: 8_000 }),
+  });
+};
+
+export async function loadVerified(env: Env, _deps: EdgeCacheDeps, read: Read = chainRead(env)): Promise<{ updated: string; verified: VerifiedEntry[] } | null> {
+  let stale: { updated: string; verified: VerifiedEntry[] } | null = null;
+  try { stale = JSON.parse((await env.INVITES.get(VERIFIED_KEY)) ?? "null"); } catch { stale = null; }
+  if (stale && Date.now() - Date.parse(stale.updated) < VERIFIED_TTL_S * 1000) return stale;
+  try {
+    const fresh = { updated: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), verified: verifiedFromRecords(await read()) };
+    await env.INVITES.put(VERIFIED_KEY, JSON.stringify(fresh));
+    return fresh;
+  } catch (err) {
+    console.warn("data-api verified read failed", err);
+    return stale;
+  }
+}
+
+export async function verifiedIds(env: Env, deps: EdgeCacheDeps): Promise<Set<string>> {
+  const v = await loadVerified(env, deps).catch(() => null);
+  return new Set(v?.verified.map((x) => x.id) ?? []);
+}
+
+export function handleVerified(req: Request, env: Env, deps: EdgeCacheDeps = {}, read?: Read): Promise<Response> {
+  return cached(req, deps, "verified", async () => {
+    const v = await loadVerified(env, deps, read);
+    return v ? v1Json(req, v, VERIFIED_TTL_S) : v1Error(503, "Verified projects are not available right now. Retry later.");
+  }, VERIFIED_TTL_S);
+}

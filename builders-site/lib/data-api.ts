@@ -5,6 +5,7 @@
  */
 import { ABI_INDICES, sha256Hex, type AbiData } from "../../src/lib/builders-index";
 import { hourOf, isoHour, INDEX_IDS, type IndexId } from "./data-api-rows";
+import { verifiedIds } from "./data-api-verified";
 import type { D1Database, Env } from "./env";
 import { edgeCachedGet, type EdgeCacheDeps } from "./http";
 
@@ -96,7 +97,6 @@ const KIND: Record<string, "builder" | "integration" | "base"> = { project: "bui
 type MemberRow = { id: string; hour: number; points: number; points_earned: number; payments: number; wallets: number; new_payers: number; usdc: number };
 const rowOut = (r: MemberRow) => ({ hour_close: isoHour(r.hour), hour: r.hour, points: r.points, points_earned: r.points_earned, payments: r.payments, wallets: r.wallets, new_payers: r.new_payers, usdc: r.usdc });
 const unavailable = () => v1Error(503, "History is not available right now. Retry later.");
-const verifiedIds = async (_env: Env, _deps: EdgeCacheDeps) => new Set<string>();   // Task 5 replaces this with the import
 
 async function firstHours(db: D1Database, index: IndexId): Promise<Map<string, number>> {
   const rows = (await db.prepare("SELECT id, MIN(hour) AS h FROM member_hour WHERE idx = ? GROUP BY id").bind(index).all<{ id: string; h: number }>()).results;

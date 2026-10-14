@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { DATA_MIGRATIONS } from "../lib/data-api-ingest";
 import { handleIndexHourly, handleIndices, parseWindow } from "../lib/data-api";
 import { ABI_INDICES, type AbiData } from "../../src/lib/builders-index";
@@ -12,6 +12,9 @@ import { handleMemberHourly, handleMembers, handleMembersHourly, handleMembersNe
 import fixtureMembers from "../../docs/superpowers/specs/data-api-v1-fixtures/members-aii.json";
 import fixtureMemberHourly from "../../docs/superpowers/specs/data-api-v1-fixtures/member-hourly.json";
 import fixtureMembersHourly from "../../docs/superpowers/specs/data-api-v1-fixtures/members-hourly-aii.json";
+
+// /members joins /verified; keep these tests off the real chain (data-api-verified has its own tests)
+vi.mock("../lib/data-api-verified", async (orig) => ({ ...(await orig<typeof import("../lib/data-api-verified")>()), verifiedIds: async () => new Set<string>() }));
 
 const O = "https://builder.registrai.cc";
 const H = (s: string) => Date.parse(s) / 3600e3;
