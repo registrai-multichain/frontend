@@ -225,5 +225,6 @@
 .pa-legal { max-width: 78ch; }
 .pa-legal h2 { margin-top: 2.2rem; margin-bottom: 0.6rem; }
 .pa-legal p { margin: 0.7rem 0; line-height: 1.6; }
+.pa-code { margin: 0.5rem 0 0.9rem; padding: 0.6rem 0.8rem; overflow-x: auto; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 8px; font-family: var(--font-mono), monospace; font-size: 0.85em; line-height: 1.5; white-space: pre; }
 .pa-legal a { text-decoration: underline; text-underline-offset: 2px; }
-.pa-legal code { font-size: 0.9em; }
+.pa-legal code { font-size: 0.9em; overflow-wrap: anywhere; }

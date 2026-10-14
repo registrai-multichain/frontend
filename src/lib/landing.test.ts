@@ -36,7 +36,7 @@ describe("landing copy", () => {
     expect(HERO.microcopy).toBe("Independent. Not affiliated with Circle or Arc.");
     expect([HERO.primaryCta, HERO.secondaryCta]).toEqual(["See the indices", "Request data"]);
     expect(HERO.secondaryHref).toBe("mailto:contact@registrai.cc?subject=Data%20request");
-    expect(PRODUCTS.map((p) => [p.name, p.tag])).toEqual([["Indices", "Live"], ["Project facts (Tabula)", "Live"], ["Data API", "Building now"], ["Other chains", "Later"]]);
+    expect(PRODUCTS.map((p) => [p.name, p.tag])).toEqual([["Indices", "Live"], ["Project facts (Tabula)", "Live"], ["Data API", "Live"], ["Other chains", "Later"]]);
     expect(AUDIENCE.map((a) => a.who)).toEqual(["Funds and market makers", "Exchange listing teams", "Launchpads and DEXs", "Ecosystem and grant programs", "Builders"]);
     expect(TIERS.map((t) => t.name)).toEqual(["Community", "Pro", "Institutional"]);
     expect(HOW_WE_PUBLISH.headline).toBe("Facts, not opinions.");
@@ -68,6 +68,12 @@ describe("landing CSS", () => {
     });
     expect(found).toEqual(["@media (min-width: 641px) 220px"]);
   });
+});
+
+it("the Data API card: index and per-app endpoints and full history live, the rest still building; links to the docs", () => {
+  const api = PRODUCTS.find((p) => p.name === "Data API")!;
+  expect(api.items!.map((i) => i.tag)).toEqual(["Live", "Live", "Building now", "Building now", "Building now"]);
+  expect(api.link).toEqual({ label: "Read the API docs", href: "https://builder.registrai.cc/data-api/" });
 });
 
 it("Tabula's pieces carry their true status: facts pages and investigations live; Radar, Trace and Record still building", () => {

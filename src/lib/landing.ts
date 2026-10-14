@@ -55,15 +55,15 @@ export const PRODUCTS: Product[] = [
   },
   {
     name: "Data API",
-    tag: "Building now",
+    tag: "Live",
     items: [
-      { text: "Full Arc history with no pruning or rate-limit walls." },
-      { text: "Decoded stablecoin payments: who paid which app." },
-      { text: "Address labels: which contract belongs to which project or integration." },
-      { text: "Index and per-app activity endpoints." },
-      { text: "Payment webhooks." },
+      { text: "Index and per-app activity endpoints.", tag: "Live" },
+      { text: "Full Arc history with no pruning.", tag: "Live" },
+      { text: "Decoded stablecoin payments: who paid which app.", tag: "Building now" },
+      { text: "Address labels: which contract belongs to which project or integration.", tag: "Building now" },
+      { text: "Payment webhooks.", tag: "Building now" },
     ],
-    link: { label: "Join the early access list", href: contactHref("Data API early access") },
+    link: { label: "Read the API docs", href: "https://builder.registrai.cc/data-api/" },
   },
   {
     name: "Other chains",
