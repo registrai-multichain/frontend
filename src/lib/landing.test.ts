@@ -72,7 +72,7 @@ describe("landing CSS", () => {
 
 it("the Data API card: index and per-app endpoints and full history live, the rest still building; links to the docs", () => {
   const api = PRODUCTS.find((p) => p.name === "Data API")!;
-  expect(api.items!.map((i) => i.tag)).toEqual(["Live", "Live", "Building now", "Building now", "Building now"]);
+  expect(api.items!.map((i) => i.tag)).toEqual(["Live", "Building now", "Building now", "Building now", "Building now"]);
   expect(api.link).toEqual({ label: "Read the API docs", href: "https://builder.registrai.cc/data-api/" });
 });
 

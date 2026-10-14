@@ -106,6 +106,7 @@ async function seededMembers() {
   for (const [i, id] of ids.entries())
     for (let h = H("2026-10-14T19:00:00Z") + (i === 1 ? 2 : 0); h <= H("2026-10-14T21:00:00Z"); h++)
       s.db.sqlite.prepare("INSERT INTO member_hour VALUES ('abi', ?, ?, ?, 1.5, 3, 2, 0, 12.5)").all(id, h, 100 + i);
+  for (const [i, id] of ids.entries()) s.db.sqlite.prepare("INSERT INTO member_first (idx, id, first_hour) VALUES ('abi', ?, ?)").all(id, H("2026-10-14T19:00:00Z") + (i === 1 ? 2 : 0));
   return { ...s, ids };
 }
 
@@ -153,5 +154,36 @@ describe("/api/v1/members route", () => {
     expect((await r.json()).id).toBe(ids[0]);
     expect((await onRequest(ctx(`/api/v1/members/${enc}/hourly`, [enc, "hourly"]))).status).toBe(400);
     expect((await onRequest(ctx("/api/v1/members/x/y/z?index=abi", ["x", "y", "z"]))).status).toBe(404);
+  });
+});
+
+describe("final review fixes", () => {
+  test("#1 /members/hourly?hour= returns exactly that hour; hour with from/to is 400", async () => {
+    const { env } = await seededMembers();
+    const body = await (await handleMembersHourly(get("/api/v1/members/hourly?index=abi&hour=2026-10-14T20:00:00Z"), env, "abi", { cache: null })).json();
+    expect(new Set(body.rows.map((r: { hour_close: string }) => r.hour_close))).toEqual(new Set(["2026-10-14T20:00:00Z"]));
+    expect((await handleMembersHourly(get("/api/v1/members/hourly?index=abi&hour=2026-10-14T20:00:00Z&from=2026-10-14T19:00:00Z"), env, "abi", { cache: null })).status).toBe(400);
+    expect((await handleMembersHourly(get("/api/v1/members/hourly?index=abi&hour=2026-10-14T20:30:00Z"), env, "abi", { cache: null })).status).toBe(400);
+  });
+  test("#2 If-None-Match uses weak comparison: W/ prefix, comma lists and * all give 304", async () => {
+    const { env } = await seeded();
+    const path = "/api/v1/indices/abi/hourly?from=2026-10-14T21:00:00Z";
+    const etag = (await handleIndexHourly(get(path), env, "abi", { cache: null })).headers.get("etag")!;
+    for (const h of [`W/${etag}`, `"nope", W/${etag}`, "*"])
+      expect((await handleIndexHourly(get(path, { "if-none-match": h }), env, "abi", { cache: null })).status, h).toBe(304);
+    expect((await handleIndexHourly(get(path, { "if-none-match": '"nope"' }), env, "abi", { cache: null })).status).toBe(200);
+  });
+  test("#3 first_hour comes from member_first (no scan of member_hour)", async () => {
+    const { env, db, ids } = await seededMembers();
+    db.sqlite.prepare("INSERT OR REPLACE INTO member_first (idx, id, first_hour) VALUES ('abi', ?, ?)").all(ids[0], H("2026-10-11T00:00:00Z"));
+    const body = await (await handleMembers(get("/api/v1/members?index=abi"), env, "abi", { cache: null })).json();
+    expect(body.members.find((m: { id: string }) => m.id === ids[0]).first_hour).toBe("2026-10-11T00:00:00Z");
+    expect(db.log.some((q) => /MIN\(hour\)/i.test(q))).toBe(false);
+  });
+  test("#5 only from, after data_until: 200 with no rows (a poller ahead of the push), not 400", async () => {
+    const { env } = await seeded();
+    const r = await handleIndexHourly(get("/api/v1/indices/abi/hourly?from=2026-10-14T22:00:00Z"), env, "abi", { cache: null });
+    expect(r.status).toBe(200);
+    expect((await r.json()).rows).toEqual([]);
   });
 });

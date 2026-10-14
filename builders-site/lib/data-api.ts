@@ -19,11 +19,18 @@ const HEADERS = { "content-type": "application/json; charset=utf-8", "x-content-
 export const v1Error = (status: number, error: string) =>
   new Response(JSON.stringify({ error }), { status, headers: { ...HEADERS, "cache-control": "no-store" } });
 
+/** RFC 9110 weak comparison: `*`, a comma list, and W/ on either side (Cloudflare weakens strong etags when it compresses). */
+export function etagMatches(header: string | null, etag: string): boolean {
+  if (!header) return false;
+  const bare = (t: string) => t.trim().replace(/^W\//, "");
+  return header.trim() === "*" || header.split(",").some((t) => bare(t) === bare(etag));
+}
+
 /** A v1 JSON response: version first, sha256 etag, 304 when if-none-match matches. */
 export async function v1Json(req: Request, body: Record<string, unknown>, maxAge = V1_CACHE_S): Promise<Response> {
   const text = JSON.stringify({ version: 1, ...body });
   const etag = `"${await sha256Hex(text)}"`;
-  if (req.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers: { ...HEADERS, etag } });
+  if (etagMatches(req.headers.get("if-none-match"), etag)) return new Response(null, { status: 304, headers: { ...HEADERS, etag } });
   return new Response(text, { status: 200, headers: { ...HEADERS, etag, "cache-control": `public, max-age=${maxAge}` } });
 }
 
@@ -32,7 +39,7 @@ export async function cached(req: Request, deps: EdgeCacheDeps, variant: string,
   if (req.method.toUpperCase() !== "GET") return v1Error(405, "Only GET is supported.");
   const res = await edgeCachedGet(req, deps, produce, ttl, variant);
   const etag = res.headers.get("etag");
-  if (res.status === 200 && etag && req.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers: { ...HEADERS, etag } });
+  if (res.status === 200 && etag && etagMatches(req.headers.get("if-none-match"), etag)) return new Response(null, { status: 304, headers: { ...HEADERS, etag } });
   return res;
 }
 
@@ -45,7 +52,10 @@ export function parseWindow(url: URL, untilHour: number, cap: number): { from: n
   if ((f !== null && from === null) || (t !== null && to === null)) return { error: "from and to must be ISO hour closes, like 2026-10-14T19:00:00Z." };
   let a: number, b: number;
   if (from === null && to === null) { b = untilHour; a = b - cap + 1; }
-  else if (from !== null && to === null) { a = from; b = Math.min(from + cap - 1, untilHour); }
+  else if (from !== null && to === null) {
+    if (from > untilHour) return { from, to: from - 1 };   // ahead of the data (a poller before the push): an empty window, not an error
+    a = from; b = Math.min(from + cap - 1, untilHour);
+  }
   else if (from === null) { b = to!; a = b - cap + 1; }
   else { a = from; b = to!; }
   if (a > b) return { error: "from must not be after to." };
@@ -99,8 +109,8 @@ const rowOut = (r: MemberRow) => ({ hour_close: isoHour(r.hour), hour: r.hour, p
 const unavailable = () => v1Error(503, "History is not available right now. Retry later.");
 
 async function firstHours(db: D1Database, index: IndexId): Promise<Map<string, number>> {
-  const rows = (await db.prepare("SELECT id, MIN(hour) AS h FROM member_hour WHERE idx = ? GROUP BY id").bind(index).all<{ id: string; h: number }>()).results;
-  return new Map(rows.map((r) => [r.id, r.h]));
+  const rows = (await db.prepare("SELECT id, first_hour FROM member_first WHERE idx = ?").bind(index).all<{ id: string; first_hour: number }>()).results;
+  return new Map(rows.map((r) => [r.id, r.first_hour]));
 }
 
 async function memberList(env: Env, index: IndexId, deps: EdgeCacheDeps) {
@@ -160,7 +170,13 @@ export function handleMembersHourly(req: Request, env: Env, index: IndexId, deps
     if (!db) return unavailable();
     const until = await dataUntil(db, index);
     if (until === null) return unavailable();
-    const w = parseWindow(new URL(req.url), until, MEMBERS_HOURLY_CAP_H);
+    const url = new URL(req.url), hourParam = url.searchParams.get("hour");
+    let w: { from: number; to: number } | { error: string };
+    if (hourParam !== null) {
+      const h = hourOf(hourParam);
+      if (url.searchParams.has("from") || url.searchParams.has("to")) w = { error: "Use hour, or from and to, not both." };
+      else w = h === null ? { error: "hour must be an ISO hour close, like 2026-10-14T19:00:00Z." } : { from: h, to: h };
+    } else w = parseWindow(url, until, MEMBERS_HOURLY_CAP_H);
     if ("error" in w) return v1Error(400, w.error);
     return cached(req, deps, `msh:${index}:${w.from}:${w.to}:${until}`, async () => {
       const rows = (await db.prepare("SELECT id, hour, points, points_earned, payments, wallets, new_payers, usdc FROM member_hour WHERE idx = ? AND hour BETWEEN ? AND ? ORDER BY hour, id").bind(index, w.from, w.to).all<MemberRow>()).results;

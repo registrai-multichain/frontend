@@ -9,6 +9,7 @@ describe("backfill", () => {
     expect(sql).toEqual([
       "INSERT OR REPLACE INTO index_hour (idx, hour, close) VALUES ('abi', 497781, 961.013);",
       "INSERT OR REPLACE INTO member_hour (idx, id, hour, points, points_earned, payments, wallets, new_payers, usdc) VALUES ('abi', 'domain:o''brien.app', 497781, 1.25, 0, 0, 0, 0, 0);",
+      "INSERT INTO member_first (idx, id, first_hour) VALUES ('abi', 'domain:o''brien.app', 497781) ON CONFLICT (idx, id) DO UPDATE SET first_hour = MIN(first_hour, excluded.first_hour);",
     ]);
   });
 });

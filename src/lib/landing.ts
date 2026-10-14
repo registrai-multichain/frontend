@@ -58,7 +58,7 @@ export const PRODUCTS: Product[] = [
     tag: "Live",
     items: [
       { text: "Index and per-app activity endpoints.", tag: "Live" },
-      { text: "Full Arc history with no pruning.", tag: "Live" },
+      { text: "Full Arc history with no pruning.", tag: "Building now" },
       { text: "Decoded stablecoin payments: who paid which app.", tag: "Building now" },
       { text: "Address labels: which contract belongs to which project or integration.", tag: "Building now" },
       { text: "Payment webhooks.", tag: "Building now" },

@@ -38,18 +38,23 @@ export async function loadVerified(env: Env, _deps: EdgeCacheDeps, read: Read = 
   let stale: { updated: string; verified: VerifiedEntry[] } | null = null;
   try { stale = JSON.parse((await env.INVITES.get(VERIFIED_KEY)) ?? "null"); } catch { stale = null; }
   if (stale && Date.now() - Date.parse(stale.updated) < VERIFIED_TTL_S * 1000) return stale;
+  let fresh: { updated: string; verified: VerifiedEntry[] };
   try {
-    const fresh = { updated: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), verified: verifiedFromRecords(await read()) };
-    await env.INVITES.put(VERIFIED_KEY, JSON.stringify(fresh));
-    return fresh;
+    fresh = { updated: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), verified: verifiedFromRecords(await read()) };
   } catch (err) {
     console.warn("data-api verified read failed", err);
     return stale;
   }
+  // a KV put failure (e.g. a 429 from concurrent writers of one key) must not throw away a good read
+  await env.INVITES.put(VERIFIED_KEY, JSON.stringify(fresh)).catch((err: unknown) => console.warn("data-api verified cache write failed", err));
+  return fresh;
 }
 
-export async function verifiedIds(env: Env, deps: EdgeCacheDeps): Promise<Set<string>> {
-  const v = await loadVerified(env, deps).catch(() => null);
+/** For /members: the KV copy only, never the chain on the request path. A stale or missing copy is refreshed in the background. */
+export async function verifiedIds(env: Env, deps: EdgeCacheDeps, read?: Read): Promise<Set<string>> {
+  let v: { updated: string; verified: VerifiedEntry[] } | null = null;
+  try { v = JSON.parse((await env.INVITES.get(VERIFIED_KEY)) ?? "null"); } catch { v = null; }
+  if ((!v || Date.now() - Date.parse(v.updated) >= VERIFIED_TTL_S * 1000) && deps.waitUntil) deps.waitUntil(loadVerified(env, deps, read).catch(() => null));
   return new Set(v?.verified.map((x) => x.id) ?? []);
 }
 

@@ -30,3 +30,27 @@ describe("/api/v1/verified", () => {
     warn.mockRestore();
   });
 });
+
+describe("final review fix #4: /members never waits on the chain", () => {
+  test("verifiedIds reads KV only; a stale or missing copy is refreshed in the background", async () => {
+    const { verifiedIds } = await import("../lib/data-api-verified");
+    const kv = new MemoryKV(); const bg: Promise<unknown>[] = [];
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => { release = r; });
+    const read = async () => { await gate; return [rec({ projects: [proj("domain:registrai.cc", "verified")] })]; };
+    const env = { INVITES: kv } as never;
+    // resolves while the chain read is still pending: /members never waits on it
+    expect(await verifiedIds(env, { waitUntil: (p) => { bg.push(p); } }, read)).toEqual(new Set());
+    expect(bg).toHaveLength(1);
+    release();
+    await Promise.all(bg);
+    expect(await verifiedIds(env, {}, read)).toEqual(new Set(["domain:registrai.cc"]));
+  });
+  test("a KV put failure after a fresh read still serves the fresh result", async () => {
+    const kv = new MemoryKV(); kv.put = async () => { throw new Error("kv 429"); };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const v = await loadVerified({ INVITES: kv } as never, {}, async () => [rec({ projects: [proj("domain:registrai.cc", "verified")] })]);
+    expect(v!.verified).toHaveLength(1);
+    warn.mockRestore();
+  });
+});

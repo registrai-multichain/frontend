@@ -18,3 +18,10 @@ CREATE TABLE member_hour (
   PRIMARY KEY (idx, id, hour)
 ) WITHOUT ROWID;
 CREATE INDEX member_hour_by_hour ON member_hour (idx, hour);
+-- first hour each member was recorded (kept at ingest and by the backfill, so /members never scans member_hour)
+CREATE TABLE member_first (
+  idx        TEXT    NOT NULL,
+  id         TEXT    NOT NULL,
+  first_hour INTEGER NOT NULL,
+  PRIMARY KEY (idx, id)
+) WITHOUT ROWID;

@@ -8,11 +8,13 @@ export const DATA_MIGRATIONS = ["0001_data_api.sql"];
 export const INGEST_INDEX_LOOKBACK_H = 48;
 
 export function upsertSql(rows: (IndexHourRow | MemberHourRow)[]): { sql: string; params: unknown[] }[] {
-  return rows.map((r) =>
+  return rows.flatMap((r) =>
     "id" in r
-      ? { sql: "INSERT OR REPLACE INTO member_hour (idx, id, hour, points, points_earned, payments, wallets, new_payers, usdc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-          params: [r.index, r.id, r.hour, r.points, r.points_earned, r.payments, r.wallets, r.new_payers, r.usdc] }
-      : { sql: "INSERT OR REPLACE INTO index_hour (idx, hour, close) VALUES (?, ?, ?)", params: [r.index, r.hour, r.close] });
+      ? [{ sql: "INSERT OR REPLACE INTO member_hour (idx, id, hour, points, points_earned, payments, wallets, new_payers, usdc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+           params: [r.index, r.id, r.hour, r.points, r.points_earned, r.payments, r.wallets, r.new_payers, r.usdc] },
+         { sql: "INSERT INTO member_first (idx, id, first_hour) VALUES (?, ?, ?) ON CONFLICT (idx, id) DO UPDATE SET first_hour = MIN(first_hour, excluded.first_hour)",
+           params: [r.index, r.id, r.hour] }]
+      : [{ sql: "INSERT OR REPLACE INTO index_hour (idx, hour, close) VALUES (?, ?, ?)", params: [r.index, r.hour, r.close] }]);
 }
 
 export async function ingestIndexFile(db: D1Database | undefined, index: IndexId, d: AbiData): Promise<{ index: number; members: number } | null> {
