@@ -17,7 +17,7 @@ export const PUBLIC_SITE = "https://registrai.cc";
 export const PUBLIC_ROUTES = ["bridge"] as const;
 
 /** App routes that move to the builders site (same path). */
-export const BUILDERS_SITE_ROUTES = ["builders", "verify", "admin", "guide", "suggest", "project", "how-we-publish", "track-record", "record", "builders-index", "terms", "privacy", "pilot-rules"] as const;
+export const BUILDERS_SITE_ROUTES = ["builders", "verify", "admin", "guide", "suggest", "project", "how-we-publish", "track-record", "record", "builders-index", "terms", "privacy", "pilot-rules", "data-api"] as const;
 
 /** Routes of the retired markets app: every site sends them to the builders site's root. */
 export const RETIRED_ROUTES = ["atlas", "perennial", "rounds", "propose"] as const;
