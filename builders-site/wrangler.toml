@@ -42,7 +42,7 @@ migrations_dir = "migrations"
 [[d1_databases]]
 binding = "DATA_DB"
 database_name = "registrai-data"
-database_id = "REPLACE_WITH_DATA_D1_ID"
+database_id = "ca0288d0-f3d8-4e09-8451-7dc6537e8803"
 migrations_dir = "migrations-data"
 
 [vars]
