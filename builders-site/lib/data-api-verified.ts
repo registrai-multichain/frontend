@@ -1,6 +1,6 @@
 /** Data API v1 /verified: projects whose proof validates against the mainnet BuilderRegistry (same rules as the gallery). KV-cached 5 min. */
-import { createPublicClient, http } from "viem";
-import { BUILDERS } from "../../src/lib/builders-network";
+import { createPublicClient, http, type Address } from "viem";
+import mainnet from "../../src/lib/deployments/arc-mainnet.json";
 import { proofConfigFromEnv } from "../../src/lib/verified-builders";
 import { makeFetchJson, readBuilderRecords, type BuilderRecord, type RegistryReader } from "../../src/lib/verified-builders-chain";
 import { isoHour } from "./data-api-rows";
@@ -26,11 +26,16 @@ export function verifiedFromRecords(records: BuilderRecord[]): VerifiedEntry[] {
   return [...best].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([id, h]) => ({ id, method: "registry" as const, since: isoHour(h) }));
 }
 
+// Arc mainnet builder registry, straight from the deployments record: src/lib/builders-network.ts reads Next's
+// process.env when it loads, and Workers have no process (test/worker-imports.test.ts).
+const ARC_MAINNET_RPC = "https://rpc.mainnet.arc.io";
+const REG = mainnet.builders as { BuilderRegistry: string; CaretakerRegistry: string | null; operator: string | null };
+
 const chainRead = (env: Env): Read => async () => {
-  const client = createPublicClient({ chain: BUILDERS.chain.viemChain, transport: http(BUILDERS.rpc, { retryCount: 2, retryDelay: 400 }) });
+  const client = createPublicClient({ transport: http(ARC_MAINNET_RPC, { retryCount: 2, retryDelay: 400 }) });
   return readBuilderRecords(client as unknown as RegistryReader, {
-    builderRegistry: BUILDERS.contracts.BuilderRegistry!, caretakerRegistry: BUILDERS.contracts.CaretakerRegistry, operator: BUILDERS.operator,
-    chainId: BUILDERS.chainId, proofConfig: proofConfigFromEnv(env as unknown as Record<string, string | undefined>), fetchJson: makeFetchJson({ timeoutMs: 8_000 }),
+    builderRegistry: REG.BuilderRegistry as Address, caretakerRegistry: (REG.CaretakerRegistry as Address | null) ?? null, operator: (REG.operator as Address | null) ?? null,
+    chainId: mainnet.chainId, proofConfig: proofConfigFromEnv(env as unknown as Record<string, string | undefined>), fetchJson: makeFetchJson({ timeoutMs: 8_000 }),
   });
 };
 
