@@ -9,8 +9,11 @@ Owner's words:
 
 **Status: APPROVED by the owner on 2026-10-14 ("go"):**
 - **Licence:** CC BY 4.0, with the attribution "Data: Registrai".
-- **Free-tier limits:** 120 requests per minute per IP; at most 744 hours per history request (168 on
+- **Free-tier limits:** 100 requests per 10 s per IP; at most 744 hours per history request (168 on
   `members/hourly`).
+  - This was changed from 120/min on 2026-10-15 (owner).
+  - The limit is the existing Cloudflare rule "builders API per-IP limit" on all of `builder.registrai.cc/api/`,
+    because the free plan allows only one rule.
 - **Genara session (arc-0a):** confirmed coverage. Its asks A–C are folded in.
 
 ## What it is
@@ -47,6 +50,9 @@ Today Genara's climate feed reads `/opt/abi/out` on our index server. After v1:
 - Radar's private alerts;
 - builder addresses or countries from claims;
 - anything a project marked private.
+  - Index membership itself is public: it is the index page's own data (owner, 2026-10-15).
+  - `PRIVATE_SOURCES` (for example `domain:arctools.fun`) covers Radar alerts and watch-feed labels and events only.
+  - Those projects stay index members in v1, as on `/api/index`.
 
 ## Rules
 
@@ -69,7 +75,7 @@ Today Genara's climate feed reads `/opt/abi/out` on our index server. After v1:
   - edge-cached for 60 s, or for 5 min on claims;
   - GET only, anything else returns 405.
 - **Limits (free tier):**
-  - a Cloudflare rate limit of 120 requests per minute per IP, returning 429 with `retry-after`;
+  - a Cloudflare rate limit of 100 requests per 10 s per IP (the shared `/api/` rule), returning 429;
   - at most 744 hours (31 days) per history request.
 - **Errors:** `{ "error": "<plain sentence>" }` with a 4xx/5xx status. A missing upstream returns 503, never an
   empty 200, and a response is never partial.

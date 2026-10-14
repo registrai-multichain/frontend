@@ -61,7 +61,7 @@ export default function DataApiPage() {
 
         <H>Limits</H>
         <ul className="pa-list">
-          <li>{LIMITS.perMinutePerIp} requests per minute per IP.</li>
+          <li>{LIMITS.requestsPerWindow} requests per {LIMITS.windowSeconds} seconds per IP; above that, requests are refused with 429 for {LIMITS.windowSeconds} seconds.</li>
           <li>At most {LIMITS.historyHours} hours per history request, {LIMITS.membersHourlyHours} on <code>/members/hourly</code>.</li>
           <li>Responses are cached for 60 s (5 min on <code>/verified</code>). Send <code>If-None-Match</code> with the last <code>ETag</code> to get a 304.</li>
         </ul>

@@ -3,7 +3,9 @@
 export const DATA_API_BASE = "https://builder.registrai.cc/api/v1";
 export const DATA_API_DOCS_URL = "https://builder.registrai.cc/data-api/";
 
-export const LIMITS = { perMinutePerIp: 120, historyHours: 744, membersHourlyHours: 168 };
+// requestsPerWindow/windowSeconds: the Cloudflare rate-limiting rule "builders API per-IP limit" on builder.registrai.cc/api/
+// (the free plan's one rule, shared with the rest of /api/; owner 2026-10-15). Change the two together.
+export const LIMITS = { requestsPerWindow: 100, windowSeconds: 10, historyHours: 744, membersHourlyHours: 168 };
 export const HISTORY_START = { indices: "2026-10-02T00:00:00Z", members: "2026-10-10T23:00:00Z" };
 
 export type Endpoint = { method: "GET"; path: string; params: string; returns: string; example: string };

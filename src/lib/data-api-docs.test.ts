@@ -7,7 +7,7 @@ describe("Data API docs content", () => {
     for (const e of ENDPOINTS) expect(e.example).toMatch(new RegExp(`^curl -s '${DATA_API_BASE.replace(/[./]/g, "\\$&")}/`));
   });
   it("states the limits and history start dates the API enforces", () => {
-    expect(LIMITS).toEqual({ perMinutePerIp: 120, historyHours: 744, membersHourlyHours: 168 });
+    expect(LIMITS).toEqual({ requestsPerWindow: 100, windowSeconds: 10, historyHours: 744, membersHourlyHours: 168 });
     expect(HISTORY_START).toEqual({ indices: "2026-10-02T00:00:00Z", members: "2026-10-10T23:00:00Z" });
   });
 });
