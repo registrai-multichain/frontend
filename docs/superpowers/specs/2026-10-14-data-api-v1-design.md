@@ -7,9 +7,11 @@ Owner's words:
 - "ask genara session to confirm before building";
 - "it is an api for general public, no just genara. We are dogfooding the data business now".
 
-**Status: DRAFT.**
-- **Genara session (arc-0a):** confirmed coverage on 2026-10-14. Its asks A–C and the semantics below are folded in.
-- **Waiting on:** the owner's sign-off and questions 4–5. Nothing is built yet.
+**Status: APPROVED by the owner on 2026-10-14 ("go"):**
+- **Licence:** CC BY 4.0, with the attribution "Data: Registrai".
+- **Free-tier limits:** 120 requests per minute per IP; at most 744 hours per history request (168 on
+  `members/hourly`).
+- **Genara session (arc-0a):** confirmed coverage. Its asks A–C are folded in.
 
 ## What it is
 
@@ -88,7 +90,7 @@ Today Genara's climate feed reads `/opt/abi/out` on our index server. After v1:
   - free to use with attribution ("Data: Registrai");
   - no warranty, not financial advice;
   - the terms page gets a Data API section.
-  - The licence choice is the owner's (see Open questions).
+  - The licence is CC BY 4.0 (owner, 2026-10-14).
 
 ## Endpoints
 
@@ -250,10 +252,6 @@ Wallet scanning and the signed push to world.genara.life stay in Genara, so play
 - Asks A–C are folded in above.
 - Genara will move its feed into a cron Worker, so it needs nothing on our index server.
 
-**For the owner:**
-
-4. **Licence:** CC BY 4.0 ("Data: Registrai") is the assistant's recommendation; the alternative is a custom licence
-   that bars resale.
-5. **Free-tier limits:** is 120 requests per minute per IP and a 31-day window per request OK? Genara is fine with
-   both.
-
+**Owner (answered 2026-10-14):**
+- the licence is CC BY 4.0;
+- the limits are as proposed.
