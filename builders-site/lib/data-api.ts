@@ -1,0 +1,94 @@
+/**
+ * Registrai Data API v1 (spec docs/superpowers/specs/2026-10-14-data-api-v1-design.md): public, read-only, versioned.
+ * History from DATA_DB (registrai-data), current state from the KV index files. CORS *, sha256 etag (304 on match),
+ * edge-cached 60 s with a cache variant built from VALIDATED params only.
+ */
+import { ABI_INDICES, sha256Hex, type AbiData } from "../../src/lib/builders-index";
+import { hourOf, isoHour, INDEX_IDS, type IndexId } from "./data-api-rows";
+import type { D1Database, Env } from "./env";
+import { edgeCachedGet, type EdgeCacheDeps } from "./http";
+
+export const V1_CACHE_S = 60;
+export const INDEX_CAP_H = 744;
+export const MEMBERS_HOURLY_CAP_H = 168;
+const BASE_DATE = "2026-10-02T00:00:00Z";
+const NAMES: Record<IndexId, string> = { abi: "Arc Builders Index", aii: "Arc Integrations Index", aei: "Arc Ecosystem Index" };
+const HEADERS = { "content-type": "application/json; charset=utf-8", "x-content-type-options": "nosniff", "access-control-allow-origin": "*" };
+
+export const v1Error = (status: number, error: string) =>
+  new Response(JSON.stringify({ error }), { status, headers: { ...HEADERS, "cache-control": "no-store" } });
+
+/** A v1 JSON response: version first, sha256 etag, 304 when if-none-match matches. */
+export async function v1Json(req: Request, body: Record<string, unknown>, maxAge = V1_CACHE_S): Promise<Response> {
+  const text = JSON.stringify({ version: 1, ...body });
+  const etag = `"${await sha256Hex(text)}"`;
+  if (req.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers: { ...HEADERS, etag } });
+  return new Response(text, { status: 200, headers: { ...HEADERS, etag, "cache-control": `public, max-age=${maxAge}` } });
+}
+
+/** edgeCachedGet, then the 304 check again (a cache hit returns the stored 200 as is). */
+export async function cached(req: Request, deps: EdgeCacheDeps, variant: string, produce: () => Promise<Response>, ttl = V1_CACHE_S): Promise<Response> {
+  if (req.method.toUpperCase() !== "GET") return v1Error(405, "Only GET is supported.");
+  const res = await edgeCachedGet(req, deps, produce, ttl, variant);
+  const etag = res.headers.get("etag");
+  if (res.status === 200 && etag && req.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers: { ...HEADERS, etag } });
+  return res;
+}
+
+export const parseIndex = (v: string | null): IndexId | null => (INDEX_IDS as string[]).includes(v ?? "") ? (v as IndexId) : null;
+
+/** from/to (ISO hour closes, inclusive). Neither: the cap-long window ending at data_until; one: up to the cap from it. */
+export function parseWindow(url: URL, untilHour: number, cap: number): { from: number; to: number } | { error: string } {
+  const f = url.searchParams.get("from"), t = url.searchParams.get("to");
+  const from = f === null ? null : hourOf(f), to = t === null ? null : hourOf(t);
+  if ((f !== null && from === null) || (t !== null && to === null)) return { error: "from and to must be ISO hour closes, like 2026-10-14T19:00:00Z." };
+  let a: number, b: number;
+  if (from === null && to === null) { b = untilHour; a = b - cap + 1; }
+  else if (from !== null && to === null) { a = from; b = Math.min(from + cap - 1, untilHour); }
+  else if (from === null) { b = to!; a = b - cap + 1; }
+  else { a = from; b = to!; }
+  if (a > b) return { error: "from must not be after to." };
+  if (b - a + 1 > cap) return { error: `A request covers at most ${cap} hours.` };
+  return { from: a, to: b };
+}
+
+export async function dataUntil(db: D1Database, index: IndexId): Promise<number | null> {
+  const r = await db.prepare("SELECT MAX(hour) AS h FROM index_hour WHERE idx = ?").bind(index).first<{ h: number | null }>();
+  return r?.h ?? null;
+}
+
+async function indexFile(env: Env, id: IndexId): Promise<AbiData | null> {
+  try { return JSON.parse((await env.INVITES.get(ABI_INDICES[id].key)) ?? "null") as AbiData | null; } catch { return null; }
+}
+const lastClose = (d: AbiData) => d.candles?.length ? d.candles[d.candles.length - 1][4] : null;
+
+export function handleIndices(req: Request, env: Env, deps: EdgeCacheDeps = {}): Promise<Response> {
+  return cached(req, deps, "indices", async () => {
+    const files = await Promise.all(INDEX_IDS.map((id) => indexFile(env, id)));
+    if (files.some((f) => !f || lastClose(f) === null || hourOf(f.data_until) === null)) return v1Error(503, "The index data is not available right now. Retry later.");
+    const fs = files as AbiData[];
+    const until = Math.min(...fs.map((f) => hourOf(f.data_until)!));
+    const p = fs[0].params as { half_life_days: number; decay_per_hour_pct: number };
+    return v1Json(req, {
+      data_until: isoHour(until),
+      indices: Object.fromEntries(INDEX_IDS.map((id, i) => [id, { name: NAMES[id], close: lastClose(fs[i]), close_24h_ago: fs[i].index_24h_ago, base: 1000, base_date: BASE_DATE, members: fs[i].projects.length }])),
+      params: { half_life_days: p.half_life_days, decay_per_hour_pct: p.decay_per_hour_pct },
+    });
+  });
+}
+
+export function handleIndexHourly(req: Request, env: Env, index: IndexId, deps: EdgeCacheDeps = {}): Promise<Response> {
+  const url = new URL(req.url);
+  return (async () => {
+    const db = env.DATA_DB;
+    if (!db) return v1Error(503, "History is not available right now. Retry later.");
+    const until = await dataUntil(db, index);
+    if (until === null) return v1Error(503, "History is not available right now. Retry later.");
+    const w = parseWindow(url, until, INDEX_CAP_H);
+    if ("error" in w) return v1Error(400, w.error);
+    return cached(req, deps, `ih:${index}:${w.from}:${w.to}:${until}`, async () => {
+      const rows = (await db.prepare("SELECT hour, close FROM index_hour WHERE idx = ? AND hour BETWEEN ? AND ? ORDER BY hour").bind(index, w.from, w.to).all<{ hour: number; close: number }>()).results;
+      return v1Json(req, { index, data_until: isoHour(until), rows: rows.map((r) => ({ hour_close: isoHour(r.hour), hour: r.hour, close: r.close })) });
+    });
+  })();
+}
