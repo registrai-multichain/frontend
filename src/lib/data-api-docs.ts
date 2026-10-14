@@ -18,7 +18,7 @@ export const ENDPOINTS: Endpoint[] = [
     example: curl("/members?index=aii") },
   { method: "GET", path: "/members/{id}/hourly", params: "index, from, to (optional)", returns: "One member's hourly points and activity, oldest first.",
     example: curl("/members/domain%3Aarchery.wtf/hourly?index=abi") },
-  { method: "GET", path: "/members/hourly", params: "index, from, to (optional; at most 168 h)", returns: "Every member's hourly rows for a range, ordered by hour, then id.",
+  { method: "GET", path: "/members/hourly", params: "index, and hour or from, to (optional; at most 168 h)", returns: "Every member's hourly rows for a range, ordered by hour, then id.",
     example: curl("/members/hourly?index=aii&from=2026-10-14T00:00:00Z&to=2026-10-14T23:00:00Z") },
   { method: "GET", path: "/members/new", params: "index, since", returns: "Members first seen after an hour.",
     example: curl("/members/new?index=abi&since=2026-10-13T00:00:00Z") },
@@ -35,7 +35,7 @@ export const FIELDS: { name: string; text: string }[] = [
 ];
 
 export const ERRORS: { status: number; text: string }[] = [
-  { status: 400, text: "A parameter is missing or invalid; the error says which." },
+  { status: 400, text: "A parameter is missing or invalid; the error says which. A from after the last closed hour returns 200 with no rows." },
   { status: 404, text: "Unknown endpoint, or a member id this index has never had." },
   { status: 405, text: "Only GET is supported." },
   { status: 429, text: "Too many requests from your IP; retry after the retry-after header." },
