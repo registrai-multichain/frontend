@@ -68,7 +68,7 @@ export async function dataUntil(db: D1Database, index: IndexId): Promise<number 
   return r?.h ?? null;
 }
 
-async function indexFile(env: Env, id: IndexId): Promise<AbiData | null> {
+export async function indexFile(env: Env, id: IndexId): Promise<AbiData | null> {
   try { return JSON.parse((await env.INVITES.get(ABI_INDICES[id].key)) ?? "null") as AbiData | null; } catch { return null; }
 }
 const lastClose = (d: AbiData) => d.candles?.length ? d.candles[d.candles.length - 1][4] : null;
@@ -108,7 +108,7 @@ type MemberRow = { id: string; hour: number; points: number; points_earned: numb
 const rowOut = (r: MemberRow) => ({ hour_close: isoHour(r.hour), hour: r.hour, points: r.points, points_earned: r.points_earned, payments: r.payments, wallets: r.wallets, new_payers: r.new_payers, usdc: r.usdc });
 const unavailable = () => v1Error(503, "History is not available right now. Retry later.");
 
-async function firstHours(db: D1Database, index: IndexId): Promise<Map<string, number>> {
+export async function firstHours(db: D1Database, index: IndexId): Promise<Map<string, number>> {
   const rows = (await db.prepare("SELECT id, first_hour FROM member_first WHERE idx = ?").bind(index).all<{ id: string; first_hour: number }>()).results;
   return new Map(rows.map((r) => [r.id, r.first_hour]));
 }
