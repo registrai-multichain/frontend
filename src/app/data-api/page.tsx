@@ -32,6 +32,7 @@ export default function DataApiPage() {
 
         <H>Base URL</H>
         <pre className="pa-code"><code>{DATA_API_BASE}</code></pre>
+        <p className="pa-muted">For tools and agents: <a href="/api/v1/openapi.json">OpenAPI 3.1</a> · <a href="/llms.txt">llms.txt</a> · MCP server (read-only, Streamable HTTP) at <code>https://builder.registrai.cc/api/mcp</code> · <Link href="/apps/">Stablecoin apps on Arc</Link></p>
 
         <H>Endpoints</H>
         {ENDPOINTS.map((e) => (
