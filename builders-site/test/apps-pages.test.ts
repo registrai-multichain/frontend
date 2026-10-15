@@ -47,3 +47,7 @@ describe("renderers", () => {
     expect(renderNotFound()).toContain('href="/apps/"');
   });
 });
+
+test("M6: the totals line names USDC, the currency the totals are in", () => {
+  expect(renderAppList(list(), "payments")).toMatch(/USDC payments/);
+});

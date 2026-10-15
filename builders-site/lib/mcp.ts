@@ -19,14 +19,17 @@ const INDEX = { type: "string", enum: ["abi", "aii", "aei"], description: "abi =
 const HOUR = (d: string) => ({ type: "string", description: `${d} An ISO hour close, e.g. 2026-10-14T19:00:00Z.` });
 const obj = (properties: Record<string, unknown>, required: string[] = []) => ({ type: "object", properties, required, additionalProperties: false });
 
+// every tool only reads public data (review I4: clients skip the confirm prompt for read-only tools)
+const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+
 export const MCP_TOOLS = [
-  { name: "arc_indices", description: "Latest hourly close of the Arc Builders, Integrations and Ecosystem indices (ABI, AII, AEI), their 24 h change base and decay parameters.", inputSchema: obj({}) },
-  { name: "arc_index_history", description: "Hourly closes of one Arc index, oldest first (at most 744 hours per call).", inputSchema: obj({ index: INDEX, from: HOUR("First hour (inclusive)."), to: HOUR("Last hour (inclusive).") }, ["index"]) },
-  { name: "arc_apps", description: "Every stablecoin app on Arc in the indices with its last 24 h of stablecoin payments and USD volume, verified status and first-seen hour.", inputSchema: obj({ sort: { type: "string", enum: ["payments", "usdc", "points", "first_seen"] } }) },
-  { name: "arc_app", description: "One Arc app by id (e.g. domain:archery.wtf, integration:uniswap): last 24 h, contracts count, verified status and the last 7 days of hourly rows.", inputSchema: obj({ id: { type: "string" } }, ["id"]) },
-  { name: "arc_app_history", description: "One app's hourly points and activity (payments, paying wallets, new payers, USD) in one index, oldest first.", inputSchema: obj({ id: { type: "string" }, index: INDEX, from: HOUR("First hour (inclusive)."), to: HOUR("Last hour (inclusive).") }, ["id", "index"]) },
-  { name: "arc_new_apps", description: "Apps first seen in an index after a given hour.", inputSchema: obj({ index: INDEX, since: HOUR("Members first seen after this hour.") }, ["index", "since"]) },
-  { name: "arc_verified", description: "Projects whose builder proof validates against the Arc mainnet builder registry.", inputSchema: obj({}) },
+  { name: "arc_indices", description: "Latest hourly close of the Arc Builders, Integrations and Ecosystem indices (ABI, AII, AEI), their 24 h change base and decay parameters.", inputSchema: obj({}), annotations: RO },
+  { name: "arc_index_history", description: "Hourly closes of one Arc index, oldest first (at most 744 hours per call).", inputSchema: obj({ index: INDEX, from: HOUR("First hour (inclusive)."), to: HOUR("Last hour (inclusive).") }, ["index"]), annotations: RO },
+  { name: "arc_apps", description: "Every stablecoin app on Arc in the indices with its last 24 h of stablecoin payments and USD volume, verified status and first-seen hour.", inputSchema: obj({ sort: { type: "string", enum: ["payments", "usdc", "points", "first_seen"] } }), annotations: RO },
+  { name: "arc_app", description: "One Arc app by id (e.g. domain:archery.wtf, integration:uniswap): last 24 h, contracts count, verified status and the last 7 days of hourly rows.", inputSchema: obj({ id: { type: "string" } }, ["id"]), annotations: RO },
+  { name: "arc_app_history", description: "One app's hourly points and activity (payments, paying wallets, new payers, USD) in one index, oldest first.", inputSchema: obj({ id: { type: "string" }, index: INDEX, from: HOUR("First hour (inclusive)."), to: HOUR("Last hour (inclusive).") }, ["id", "index"]), annotations: RO },
+  { name: "arc_new_apps", description: "Apps first seen in an index after a given hour.", inputSchema: obj({ index: INDEX, since: HOUR("Members first seen after this hour.") }, ["index", "since"]), annotations: RO },
+  { name: "arc_verified", description: "Projects whose builder proof validates against the Arc mainnet builder registry.", inputSchema: obj({}), annotations: RO },
 ] as const;
 
 type Args = Record<string, unknown>;
@@ -50,7 +53,7 @@ async function viaApi(url: string, run: (req: Request) => Promise<Response>): Pr
 }
 
 async function callTool(name: string, a: Args, env: Env, deps: EdgeCacheDeps): Promise<ToolResult | null> {
-  const d = { ...deps, cache: null };
+  const d = deps; // share the API's edge cache (review I2): a tool call costs what an API call costs
   switch (name) {
     case "arc_indices": return viaApi(`${API}/indices`, (q) => handleIndices(q, env, d));
     case "arc_index_history": { const i = index(a); return viaApi(`${API}/indices/${i}/hourly${qs({ from: str(a, "from"), to: str(a, "to") })}`, (q) => handleIndexHourly(q, env, i, d)); }

@@ -22,7 +22,7 @@ async function seeded() {
   await kv.put(ABI_INDICES.aei.key, file(projects));
   await kv.put(ABI_INDICES.abi.key, file([projects[0]]));
   await kv.put(ABI_INDICES.aii.key, file([projects[1]]));
-  await kv.put("facts:domain:archery.wtf", JSON.stringify({ source: "domain:archery.wtf", facts: [] }));
+  await kv.put("facts:domain:archery.wtf", JSON.stringify({ source: "domain:archery.wtf", facts: [{ id: "f1", kind: "control", text: "x", evidence: [] }], changelog: [], lastReviewedAt: "", reviewedBy: "", rev: 1 }));
   db.sqlite.prepare("INSERT INTO index_hour VALUES ('aei', ?, 990)").all(H("2026-10-14T21:00:00Z"));
   db.sqlite.prepare("INSERT INTO member_hour VALUES ('aei', 'domain:archery.wtf', ?, 9.2, 11, 5, 3, 1, 50)").all(H("2026-10-14T21:00:00Z"));
   db.sqlite.prepare("INSERT INTO member_first VALUES ('aei', 'domain:archery.wtf', ?)").all(H("2026-10-11T19:00:00Z"));
@@ -69,5 +69,18 @@ describe("MCP", () => {
     const r = await (await rpc(env, { jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "arc_index_history", arguments: { index: "aei" } } })).json();
     expect(r.result.structuredContent).toMatchObject({ version: 1, index: "aei" });
     expect(r.result.structuredContent.source_url).toContain("/api/v1/indices/aei/hourly");
+  });
+});
+
+describe("review fixes", () => {
+  test("I4: every tool is annotated read-only", () => {
+    for (const t of MCP_TOOLS) expect((t as { annotations?: { readOnlyHint?: boolean } }).annotations?.readOnlyHint, t.name).toBe(true);
+  });
+  test("I2: API-backed tools share the API's edge cache", async () => {
+    const { MemoryCache } = await import("./memory-cache");
+    const { env } = await seeded();
+    const cache = new MemoryCache();
+    await handleMcp(new Request("https://builder.registrai.cc/api/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "arc_index_history", arguments: { index: "aei" } } }) }), env as never, { cache: cache as unknown as Cache });
+    expect([...cache.store.keys()].some((k) => k.includes("/api/v1/indices/aei/hourly"))).toBe(true);
   });
 });

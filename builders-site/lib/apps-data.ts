@@ -6,7 +6,8 @@ import { isoHour, type IndexId } from "./data-api-rows";
 import { verifiedIds } from "./data-api-verified";
 import type { Env } from "./env";
 import { FACTS_PREFIX } from "./facts";
-import type { EdgeCacheDeps } from "./http";
+import { edgeCache, type EdgeCacheDeps } from "./http";
+import { publicFacts, type ProjectFacts } from "../../src/lib/facts";
 
 const KIND: Record<string, "builder" | "integration" | "base"> = { project: "builder", integration: "integration", base: "base" };
 export type AppRow = { id: string; name: string; kind: "builder" | "integration" | "base"; verified: boolean; points: number; share: number; first_hour: string;
@@ -33,7 +34,25 @@ export function pathToId(segments: string[]): string | null {
 
 const membersOf = (f: AbiData | null) => new Set((f?.projects ?? []).map((p) => p.source));
 
+/** The app list is read once per 5 min per colo (edge cache under a fixed key), so /apps/<anything>/ costs one cache lookup,
+ * not 4 KV reads and 2 D1 queries (review I1: junk URLs must not spend the shared KV read quota). */
+const LIST_KEY = "https://builder.registrai.cc/__internal/apps-list";
+export const APP_LIST_TTL_S = 300;
+
 export async function loadAppList(env: Env, deps: EdgeCacheDeps): Promise<AppList | null> {
+  const cache = deps.cache === undefined ? edgeCache() : deps.cache;
+  const key = new Request(LIST_KEY);
+  const hit = cache ? await cache.match(key) : undefined;
+  if (hit) return (await hit.json()) as AppList;
+  const l = await readAppList(env, deps);
+  if (l && cache) {
+    const put = cache.put(key, new Response(JSON.stringify(l), { headers: { "content-type": "application/json", "cache-control": `public, max-age=${APP_LIST_TTL_S}` } }));
+    if (deps.waitUntil) deps.waitUntil(put); else await put;
+  }
+  return l;
+}
+
+async function readAppList(env: Env, deps: EdgeCacheDeps): Promise<AppList | null> {
   const db = env.DATA_DB;
   const [aei, abi, aii] = await Promise.all([indexFile(env, "aei"), indexFile(env, "abi"), indexFile(env, "aii")]);
   if (!db || !aei?.live?.P) return null;
@@ -66,6 +85,11 @@ export async function loadApp(env: Env, deps: EdgeCacheDeps, id: string): Promis
   const hourly = (await db.prepare("SELECT hour, points, points_earned, payments, wallets, new_payers, usdc FROM member_hour WHERE idx = 'aei' AND id = ? AND hour BETWEEN ? AND ? ORDER BY hour")
     .bind(id, to - 167, to).all<{ hour: number } & Omit<HourRow, "hour_close">>()).results
     .map(({ hour, ...r }) => ({ hour_close: isoHour(hour), ...r }));
-  const facts = await env.INVITES.get(`${FACTS_PREFIX}${id}`);
-  return { ...row, hourly, facts_url: facts ? projectHref(id) : null, data_until: list.data_until };
+  // link the facts page only when something on it is public now (review M5: never reveal an unpublished record)
+  let hasPublic = false;
+  try {
+    const stored = JSON.parse((await env.INVITES.get(`${FACTS_PREFIX}${id}`)) ?? "null") as ProjectFacts | null;
+    hasPublic = !!stored && publicFacts(stored, Date.now()).facts.length > 0;
+  } catch { hasPublic = false; }
+  return { ...row, hourly, facts_url: hasPublic ? projectHref(id) : null, data_until: list.data_until };
 }

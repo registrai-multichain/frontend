@@ -3,7 +3,7 @@ import type { PagesFunction } from "../lib/env";
 /** GET /llms.txt (llmstxt.org): where agents find Registrai's Arc data (spec 2026-10-15-agent-reference-design.md). */
 export const LLMS_TXT = `# Registrai
 
-> Hourly data on stablecoin apps on Arc: per-app stablecoin payments, paying wallets and volume, the Arc Builders, Integrations and Ecosystem indices, and verified builders. Every number links to the chain.
+> Hourly data on stablecoin apps on Arc: per-app stablecoin payments, paying wallets and volume, the Arc Builders, Integrations and Ecosystem indices, and verified builders. Computed from public Arc mainnet data; the method and evidence are published.
 
 ## Data
 - [Stablecoin apps on Arc](https://builder.registrai.cc/apps/): every app with its last 24 h, sorted by payments

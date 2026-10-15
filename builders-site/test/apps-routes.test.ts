@@ -25,7 +25,7 @@ async function seeded() {
   await kv.put(ABI_INDICES.aei.key, file(projects));
   await kv.put(ABI_INDICES.abi.key, file([projects[0]]));
   await kv.put(ABI_INDICES.aii.key, file([projects[1]]));
-  await kv.put("facts:domain:archery.wtf", JSON.stringify({ source: "domain:archery.wtf", facts: [] }));
+  await kv.put("facts:domain:archery.wtf", JSON.stringify({ source: "domain:archery.wtf", facts: [{ id: "f1", kind: "control", text: "x", evidence: [] }], changelog: [], lastReviewedAt: "", reviewedBy: "", rev: 1 }));
   db.sqlite.prepare("INSERT INTO index_hour VALUES ('aei', ?, 990)").all(H("2026-10-14T21:00:00Z"));
   db.sqlite.prepare("INSERT INTO member_hour VALUES ('aei', 'domain:archery.wtf', ?, 9.2, 11, 5, 3, 1, 50)").all(H("2026-10-14T21:00:00Z"));
   db.sqlite.prepare("INSERT INTO member_first VALUES ('aei', 'domain:archery.wtf', ?)").all(H("2026-10-11T19:00:00Z"));
@@ -61,4 +61,12 @@ test("sitemap lists every app page; llms.txt names the API and MCP", async () =>
   expect(t).toContain("https://builder.registrai.cc/api/mcp");
 });
 
+});
+
+test("I1: sitemap is GET/HEAD only; llms.txt makes no claim the pages don't keep", async () => {
+  const { onRequest: sm } = await import("../functions/sitemap.xml");
+  const { LLMS_TXT } = await import("../functions/llms.txt");
+  const { env } = await seeded();
+  expect((await sm({ request: new Request("https://builder.registrai.cc/sitemap.xml", { method: "POST" }), env, params: {}, waitUntil: () => undefined } as never)).status).toBe(405);
+  expect(LLMS_TXT).not.toContain("Every number links to the chain");
 });

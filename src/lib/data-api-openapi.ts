@@ -21,6 +21,14 @@ function schemaOf(v: unknown): Schema {
   return { type: typeof v === "number" ? "number" : typeof v === "boolean" ? "boolean" : "string" };
 }
 
+/** Mark a field nullable in a derived schema (review M1: close_24h_ago is null while an index has fewer than 24 closed hours). "*" = every property. */
+function nullable(s: Schema, path: string[]): Schema {
+  if (!path.length) return { ...s, type: [s.type, "null"] as unknown as string };
+  const [head, ...rest] = path, props = { ...(s.properties ?? {}) };
+  for (const k of head === "*" ? Object.keys(props) : [head]) if (props[k]) props[k] = nullable(props[k], rest);
+  return { ...s, properties: props };
+}
+
 const membersNew = { version: 1, index: "aii", since: "2026-10-14T19:00:00Z", data_until: "2026-10-14T21:00:00Z", members: members.members };
 const hourParam = (name: string, description: string) => ({ name, in: "query", required: false, description, schema: { type: "string", format: "date-time", example: "2026-10-14T19:00:00Z" } });
 const indexQuery = { name: "index", in: "query", required: true, schema: { type: "string", enum: ["abi", "aii", "aei"] } };
@@ -28,8 +36,8 @@ const from = hourParam("from", "First hour close (inclusive), an ISO hour like 2
 const to = hourParam("to", "Last hour close (inclusive).");
 const err = { $ref: "#/components/responses/Error" };
 const ok = (schema: string, description: string) => ({ description, content: { "application/json": { schema: { $ref: `#/components/schemas/${schema}` } } } });
-const op = (summary: string, schema: string, parameters: unknown[] = []) => ({
-  get: { summary, parameters, responses: { "200": ok(schema, summary), "304": { description: "Not modified (If-None-Match)" }, "400": err, "404": err, "405": err, "429": err, "503": err } },
+const op = (operationId: string, summary: string, schema: string, parameters: unknown[] = []) => ({
+  get: { operationId, summary, parameters, responses: { "200": ok(schema, summary), "304": { description: "Not modified (If-None-Match)" }, "400": err, "404": err, "405": err, "429": err, "503": err } },
 });
 
 export const OPENAPI = {
@@ -43,17 +51,17 @@ export const OPENAPI = {
   servers: [{ url: DATA_API_BASE }],
   externalDocs: { url: "https://builder.registrai.cc/data-api/" },
   paths: {
-    "/indices": op("Latest close of ABI, AII and AEI, with parameters", "Indices"),
-    "/indices/{index}/hourly": op("Hourly closes of one index", "IndexHourly", [{ name: "index", in: "path", required: true, schema: { type: "string", enum: ["abi", "aii", "aei"] } }, from, to]),
-    "/members": op("Every scored member of an index now", "Members", [indexQuery]),
-    "/members/{id}/hourly": op("One member's hourly points and activity", "MemberHourly", [{ name: "id", in: "path", required: true, description: "Member id (index source), URL-encoded, e.g. domain%3Aarchery.wtf", schema: { type: "string" } }, indexQuery, from, to]),
-    "/members/hourly": op(`Every member's hourly rows for one hour or a range (at most ${LIMITS.membersHourlyHours} h)`, "MembersHourly", [indexQuery, hourParam("hour", "One hour close; not with from/to."), from, to]),
-    "/members/new": op("Members first seen after an hour", "MembersNew", [indexQuery, { ...hourParam("since", "Hour close; members first seen after it."), required: true }]),
-    "/verified": op("Projects whose builder proof validates against the Arc mainnet registry", "Verified"),
+    "/indices": op("getIndices", "Latest close of ABI, AII and AEI, with parameters", "Indices"),
+    "/indices/{index}/hourly": op("getIndexHourly", "Hourly closes of one index", "IndexHourly", [{ name: "index", in: "path", required: true, schema: { type: "string", enum: ["abi", "aii", "aei"] } }, from, to]),
+    "/members": op("listMembers", "Every scored member of an index now", "Members", [indexQuery]),
+    "/members/{id}/hourly": op("getMemberHourly", "One member's hourly points and activity", "MemberHourly", [{ name: "id", in: "path", required: true, description: "Member id (index source), URL-encoded, e.g. domain%3Aarchery.wtf", schema: { type: "string" } }, indexQuery, from, to]),
+    "/members/hourly": op("listMembersHourly", `Every member's hourly rows for one hour or a range (at most ${LIMITS.membersHourlyHours} h)`, "MembersHourly", [indexQuery, hourParam("hour", "One hour close; not with from/to."), from, to]),
+    "/members/new": op("listNewMembers", "Members first seen after an hour", "MembersNew", [indexQuery, { ...hourParam("since", "Hour close; members first seen after it."), required: true }]),
+    "/verified": op("listVerified", "Projects whose builder proof validates against the Arc mainnet registry", "Verified"),
   },
   components: {
     schemas: {
-      Indices: schemaOf(indices),
+      Indices: nullable(schemaOf(indices), ["indices", "*", "close_24h_ago"]),
       IndexHourly: schemaOf(indexHourly),
       Members: schemaOf(members),
       MemberHourly: schemaOf(memberHourly),

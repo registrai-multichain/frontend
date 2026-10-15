@@ -38,7 +38,8 @@ async function seeded() {
   await kv.put(ABI_INDICES.aei.key, file(projects));
   await kv.put(ABI_INDICES.abi.key, file([projects[0]]));
   await kv.put(ABI_INDICES.aii.key, file([projects[1]]));
-  await kv.put("facts:domain:archery.wtf", JSON.stringify({ source: "domain:archery.wtf", facts: [] }));
+  // one fact with no embargo: public now, so the page links it
+  await kv.put("facts:domain:archery.wtf", JSON.stringify({ source: "domain:archery.wtf", facts: [{ id: "f1", kind: "control", text: "x", evidence: [] }], changelog: [], lastReviewedAt: "", reviewedBy: "", rev: 1 }));
   db.sqlite.prepare("INSERT INTO index_hour VALUES ('aei', ?, 990)").all(H("2026-10-14T21:00:00Z"));
   db.sqlite.prepare("INSERT INTO member_hour VALUES ('aei', 'domain:archery.wtf', ?, 9.2, 11, 5, 3, 1, 50)").all(H("2026-10-14T21:00:00Z"));
   db.sqlite.prepare("INSERT INTO member_first VALUES ('aei', 'domain:archery.wtf', ?)").all(H("2026-10-11T19:00:00Z"));
@@ -68,5 +69,24 @@ describe("loaders", () => {
   });
   test("no DB or no index file: null (the route answers 503)", async () => {
     expect(await loadAppList({ INVITES: new MemoryKV() } as never, {})).toBeNull();
+  });
+});
+
+describe("review fixes", () => {
+  test("I1: the app list is read once per cache window; unknown ids cost no KV or D1 reads after that", async () => {
+    const { MemoryCache } = await import("./memory-cache");
+    const { env } = await seeded();
+    const kv = (env as { INVITES: MemoryKV }).INVITES, get = vi.spyOn(kv, "get");
+    const cache = new MemoryCache() as unknown as Cache;
+    expect(await loadApp(env, { cache }, "domain:nope1.example")).toBe("unknown");
+    const after = get.mock.calls.length;
+    expect(await loadApp(env, { cache }, "domain:nope2.example")).toBe("unknown");
+    expect(await loadApp(env, { cache }, "domain:nope3.example")).toBe("unknown");
+    expect(get.mock.calls.length).toBe(after);
+  });
+  test("M5: a facts record with nothing public yet gives no facts link", async () => {
+    const { env } = await seeded();
+    await (env as { INVITES: MemoryKV }).INVITES.put("facts:integration:uniswap", JSON.stringify({ source: "integration:uniswap", facts: [{ id: "f1", publishAt: "2099-01-01T00:00:00Z", kind: "control", text: "x", evidence: [] }], changelog: [], lastReviewedAt: "", reviewedBy: "", rev: 1 }));
+    expect(((await loadApp(env, {}, "integration:uniswap")) as { facts_url: string | null }).facts_url).toBeNull();
   });
 });

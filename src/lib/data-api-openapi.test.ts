@@ -18,3 +18,15 @@ describe("OpenAPI", () => {
     for (const p of Object.values(OPENAPI.paths)) expect(Object.keys(p.get.responses)).toEqual(expect.arrayContaining(["200", "400", "429", "503"]));
   });
 });
+
+describe("review fixes", () => {
+  it("I3: every operation has a unique operationId (GPT Actions and OpenAPI tool converters need it)", () => {
+    const ids = Object.values(OPENAPI.paths).map((p) => (p.get as { operationId?: string }).operationId);
+    expect(ids.every((x) => typeof x === "string" && x.length > 0)).toBe(true);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+  it("M1: close_24h_ago may be null (fewer than 24 closed hours)", () => {
+    const abi = (OPENAPI.components.schemas.Indices.properties as Record<string, { properties?: Record<string, { properties?: Record<string, { type: unknown }> }> }>).indices.properties!.abi.properties!;
+    expect(abi.close_24h_ago.type).toEqual(["number", "null"]);
+  });
+});

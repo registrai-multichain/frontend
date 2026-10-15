@@ -10,8 +10,10 @@ const METHOD_URL = "/builders-index/";
 const API_DOCS_URL = "/data-api/";
 
 export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-const num = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
-const usd = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+// one formatter per module (review M3: a formatter per call costs CPU on the free plan's 10 ms budget)
+const NUM = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }), USD = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+const num = (n: number) => NUM.format(n);
+const usd = (n: number) => `$${USD.format(n)}`;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const when = (iso: string) => { const d = new Date(iso); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${String(d.getUTCHours()).padStart(2, "0")}:00 UTC`; };
 const day = (iso: string) => { const d = new Date(iso); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
@@ -52,7 +54,7 @@ export function renderAppList(l: AppList, sort: Sort): string {
   const share = l.totals.arc_usdc_24h_est > 0 ? ` That is about ${num((100 * l.totals.usdc_24h) / l.totals.arc_usdc_24h_est)}% of the estimated ${usd(l.totals.arc_usdc_24h_est)} USDC moved on Arc in the same 24 h; the rest is not attributed to an app yet.` : "";
   const body = `<h1>Stablecoin apps on Arc</h1>
 <p class="muted">Data until ${esc(when(l.data_until))}. Updated hourly from Arc mainnet.</p>
-<p>${num(l.totals.apps)} apps · ${num(l.totals.payments_24h)} stablecoin payments · ${usd(l.totals.usdc_24h)} USDC to these apps in the last 24 h
+<p>${num(l.totals.apps)} apps · ${num(l.totals.payments_24h)} USDC payments · ${usd(l.totals.usdc_24h)} USDC to these apps in the last 24 h
 <details><summary>i</summary> Payments into the apps' own contracts, counted by the Arc Ecosystem Index method (per-wallet caps and minimums apply).${esc(share)}</details></p>
 <p class="muted">Sorted by ${esc(SORTS[sort].label)}. Sort by ${others}.</p>
 <div class="wrap"><table><thead><tr><th>App</th><th>Kind</th><th>Verified</th><th class="n">24 h payments</th><th class="n">24 h USD</th><th class="n">Index share</th><th>First seen</th></tr></thead><tbody>
