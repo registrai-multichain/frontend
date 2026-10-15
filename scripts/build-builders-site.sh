@@ -49,7 +49,7 @@ mkdir -p "$D/social" && cp out/social/registrai-landing-regi.png "$D/social/"
     esac
   done
 } > "$D/_redirects"
-printf "User-agent: *\nAllow: /\nDisallow: /api/\n" > "$D/robots.txt"
+printf "User-agent: *\nAllow: /\nAllow: /api/v1/\nDisallow: /api/\nSitemap: https://builder.registrai.cc/sitemap.xml\n" > "$D/robots.txt"
 # Security headers for the standalone builders site (builder.registrai.cc).
 # Written fresh here (not inherited from public/_headers) so the mainnet site
 # ships an explicit, tight policy. The CSP is tuned to THIS app only:

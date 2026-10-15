@@ -101,6 +101,8 @@ describe("scripts/deploy-builders-site.sh", () => {
     expect(r.out).toContain(`deploying commit ${t.head()} (`);
     expect(r.out).toContain("release test commit");
     expect(r.out).toContain("WOULD RUN: npx wrangler pages deploy --branch=main");
+    // crawlers may read the public Data API and the sitemap; the rest of /api/ stays disallowed
+    expect(readFileSync(join(t.dir, "dist-builders/robots.txt"), "utf8")).toBe("User-agent: *\nAllow: /\nAllow: /api/v1/\nDisallow: /api/\nSitemap: https://builder.registrai.cc/sitemap.xml\n");
   });
   test("refuses while the DATA_DB (registrai-data) database id is the placeholder", () => {
     const t = repo(NOW - 600, NOW - 300);
