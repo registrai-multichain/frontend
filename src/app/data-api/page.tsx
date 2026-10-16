@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
 import { InfoBubble } from "@/components/InfoBubble";
-import { CHANGELOG, DATA_API_BASE, ENDPOINTS, ERRORS, FIELDS, HISTORY_START, LICENCE, LIMITS, PRECISION_NOTE } from "@/lib/data-api-docs";
+import { CHANGELOG, DATA_API_BASE, ENDPOINTS, ERRORS, FIELDS, HISTORY_START, LICENCE, LIMITS, PAID_DOCS, PAID_NOTE, PRECISION_NOTE } from "@/lib/data-api-docs";
 
 const TITLE = "Data API · Registrai";
 const DESCRIPTION = "Public, read-only API for the Arc indices and per-app hourly activity on Arc mainnet.";
@@ -72,6 +72,14 @@ export default function DataApiPage() {
         <ul className="pa-list">
           {ERRORS.map((e) => <li key={e.status}><code>{e.status}</code>: {e.text}</li>)}
         </ul>
+
+        <H>Paid extras</H>
+        <p>{PAID_NOTE}</p>
+        <table className="pa-legal-table">
+          <thead><tr><th>Path</th><th>Returns</th><th>Circle</th><th>Standard</th><th>MCP tool</th></tr></thead>
+          <tbody>{PAID_DOCS.map((p) => <tr key={p.id}><td><code>{p.path}</code></td><td>{p.returns} <span className="pa-muted">Parameters: {p.params}.</span></td><td>{p.circle}</td><td>{p.standard}</td><td><code>{p.mcp}</code></td></tr>)}</tbody>
+        </table>
+        <p className="pa-muted">How to pay <InfoBubble label="How to pay">Call the path; a 402 response lists the options (also base64 in the PAYMENT-REQUIRED header). Pay with Circle&apos;s x402 batching client (a Gateway balance) or any x402 client that signs a USDC EIP-3009 authorization on Arc, and retry with the PAYMENT-SIGNATURE header. The PAYMENT-RESPONSE header carries the settlement. Over MCP, call the tool, then retry with the payment in params._meta[&quot;x402/payment&quot;]. The catalogue, payment health and sales totals are free: /api/v1/paid, /api/v1/paid/health, /api/v1/paid/stats.</InfoBubble></p>
 
         <H>Versioning</H>
         <p>Every response carries <code>&quot;version&quot;: 1</code>. Fields are only added within v1. A breaking change ships as <code>/api/v2</code>, with v1 kept for at least 90 days and dated below.</p>

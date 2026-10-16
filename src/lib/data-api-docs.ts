@@ -1,4 +1,5 @@
 // Data API v1 docs content (builder.registrai.cc/data-api/). Spec: docs/superpowers/specs/2026-10-14-data-api-v1-design.md.
+import { formatUsd, PRODUCTS, type ProductId } from "./x402-catalog";
 // The numbers here are the limits the API enforces (builders-site/lib/data-api.ts); keep them in step.
 export const DATA_API_BASE = "https://builder.registrai.cc/api/v1";
 export const DATA_API_DOCS_URL = "https://builder.registrai.cc/data-api/";
@@ -50,3 +51,16 @@ export const PRECISION_NOTE =
 export const CHANGELOG = [{ date: "2026-10-14", text: "v1 released: indices, members, member history, verified projects." }];
 
 export const LICENCE = 'Free to use under CC BY 4.0 with the attribution "Data: Registrai". No warranty; not financial advice.';
+
+// Paid extras (x402). Prices come from the same catalogue the payment code charges.
+export type PaidDoc = { id: ProductId; path: string; params: string; mcp: string; circle: string; standard: string; returns: string };
+const PAID_ROUTES: Record<ProductId, { path: string; params: string; mcp: string }> = {
+  deep_index_history: { path: "/paid/indices/{index}/hourly", params: "from, to (any window)", mcp: "arc_index_history_deep" },
+  deep_member_history: { path: "/paid/members/{id}/hourly", params: "index, from, to (any window)", mcp: "arc_app_history_deep" },
+  members_day: { path: "/paid/members/day", params: "date (YYYY-MM-DD)", mcp: "arc_members_day" },
+  events: { path: "/paid/events", params: "since_block, until_block, since_ts, kind, project, contract, labelled, min_balance, min_project_usdc_24h, limit", mcp: "arc_events" },
+  contract: { path: "/paid/contract/{address}", params: "none", mcp: "arc_contract" },
+  project_scope: { path: "/paid/projects/{source}/scope", params: "limit, offset", mcp: "arc_project_scope" },
+};
+export const PAID_DOCS: PaidDoc[] = (Object.keys(PRODUCTS) as ProductId[]).map((id) => ({ id, ...PAID_ROUTES[id], circle: formatUsd(PRODUCTS[id].gateway), standard: formatUsd(PRODUCTS[id].standard), returns: PRODUCTS[id].description }));
+export const PAID_NOTE = "Paid extras are sold per request through x402 on Arc mainnet. A request without payment answers 402 with two options: Circle Gateway Nanopayments (batched, gasless; the lower price) or a standard EIP-3009 USDC authorization (any x402 wallet). The response is built first and charged only if it can be delivered. The free tier above is unchanged.";

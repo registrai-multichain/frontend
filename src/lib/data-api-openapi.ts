@@ -1,6 +1,6 @@
 // OpenAPI 3.1 description of Registrai Data API v1 (spec docs/superpowers/specs/2026-10-14-data-api-v1-design.md).
 // Response schemas are derived from the contract fixtures, so the description cannot drift from what consumers test against.
-import { DATA_API_BASE, LIMITS } from "./data-api-docs";
+import { DATA_API_BASE, LIMITS, PAID_DOCS, PAID_NOTE } from "./data-api-docs";
 import indices from "../../docs/superpowers/specs/data-api-v1-fixtures/indices.json";
 import indexHourly from "../../docs/superpowers/specs/data-api-v1-fixtures/indices-abi-hourly.json";
 import members from "../../docs/superpowers/specs/data-api-v1-fixtures/members-aii.json";
@@ -40,6 +40,20 @@ const op = (operationId: string, summary: string, schema: string, parameters: un
   get: { operationId, summary, parameters, responses: { "200": ok(schema, summary), "304": { description: "Not modified (If-None-Match)" }, "400": err, "404": err, "405": err, "429": err, "503": err } },
 });
 
+const PAID_SCHEMA: Record<string, string> = { deep_index_history: "IndexHourly", deep_member_history: "MemberHourly" };
+const paidOp = (d: (typeof PAID_DOCS)[number]) => ({
+  get: {
+    operationId: `paid_${d.id}`,
+    summary: `${d.returns} Paid via x402: ${d.circle} (Circle Gateway) or ${d.standard} (standard EIP-3009).`,
+    parameters: [...d.path.matchAll(/\{(\w+)\}/g)].map((m) => ({ name: m[1], in: "path", required: true, schema: { type: "string" } })),
+    responses: {
+      "200": PAID_SCHEMA[d.id] ? ok(PAID_SCHEMA[d.id], d.returns) : { description: d.returns, content: { "application/json": { schema: { type: "object" } } } },
+      "402": { description: "Payment required: x402 v2 PaymentRequired (also base64 in the PAYMENT-REQUIRED header). Retry with PAYMENT-SIGNATURE.", content: { "application/json": { schema: { $ref: "#/components/schemas/PaymentRequired" } } } },
+      "400": err, "404": err, "429": err, "503": err,
+    },
+  },
+});
+
 export const OPENAPI = {
   openapi: "3.1.0",
   info: {
@@ -57,6 +71,7 @@ export const OPENAPI = {
     "/members/{id}/hourly": op("getMemberHourly", "One member's hourly points and activity", "MemberHourly", [{ name: "id", in: "path", required: true, description: "Member id (index source), URL-encoded, e.g. domain%3Aarchery.wtf", schema: { type: "string" } }, indexQuery, from, to]),
     "/members/hourly": op("listMembersHourly", `Every member's hourly rows for one hour or a range (at most ${LIMITS.membersHourlyHours} h)`, "MembersHourly", [indexQuery, hourParam("hour", "One hour close; not with from/to."), from, to]),
     "/members/new": op("listNewMembers", "Members first seen after an hour", "MembersNew", [indexQuery, { ...hourParam("since", "Hour close; members first seen after it."), required: true }]),
+    ...Object.fromEntries(PAID_DOCS.map((d) => [d.path, paidOp(d)])),
     "/verified": op("listVerified", "Projects whose builder proof validates against the Arc mainnet registry", "Verified"),
   },
   components: {
@@ -69,6 +84,7 @@ export const OPENAPI = {
       MembersNew: schemaOf(membersNew),
       Verified: schemaOf(verified),
       Error: { type: "object", properties: { error: { type: "string" } }, required: ["error"] },
+      PaymentRequired: { type: "object", description: PAID_NOTE, properties: { x402Version: { type: "number" }, error: { type: "string" }, resource: { type: "object" }, accepts: { type: "array", items: { type: "object" } } }, required: ["x402Version", "accepts"] },
     },
     responses: { Error: { description: "Error with a plain sentence", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } } },
   },

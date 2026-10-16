@@ -11,6 +11,7 @@ export const LLMS_TXT = `# Registrai
 - [Data API v1](https://builder.registrai.cc/data-api/): public JSON API, no key, CC BY 4.0
 - [OpenAPI](https://builder.registrai.cc/api/v1/openapi.json)
 - [MCP server](https://builder.registrai.cc/api/mcp): read-only tools over the same data (Streamable HTTP)
+- [Paid extras](https://builder.registrai.cc/api/v1/paid): deep history, a day export and watch-feed data, per request via x402 (USDC on Arc)
 
 ## Method
 - [How we publish](https://builder.registrai.cc/how-we-publish/)
