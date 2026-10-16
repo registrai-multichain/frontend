@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { privateKeyToAccount } from "viem/accounts";
 import { DATA_MIGRATIONS } from "../lib/data-api-ingest";
-import { EIP3009_TYPES, settleEip3009, verifyEip3009, type ChainIO, type Eip3009Payload } from "../lib/x402-eip3009";
+import { EIP3009_TYPES, checkEip3009, submitEip3009, verifyEip3009, type ChainIO, type Eip3009Payload } from "../lib/x402-eip3009";
 import { findPayment } from "../lib/x402-ledger";
 import type { Requirement } from "../lib/x402-requirements";
 import { MemoryD1 } from "./memory-d1";
@@ -21,68 +21,80 @@ async function pay(o: Partial<{ to: string; value: string; validAfter: string; v
   return { signature, authorization };
 }
 
-function io(o: Partial<{ used: boolean; receipt: "success" | "reverted" | "pending"; usedAfterSubmit: boolean }> = {}) {
-  const calls = { submit: 0 };
+function io(o: Partial<{ used: boolean; receipt: "success" | "reverted" | "pending" }> = {}) {
+  const calls = { send: 0 };
   let used = o.used ?? false;
+  const state = { receipt: o.receipt ?? ("success" as "success" | "reverted" | "pending") };
   const chain: ChainIO = {
     authorizationState: async () => used,
-    submit: async () => { calls.submit++; await new Promise((r) => setTimeout(r, 5)); if (o.usedAfterSubmit !== false && (o.receipt ?? "success") === "success") used = true; return "0xfeed" as `0x${string}`; },
-    receipt: async () => o.receipt ?? "success",
+    prepare: async () => ({ hash: "0xfeed", raw: "0xraw" }),
+    send: async () => { calls.send++; await new Promise((r) => setTimeout(r, 5)); if (state.receipt === "success") used = true; },
+    receipt: async () => state.receipt,
   };
-  return { chain, calls, setUsed: (v: boolean) => { used = v; } };
+  return { chain, calls, state, setUsed: (v: boolean) => { used = v; } };
+}
+const OPTS = { chainId: 5042, now: NOW };
+/** The gate's order: check, then (product built), then submit. */
+async function settle(d: MemoryD1, p: Eip3009Payload, x: ReturnType<typeof io>, product: "events" | "members_day" = "events", waitMs?: number) {
+  const c = await checkEip3009(d as never, p, REQ, product, x.chain, OPTS);
+  if (c.kind === "error") return { ok: false as const, reason: c.reason };
+  if (c.kind === "reconcile") return { ok: true as const, tx: c.tx, reconciled: true };
+  return submitEip3009(d as never, p, product, x.chain, { waitMs, pollMs: 5 });
 }
 
 describe("verify", () => {
-  test("a good signature for the right payee, amount, window and chain passes", async () => {
+  test("a good signature for the right payee, exact amount, window and chain passes", async () => {
     expect(await verifyEip3009(await pay(), REQ, 5042, NOW, io().chain)).toEqual({ ok: true, payer: buyer.address });
   });
-  test("wrong payee, underpay, expired, not yet valid, wrong chain, tampered value, used onchain nonce: each refused", async () => {
+  test("wrong payee, underpay, overpay, expired (incl. inside the 6 s buffer), not yet valid, wrong chain, tampered value, used onchain nonce", async () => {
     const cases: [Promise<Eip3009Payload>, string][] = [
       [pay({ to: "0x0000000000000000000000000000000000000001" }), "wrong payee"],
       [pay({ value: "9999" }), "amount below price"],
+      [pay({ value: "10001" }), "amount must equal the price"],
       [pay({ validBefore: String(NOW - 1) }), "authorization expired"],
+      [pay({ validBefore: String(NOW + 5) }), "authorization expired"],
       [pay({ validAfter: String(NOW + 60) }), "authorization not valid yet"],
       [pay({ chainId: 1 }), "bad signature"],
     ];
     for (const [p, reason] of cases) expect(await verifyEip3009(await p, REQ, 5042, NOW, io().chain)).toEqual({ ok: false, reason });
-    const t = await pay(); t.authorization.value = "20000";
+    const t = await pay(); t.signature = (t.signature.slice(0, -4) + "0000") as `0x${string}`;
     expect(await verifyEip3009(t, REQ, 5042, NOW, io().chain)).toEqual({ ok: false, reason: "bad signature" });
     expect(await verifyEip3009(await pay(), REQ, 5042, NOW, io({ used: true }).chain)).toEqual({ ok: false, reason: "payment already used" });
   });
 });
 
 describe("settle", () => {
-  test("success: one transfer submitted, ledger settled with the tx", async () => {
+  test("success: one transfer sent, ledger settled with the locally computed hash", async () => {
     const d = db(), x = io(), p = await pay();
-    expect(await settleEip3009(d, p, REQ, "events", x.chain, { chainId: 5042, now: NOW })).toEqual({ ok: true, tx: "0xfeed", payer: buyer.address });
-    expect(x.calls.submit).toBe(1);
-    expect(await findPayment(d, "eip3009", buyer.address, p.authorization.nonce)).toEqual({ status: "settled", tx_hash: "0xfeed" });
+    expect(await settle(d, p, x)).toEqual({ ok: true, tx: "0xfeed", payer: buyer.address });
+    expect(x.calls.send).toBe(1);
+    expect(await findPayment(d as never, "eip3009", buyer.address, p.authorization.nonce)).toMatchObject({ status: "settled", tx_hash: "0xfeed" });
   });
-  test("replay, including concurrent: charged and served once", async () => {
+  test("replay, including concurrent: one send; the others are refused", async () => {
     const d = db(), x = io(), p = await pay();
-    const [a, b] = await Promise.all([settleEip3009(d, p, REQ, "events", x.chain, { chainId: 5042, now: NOW }), settleEip3009(d, p, REQ, "events", x.chain, { chainId: 5042, now: NOW })]);
+    const [a, b] = await Promise.all([settle(d, p, x), settle(d, p, x)]);
     expect([a.ok, b.ok].sort()).toEqual([false, true]);
     expect([a, b].find((r) => !r.ok)).toMatchObject({ reason: "payment already used" });
-    expect(x.calls.submit).toBe(1);
-    expect(await settleEip3009(d, p, REQ, "events", x.chain, { chainId: 5042, now: NOW })).toMatchObject({ ok: false, reason: "payment already used" });
+    expect(x.calls.send).toBe(1);
+    expect(await settle(d, p, x)).toMatchObject({ ok: false, reason: "payment already used" });
   });
-  test("reverted: settlement_failed, ledger failed; nothing served", async () => {
+  test("reverted: settlement_failed and the ledger row is failed", async () => {
     const d = db(), p = await pay();
-    expect(await settleEip3009(d, p, REQ, "events", io({ receipt: "reverted" }).chain, { chainId: 5042, now: NOW })).toMatchObject({ ok: false, reason: "settlement_failed" });
-    expect((await findPayment(d, "eip3009", buyer.address, p.authorization.nonce))!.status).toBe("failed");
+    expect(await settle(d, p, io({ receipt: "reverted" }))).toMatchObject({ ok: false, reason: "settlement_failed" });
+    expect((await findPayment(d as never, "eip3009", buyer.address, p.authorization.nonce))!.status).toBe("failed");
   });
-  test("no receipt in time: settlement_unknown; a retry reconciles from authorizationState", async () => {
-    const d = db(), p = await pay(), x = io({ receipt: "pending", usedAfterSubmit: false });
-    expect(await settleEip3009(d, p, REQ, "events", x.chain, { chainId: 5042, now: NOW, waitMs: 20 })).toMatchObject({ ok: false, reason: "settlement_unknown" });
-    expect((await findPayment(d, "eip3009", buyer.address, p.authorization.nonce))!.status).toBe("unknown");
-    x.setUsed(true); // the transfer landed after all
-    expect(await settleEip3009(d, p, REQ, "events", x.chain, { chainId: 5042, now: NOW })).toMatchObject({ ok: true });
-    expect((await findPayment(d, "eip3009", buyer.address, p.authorization.nonce))!.status).toBe("settled");
-    expect(x.calls.submit).toBe(1);
+  test("no receipt in time: unknown; a retry is served only once our receipt succeeds", async () => {
+    const d = db(), p = await pay(), x = io({ receipt: "pending" });
+    expect(await settle(d, p, x, "events", 20)).toMatchObject({ ok: false, reason: "settlement_unknown" });
+    expect((await findPayment(d as never, "eip3009", buyer.address, p.authorization.nonce))!.status).toBe("unknown");
+    expect(await settle(d, p, x)).toMatchObject({ ok: false, reason: "settlement_unknown" }); // still pending
+    x.state.receipt = "success";
+    expect(await settle(d, p, x)).toMatchObject({ ok: true, reconciled: true });
+    expect(x.calls.send).toBe(1);
   });
   test("a failed payment can't be retried into a free response", async () => {
     const d = db(), p = await pay();
-    await settleEip3009(d, p, REQ, "events", io({ receipt: "reverted" }).chain, { chainId: 5042, now: NOW });
-    expect(await settleEip3009(d, p, REQ, "events", io().chain, { chainId: 5042, now: NOW })).toMatchObject({ ok: false, reason: "payment already used" });
+    await settle(d, p, io({ receipt: "reverted" }));
+    expect(await settle(d, p, io())).toMatchObject({ ok: false, reason: "payment already used" });
   });
 });

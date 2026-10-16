@@ -11,3 +11,10 @@ CREATE TABLE x402_payments (
   PRIMARY KEY (scheme, payer, nonce)
 ) WITHOUT ROWID;
 CREATE INDEX x402_by_day ON x402_payments (created_at);
+-- one settlement at a time from the gas wallet (its account nonce must not race)
+CREATE TABLE x402_settler_lock (
+  id     INTEGER PRIMARY KEY CHECK (id = 1),
+  holder TEXT    NOT NULL,
+  until  INTEGER NOT NULL      -- unix seconds; free when until < now
+);
+INSERT INTO x402_settler_lock (id, holder, until) VALUES (1, '', 0);

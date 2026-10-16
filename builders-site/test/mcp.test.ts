@@ -94,7 +94,7 @@ describe("paid MCP tools (x402 over MCP)", () => {
     for (let h = H("2026-08-01T00:00:00Z"); h <= H("2026-10-14T21:00:00Z"); h += 24) db.sqlite.prepare("INSERT OR IGNORE INTO index_hour VALUES ('abi', ?, 990)").all(h);
     return { ...(env as object), X402_PAY_TO: PAY, X402_SETTLER_KEY: `0x${"22".repeat(32)}` } as never;
   }
-  function chainIO() { let used = false; const calls = { submit: 0 }; return { calls, io: { authorizationState: async () => used, submit: async () => { calls.submit++; used = true; return "0xfeed" as const; }, receipt: async () => "success" as const } }; }
+  function chainIO() { let used = false; const calls = { submit: 0 }; return { calls, io: { authorizationState: async () => used, prepare: async () => ({ hash: "0xfeed" as const, raw: "0xraw" as const }), send: async () => { calls.submit++; used = true; }, receipt: async () => "success" as const } }; }
   const gdeps = (io: unknown) => ({ cache: null, noCache: true, io, supported: async () => ({ kinds: [] }), domainRead: async (fn: "name" | "version") => (fn === "name" ? "USDC" : "2") }) as never;
   async function payment(value = "10000", nonce = `0x${"ce".repeat(32)}`) {
     const { privateKeyToAccount } = await import("viem/accounts");
@@ -117,7 +117,9 @@ describe("paid MCP tools (x402 over MCP)", () => {
   test("unpaid call: isError with the x402 payment requirements", async () => {
     const r = await call(await paidEnv(), gdeps(chainIO().io), "arc_index_history_deep", { index: "abi", from: "2026-08-01T00:00:00Z" });
     expect(r.result.isError).toBe(true);
-    expect(r.result.structuredContent.x402.accepts[0]).toMatchObject({ scheme: "exact", amount: "10000", payTo: PAY });
+    // x402 MCP transport (coinbase/x402 specs/transports-v2/mcp.md): structuredContent IS the PaymentRequired, text is its JSON
+    expect(r.result.structuredContent.accepts[0]).toMatchObject({ scheme: "exact", amount: "10000", payTo: PAY });
+    expect(JSON.parse(r.result.content[0].text)).toEqual(r.result.structuredContent);
   });
   test("paid call: data plus the payment response; a replay is refused", async () => {
     const env = await paidEnv(), c = chainIO(), p = await payment();
@@ -135,5 +137,19 @@ describe("paid MCP tools (x402 over MCP)", () => {
     const r = await call(env, gdeps(chainIO().io), "arc_members_day", { date: "2026-10-14" });
     expect(r.result.isError).toBe(true);
     expect(r.result.content[0].text).toContain("not configured");
+  });
+});
+
+describe("paid MCP failures", () => {
+  test("a database failure inside a paid tool is an isError result, never an HTTP 500", async () => {
+    const { env } = await seeded();
+    const broken = { ...(env as object), X402_PAY_TO: "0x000000000000000000000000000000000000dEaD", X402_SETTLER_KEY: `0x${"22".repeat(32)}`,
+      DATA_DB: { prepare: () => { throw new Error("d1 down"); }, batch: async () => { throw new Error("d1 down"); } } } as never;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const res = await handleMcp(new Request("https://builder.registrai.cc/api/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "arc_members_day", arguments: { date: "2026-10-14" } } }) }), broken,
+      { cache: null, noCache: true, supported: async () => ({ kinds: [] }), domainRead: async (fn: string) => (fn === "name" ? "USDC" : "2") } as never);
+    expect(res.status).toBe(200);
+    expect((await res.json()).result.isError).toBe(true);
+    warn.mockRestore();
   });
 });

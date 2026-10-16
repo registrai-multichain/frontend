@@ -62,8 +62,22 @@ const ROUTES: Record<ProductId, string> = {
   project_scope: "/api/v1/paid/projects/{source}/scope?limit&offset",
 };
 
+const PREFLIGHT = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, OPTIONS",
+  "access-control-allow-headers": "PAYMENT-SIGNATURE, X-PAYMENT, content-type", "access-control-expose-headers": "PAYMENT-REQUIRED, PAYMENT-RESPONSE", "access-control-max-age": "86400" };
+const safeDecode = (s: string) => { try { return decodeURIComponent(s); } catch { return null; } };
+
 export async function handlePaid(req: Request, env: Env, deps: GateDeps & { readBalance?: (a: `0x${string}`) => Promise<number> }, parts: string[]): Promise<Response> {
+  if (req.method.toUpperCase() === "OPTIONS") return new Response(null, { status: 204, headers: PREFLIGHT });
   if (req.method.toUpperCase() !== "GET") return err(405, "Only GET is supported.");
+  try {
+    return await route(req, env, deps, parts);
+  } catch (e) {
+    console.warn("x402 paid route failed", parts.join("/"), e instanceof Error ? e.message.slice(0, 200) : e);
+    return err(503, "Not available right now. Retry later; nothing was charged.");
+  }
+}
+
+async function route(req: Request, env: Env, deps: GateDeps & { readBalance?: (a: `0x${string}`) => Promise<number> }, parts: string[]): Promise<Response> {
   const url = new URL(req.url);
   const [a, b, c] = parts;
   if (parts.length === 0) {
@@ -87,14 +101,18 @@ export async function handlePaid(req: Request, env: Env, deps: GateDeps & { read
   if (a === "members" && c === "hourly" && parts.length === 3) {
     const index = parseIndex(url.searchParams.get("index"));
     if (!index) return err(400, "index is required: abi, aii or aei.");
-    let id: string;
-    try { id = decodeURIComponent(b); } catch { return err(400, "The member id is not valid URL encoding."); }
+    const id = safeDecode(b);
+    if (id === null) return err(400, "The member id is not valid URL encoding.");
     return sell(req, env, deps, "deep_member_history", () => handleMemberHourly(req, env, index, id, { ...deps, cache: null }, DEEP_CAP_H));
   }
   const feedOff = !env.WATCHFEED_URL || !env.WATCHFEED_SECRET;
   if ((a === "events" || a === "contract" || a === "projects") && feedOff) return err(503, "The watch feed is not available right now."); // never offer what can't be delivered
   if (a === "events" && parts.length === 1) return sell(req, env, deps, "events", () => watchfeed(env, "/v1/events", url.search));
   if (a === "contract" && parts.length === 2 && /^0x[0-9a-fA-F]{40}$/.test(b)) return sell(req, env, deps, "contract", () => watchfeed(env, `/v1/contract/${b}`, ""));
-  if (a === "projects" && c === "scope" && parts.length === 3) return sell(req, env, deps, "project_scope", () => watchfeed(env, `/v1/projects/${encodeURIComponent(decodeURIComponent(b))}/scope`, url.search));
+  if (a === "projects" && c === "scope" && parts.length === 3) {
+    const source = safeDecode(b);
+    if (source === null) return err(400, "The project source is not valid URL encoding.");
+    return sell(req, env, deps, "project_scope", () => watchfeed(env, `/v1/projects/${encodeURIComponent(source)}/scope`, url.search));
+  }
   return err(404, "Unknown paid endpoint. See https://builder.registrai.cc/api/v1/paid");
 }

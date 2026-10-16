@@ -1,7 +1,9 @@
 /**
  * The 402: x402 v2 PaymentRequired with up to two ways to pay (spec 2026-10-16-x402-data-api-design.md):
- *   1. Circle Gateway batched ("exact", extra = the facilitator's GatewayWalletBatched kind), at the gateway price;
- *   2. standard EIP-3009 "exact" on USDC, settled by us, at the standard price (only when the gas wallet key is set).
+ *   1. standard EIP-3009 "exact" on USDC, settled by us, at the standard price (only when the gas wallet key is set). First,
+ *      because generic x402 clients take accepts[0]; Circle's GatewayClient finds its entry by extra.name wherever it is.
+ *   2. Circle Gateway batched ("exact", GatewayWalletBatched), at the gateway price, with the same timeout and extra
+ *      Circle's own server library builds (604900 s; name, version, verifyingContract).
  */
 import { encodePaymentRequiredHeader } from "@x402/core/http";
 import { BatchFacilitatorClient } from "@circle-fin/x402-batching/server";
@@ -13,17 +15,21 @@ export type PaymentRequired = { x402Version: 2; error: string; resource: { url: 
 type Supported = { kinds: { scheme: string; network: string; extra?: Record<string, unknown> }[] };
 
 export const MAX_TIMEOUT_S = 300;
+/** What @circle-fin/x402-batching/server uses for Gateway requirements (7 days + 100 s). */
+export const GATEWAY_TIMEOUT_S = 604900;
+const FAILED_TTL_MS = 60e3;
 const SUPPORTED_TTL_MS = 3600e3;
 const cache = new Map<string, { at: number; extra: Record<string, unknown> | null }>();
 
 /** The Circle facilitator's GatewayWalletBatched kind for this network (cached 1 h per isolate); null when it can't be read. */
 export async function gatewayExtra(cfg: X402Config, fetchSupported?: () => Promise<Supported>, noCache = false): Promise<Record<string, unknown> | null> {
   const hit = cache.get(cfg.facilitator);
-  if (!noCache && hit && Date.now() - hit.at < SUPPORTED_TTL_MS) return hit.extra;
+  if (!noCache && hit && Date.now() - hit.at < (hit.extra ? SUPPORTED_TTL_MS : FAILED_TTL_MS)) return hit.extra;
   let extra: Record<string, unknown> | null = null;
   try {
     const s = await (fetchSupported ?? (() => new BatchFacilitatorClient({ url: cfg.facilitator }).getSupported() as Promise<Supported>))();
-    extra = s.kinds.find((k) => k.network === cfg.caip2 && k.extra?.name === "GatewayWalletBatched")?.extra ?? null;
+    const k = s.kinds.find((x) => x.network === cfg.caip2 && x.extra?.name === "GatewayWalletBatched")?.extra;
+    extra = k && typeof k.verifyingContract === "string" ? { name: k.name, version: k.version, verifyingContract: k.verifyingContract } : null;
   } catch (err) {
     console.warn("x402 gateway getSupported failed", err);
   }
@@ -54,10 +60,10 @@ export async function usdcDomain(cfg: X402Config, read?: (fn: "name" | "version"
 
 export function paymentRequired(product: ProductId, url: string, cfg: X402Config, gw: Record<string, unknown> | null, domain: { name: string; version: string } | null): PaymentRequired {
   const p = PRODUCTS[product];
-  const base = { scheme: "exact" as const, network: cfg.caip2, asset: USDC, payTo: cfg.payTo, maxTimeoutSeconds: MAX_TIMEOUT_S };
+  const base = { scheme: "exact" as const, network: cfg.caip2, asset: USDC, payTo: cfg.payTo };
   const accepts: Requirement[] = [];
-  if (gw) accepts.push({ ...base, amount: p.gateway.toString(), extra: gw });
-  if (cfg.settlerKey && domain) accepts.push({ ...base, amount: p.standard.toString(), extra: { name: domain.name, version: domain.version } });
+  if (cfg.settlerKey && domain) accepts.push({ ...base, amount: p.standard.toString(), maxTimeoutSeconds: MAX_TIMEOUT_S, extra: { name: domain.name, version: domain.version } });
+  if (gw) accepts.push({ ...base, amount: p.gateway.toString(), maxTimeoutSeconds: GATEWAY_TIMEOUT_S, extra: { name: gw.name, version: gw.version, verifyingContract: gw.verifyingContract } });
   return { x402Version: 2, error: "Payment required", resource: { url, description: p.description, mimeType: "application/json" }, accepts };
 }
 

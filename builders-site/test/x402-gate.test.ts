@@ -19,7 +19,7 @@ function env(o: Record<string, unknown> = {}) {
 }
 function chain(o: { receipt?: "success" | "reverted" } = {}) {
   let used = false; const calls = { submit: 0 };
-  const io: ChainIO = { authorizationState: async () => used, submit: async () => { calls.submit++; if ((o.receipt ?? "success") === "success") used = true; return "0xfeed"; }, receipt: async () => o.receipt ?? "success" };
+  const io: ChainIO = { authorizationState: async () => used, prepare: async () => ({ hash: "0xfeed", raw: "0xraw" }), send: async () => { calls.submit++; if ((o.receipt ?? "success") === "success") used = true; }, receipt: async () => o.receipt ?? "success" };
   return { io, calls };
 }
 const gwClient = (o: { valid?: boolean; settle?: boolean } = {}) => ({
@@ -48,7 +48,7 @@ describe("payGate", () => {
   test("no payment: 402 with both options; the header decodes", async () => {
     const r = await payGate(req(), env(), deps(), "events", serve);
     expect(r.status).toBe(402);
-    expect(decodePaymentRequiredHeader(r.headers.get("PAYMENT-REQUIRED")!).accepts.map((a: { amount: string }) => a.amount)).toEqual(["2000", "10000"]);
+    expect(decodePaymentRequiredHeader(r.headers.get("PAYMENT-REQUIRED")!).accepts.map((a: { amount: string }) => a.amount)).toEqual(["10000", "2000"]);
   });
   test("standard EIP-3009: settles, serves once, PAYMENT-RESPONSE carries the tx; a replay is 402", async () => {
     serve.mockClear(); const c = chain(); const e = env(); const h = await eip3009Header();

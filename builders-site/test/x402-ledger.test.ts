@@ -29,7 +29,7 @@ describe("x402 ledger", () => {
   test("settle and fail transitions; stats aggregate settled sales only, no payer", async () => {
     const d = db();
     await reserve(d, P); await markSettled(d, "eip3009", "0xabc", "0x01", "0xtx");
-    expect(await findPayment(d, "eip3009", "0xabc", "0x01")).toEqual({ status: "settled", tx_hash: "0xtx" });
+    expect(await findPayment(d, "eip3009", "0xabc", "0x01")).toMatchObject({ status: "settled", tx_hash: "0xtx", product: "events" });
     await reserve(d, { ...P, nonce: "0x02" }); await markFailed(d, "eip3009", "0xabc", "0x02", "failed");
     const s = await salesStats(d);
     expect(s).toHaveLength(1);

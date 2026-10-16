@@ -24,7 +24,7 @@ function setup(extra: Record<string, unknown> = {}) {
     db.sqlite.prepare("INSERT INTO member_hour VALUES ('aii', 'integration:uniswap', ?, 5, 1, 2, 1, 0, 10)").all(h);
   return { INVITES: new MemoryKV(), DATA_DB: db, X402_PAY_TO: PAY, X402_SETTLER_KEY: `0x${"22".repeat(32)}`, ...extra } as never;
 }
-const chain = (): { io: ChainIO; calls: { submit: number } } => { let used = false; const calls = { submit: 0 }; return { calls, io: { authorizationState: async () => used, submit: async () => { calls.submit++; used = true; return "0xfeed"; }, receipt: async () => "success" } }; };
+const chain = (): { io: ChainIO; calls: { submit: number } } => { let used = false; const calls = { submit: 0 }; return { calls, io: { authorizationState: async () => used, prepare: async () => ({ hash: "0xfeed", raw: "0xraw" }), send: async () => { calls.submit++; used = true; }, receipt: async () => "success" } }; };
 const deps = (io: ChainIO) => ({ cache: null, noCache: true, io, readBalance: async () => 5, supported: async () => ({ kinds: [] }), domainRead: async (fn: "name" | "version") => (fn === "name" ? "USDC" : "2") });
 async function header(value: string, nonce = `0x${Math.random().toString(16).slice(2).padEnd(64, "0").slice(0, 64)}`) {
   const a = { from: buyer.address, to: PAY, value, validAfter: String(now - 10), validBefore: String(now + 300), nonce };
@@ -90,5 +90,26 @@ describe("paid products", () => {
     expect(stats.sales[0]).toMatchObject({ product: "deep_index_history", sales: 1 });
     expect(JSON.stringify(stats).toLowerCase()).not.toContain(buyer.address.toLowerCase());
     expect((await handlePaid(get("/api/v1/paid/health"), env, deps(c.io), ["health"])).status).toBe(200);
+  });
+});
+
+describe("HTTP edge cases", () => {
+  test("browser preflight: OPTIONS 204 allows the payment headers", async () => {
+    const r = await handlePaid(new Request(`${O}/api/v1/paid/events`, { method: "OPTIONS" }), setup(), deps(chain().io), ["events"]);
+    expect(r.status).toBe(204);
+    expect(r.headers.get("access-control-allow-headers")).toMatch(/PAYMENT-SIGNATURE/i);
+    expect(r.headers.get("access-control-expose-headers")).toMatch(/PAYMENT-RESPONSE/i);
+  });
+  test("a malformed %-escape in a path is a 400, not a 500", async () => {
+    const env = setup({ WATCHFEED_URL: "https://wf.internal", WATCHFEED_SECRET: "s3cret" });
+    expect((await handlePaid(get("/api/v1/paid/projects/%E0%A4%A/scope"), env, deps(chain().io), ["projects", "%E0%A4%A", "scope"])).status).toBe(400);
+    expect((await handlePaid(get("/api/v1/paid/members/%E0%A4%A/hourly?index=abi"), env, deps(chain().io), ["members", "%E0%A4%A", "hourly"])).status).toBe(400);
+  });
+  test("an unexpected error is a JSON 503, not a 500", async () => {
+    const env = { ...(setup() as object), DATA_DB: { prepare: () => { throw new Error("d1 down"); } } } as never;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const r = await handlePaid(get("/api/v1/paid/stats"), env, deps(chain().io), ["stats"]);
+    expect(r.status).toBe(503);
+    warn.mockRestore();
   });
 });

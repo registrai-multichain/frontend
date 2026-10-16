@@ -72,13 +72,18 @@ async function callPaid(t: PaidTool, a: Args, meta: Record<string, unknown> | un
   const payment = meta?.["x402/payment"];
   const headers: Record<string, string> = {};
   if (payment) { try { headers["PAYMENT-SIGNATURE"] = encodePaymentSignatureHeader(payment as never); } catch { return { content: [{ type: "text", text: "The x402 payment could not be read." }], isError: true }; } }
-  const r = await handlePaid(new Request(url, { headers }), env, deps, parts);
+  let r: Response;
+  try { r = await handlePaid(new Request(url, { headers }), env, deps, parts); } catch (err) {
+    console.warn("mcp paid tool failed", t.name, err instanceof Error ? err.message : err);
+    return { content: [{ type: "text", text: "The tool failed. Retry later; nothing was charged." }], isError: true };
+  }
   const body = (await r.json().catch(() => ({}))) as Record<string, unknown>;
   if (r.status === 200) {
     const pr = r.headers.get("PAYMENT-RESPONSE");
     return { content: [{ type: "text", text: JSON.stringify(body) }], structuredContent: { ...body, source_url: url }, _meta: { "x402/payment-response": pr ? decodePaymentResponseHeader(pr) : null } };
   }
-  if (r.status === 402) return { content: [{ type: "text", text: `${String(body.error ?? "Payment required")}. Pay via x402 and retry with params._meta["x402/payment"].` }], structuredContent: { x402: body }, isError: true };
+  // x402 MCP transport (coinbase/x402 specs/transports-v2/mcp.md): structuredContent is the PaymentRequired; text is its JSON
+  if (r.status === 402) return { content: [{ type: "text", text: JSON.stringify(body) }], structuredContent: body, isError: true };
   return { content: [{ type: "text", text: String(body.error ?? `HTTP ${r.status}`) }], isError: true };
 }
 

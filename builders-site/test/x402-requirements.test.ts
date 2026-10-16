@@ -10,18 +10,18 @@ const DOMAIN = { name: "USDC", version: "2" };
 const URL = "https://builder.registrai.cc/api/v1/paid/events";
 
 describe("402 requirements", () => {
-  test("both accepts when the settler key is set: gateway first, then EIP-3009, exact micro-USDC amounts", () => {
+  test("both accepts when the settler key is set: EIP-3009 first, then Circle, exact micro-USDC amounts", () => {
     const cfg = readX402Config({ X402_PAY_TO: PAY, X402_SETTLER_KEY: KEY } as never)!;
     const pr = paymentRequired("events", URL, cfg, GW, DOMAIN);
     expect(pr.x402Version).toBe(2);
     expect(pr.resource).toMatchObject({ url: URL, mimeType: "application/json" });
     expect(pr.accepts.map((a) => [a.scheme, a.network, a.amount, a.payTo, a.asset])).toEqual([
-      ["exact", "eip155:5042", "2000", PAY, "0x3600000000000000000000000000000000000000"],
       ["exact", "eip155:5042", "10000", PAY, "0x3600000000000000000000000000000000000000"],
+      ["exact", "eip155:5042", "2000", PAY, "0x3600000000000000000000000000000000000000"],
     ]);
-    expect(pr.accepts[0].extra).toEqual(GW);
-    expect(pr.accepts[1].extra).toEqual(DOMAIN);
-    expect(pr.accepts.every((a) => a.maxTimeoutSeconds === 300)).toBe(true);
+    expect(pr.accepts[0].extra).toEqual(DOMAIN);
+    expect(pr.accepts[1].extra).toEqual(GW);
+    expect(pr.accepts.map((a) => a.maxTimeoutSeconds)).toEqual([300, 604900]);
   });
   test("no settler key: Circle only; no Circle kind: EIP-3009 only", () => {
     const noKey = readX402Config({ X402_PAY_TO: PAY } as never)!;
