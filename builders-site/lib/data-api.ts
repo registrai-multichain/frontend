@@ -88,14 +88,14 @@ export function handleIndices(req: Request, env: Env, deps: EdgeCacheDeps = {}):
   });
 }
 
-export function handleIndexHourly(req: Request, env: Env, index: IndexId, deps: EdgeCacheDeps = {}): Promise<Response> {
+export function handleIndexHourly(req: Request, env: Env, index: IndexId, deps: EdgeCacheDeps = {}, capHours = INDEX_CAP_H): Promise<Response> {
   const url = new URL(req.url);
   return (async () => {
     const db = env.DATA_DB;
     if (!db) return v1Error(503, "History is not available right now. Retry later.");
     const until = await dataUntil(db, index);
     if (until === null) return v1Error(503, "History is not available right now. Retry later.");
-    const w = parseWindow(url, until, INDEX_CAP_H);
+    const w = parseWindow(url, until, capHours);
     if ("error" in w) return v1Error(400, w.error);
     return cached(req, deps, `ih:${index}:${w.from}:${w.to}:${until}`, async () => {
       const rows = (await db.prepare("SELECT hour, close FROM index_hour WHERE idx = ? AND hour BETWEEN ? AND ? ORDER BY hour").bind(index, w.from, w.to).all<{ hour: number; close: number }>()).results;
@@ -145,13 +145,13 @@ export function handleMembersNew(req: Request, env: Env, index: IndexId, deps: E
   });
 }
 
-export function handleMemberHourly(req: Request, env: Env, index: IndexId, id: string, deps: EdgeCacheDeps = {}): Promise<Response> {
+export function handleMemberHourly(req: Request, env: Env, index: IndexId, id: string, deps: EdgeCacheDeps = {}, capHours = INDEX_CAP_H): Promise<Response> {
   return (async () => {
     const db = env.DATA_DB;
     if (!db) return unavailable();
     const until = await dataUntil(db, index);
     if (until === null) return unavailable();
-    const w = parseWindow(new URL(req.url), until, INDEX_CAP_H);
+    const w = parseWindow(new URL(req.url), until, capHours);
     if ("error" in w) return v1Error(400, w.error);
     return cached(req, deps, `mh:${index}:${id}:${w.from}:${w.to}:${until}`, async () => {
       const rows = (await db.prepare("SELECT id, hour, points, points_earned, payments, wallets, new_payers, usdc FROM member_hour WHERE idx = ? AND id = ? AND hour BETWEEN ? AND ? ORDER BY hour").bind(index, id, w.from, w.to).all<MemberRow>()).results;
