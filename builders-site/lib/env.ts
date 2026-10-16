@@ -76,6 +76,13 @@ export interface Env {
   PILOT_DB?: D1Database;
   /** Data API v1 history (registrai-data; lib/data-api*.ts). */
   DATA_DB?: D1Database;
+  /** x402 paid extras: revenue wallet (unset = payments not configured), "arc" | "arcTestnet", the gas wallet key (secret). */
+  X402_PAY_TO?: string;
+  X402_NETWORK?: string;
+  X402_SETTLER_KEY?: string;
+  /** Watch-feed API behind the tunnel, and the shared secret it requires. */
+  WATCHFEED_URL?: string;
+  WATCHFEED_SECRET?: string;
   /** Kill switch: "1" accepts new pilot orders (if the settings below are valid); anything else (the default) refuses them with 403 {error:"pilot closed"}. Closes and reads always work. */
   PILOT_OPEN?: string;
   /**
