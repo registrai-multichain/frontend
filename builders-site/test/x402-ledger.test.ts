@@ -37,3 +37,9 @@ describe("x402 ledger", () => {
     expect(JSON.stringify(s)).not.toContain("0xabc");
   });
 });
+
+test("the settler key is accepted with or without 0x, quotes or surrounding whitespace", () => {
+  const PAY = "0x000000000000000000000000000000000000dEaD", K = "ab".repeat(32);
+  for (const v of [K, `0x${K}`, `"0x${K}"`, `'${K}'`, `  0x${K}\n`]) expect(readX402Config({ X402_PAY_TO: PAY, X402_SETTLER_KEY: v } as never)!.settlerKey, v).toBe(`0x${K}`);
+  expect(readX402Config({ X402_PAY_TO: PAY, X402_SETTLER_KEY: "nothex" } as never)!.settlerKey).toBeNull();
+});

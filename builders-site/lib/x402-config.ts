@@ -18,6 +18,8 @@ export function readX402Config(env: Env): X402Config | null {
   const payTo = (env.X402_PAY_TO ?? "").trim();
   if (!ADDR.test(payTo)) return null;
   const network = env.X402_NETWORK === "arcTestnet" ? "arcTestnet" : "arc";
-  const key = (env.X402_SETTLER_KEY ?? "").trim();
+  // tolerate how keys are usually stored: with or without 0x, quoted, with a trailing newline
+  const raw = (env.X402_SETTLER_KEY ?? "").trim().replace(/^["']|["']$/g, "").trim();
+  const key = /^[0-9a-fA-F]{64}$/.test(raw) ? `0x${raw}` : raw;
   return { payTo: payTo as `0x${string}`, network, ...NETWORKS[network], settlerKey: KEY.test(key) ? (key as `0x${string}`) : null };
 }
