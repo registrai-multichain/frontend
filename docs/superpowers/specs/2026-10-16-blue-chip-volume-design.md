@@ -6,7 +6,7 @@ Date: 2026-10-16.
 - "the index score should include their general volume not just the stable coin ones";
 - chose **"Add blue-chip assets"** over "all tokens with a liquidity floor" and "show it, don't score it".
 
-**Status: DRAFT for the owner's review.** This is an index-method change for ABI, AII and AEI. Nothing is built.
+**Status: PARKED by the owner on 2026-10-16 ("Not building this yet. We should add x402 to our api&mcp business first").** This is an index-method change for ABI, AII and AEI. Nothing is built.
 
 ## What changes
 
