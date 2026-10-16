@@ -40,7 +40,7 @@ describe("MCP", () => {
     expect(init.result.capabilities).toEqual({ tools: {} });
     const list = await (await rpc(env, { jsonrpc: "2.0", id: 2, method: "tools/list" })).json();
     expect(list.result.tools.map((t: { name: string }) => t.name)).toEqual(MCP_TOOLS.map((t) => t.name));
-    expect(list.result.tools).toHaveLength(7);
+    expect(list.result.tools).toHaveLength(13); // 7 free + 6 paid (x402)
     const n = await rpc(env, { jsonrpc: "2.0", method: "notifications/initialized" });
     expect(n.status).toBe(202);
     expect((await (await rpc(env, { jsonrpc: "2.0", id: 3, method: "ping" })).json()).result).toEqual({});
@@ -82,5 +82,58 @@ describe("review fixes", () => {
     const cache = new MemoryCache();
     await handleMcp(new Request("https://builder.registrai.cc/api/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "arc_index_history", arguments: { index: "aei" } } }) }), env as never, { cache: cache as unknown as Cache });
     expect([...cache.store.keys()].some((k) => k.includes("/api/v1/indices/aei/hourly"))).toBe(true);
+  });
+});
+
+describe("paid MCP tools (x402 over MCP)", () => {
+  const PAY = "0x000000000000000000000000000000000000dEaD", USDC = "0x3600000000000000000000000000000000000000";
+  const now = Math.floor(Date.now() / 1000);
+  async function paidEnv() {
+    const { env } = await seeded();
+    const db = (env as { DATA_DB: { sqlite: { prepare(s: string): { all(...a: unknown[]): unknown } } } }).DATA_DB;
+    for (let h = H("2026-08-01T00:00:00Z"); h <= H("2026-10-14T21:00:00Z"); h += 24) db.sqlite.prepare("INSERT OR IGNORE INTO index_hour VALUES ('abi', ?, 990)").all(h);
+    return { ...(env as object), X402_PAY_TO: PAY, X402_SETTLER_KEY: `0x${"22".repeat(32)}` } as never;
+  }
+  function chainIO() { let used = false; const calls = { submit: 0 }; return { calls, io: { authorizationState: async () => used, submit: async () => { calls.submit++; used = true; return "0xfeed" as const; }, receipt: async () => "success" as const } }; }
+  const gdeps = (io: unknown) => ({ cache: null, noCache: true, io, supported: async () => ({ kinds: [] }), domainRead: async (fn: "name" | "version") => (fn === "name" ? "USDC" : "2") }) as never;
+  async function payment(value = "10000", nonce = `0x${"ce".repeat(32)}`) {
+    const { privateKeyToAccount } = await import("viem/accounts");
+    const { EIP3009_TYPES } = await import("../lib/x402-eip3009");
+    const buyer = privateKeyToAccount(`0x${"11".repeat(32)}`);
+    const a = { from: buyer.address, to: PAY, value, validAfter: String(now - 10), validBefore: String(now + 300), nonce };
+    const signature = await buyer.signTypedData({ domain: { name: "USDC", version: "2", chainId: 5042, verifyingContract: USDC }, types: EIP3009_TYPES, primaryType: "TransferWithAuthorization",
+      message: { from: buyer.address, to: PAY, value: BigInt(value), validAfter: BigInt(a.validAfter), validBefore: BigInt(a.validBefore), nonce: nonce as `0x${string}` } });
+    return { x402Version: 2, accepted: { scheme: "exact", network: "eip155:5042", asset: USDC, amount: value, payTo: PAY, maxTimeoutSeconds: 300, extra: { name: "USDC", version: "2" } }, payload: { signature, authorization: a } };
+  }
+  const call = (env: unknown, deps: never, name: string, args: unknown, meta?: unknown) =>
+    handleMcp(new Request("https://builder.registrai.cc/api/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args, ...(meta ? { _meta: meta } : {}) } }) }), env as never, deps).then((r) => r.json());
+
+  test("13 tools; the six paid ones say x402 and are read-only", () => {
+    expect(MCP_TOOLS).toHaveLength(13);
+    const paid = MCP_TOOLS.filter((t) => t.description.includes("x402"));
+    expect(paid.map((t) => t.name)).toEqual(["arc_index_history_deep", "arc_app_history_deep", "arc_members_day", "arc_events", "arc_contract", "arc_project_scope"]);
+    for (const t of paid) expect(t.annotations.readOnlyHint).toBe(true);
+  });
+  test("unpaid call: isError with the x402 payment requirements", async () => {
+    const r = await call(await paidEnv(), gdeps(chainIO().io), "arc_index_history_deep", { index: "abi", from: "2026-08-01T00:00:00Z" });
+    expect(r.result.isError).toBe(true);
+    expect(r.result.structuredContent.x402.accepts[0]).toMatchObject({ scheme: "exact", amount: "10000", payTo: PAY });
+  });
+  test("paid call: data plus the payment response; a replay is refused", async () => {
+    const env = await paidEnv(), c = chainIO(), p = await payment();
+    const r = await call(env, gdeps(c.io), "arc_index_history_deep", { index: "abi", from: "2026-08-01T00:00:00Z" }, { "x402/payment": p });
+    expect(r.result.isError).toBeUndefined();
+    expect(r.result.structuredContent.rows.length).toBeGreaterThan(744 / 24);
+    expect(r.result._meta["x402/payment-response"]).toMatchObject({ success: true, transaction: "0xfeed" });
+    const again = await call(env, gdeps(c.io), "arc_index_history_deep", { index: "abi", from: "2026-08-01T00:00:00Z" }, { "x402/payment": p });
+    expect(again.result.isError).toBe(true);
+    expect(again.result.content[0].text).toContain("payment already used");
+    expect(c.calls.submit).toBe(1);
+  });
+  test("unconfigured: paid tools say so; free tools unaffected", async () => {
+    const { env } = await seeded();
+    const r = await call(env, gdeps(chainIO().io), "arc_members_day", { date: "2026-10-14" });
+    expect(r.result.isError).toBe(true);
+    expect(r.result.content[0].text).toContain("not configured");
   });
 });

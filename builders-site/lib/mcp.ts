@@ -9,6 +9,10 @@ import { handleIndexHourly, handleIndices, handleMemberHourly, handleMembersNew,
 import { handleVerified } from "./data-api-verified";
 import type { Env } from "./env";
 import type { EdgeCacheDeps } from "./http";
+import { decodePaymentResponseHeader, encodePaymentSignatureHeader } from "@x402/core/http";
+import { handlePaid } from "./x402-products";
+import { formatUsd, PRODUCTS, type ProductId } from "./x402-config";
+import type { GateDeps } from "./x402-gate";
 
 const SITE = "https://builder.registrai.cc";
 const API = `${SITE}/api/v1`;
@@ -18,6 +22,33 @@ const HEADERS = { "content-type": "application/json", "access-control-allow-orig
 const INDEX = { type: "string", enum: ["abi", "aii", "aei"], description: "abi = builder apps, aii = integrations, aei = both plus the Arc base layer" };
 const HOUR = (d: string) => ({ type: "string", description: `${d} An ISO hour close, e.g. 2026-10-14T19:00:00Z.` });
 const obj = (properties: Record<string, unknown>, required: string[] = []) => ({ type: "object", properties, required, additionalProperties: false });
+
+/** Paid tools: x402 over MCP. Call without payment → isError + structuredContent.x402 (the requirements); retry with
+ * params._meta["x402/payment"] = the payment payload. Settlement is the same path as the paid HTTP routes. */
+type PaidTool = { name: string; product: ProductId; route: (a: Args) => { parts: string[]; query: Record<string, string | undefined> }; schema: Record<string, unknown>; required: string[]; what: string };
+const PAID: PaidTool[] = [
+  { name: "arc_index_history_deep", product: "deep_index_history", what: "Hourly closes of one Arc index for any window (beyond the free 744 h).",
+    schema: { index: INDEX, from: HOUR("First hour (inclusive)."), to: HOUR("Last hour (inclusive).") }, required: ["index"],
+    route: (a) => ({ parts: ["indices", String(a.index), "hourly"], query: { from: a.from as string, to: a.to as string } }) },
+  { name: "arc_app_history_deep", product: "deep_member_history", what: "One app's hourly points and activity for any window.",
+    schema: { id: { type: "string" }, index: INDEX, from: HOUR("First hour (inclusive)."), to: HOUR("Last hour (inclusive).") }, required: ["id", "index"],
+    route: (a) => ({ parts: ["members", encodeURIComponent(String(a.id)), "hourly"], query: { index: a.index as string, from: a.from as string, to: a.to as string } }) },
+  { name: "arc_members_day", product: "members_day", what: "Every member's hourly rows and the ABI, AII and AEI closes for one UTC day.",
+    schema: { date: { type: "string", description: "YYYY-MM-DD (UTC)." } }, required: ["date"],
+    route: (a) => ({ parts: ["members", "day"], query: { date: a.date as string } }) },
+  { name: "arc_events", product: "events", what: "Watch-feed events on Arc: deploys, upgrades, control changes, pauses and large outflows, labelled to projects.",
+    schema: Object.fromEntries(["since_block", "until_block", "since_ts", "kind", "project", "contract", "labelled", "min_balance", "min_project_usdc_24h", "limit"].map((k) => [k, { type: "string" }])), required: [],
+    route: (a) => ({ parts: ["events"], query: Object.fromEntries(Object.entries(a).map(([k, v]) => [k, v === undefined ? undefined : String(v)])) }) },
+  { name: "arc_contract", product: "contract", what: "Facts for one contract on Arc: label, project, recent events and USDC balance.",
+    schema: { address: { type: "string" } }, required: ["address"], route: (a) => ({ parts: ["contract", String(a.address)], query: {} }) },
+  { name: "arc_project_scope", product: "project_scope", what: "Every contract attributed to one project.",
+    schema: { source: { type: "string" }, limit: { type: "string" }, offset: { type: "string" } }, required: ["source"],
+    route: (a) => ({ parts: ["projects", encodeURIComponent(String(a.source)), "scope"], query: { limit: a.limit as string, offset: a.offset as string } }) },
+];
+function paidTools() {
+  return PAID.map((t) => ({ name: t.name, description: `${t.what} Paid via x402 (USDC on Arc): ${formatUsd(PRODUCTS[t.product].gateway)} via Circle Gateway or ${formatUsd(PRODUCTS[t.product].standard)} standard. Call once to get the payment requirements, then retry with params._meta["x402/payment"].`,
+    inputSchema: obj(t.schema, t.required), annotations: RO }));
+}
 
 // every tool only reads public data (review I4: clients skip the confirm prompt for read-only tools)
 const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
@@ -30,7 +61,26 @@ export const MCP_TOOLS = [
   { name: "arc_app_history", description: "One app's hourly points and activity (payments, paying wallets, new payers, USD) in one index, oldest first.", inputSchema: obj({ id: { type: "string" }, index: INDEX, from: HOUR("First hour (inclusive)."), to: HOUR("Last hour (inclusive).") }, ["id", "index"]), annotations: RO },
   { name: "arc_new_apps", description: "Apps first seen in an index after a given hour.", inputSchema: obj({ index: INDEX, since: HOUR("Members first seen after this hour.") }, ["index", "since"]), annotations: RO },
   { name: "arc_verified", description: "Projects whose builder proof validates against the Arc mainnet builder registry.", inputSchema: obj({}), annotations: RO },
+  ...paidTools(),
 ] as const;
+
+async function callPaid(t: PaidTool, a: Args, meta: Record<string, unknown> | undefined, env: Env, deps: GateDeps) {
+  for (const k of t.required) if (a[k] === undefined) return { content: [{ type: "text", text: `${k} is required.` }], isError: true };
+  const { parts, query } = t.route(a);
+  const q = new URLSearchParams(); for (const [k, v] of Object.entries(query)) if (v !== undefined) q.set(k, v);
+  const url = `${SITE}/api/v1/paid/${parts.join("/")}${q.toString() ? `?${q}` : ""}`;
+  const payment = meta?.["x402/payment"];
+  const headers: Record<string, string> = {};
+  if (payment) { try { headers["PAYMENT-SIGNATURE"] = encodePaymentSignatureHeader(payment as never); } catch { return { content: [{ type: "text", text: "The x402 payment could not be read." }], isError: true }; } }
+  const r = await handlePaid(new Request(url, { headers }), env, deps, parts);
+  const body = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+  if (r.status === 200) {
+    const pr = r.headers.get("PAYMENT-RESPONSE");
+    return { content: [{ type: "text", text: JSON.stringify(body) }], structuredContent: { ...body, source_url: url }, _meta: { "x402/payment-response": pr ? decodePaymentResponseHeader(pr) : null } };
+  }
+  if (r.status === 402) return { content: [{ type: "text", text: `${String(body.error ?? "Payment required")}. Pay via x402 and retry with params._meta["x402/payment"].` }], structuredContent: { x402: body }, isError: true };
+  return { content: [{ type: "text", text: String(body.error ?? `HTTP ${r.status}`) }], isError: true };
+}
 
 type Args = Record<string, unknown>;
 type ToolResult = { ok: true; data: Record<string, unknown> } | { ok: false; error: string };
@@ -103,6 +153,8 @@ export async function handleMcp(req: Request, env: Env, deps: EdgeCacheDeps): Pr
       const name = m.params?.name, args = (m.params?.arguments ?? {}) as Args;
       if (typeof name !== "string" || !MCP_TOOLS.some((t) => t.name === name)) return reply(m.id, { error: { code: -32602, message: `Unknown tool: ${String(name)}` } });
       if (typeof args !== "object" || args === null || Array.isArray(args)) return reply(m.id, { error: { code: -32602, message: "arguments must be an object." } });
+      const paid = PAID.find((t) => t.name === name);
+      if (paid) return reply(m.id, { result: await callPaid(paid, args, m.params?._meta as Record<string, unknown> | undefined, env, deps as GateDeps) });
       let r: ToolResult | null;
       try { r = await callTool(name, args, env, deps); } catch (e) {
         if (e instanceof BadArgs) r = { ok: false, error: e.message };
