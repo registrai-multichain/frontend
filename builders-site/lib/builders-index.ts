@@ -9,6 +9,7 @@
 import { ABI_INDEX_IDS, ABI_INDICES, ABI_LIMITS, ABI_SUMMARY_SPARK_HOURS, canonicalJson, sha256Hex, validateContracts, validateIndex, validateSeen, type AbiIndexId, type AbiIndexSummary } from "../../src/lib/builders-index";
 import { bearerGuard } from "./bot-auth";
 import { ingestIndexFile } from "./data-api-ingest";
+import { storeAppContracts } from "./app-contracts";
 import type { Env } from "./env";
 import { edgeCachedGet, errorJson, json, type EdgeCacheDeps } from "./http";
 
@@ -117,7 +118,7 @@ export async function handlePushContracts(req: Request, env: Env, id: AbiIndexId
   }, (d) => ({ index: id, hour_start: d.hour_start, contracts: Object.keys(d.contracts).length, sha256: sha }), hourStartRank, async (d) => {
     sha = await sha256Hex(canonicalJson({ contracts: d.contracts, open_senders: d.open_senders }));
     d.sha256 = sha;
-  });
+  }, id === "aei" ? (d) => storeAppContracts(env, d.contracts) : undefined); // per-app lists for the /apps pages
   return r;
 }
 export const handlePublicContracts = (req: Request, env: Env, deps: EdgeCacheDeps = {}, id: AbiIndexId = "abi") => publicGet(req, env, ABI_INDICES[id].contractsKey, deps);

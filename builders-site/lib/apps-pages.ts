@@ -4,6 +4,7 @@
  * goes through esc(); JSON-LD escapes "<".
  */
 import { idToPath, type AppDetail, type AppList, type AppRow } from "./apps-data";
+import { evidenceHref } from "../../src/lib/facts";
 
 const SITE = "https://builder.registrai.cc";
 const METHOD_URL = "/builders-index/";
@@ -93,6 +94,13 @@ ${[...byDay].reverse().map(([d, x]) => `<tr><td>${esc(day(`${d}T00:00:00Z`))}</t
 </tbody></table></div>`;
 }
 
+function contractList(a: AppDetail): string {
+  const l = a.contracts_sample ?? [];
+  if (!l.length) return "";
+  const more = a.contracts - l.length;
+  return `<ul>${l.map((c) => `<li><a href="${esc(evidenceHref(c))}" rel="noreferrer"><code>${esc(c)}</code></a></li>`).join("")}</ul>${more > 0 ? `<p class="muted">and ${num(more)} more</p>` : ""}`;
+}
+
 export function renderApp(a: AppDetail): string {
   const path = idToPath(a.id) ?? "/apps/";
   const api = `/api/v1/members/${encodeURIComponent(a.id)}/hourly?index=aei`;
@@ -113,7 +121,9 @@ ${last ? `<tr><th>Paying wallets, last hour</th><td class="n">${num(last.wallets
 <h2>Last 7 days</h2>
 ${a.hourly.length ? `${spark(a)}${daily(a)}` : `<p>There is no hourly history yet for this app.</p>`}
 <h2>Contracts and sources</h2>
-<p>Contracts: ${num(a.contracts)} attributed to this app (<a href="/api/index/aei/contracts" rel="nofollow">full contract map, JSON</a>).</p>
+<p>Contracts: ${num(a.contracts)} attributed to this app.</p>
+${contractList(a)}
+<p class="muted">All apps' contracts: <a href="/api/index/aei/contracts" rel="nofollow">contract map, JSON</a>.</p>
 <ul>${a.facts_url ? `<li><a href="${esc(a.facts_url)}">Project facts page</a></li>` : ""}<li><a href="${esc(api)}">Hourly data as JSON</a></li><li><a href="${METHOD_URL}">How the index counts payments</a></li></ul>`;
   const ld = { "@context": "https://schema.org", "@type": "Dataset", name: `${a.name} hourly activity on Arc`, url: `${SITE}${path}`,
     description: `Hourly stablecoin payments, paying wallets, volume and index points for ${a.name} on Arc mainnet, from Registrai.`,

@@ -2,6 +2,7 @@
 import type { AbiData } from "../../src/lib/builders-index";
 import { projectHref } from "../../src/lib/project-page";
 import { dataUntil, firstHours, indexFile } from "./data-api";
+import { readAppContracts } from "./app-contracts";
 import { isoHour, type IndexId } from "./data-api-rows";
 import { verifiedIds } from "./data-api-verified";
 import type { Env } from "./env";
@@ -14,7 +15,7 @@ export type AppRow = { id: string; name: string; kind: "builder" | "integration"
   last_24h: { points_earned: number; payments: number; usdc: number }; contracts: number; indices: IndexId[] };
 export type AppList = { data_until: string; rows: AppRow[]; totals: { apps: number; payments_24h: number; usdc_24h: number; arc_usdc_24h_est: number } };
 export type HourRow = { hour_close: string; points: number; points_earned: number; payments: number; wallets: number; new_payers: number; usdc: number };
-export type AppDetail = AppRow & { hourly: HourRow[]; facts_url: string | null; data_until: string };
+export type AppDetail = AppRow & { hourly: HourRow[]; facts_url: string | null; data_until: string; contracts_sample?: string[] };
 
 export function idToPath(id: string): string | null {
   const i = id.indexOf(":");
@@ -91,5 +92,6 @@ export async function loadApp(env: Env, deps: EdgeCacheDeps, id: string): Promis
     const stored = JSON.parse((await env.INVITES.get(`${FACTS_PREFIX}${id}`)) ?? "null") as ProjectFacts | null;
     hasPublic = !!stored && publicFacts(stored, Date.now()).facts.length > 0;
   } catch { hasPublic = false; }
-  return { ...row, hourly, facts_url: hasPublic ? projectHref(id) : null, data_until: list.data_until };
+  const contracts = await readAppContracts(env, id);
+  return { ...row, hourly, facts_url: hasPublic ? projectHref(id) : null, data_until: list.data_until, contracts_sample: contracts?.sample ?? [] };
 }
