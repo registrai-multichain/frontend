@@ -25,42 +25,45 @@ const obj = (properties: Record<string, unknown>, required: string[] = []) => ({
 
 /** Paid tools: x402 over MCP. Call without payment → isError + structuredContent.x402 (the requirements); retry with
  * params._meta["x402/payment"] = the payment payload. Settlement is the same path as the paid HTTP routes. */
-type PaidTool = { name: string; product: ProductId; route: (a: Args) => { parts: string[]; query: Record<string, string | undefined> }; schema: Record<string, unknown>; required: string[]; what: string };
+type PaidTool = { name: string; product: ProductId; route: (a: Args) => { parts: string[]; query: Record<string, string | undefined> }; schema: Record<string, unknown>; required: string[]; what: string; title: string };
 const PAID: PaidTool[] = [
-  { name: "arc_index_history_deep", product: "deep_index_history", what: "Hourly closes of one Arc index for any window (beyond the free 744 h).",
+  { name: "arc_index_history_deep", title: "Arc index: full history", product: "deep_index_history", what: "Hourly closes of one Arc index for any window (beyond the free 744 h).",
     schema: { index: INDEX, from: HOUR("First hour (inclusive)."), to: HOUR("Last hour (inclusive).") }, required: ["index"],
     route: (a) => ({ parts: ["indices", String(a.index), "hourly"], query: { from: a.from as string, to: a.to as string } }) },
-  { name: "arc_app_history_deep", product: "deep_member_history", what: "One app's hourly points and activity for any window.",
+  { name: "arc_app_history_deep", title: "Arc app: full history", product: "deep_member_history", what: "One app's hourly points and activity for any window.",
     schema: { id: { type: "string" }, index: INDEX, from: HOUR("First hour (inclusive)."), to: HOUR("Last hour (inclusive).") }, required: ["id", "index"],
     route: (a) => ({ parts: ["members", encodeURIComponent(String(a.id)), "hourly"], query: { index: a.index as string, from: a.from as string, to: a.to as string } }) },
-  { name: "arc_members_day", product: "members_day", what: "Every member's hourly rows and the ABI, AII and AEI closes for one UTC day.",
+  { name: "arc_members_day", title: "Arc apps: one day", product: "members_day", what: "Every member's hourly rows and the ABI, AII and AEI closes for one UTC day.",
     schema: { date: { type: "string", description: "YYYY-MM-DD (UTC)." } }, required: ["date"],
     route: (a) => ({ parts: ["members", "day"], query: { date: a.date as string } }) },
-  { name: "arc_events", product: "events", what: "Watch-feed events on Arc: deploys, upgrades, control changes, pauses and large outflows, labelled to projects.",
+  { name: "arc_events", title: "Arc watch-feed events", product: "events", what: "Watch-feed events on Arc: deploys, upgrades, control changes, pauses and large outflows, labelled to projects.",
     schema: Object.fromEntries(["since_block", "until_block", "since_ts", "kind", "project", "contract", "labelled", "min_balance", "min_project_usdc_24h", "limit"].map((k) => [k, { type: "string" }])), required: [],
     route: (a) => ({ parts: ["events"], query: Object.fromEntries(Object.entries(a).map(([k, v]) => [k, v === undefined ? undefined : String(v)])) }) },
-  { name: "arc_contract", product: "contract", what: "Facts for one contract on Arc: label, project, recent events and USDC balance.",
+  { name: "arc_contract", title: "Arc contract facts", product: "contract", what: "Facts for one contract on Arc: label, project, recent events and USDC balance.",
     schema: { address: { type: "string" } }, required: ["address"], route: (a) => ({ parts: ["contract", String(a.address)], query: {} }) },
-  { name: "arc_project_scope", product: "project_scope", what: "Every contract attributed to one project.",
+  { name: "arc_project_scope", title: "Arc project contracts", product: "project_scope", what: "Every contract attributed to one project.",
     schema: { source: { type: "string" }, limit: { type: "string" }, offset: { type: "string" } }, required: ["source"],
     route: (a) => ({ parts: ["projects", encodeURIComponent(String(a.source)), "scope"], query: { limit: a.limit as string, offset: a.offset as string } }) },
 ];
 function paidTools() {
-  return PAID.map((t) => ({ name: t.name, description: `${t.what} Paid via x402 (USDC on Arc): ${formatUsd(PRODUCTS[t.product].gateway)} via Circle Gateway or ${formatUsd(PRODUCTS[t.product].standard)} standard. Call once to get the payment requirements, then retry with params._meta["x402/payment"].`,
-    inputSchema: obj(t.schema, t.required), annotations: RO }));
+  return PAID.map((t) => ({ name: t.name, title: t.title, description: `${t.what} Paid via x402 (USDC on Arc): ${formatUsd(PRODUCTS[t.product].gateway)} via Circle Gateway or ${formatUsd(PRODUCTS[t.product].standard)} standard. Call once to get the payment requirements, then retry with params._meta["x402/payment"].`,
+    inputSchema: obj(t.schema, t.required), annotations: { ...RO, title: t.title } }));
 }
 
 // every tool only reads public data (review I4: clients skip the confirm prompt for read-only tools)
 const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 
+const tool = (name: string, title: string, description: string, inputSchema: ReturnType<typeof obj>) =>
+  ({ name, title, description, inputSchema, annotations: { ...RO, title } });
+
 export const MCP_TOOLS = [
-  { name: "arc_indices", description: "Latest hourly close of the Arc Builders, Integrations and Ecosystem indices (ABI, AII, AEI), their 24 h change base and decay parameters.", inputSchema: obj({}), annotations: RO },
-  { name: "arc_index_history", description: "Hourly closes of one Arc index, oldest first (at most 744 hours per call).", inputSchema: obj({ index: INDEX, from: HOUR("First hour (inclusive)."), to: HOUR("Last hour (inclusive).") }, ["index"]), annotations: RO },
-  { name: "arc_apps", description: "Every stablecoin app on Arc in the indices with its last 24 h of stablecoin payments and USD volume, verified status and first-seen hour.", inputSchema: obj({ sort: { type: "string", enum: ["payments", "usdc", "points", "first_seen"] } }), annotations: RO },
-  { name: "arc_app", description: "One Arc app by id (e.g. domain:archery.wtf, integration:uniswap): last 24 h, contracts count, verified status and the last 7 days of hourly rows.", inputSchema: obj({ id: { type: "string" } }, ["id"]), annotations: RO },
-  { name: "arc_app_history", description: "One app's hourly points and activity (payments, paying wallets, new payers, USD) in one index, oldest first.", inputSchema: obj({ id: { type: "string" }, index: INDEX, from: HOUR("First hour (inclusive)."), to: HOUR("Last hour (inclusive).") }, ["id", "index"]), annotations: RO },
-  { name: "arc_new_apps", description: "Apps first seen in an index after a given hour.", inputSchema: obj({ index: INDEX, since: HOUR("Members first seen after this hour.") }, ["index", "since"]), annotations: RO },
-  { name: "arc_verified", description: "Projects whose builder proof validates against the Arc mainnet builder registry.", inputSchema: obj({}), annotations: RO },
+  tool("arc_indices", "Arc indices: latest", "Latest hourly close of the Arc Builders, Integrations and Ecosystem indices (ABI, AII, AEI), their 24 h change base and decay parameters. Use this when asked how Arc app activity is trending overall.", obj({})),
+  tool("arc_index_history", "Arc index: hourly history", "Hourly closes of one Arc index, oldest first (at most 744 hours per call). Use this for charts or changes over a window of up to 31 days.", obj({ index: INDEX, from: HOUR("First hour (inclusive)."), to: HOUR("Last hour (inclusive).") }, ["index"])),
+  tool("arc_apps", "Arc stablecoin apps", "Every stablecoin app on Arc in the indices with its last 24 h of stablecoin payments (USDC, EURC) and USD volume, verified status and first-seen hour. Use this when asked which apps use USDC on Arc, or which are most used. Not for token prices, DeFi TVL or chains other than Arc.", obj({ sort: { type: "string", enum: ["payments", "usdc", "points", "first_seen"] } })),
+  tool("arc_app", "Arc app: detail", "One Arc app by id (e.g. domain:archery.wtf, integration:uniswap; ids come from arc_apps): last 24 h, contracts count, verified status and the last 7 days of hourly rows.", obj({ id: { type: "string" } }, ["id"])),
+  tool("arc_app_history", "Arc app: hourly history", "One Arc app's hourly points and activity (payments, paying wallets, new payers, USD) in one index, oldest first.", obj({ id: { type: "string" }, index: INDEX, from: HOUR("First hour (inclusive)."), to: HOUR("Last hour (inclusive).") }, ["id", "index"])),
+  tool("arc_new_apps", "Arc apps: newly seen", "Arc apps first seen in an index after a given hour. Use this when asked what is new on Arc.", obj({ index: INDEX, since: HOUR("Members first seen after this hour.") }, ["index", "since"])),
+  tool("arc_verified", "Arc builders: verified", "Arc projects whose builder proof validates against the Arc mainnet builder registry.", obj({})),
   ...paidTools(),
 ] as const;
 
@@ -150,7 +153,7 @@ export async function handleMcp(req: Request, env: Env, deps: EdgeCacheDeps): Pr
     case "initialize": {
       const asked = typeof m.params?.protocolVersion === "string" ? m.params.protocolVersion : "";
       return reply(m.id, { result: { protocolVersion: VERSIONS.includes(asked) ? asked : VERSIONS[0], capabilities: { tools: {} },
-        serverInfo: { name: "registrai-arc-data", version: "1.0.0" }, instructions: "Read-only Arc stablecoin app data from Registrai (CC BY 4.0). Cite source_url." } });
+        serverInfo: { name: "registrai-arc-data", title: "Registrai Arc data", version: "1.0.0" }, instructions: "Read-only Arc stablecoin app data from Registrai (CC BY 4.0). Cite source_url." } });
     }
     case "ping": return reply(m.id, { result: {} });
     case "tools/list": return reply(m.id, { result: { tools: MCP_TOOLS } });

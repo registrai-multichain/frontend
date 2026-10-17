@@ -153,3 +153,25 @@ describe("paid MCP failures", () => {
     warn.mockRestore();
   });
 });
+
+describe("MCP tool metadata for directories", () => {
+  // the Claude connector directory requires a human-readable title on every tool
+  test("every tool has a unique plain title, mirrored in annotations.title", () => {
+    const titles = MCP_TOOLS.map((t) => (t as { title?: string }).title ?? "");
+    expect(titles.every((x) => x.length >= 3 && x.length <= 40)).toBe(true);
+    expect(new Set(titles).size).toBe(MCP_TOOLS.length);
+    for (const t of MCP_TOOLS) expect((t.annotations as { title?: string }).title).toBe((t as { title?: string }).title);
+  });
+
+  test("descriptions say when to use the tool and what it does not cover", () => {
+    for (const t of MCP_TOOLS) expect(t.description, t.name).toMatch(/Arc/);
+    const free = MCP_TOOLS.find((t) => t.name === "arc_apps")!;
+    expect(free.description).toMatch(/Use this when/);
+    expect(free.description).toMatch(/[Nn]ot for/);
+  });
+
+  test("initialize names the server with a title", async () => {
+    const r = await (await rpc({}, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } })).json();
+    expect(r.result.serverInfo.title).toBe("Registrai Arc data");
+  });
+});
