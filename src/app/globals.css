@@ -1530,7 +1530,7 @@ details.bld-legend p { margin: 10px 0 0; }
 .lp-soon { padding: 4px 8px; border: 1px dashed rgba(13,13,12,.45); font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; }
 @media (max-width: 640px) {
  .lp-nav-links { gap: 6px; }
- .lp-nav-links .lp-bridge-link:nth-child(2) { display: none; }
+ .lp-nav-links .lp-bridge-link:nth-child(3) { display: none; } /* phones: Indices, Apps, Bridge */
  .lp-hero-live { font-size: 9.5px; }
 }
 .lp-404 { min-height: 60vh; padding-block: 90px 120px; }

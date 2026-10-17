@@ -106,3 +106,34 @@ describe("landing redesign data", () => {
   });
 });
 
+
+describe("landing: entity and internal links for crawlers", () => {
+  const page = readFileSync(resolve(__dirname, "../app/page.tsx"), "utf8");
+  it("links the per-app pages from the nav and the footer", async () => {
+    const { APPS_URL } = await import("./landing");
+    expect(APPS_URL).toBe("https://builder.registrai.cc/apps/");
+    expect(page.match(/href=\{APPS_URL\}/g)?.length).toBe(2);
+  });
+  it("publishes Organization JSON-LD with sameAs links", async () => {
+    const { ORG_JSONLD } = await import("./landing");
+    expect(ORG_JSONLD["@type"]).toBe("Organization");
+    expect(ORG_JSONLD.url).toBe("https://registrai.cc/");
+    expect(ORG_JSONLD.sameAs).toEqual(expect.arrayContaining(["https://x.com/registraicc", "https://github.com/registrai-multichain", "https://builder.registrai.cc/"]));
+    expect(page).toContain('type="application/ld+json"');
+  });
+});
+
+describe("registrai.cc robots, sitemap, llms.txt", () => {
+  it("robots has no non-standard Host line; sitemap lists final URLs only (trailing slash)", async () => {
+    const robots = (await import("../app/robots")).default();
+    expect(robots.host).toBeUndefined();
+    const urls = (await import("../app/sitemap")).default().map((u) => u.url);
+    expect(urls).toEqual(["https://registrai.cc/", "https://registrai.cc/bridge/"]);
+  });
+  it("llms.txt points agents at the builder data", () => {
+    const t = readFileSync(resolve(__dirname, "../../public/llms.txt"), "utf8");
+    expect(t).toMatch(/^# Registrai\n/);
+    expect(t).toContain("https://builder.registrai.cc/apps/");
+    expect(t).toContain("https://builder.registrai.cc/llms.txt");
+  });
+});

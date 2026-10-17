@@ -1,0 +1,11 @@
+# Registrai
+
+> Hourly data on stablecoin apps on Arc: per-app stablecoin payments, paying wallets and volume, the Arc Builders, Integrations and Ecosystem indices, and verified builders. The data lives on builder.registrai.cc.
+
+## Data
+- [Stablecoin apps on Arc](https://builder.registrai.cc/apps/): every app with its last 24 h
+- [Arc indices](https://builder.registrai.cc/builders-index/): ABI, AII, AEI, hourly
+- [Data API v1](https://builder.registrai.cc/data-api/): public JSON API, no key, CC BY 4.0
+- [Full agent guide](https://builder.registrai.cc/llms.txt): API, OpenAPI and MCP server
+
+Licence: CC BY 4.0, attribution "Data: Registrai".

@@ -6,11 +6,12 @@ import { Reveal } from "@/components/landing/Reveal";
 import { LiveBoard, LiveChips } from "@/components/landing/LiveBoard";
 import "./landing.css";
 
-import { AUDIENCE, AUDIENCE_SECTION, FOOTER_BRAND_LINE, HERO, HOW_WE_PUBLISH, HOW_WE_PUBLISH_URL, INDICES_URL, MEASURED, MEASURED_LABEL, PRODUCTS, PRODUCTS_SECTION, STEPS, STEPS_INFO, STEPS_SECTION, TIERS, TIERS_SECTION } from "@/lib/landing";
+import { APPS_URL, AUDIENCE, AUDIENCE_SECTION, FOOTER_BRAND_LINE, HERO, HOW_WE_PUBLISH, HOW_WE_PUBLISH_URL, INDICES_URL, MEASURED, MEASURED_LABEL, ORG_JSONLD, PRODUCTS, PRODUCTS_SECTION, STEPS, STEPS_INFO, STEPS_SECTION, TIERS, TIERS_SECTION } from "@/lib/landing";
 
 export default function Home() {
   return (
     <div className="lp">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ORG_JSONLD) }} />
       <Header />
       <main>
         <Hero />
@@ -34,6 +35,7 @@ function Header() {
       <div className="lp-nav-center" aria-hidden="true"><span>Verified builders</span><i /><span>Built on Arc</span></div>
       <span className="lp-nav-links">
         <a href={INDICES_URL} className="lp-bridge-link">Indices <span>→</span></a>
+        <a href={APPS_URL} className="lp-bridge-link">Apps <span>→</span></a>
         <a href="https://builder.registrai.cc/builders/" className="lp-bridge-link">Verified builders <span>→</span></a>
         <Link href="/bridge" className="lp-bridge-link">Bridge USDC <span>→</span></Link>
       </span>
@@ -218,6 +220,6 @@ function RegiBootstrap() {
 
 function Footer() {
   return (
-    <footer className="lp-footer lp-frame"><div><BrandMark className="lp-footer-mark" /></div><div className="lp-footer-links"><a href={INDICES_URL}>Indices →</a><a href="https://builder.registrai.cc/builders/">Verified builders →</a><Link href="/bridge">Bridge USDC →</Link><a href={REGI_EXPLORER_URL} target="_blank" rel="noreferrer">$REGI on Arc ↗</a><a href="/brand/registrai-brand-kit-regi.zip" download>Brand kit ↓</a><a href={REGISTRAI_X_URL} target="_blank" rel="me noreferrer">X @registraicc ↗</a><a href="https://github.com/registrai-multichain" target="_blank" rel="noreferrer">GitHub ↗</a><a href="mailto:contact@registrai.cc">contact@registrai.cc</a></div><div className="lp-footer-status"><i /> Building in public<br /><span>Warsaw / 2026</span></div><p className="lp-footer-note">{FOOTER_BRAND_LINE}</p></footer>
+    <footer className="lp-footer lp-frame"><div><BrandMark className="lp-footer-mark" /></div><div className="lp-footer-links"><a href={INDICES_URL}>Indices →</a><a href={APPS_URL}>Apps →</a><a href="https://builder.registrai.cc/builders/">Verified builders →</a><Link href="/bridge">Bridge USDC →</Link><a href={REGI_EXPLORER_URL} target="_blank" rel="noreferrer">$REGI on Arc ↗</a><a href="/brand/registrai-brand-kit-regi.zip" download>Brand kit ↓</a><a href={REGISTRAI_X_URL} target="_blank" rel="me noreferrer">X @registraicc ↗</a><a href="https://github.com/registrai-multichain" target="_blank" rel="noreferrer">GitHub ↗</a><a href="mailto:contact@registrai.cc">contact@registrai.cc</a></div><div className="lp-footer-status"><i /> Building in public<br /><span>Warsaw / 2026</span></div><p className="lp-footer-note">{FOOTER_BRAND_LINE}</p></footer>
   );
 }

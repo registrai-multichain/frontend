@@ -11,10 +11,10 @@ export const dynamic = "force-static";
  */
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
-  return ["", "/bridge"].map((path) => ({
+  return ["/", "/bridge/"].map((path) => ({
     url: `${BASE}${path}`,
     lastModified: now,
     changeFrequency: "weekly" as const,
-    priority: path === "" ? 1 : 0.7,
+    priority: path === "/" ? 1 : 0.7,
   }));
 }

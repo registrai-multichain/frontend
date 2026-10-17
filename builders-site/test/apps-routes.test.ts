@@ -70,3 +70,13 @@ test("I1: sitemap is GET/HEAD only; llms.txt makes no claim the pages don't keep
   expect((await sm({ request: new Request("https://builder.registrai.cc/sitemap.xml", { method: "POST" }), env, params: {}, waitUntil: () => undefined } as never)).status).toBe(405);
   expect(LLMS_TXT).not.toContain("Every number links to the chain");
 });
+
+test("sitemap: data pages carry lastmod = data_until; noindexed /verify/ is out; guide, terms, privacy are in", async () => {
+  const { onRequest: sm } = await import("../functions/sitemap.xml");
+  const { env } = await seeded();
+  const xml = await (await sm({ request: new Request("https://builder.registrai.cc/sitemap.xml"), env, params: {}, waitUntil: () => undefined } as never)).text();
+  expect(xml).toContain("<url><loc>https://builder.registrai.cc/apps/domain/archery.wtf/</loc><lastmod>2026-10-14T21:00:00Z</lastmod></url>");
+  expect(xml).toContain("<url><loc>https://builder.registrai.cc/builders-index/</loc><lastmod>2026-10-14T21:00:00Z</lastmod></url>");
+  expect(xml).not.toContain("/verify/");
+  for (const p of ["/guide/", "/terms/", "/privacy/"]) expect(xml).toContain(`<loc>https://builder.registrai.cc${p}</loc>`);
+});

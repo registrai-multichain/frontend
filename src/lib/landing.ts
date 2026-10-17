@@ -7,6 +7,19 @@ export const VERIFY_URL = "https://builder.registrai.cc/verify/";
 export const HOW_WE_PUBLISH_URL = "https://builder.registrai.cc/how-we-publish/";
 export const TRACK_RECORD_URL = "https://builder.registrai.cc/track-record/";
 export const INDICES_URL = "https://builder.registrai.cc/builders-index/";
+export const APPS_URL = "https://builder.registrai.cc/apps/";
+
+/** schema.org Organization for the landing (entity identity for search and answer engines). */
+export const ORG_JSONLD = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "Registrai",
+  url: "https://registrai.cc/",
+  logo: "https://registrai.cc/mark-ring-512.png",
+  description: "Registrai publishes hourly data on stablecoin apps on Arc: per-app payments, paying wallets and volume, the Arc indices and verified builders.",
+  email: "contact@registrai.cc",
+  sameAs: ["https://builder.registrai.cc/", "https://x.com/registraicc", "https://github.com/registrai-multichain"],
+} as const;
 
 export const SITE_TITLE = "Registrai · Data on Arc";
 export const SITE_DESCRIPTION = "Indices, project facts and data on every app built on Arc. Independent; evidence for every number.";
