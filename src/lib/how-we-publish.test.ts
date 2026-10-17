@@ -25,7 +25,7 @@ describe("how-we-publish + routing", () => {
     expect(sh.split("\n").filter((l) => l.includes("case"))[0]).toContain("track-record");
   });
   test("projectHref encodes github sources", () => {
-    expect(projectHref("github:owner/repo")).toBe("/project/?source=github%3Aowner%2Frepo");
+    expect(projectHref("github:owner/repo")).toBe("/project/github/owner/repo/");
   });
   test("the policy page states the rules and uses no verdict words", () => {
     const src = readFileSync(new URL("../app/how-we-publish/page.tsx", import.meta.url), "utf8");

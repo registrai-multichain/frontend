@@ -61,7 +61,7 @@ describe("loaders", () => {
     const a = await loadApp(env, {}, "domain:archery.wtf");
     expect(a).not.toBe("unknown");
     expect((a as { hourly: unknown[] }).hourly).toHaveLength(1);
-    expect((a as { facts_url: string }).facts_url).toBe("/project/?source=domain%3Aarchery.wtf");
+    expect((a as { facts_url: string }).facts_url).toBe("/project/domain/archery.wtf/");
     expect(await loadApp(env, {}, "domain:nope.example")).toBe("unknown");
     const u = await loadApp(env, {}, "integration:uniswap");
     expect((u as { hourly: unknown[]; facts_url: null }).hourly).toEqual([]);

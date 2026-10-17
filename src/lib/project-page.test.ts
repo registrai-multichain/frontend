@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { evidenceLabel, factsPath, groupFacts, pageState, parseSourceParam, safeHttpsHref } from "./project-page";
+import { evidenceLabel, factsPath, groupFacts, pageState, parseSourceParam, safeHttpsHref, projectHref, sourceFromProjectPath } from "./project-page";
 import type { Fact } from "./facts";
 
 const f = (id: string, topic: Fact["topic"], observedAt: string, extra: Partial<Fact> = {}): Fact =>
@@ -63,5 +63,21 @@ describe("safeHttpsHref", () => {
     for (const bad of ["javascript:alert(1)", "data:text/html,x", "http://kairo.market", "https://user:pw@x.y", "not a url", "", null, 5]) {
       expect(safeHttpsHref(bad)).toBeNull();
     }
+  });
+});
+
+describe("project page URLs", () => {
+  test("projectHref is a path: one URL per project", () => {
+    expect(projectHref("domain:www.myarcade.fun")).toBe("/project/domain/www.myarcade.fun/");
+    expect(projectHref("github:owner/repo")).toBe("/project/github/owner/repo/");
+  });
+  test("sourceFromProjectPath reads it back, normalized sources only", () => {
+    expect(sourceFromProjectPath("/project/domain/www.myarcade.fun/")).toBe("domain:www.myarcade.fun");
+    expect(sourceFromProjectPath("/project/github/owner/repo")).toBe("github:owner/repo");
+    expect(sourceFromProjectPath("/project/")).toBeNull();
+    expect(sourceFromProjectPath("/project/domain/")).toBeNull();
+    expect(sourceFromProjectPath("/project/domain/UPPER.example/")).toBeNull();
+    expect(sourceFromProjectPath("/project/integration/uniswap/")).toBeNull();
+    expect(sourceFromProjectPath("/project/domain/%E0%A4%A/")).toBeNull();
   });
 });

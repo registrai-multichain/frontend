@@ -74,4 +74,18 @@ export function safeHttpsHref(u: unknown): string | null {
     return null;
   }
 }
-export const projectHref = (source: string) => `/project/?source=${encodeURIComponent(source)}`;
+/** One URL per project: /project/<kind>/<rest>/ (e.g. /project/domain/archery.wtf/, /project/github/owner/repo/). */
+export const projectHref = (source: string) => {
+  const i = source.indexOf(":");
+  if (i <= 0) return `/project/?source=${encodeURIComponent(source)}`;
+  return `/project/${encodeURIComponent(source.slice(0, i))}/${source.slice(i + 1).split("/").map(encodeURIComponent).join("/")}/`;
+};
+
+/** The source a /project/<kind>/<rest>/ path names, or null (only sources already in normalized form). */
+export function sourceFromProjectPath(pathname: string): string | null {
+  const segs = /^\/project\/(.*)$/.exec(pathname)?.[1].split("/").filter(Boolean) ?? [];
+  if (segs.length < 2) return null;
+  let s: string;
+  try { s = `${decodeURIComponent(segs[0])}:${segs.slice(1).map(decodeURIComponent).join("/")}`; } catch { return null; }
+  return normalizeSource(s) === s ? s : null;
+}

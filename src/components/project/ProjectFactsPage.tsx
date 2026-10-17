@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { evidenceHref, PUBLIC_REVIEWER, type ChangeLogEntry, type Fact } from "@/lib/facts";
-import { evidenceLabel, factsPath, groupFacts, pageState, parseSourceParam, safeHttpsHref, type PageState } from "@/lib/project-page";
+import { evidenceLabel, factsPath, groupFacts, pageState, parseSourceParam, safeHttpsHref, sourceFromProjectPath, type PageState } from "@/lib/project-page";
 import { recheckedLine } from "@/lib/record-page";
 import { projectPath } from "@/lib/projects";
 import { removeHref } from "@/lib/builders-gallery";
@@ -167,7 +167,10 @@ export function View({ source, state }: { source: string; state: Extract<PageSta
 
 function Inner() {
   const raw = useSearchParams()?.get("source") ?? null;
-  const source = parseSourceParam(raw);
+  // /project/<kind>/<rest>/ is served from this same static page (builders-site/functions/project): the source is in the path
+  const [pathSource, setPathSource] = useState<string | null | undefined>(undefined);
+  useEffect(() => { setPathSource(sourceFromProjectPath(window.location.pathname)); }, []);
+  const source = parseSourceParam(raw) ?? pathSource ?? null;
   const [state, setState] = useState<PageState>({ kind: "loading" });
 
   useEffect(() => {
@@ -180,7 +183,7 @@ function Inner() {
     return () => { live = false; };
   }, [source]);
 
-  if (!source) return <Missing />;
+  if (!source) return pathSource === undefined && !raw ? <p className="pa-muted">Loading…</p> : <Missing />;
   if (state.kind === "loading") return <p className="pa-muted">Loading…</p>;
   if (state.kind === "missing") return <Missing />;
   if (state.kind === "error") return <LoadFailed />;

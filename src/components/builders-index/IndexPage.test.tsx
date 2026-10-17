@@ -26,7 +26,7 @@ describe("the terminal markup", () => {
   });
   test("the base layer shows dashes for payment stats; members link to project pages", () => {
     const h = html();
-    expect(h).toMatch(/href="\/project\/?\?source=domain%3Aargus.world"/);
+    expect(h).toMatch(/href="\/project\/domain\/argus\.world\/?"/);
     expect(h).toContain("chain-wide");
   });
   test("with the open hour: live status, tape rows and the countdown cell", async () => {
