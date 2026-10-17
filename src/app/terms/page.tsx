@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { builderUrl } from "@/lib/public-site";
 import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
 import { LEGAL } from "@/lib/legal";
@@ -6,7 +7,7 @@ import { LEGAL } from "@/lib/legal";
 export const metadata: Metadata = {
   title: "Terms of use · Registrai",
   description: "Terms for using builder.registrai.cc: the builder registry, the Arc indices and the points pilot.",
-  alternates: { canonical: "/terms" },
+  alternates: { canonical: builderUrl("terms") },
   // own share tags: the root layout's carry the landing page's line and image (audit L12)
   openGraph: { type: "website", siteName: "Registrai", title: "Terms of use · Registrai", description: "Terms for using builder.registrai.cc: the builder registry, the Arc indices and the points pilot.", url: "https://builder.registrai.cc/terms/" },
   twitter: { card: "summary", title: "Terms of use · Registrai", description: "Terms for using builder.registrai.cc: the builder registry, the Arc indices and the points pilot." },

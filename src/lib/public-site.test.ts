@@ -1,7 +1,7 @@
-import { readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
-import { RETIRED_ROUTES, BUILDERS_SITE_ROUTES, DASHBOARD_SITE_ROUTES, PUBLIC_ROUTES, TESTNET_ROUTES, appSiteRedirects, dashboardSiteRedirects, publicRedirects } from "./public-site";
+import { RETIRED_ROUTES, BUILDERS_SITE_ROUTES, DASHBOARD_SITE_ROUTES, PUBLIC_ROUTES, TESTNET_ROUTES, appSiteRedirects, builderUrl, dashboardSiteRedirects, publicRedirects } from "./public-site";
 
 const APP = resolve(__dirname, "../app");
 
@@ -61,5 +61,23 @@ describe("dashboard.registrai.cc", () => {
     expect(r).toContain("/bridge https://registrai.cc/bridge/ 302");
     const sources = r.split("\n").filter((l) => l && !l.startsWith("#")).map((l) => l.split(" ")[0]);
     for (const kept of ["/", "/index.html", "/_next/*"]) expect(sources).not.toContain(kept);
+  });
+});
+
+describe("canonical host of the builders site", () => {
+  test("builderUrl is the builder.registrai.cc URL with a trailing slash", () => {
+    expect(builderUrl("data-api")).toBe("https://builder.registrai.cc/data-api/");
+    expect(builderUrl("/apps/")).toBe("https://builder.registrai.cc/apps/");
+    expect(builderUrl("")).toBe("https://builder.registrai.cc/");
+  });
+
+  // registrai.cc/<route> 302s to builder.registrai.cc, so a canonical on registrai.cc points crawlers in a loop
+  test("every builders-site page declares its own canonical on builder.registrai.cc", () => {
+    const pages = BUILDERS_SITE_ROUTES.filter((r) => r !== "admin" && existsSync(resolve(APP, r, "page.tsx")));
+    expect(pages.length).toBeGreaterThan(10);
+    for (const r of pages) {
+      const src = readFileSync(resolve(APP, r, "page.tsx"), "utf8");
+      expect(src, `${r}/page.tsx`).toContain(`canonical: builderUrl("${r}")`);
+    }
   });
 });

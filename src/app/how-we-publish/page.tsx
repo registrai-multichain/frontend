@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import { builderUrl } from "@/lib/public-site";
 import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
 
 export const metadata: Metadata = {
   title: "How we publish · Registrai",
   description: "Registrai shows proof, not opinions: the same evidenced facts for every project, and no ratings.",
-  alternates: { canonical: "/how-we-publish" },
+  alternates: { canonical: builderUrl("how-we-publish") },
 };
 
 /** builder.registrai.cc/how-we-publish: the publication policy (spec §6), static. */

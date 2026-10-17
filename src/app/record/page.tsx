@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import { builderUrl } from "@/lib/public-site";
 import { BuildersShell } from "@/components/BuildersShell";
 import { RecordPage } from "@/components/record/RecordPage";
 
 export const metadata: Metadata = {
   title: "Record · Registrai",
   description: "Daily record of what Registrai published, with its digest and the Arc transaction that anchors it.",
-  alternates: { canonical: "/record" },
+  alternates: { canonical: builderUrl("record") },
 };
 
 export default function RecordRoute() {

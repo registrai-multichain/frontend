@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { builderUrl } from "@/lib/public-site";
 import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
 import { SuggestForm } from "@/components/builders/SuggestForm";
@@ -6,7 +7,7 @@ import { SuggestForm } from "@/components/builders/SuggestForm";
 export const metadata: Metadata = {
   title: "Suggest a project · Registrai",
   description: "Know a team building on Arc? Suggest it for the Registrai builders gallery: its website and its X account are all we need.",
-  alternates: { canonical: "/suggest" },
+  alternates: { canonical: builderUrl("suggest") },
 };
 
 /** builder.registrai.cc/suggest: the public way into the invite list (src/lib/suggestions.ts). */

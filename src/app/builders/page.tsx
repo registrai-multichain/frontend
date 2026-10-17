@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { builderUrl } from "@/lib/public-site";
 import { BuildersShell } from "@/components/BuildersShell";
 import { BuildersGallery } from "@/components/builders/BuildersGallery";
 import { BUILDERS } from "@/lib/builders-network";
@@ -12,7 +13,7 @@ const DESCRIPTION =
 export const metadata: Metadata = {
   title: "Verified builders · Registrai",
   description: DESCRIPTION,
-  alternates: { canonical: "/builders" },
+  alternates: { canonical: builderUrl("builders") },
   openGraph: {
     title: "Verified builders · Registrai",
     description: DESCRIPTION,

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { builderUrl } from "@/lib/public-site";
 import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
 import { OpenFromHash } from "@/components/builders/OpenFromHash";
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
   title: "Builder guide · Registrai",
   description:
     "How Registrai verification works, and what to do when you move to a new wallet, lose one, change deployers or move a project.",
-  alternates: { canonical: "/guide" },
+  alternates: { canonical: builderUrl("guide") },
 };
 
 const LABEL = BUILDERS.label;

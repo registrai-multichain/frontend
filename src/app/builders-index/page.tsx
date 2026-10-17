@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { builderUrl } from "@/lib/public-site";
 import { BuildersShell } from "@/components/BuildersShell";
 import { IndexPage } from "@/components/builders-index/IndexPage";
 import { INDEX_FOOT_NOTE } from "@/lib/builders-index-page";
@@ -11,7 +12,7 @@ const DESCRIPTION = "Hourly indices of builder, integration and ecosystem activi
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
-  alternates: { canonical: "/builders-index" },
+  alternates: { canonical: builderUrl("builders-index") },
   openGraph: { type: "website", siteName: "Registrai", title: TITLE, description: DESCRIPTION, url: "https://builder.registrai.cc/builders-index/" },
   twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
 };

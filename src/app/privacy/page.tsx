@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { builderUrl } from "@/lib/public-site";
 import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
 import { LEGAL } from "@/lib/legal";
@@ -6,7 +7,7 @@ import { LEGAL } from "@/lib/legal";
 export const metadata: Metadata = {
   title: "Privacy notice · Registrai",
   description: "What personal data builder.registrai.cc processes, why, for how long, and your rights.",
-  alternates: { canonical: "/privacy" },
+  alternates: { canonical: builderUrl("privacy") },
   // own share tags: the root layout's carry the landing page's line and image (audit L12)
   openGraph: { type: "website", siteName: "Registrai", title: "Privacy notice · Registrai", description: "What personal data builder.registrai.cc processes, why, for how long, and your rights.", url: "https://builder.registrai.cc/privacy/" },
   twitter: { card: "summary", title: "Privacy notice · Registrai", description: "What personal data builder.registrai.cc processes, why, for how long, and your rights." },

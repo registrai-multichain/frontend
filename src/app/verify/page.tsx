@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { builderUrl } from "@/lib/public-site";
 import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
 import { VerifyApp } from "@/components/verify/VerifyApp";
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
   title: "Verify your project · Registrai",
   description:
     "Claim your projects as a Registrai verified builder: sign a proof with your wallet, publish it in your repo or on your domain, and register on Arc.",
-  alternates: { canonical: "/verify" },
+  alternates: { canonical: builderUrl("verify") },
   robots: { index: false, follow: true },
 };
 

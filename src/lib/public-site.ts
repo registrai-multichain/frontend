@@ -13,6 +13,12 @@ export const BUILDERS_SITE = "https://builder.registrai.cc";
 export const DASHBOARD_SITE = "https://dashboard.registrai.cc";
 export const PUBLIC_SITE = "https://registrai.cc";
 
+/** The canonical URL of a builders-site path (the host every builder page lives on; trailing slash as served). */
+export const builderUrl = (path: string): string => {
+  const p = path.replace(/^\/+|\/+$/g, "");
+  return `${BUILDERS_SITE}/${p ? `${p}/` : ""}`;
+};
+
 /** App routes the public site keeps. */
 export const PUBLIC_ROUTES = ["bridge"] as const;
 

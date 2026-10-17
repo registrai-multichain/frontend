@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { builderUrl } from "@/lib/public-site";
 import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
 import { LockContract } from "@/components/builders-index/pilot/LockContract";
@@ -9,7 +10,7 @@ import { RULES } from "@/lib/abi-pilot";
 export const metadata: Metadata = {
   title: "Points pilot rules · Registrai",
   description: "How the points pilot on ABI, AII and AEI works: eligibility, markets, orders, leverage, funding, borrow, liquidation and the points economy.",
-  alternates: { canonical: "/pilot-rules" },
+  alternates: { canonical: builderUrl("pilot-rules") },
   // own share tags: the root layout's carry the landing page's line and image (audit L12)
   openGraph: { type: "website", siteName: "Registrai", title: "Points pilot rules · Registrai", description: "How the points pilot on ABI, AII and AEI works: eligibility, markets, orders, leverage, funding, borrow, liquidation and the points economy.", url: "https://builder.registrai.cc/pilot-rules/" },
   twitter: { card: "summary", title: "Points pilot rules · Registrai", description: "How the points pilot on ABI, AII and AEI works: eligibility, markets, orders, leverage, funding, borrow, liquidation and the points economy." },

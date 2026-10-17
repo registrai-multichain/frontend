@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { builderUrl } from "@/lib/public-site";
 import { BuildersShell } from "@/components/BuildersShell";
 import { ProjectFactsPage } from "@/components/project/ProjectFactsPage";
 
@@ -7,7 +8,7 @@ const DESCRIPTION = "What is on chain, who controls it and how it is used: neutr
 export const metadata: Metadata = {
   title: "Project facts · Registrai",
   description: DESCRIPTION,
-  alternates: { canonical: "/project" },
+  alternates: { canonical: builderUrl("project") },
 };
 
 export default function ProjectPage() {
