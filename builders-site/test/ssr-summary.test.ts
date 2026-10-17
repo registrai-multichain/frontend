@@ -36,10 +36,12 @@ describe("server-rendered summaries for pages that load their numbers in the bro
     expect(h).toContain("Owner changed &lt;b&gt;");
   });
 
-  test("injection: right after <body>, hidden at once when scripts run, escaped, page otherwise untouched", () => {
+  test("injection: summary right after <body>; hidden by a head style when scripts run, shown by <noscript>; page otherwise untouched", () => {
     const out = injectSummary(STATIC, "<p>x</p>");
-    expect(out).toContain('<body class="min-h-screen antialiased"><script>document.currentScript.nextElementSibling.hidden=true</script><section id="ssr-summary"');
-    expect(out.replace(/<script>document.*?<\/section>/s, "")).toBe(STATIC);
+    expect(out).toContain('<body class="min-h-screen antialiased"><section id="ssr-summary"');
+    expect(out).toContain('<style>#ssr-summary{display:none}</style><noscript><style>#ssr-summary{display:block}</style></noscript></head>');
+    expect(out).not.toContain("<script");
+    expect(out.replace(/<style>#ssr-summary.*?<\/noscript>/s, "").replace(/<section id="ssr-summary".*?<\/section>/s, "")).toBe(STATIC);
     expect(injectSummary("<html>no body</html>", "<p>x</p>")).toBe("<html>no body</html>");
   });
 

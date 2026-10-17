@@ -1,8 +1,8 @@
 /**
  * Server-rendered summaries for builder pages whose numbers load in the browser (/builders-index/, /track-record/):
  * the static page from `next build` says "Loading…" until its script runs, so crawlers and agents that read HTML saw no
- * numbers. The summary goes right after <body> (React skips unknown elements there when hydrating) and an inline script
- * hides it at once, so visitors with scripts see only the live page. Pure: data in, HTML string out; every value is escaped.
+ * numbers. The summary goes right after <body> (React skips unknown elements there when hydrating); a head style hides it
+ * when scripts run, so visitors with scripts see only the live page. Pure: data in, HTML string out; every value is escaped.
  */
 import { esc, when } from "./apps-pages";
 import { idToPath, type AppList } from "./apps-data";
@@ -37,14 +37,18 @@ ${items ? `<ul>${items}</ul>` : "<p>No alerts published yet.</p>"}
 <p><a href="/how-we-publish/">How we publish</a></p>`;
 }
 
-const HIDE = "<script>document.currentScript.nextElementSibling.hidden=true</script>";
+// Visitors with scripts get the live page only; without scripts the <noscript> rule shows the summary. A head style, not an
+// inline script in front of the section: that script runs before the section is parsed, so it found nothing to hide.
+// HTML text extractors read the section either way.
+const HEAD_STYLE = "<style>#ssr-summary{display:none}</style><noscript><style>#ssr-summary{display:block}</style></noscript>";
 
 /** The static page with the summary right after <body>; unchanged when the page has no <body>. */
 export function injectSummary(page: string, summary: string): string {
   const m = page.match(/<body[^>]*>/);
   if (!m || m.index === undefined) return page;
   const at = m.index + m[0].length;
-  return `${page.slice(0, at)}${HIDE}<section id="ssr-summary" style="${STYLE}">${summary}</section>${page.slice(at)}`;
+  const withBody = `${page.slice(0, at)}<section id="ssr-summary" style="${STYLE}">${summary}</section>${page.slice(at)}`;
+  return withBody.replace(/<\/head>/, `${HEAD_STYLE}</head>`);
 }
 
 /** Fetch the static page (ctx.next()), add the summary when there is data; any failure serves the static page as is. */
