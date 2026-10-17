@@ -18,7 +18,7 @@ const NUM = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }), USD = 
 const num = (n: number) => NUM.format(n);
 const usd = (n: number) => `$${USD.format(n)}`;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const when = (iso: string) => { const d = new Date(iso); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${String(d.getUTCHours()).padStart(2, "0")}:00 UTC`; };
+export const when = (iso: string) => { const d = new Date(iso); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${String(d.getUTCHours()).padStart(2, "0")}:00 UTC`; };
 const day = (iso: string) => { const d = new Date(iso); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 const KIND_LABEL: Record<AppRow["kind"], string> = { builder: "Builder app", integration: "Integration", base: "Arc base layer" };
 const INDEX_LABEL = { abi: "ABI", aii: "AII", aei: "AEI" } as const;
