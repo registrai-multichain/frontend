@@ -57,3 +57,18 @@ describe("ingest on push", () => {
     expect(await ingestIndexFile(undefined, "abi", withHour("2026-10-14T21:00:00Z", {}) as never)).toBeNull();
   });
 });
+
+describe("IndexNow ping on the daily close", () => {
+  test("the AEI push of the 00:00 UTC close pings IndexNow with the sitemap URLs; other hours and indices do not", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => { calls.push(`${url} ${JSON.parse(String(init?.body)).urlList.length > 0}`); return new Response(null, { status: 202 }); });
+    try {
+      const env = { INVITES: new MemoryKV(), ABI_PUSH_TOKEN: TOKEN, DATA_DB: dataDb() } as never;
+      await handlePushIndex(post(withHour("2026-10-17T13:00:00Z", { [SRC]: 1 })), env, "aei");
+      await handlePushIndex(post(withHour("2026-10-17T00:00:00Z", { [SRC]: 1 })), { ...(env as object), INVITES: new MemoryKV() } as never, "abi");
+      expect(calls).toEqual([]);
+      await handlePushIndex(post(withHour("2026-10-18T00:00:00Z", { [SRC]: 1 })), env, "aei");
+      expect(calls).toEqual(["https://api.indexnow.org/indexnow true"]);
+    } finally { vi.unstubAllGlobals(); }
+  });
+});

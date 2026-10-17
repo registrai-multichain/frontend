@@ -13,6 +13,8 @@ import type { Env, KV } from "./env";
 import { edgeCachedGet, errorJson, json, readJson, type EdgeCacheDeps } from "./http";
 
 export const FACTS_PREFIX = "facts:";
+/** lib/sitemap-urls.ts keeps the sitemap's facts pages under this key (here to avoid an import cycle). */
+export const FACTS_SITEMAP_KEY = "data:facts-sitemap";
 const key = (source: string) => `${FACTS_PREFIX}${source}`;
 
 export async function getFacts(kv: KV, source: string): Promise<ProjectFacts | null> {
@@ -77,6 +79,7 @@ export async function handleAdminFacts(req: Request, env: Env, rawSource: string
       rev: stored.rev + 1,
     };
     await env.INVITES.put(key(source), JSON.stringify(next), { metadata: { source } });
+    await env.INVITES.delete(FACTS_SITEMAP_KEY).catch(() => undefined); // the sitemap's facts pages list rebuilds
     return json({ facts: next });
   }
   return errorJson(405, "method not allowed");

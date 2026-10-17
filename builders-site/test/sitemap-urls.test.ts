@@ -1,0 +1,54 @@
+import { describe, expect, test } from "vitest";
+import { FACTS_SITEMAP_KEY, INDEXNOW_KEY, factPages, pingIndexNow, shouldPing } from "../lib/sitemap-urls";
+import { handleAdminFacts } from "../lib/facts";
+import { MemoryKV } from "./memory-kv";
+
+const fact = (o: Record<string, unknown> = {}) => ({ id: "f1", topic: "control", text: "x", evidence: ["0x29316db42ff99f640fd4d1bb169635b6318cd430"], observedAt: "2026-10-01T00:00:00Z", ...o });
+const rec = (source: string, facts: unknown[]) => JSON.stringify({ source, facts, changelog: [], lastReviewedAt: "2026-10-02T00:00:00Z", reviewedBy: "x", rev: 1 });
+const NOW = Date.parse("2026-10-17T12:00:00Z");
+
+class CountingKV extends MemoryKV { lists = 0; override async list<M>(o?: { prefix?: string; cursor?: string; limit?: number }) { this.lists++; return super.list<M>(o); } }
+
+describe("facts pages in the sitemap", () => {
+  test("only projects with public facts; built once, then read from one key until it is a day old", async () => {
+    const kv = new CountingKV();
+    await kv.put("facts:domain:a.b", rec("domain:a.b", [fact()]), { metadata: { source: "domain:a.b" } });
+    await kv.put("facts:domain:later.b", rec("domain:later.b", [fact({ publishAt: "2026-12-01T00:00:00Z" })]), { metadata: { source: "domain:later.b" } });
+    await kv.put("facts:domain:empty.b", rec("domain:empty.b", []), { metadata: { source: "domain:empty.b" } });
+    const env = { INVITES: kv } as never;
+    const got = await factPages(env, NOW);
+    expect(got).toEqual([{ path: "/project/domain/a.b/", lastmod: "2026-10-01T00:00:00.000Z" }]);
+    await factPages(env, NOW + 3600e3);
+    expect(kv.lists).toBe(1);
+    await factPages(env, NOW + 25 * 3600e3);
+    expect(kv.lists).toBe(2);
+  });
+
+  test("an admin save resets the list", async () => {
+    const kv = new MemoryKV();
+    await kv.put(FACTS_SITEMAP_KEY, JSON.stringify({ built: NOW, pages: [] }));
+    const req = new Request("https://builder.registrai.cc/api/admin/facts/domain%3Aa.b", { method: "PUT", body: JSON.stringify({ rev: 0, facts: [fact()] }) });
+    expect((await handleAdminFacts(req, { INVITES: kv } as never, "domain:a.b", "0xabc", "admin", { now: NOW })).status).toBe(200);
+    expect(await kv.get(FACTS_SITEMAP_KEY)).toBeNull();
+  });
+});
+
+describe("IndexNow", () => {
+  test("pings once a day, after the 00:00 UTC close", () => {
+    expect(shouldPing("2026-10-17T00:00:00Z")).toBe(true);
+    expect(shouldPing("2026-10-17T13:00:00Z")).toBe(false);
+  });
+
+  test("posts the URL list with the key and its location; a failure never throws", async () => {
+    const sent: { url: string; body: Record<string, unknown> }[] = [];
+    await pingIndexNow(["https://builder.registrai.cc/apps/"], async (url, init) => { sent.push({ url: String(url), body: JSON.parse(String(init?.body)) }); return new Response(null, { status: 202 }); });
+    expect(sent[0].url).toBe("https://api.indexnow.org/indexnow");
+    expect(sent[0].body).toEqual({ host: "builder.registrai.cc", key: INDEXNOW_KEY, keyLocation: `https://builder.registrai.cc/${INDEXNOW_KEY}.txt`, urlList: ["https://builder.registrai.cc/apps/"] });
+    await expect(pingIndexNow(["x"], async () => { throw new Error("down"); })).resolves.toBeUndefined();
+  });
+
+  test("the key file is served at /<key>.txt", async () => {
+    const { onRequest } = await import("../functions/10dec8b5c4706a0c957248ee188ce526.txt");
+    expect(await (await onRequest({ request: new Request(`https://builder.registrai.cc/${INDEXNOW_KEY}.txt`) } as never)).text()).toBe(INDEXNOW_KEY);
+  });
+});
