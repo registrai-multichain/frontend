@@ -7,7 +7,7 @@ import { renderIndexSummary, withSummary } from "../../lib/ssr-summary";
 export const onRequest: PagesFunction = async (ctx) => {
   if (!["GET", "HEAD"].includes(ctx.request.method.toUpperCase())) return ctx.next();
   const deps = { waitUntil: (p: Promise<unknown>) => ctx.waitUntil(p) };
-  return withSummary(() => ctx.next(), async () => {
+  return withSummary(ctx.request, () => ctx.next(), async () => {
     const r = await handleIndices(new Request(`${new URL(ctx.request.url).origin}/api/v1/indices`), ctx.env, deps);
     if (r.status !== 200) return null;
     return renderIndexSummary(await r.json(), await loadAppList(ctx.env, deps).catch(() => null));

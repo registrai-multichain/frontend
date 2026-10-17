@@ -252,7 +252,7 @@ function BuilderCard({ e, highlighted, waiting, nominated = false, onChain = fal
               <a className="pa-link" href={removeHref(e.source)}>Ask us to remove it</a>
             </span>
           )}
-          {e.source && <Link className="pa-link" href={projectHref(e.source)}>facts →</Link>}
+          {e.source && <a className="pa-link" href={projectHref(e.source)}>facts →</a>}
           {b && <Link className="pa-link" href={detailHref(b.id)} scroll={false}>details →</Link>}
         </>
       }

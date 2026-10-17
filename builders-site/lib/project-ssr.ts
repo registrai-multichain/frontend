@@ -43,17 +43,26 @@ export function renderProjectSummary(source: string, s: Ready): string {
   return parts.join("\n");
 }
 
-/** Replace a tag's attribute value in the static head; no-op when the tag is absent. */
+/** Replace a tag's attribute value in the static head; no-op when the tag is absent. Function replacers: a value with "$&" stays literal. */
 function setAttr(page: string, tag: RegExp, value: string): string {
   return page.replace(tag, (m) => m.replace(/(content|href)="[^"]*"/, (_a, k: string) => `${k}="${esc(value)}"`));
 }
+/** Set the tag when present, else add it before </head>. */
+function upsert(page: string, tag: RegExp, value: string, make: (v: string) => string): string {
+  return tag.test(page) ? setAttr(page, tag, value) : page.replace(/<\/head>/, () => `${make(esc(value))}</head>`);
+}
 
+/**
+ * The project's own head for crawlers that read HTML. The Next page declares no canonical and no og:url (React would re-add
+ * a declared one on hydration), so both are added here; the title is replaced (ProjectFactsPage sets document.title too).
+ */
 export function setHead(page: string, h: { title: string; description: string; canonical: string; noindex?: boolean }): string {
-  let out = page.replace(/<title>[^<]*<\/title>/, `<title>${esc(h.title)}</title>`);
+  let out = page.replace(/<title>[^<]*<\/title>/, () => `<title>${esc(h.title)}</title>`);
   out = setAttr(out, /<meta name="description" content="[^"]*"\/?>/, h.description);
-  out = setAttr(out, /<link rel="canonical" href="[^"]*"\/?>/, h.canonical);
-  for (const [k, v] of [["og:title", h.title], ["og:description", h.description], ["og:url", h.canonical]] as const) out = setAttr(out, new RegExp(`<meta property="${k}" content="[^"]*"\\/?>`), v);
+  out = upsert(out, /<link rel="canonical" href="[^"]*"\/?>/, h.canonical, (v) => `<link rel="canonical" href="${v}"/>`);
+  out = upsert(out, /<meta property="og:url" content="[^"]*"\/?>/, h.canonical, (v) => `<meta property="og:url" content="${v}"/>`);
+  for (const [k, v] of [["og:title", h.title], ["og:description", h.description]] as const) out = setAttr(out, new RegExp(`<meta property="${k}" content="[^"]*"\\/?>`), v);
   for (const [k, v] of [["twitter:title", h.title], ["twitter:description", h.description]] as const) out = setAttr(out, new RegExp(`<meta name="${k}" content="[^"]*"\\/?>`), v);
-  if (h.noindex) out = out.replace(/<\/head>/, '<meta name="robots" content="noindex"/></head>');
+  if (h.noindex) out = out.replace(/<\/head>/, () => '<meta name="robots" content="noindex"/></head>');
   return out;
 }

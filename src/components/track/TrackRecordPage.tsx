@@ -37,7 +37,7 @@ function Row({ item }: { item: StoredItem }) {
     <li style={{ marginBottom: 16 }}>
       <div>
         <span className="pa-muted">{day(item.alertTime)} UTC</span> ·{" "}
-        <Link className="pa-link" href={projectHref(item.source)}>{item.source}</Link>
+        <a className="pa-link" href={projectHref(item.source)}>{item.source}</a>
       </div>
       <div>{r ? <s>{item.text}</s> : item.text}</div>
       {r && <div className="pa-small">Retracted: {r.reason}</div>}

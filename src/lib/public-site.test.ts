@@ -73,11 +73,19 @@ describe("canonical host of the builders site", () => {
 
   // registrai.cc/<route> 302s to builder.registrai.cc, so a canonical on registrai.cc points crawlers in a loop
   test("every builders-site page declares its own canonical on builder.registrai.cc", () => {
-    const pages = BUILDERS_SITE_ROUTES.filter((r) => r !== "admin" && existsSync(resolve(APP, r, "page.tsx")));
+    // project: builders-site/functions/project serves it per project and sets each one's canonical (a canonical declared
+    // in the Next page would be re-added by React on hydration, next to the project's own)
+    const pages = BUILDERS_SITE_ROUTES.filter((r) => r !== "admin" && r !== "project" && existsSync(resolve(APP, r, "page.tsx")));
     expect(pages.length).toBeGreaterThan(10);
     for (const r of pages) {
       const src = readFileSync(resolve(APP, r, "page.tsx"), "utf8");
       expect(src, `${r}/page.tsx`).toContain(`canonical: builderUrl("${r}")`);
     }
+  });
+
+  test("the project page declares no canonical and no og:url (the server sets both per project)", () => {
+    const src = readFileSync(resolve(APP, "project", "page.tsx"), "utf8");
+    expect(src).toContain("alternates: {}");
+    expect(src).not.toMatch(/canonical:|url:/);
   });
 });

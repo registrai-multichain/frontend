@@ -6,7 +6,7 @@ import { renderTrackSummary, withSummary } from "../../lib/ssr-summary";
 export const onRequest: PagesFunction = async (ctx) => {
   if (!["GET", "HEAD"].includes(ctx.request.method.toUpperCase())) return ctx.next();
   const deps = { waitUntil: (p: Promise<unknown>) => ctx.waitUntil(p) };
-  return withSummary(() => ctx.next(), async () => {
+  return withSummary(ctx.request, () => ctx.next(), async () => {
     const r = await handlePublicTrack(new Request(`${new URL(ctx.request.url).origin}/api/track`), ctx.env, deps);
     return r.status === 200 ? renderTrackSummary(await r.json()) : null;
   });

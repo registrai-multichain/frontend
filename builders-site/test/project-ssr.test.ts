@@ -59,3 +59,47 @@ describe("project facts pages, server-rendered", () => {
     });
   });
 });
+
+describe("review fixes", () => {
+  // the Next page no longer declares a canonical (React re-added it on hydration): setHead inserts one
+  const NEXT = `<html><head><title>Project facts · Registrai</title><meta name="description" content="generic"/></head><body><div hidden></div></body></html>`;
+  test("setHead inserts canonical and og:url when absent, and a name with $& stays literal", () => {
+    const out = setHead(NEXT, { title: "A$&B: facts · Registrai", description: "d", canonical: "https://builder.registrai.cc/project/domain/a.b/" });
+    expect(out).toContain("<title>A$&amp;B: facts · Registrai</title>");
+    expect(out.match(/rel="canonical"/g)).toHaveLength(1);
+    expect(out).toContain('<link rel="canonical" href="https://builder.registrai.cc/project/domain/a.b/"/>');
+    expect(out).toContain('<meta property="og:url" content="https://builder.registrai.cc/project/domain/a.b/"/>');
+  });
+
+  const SEC = { "content-type": "text/html", "content-security-policy": "default-src 'self'", "x-frame-options": "DENY" };
+  const kv = new MemoryKV();
+  const mk = (path: string, params: string[], method = "GET", env: Record<string, unknown> = {}) => ({ request: new Request(`https://builder.registrai.cc${path}`, { method }),
+    env: { INVITES: kv, ASSETS: { fetch: async () => new Response(STATIC, { headers: SEC }) }, ...env }, params: { path: params }, waitUntil: () => undefined,
+    next: async () => new Response("NEXT", { headers: SEC }) }) as never;
+
+  test("project pages keep the static page's security headers", async () => {
+    const { onRequest } = await import("../functions/project/[[path]]");
+    await kv.put("facts:domain:www.myarcade.fun", JSON.stringify({ source: "domain:www.myarcade.fun", facts: [fact], changelog: [], lastReviewedAt: "", reviewedBy: "x", rev: 1 }));
+    for (const [p, s] of [["/project/domain/www.myarcade.fun/", ["domain", "www.myarcade.fun"]], ["/project/domain/nobody.example/", ["domain", "nobody.example"]]] as const) {
+      const r = await onRequest(mk(p, [...s]));
+      expect(r.headers.get("content-security-policy"), p).toBe("default-src 'self'");
+      expect(r.headers.get("x-frame-options"), p).toBe("DENY");
+      expect(r.headers.get("content-type"), p).toContain("text/html");
+    }
+  });
+
+  test("the route's own Next files (index.txt, __next.*) pass through to the static assets", async () => {
+    const { onRequest } = await import("../functions/project/[[path]]");
+    for (const segs of [["index.txt"], ["__next._tree.txt"], ["domain", "www.myarcade.fun", "index.txt"], ["domain", "www.myarcade.fun", "__next._tree.txt"]])
+      expect(await (await onRequest(mk(`/project/${segs.join("/")}`, segs))).text(), segs.join("/")).toBe("NEXT");
+  });
+
+  test("data down: 503 with Retry-After, not a cached 200", async () => {
+    const { onRequest } = await import("../functions/project/[[path]]");
+    const broken = { get: async () => { throw new Error("kv down"); } };
+    const r = await onRequest(mk("/project/domain/www.myarcade.fun/", ["domain", "www.myarcade.fun"], "GET", { INVITES: broken }));
+    expect(r.status).toBe(503);
+    expect(r.headers.get("retry-after")).toBe("60");
+    expect(r.headers.get("cache-control")).toBe("no-store");
+  });
+});

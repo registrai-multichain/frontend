@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { InfoBubble } from "@/components/InfoBubble";
 import { projectHref } from "@/lib/project-page";
 import { createEngine, StaleError, type Candle, type LiveResult } from "@/lib/abi-live";
@@ -287,7 +286,7 @@ function MembersPanel({ d, R }: { d: AbiData; R: LiveResult | null }) {
           <tbody>
             {ms.map((m) => (
               <tr key={m.source}>
-                <td className="n">{m.base || m.integration ? m.name : <Link className="pa-link" href={projectHref(m.source)}>{m.name}</Link>}{m.base && <span className="abi-tag">chain-wide</span>}{m.integration && <span className="abi-tag">integration</span>}</td>
+                <td className="n">{m.base || m.integration ? m.name : <a className="pa-link" href={projectHref(m.source)}>{m.name}</a>}{m.base && <span className="abi-tag">chain-wide</span>}{m.integration && <span className="abi-tag">integration</span>}</td>
                 <td>{m.share.toFixed(2)}%<span className={`abi-wbar${m.base ? " base" : ""}`}><i style={{ width: `${((100 * m.share) / maxS).toFixed(1)}%`, display: "block" }} /></span></td>
                 <td className={`abi-x ${m.dbase === null ? "" : cls(Math.abs(m.dbase) < 0.005 ? 0 : m.dbase)}`}>{m.dbase === null ? <span className="abi-tag">new</span> : sgn(m.dbase)}</td>
                 {m.base ? (<><td className="dim">–</td><td className="abi-x dim">–</td><td className="dim">–</td><td className="abi-x dim">–</td><td className="abi-x dim">–</td></>) : (<>

@@ -6,6 +6,7 @@
  */
 import { esc, when } from "./apps-pages";
 import { idToPath, type AppList } from "./apps-data";
+import { projectHref } from "../../src/lib/project-page";
 
 type IndicesJson = { data_until: string; indices: Record<string, { name: string; close: number; close_24h_ago: number | null; members: number }> };
 type TrackJson = { watching: number; updatedAt: string | null; stats: { published30: number; retracted30: number; medianSeconds30: number | null }; items: { alertTime: string; source: string; text?: string }[] };
@@ -31,7 +32,7 @@ ${appRows ? `<h2>Most used apps, last 24 h</h2><table><thead><tr><th>App</th><th
 }
 
 export function renderTrackSummary(t: TrackJson): string {
-  const items = t.items.slice(0, 50).map((i) => `<li>${esc(i.alertTime.slice(0, 10))} UTC · <a href="/apps/">${esc(i.source)}</a>${i.text ? ` · ${esc(i.text)}` : ""}</li>`).join("");
+  const items = t.items.slice(0, 50).map((i) => `<li>${esc(i.alertTime.slice(0, 10))} UTC · <a href="${esc(projectHref(i.source))}">${esc(i.source)}</a>${i.text ? ` · ${esc(i.text)}` : ""}</li>`).join("");
   return `<h1>Track record</h1><p>Watching ${INT.format(t.watching)} projects. ${INT.format(t.stats.published30)} alerts published in the last 30 days, ${INT.format(t.stats.retracted30)} retracted.</p>
 ${items ? `<ul>${items}</ul>` : "<p>No alerts published yet.</p>"}
 <p><a href="/how-we-publish/">How we publish</a></p>`;
@@ -52,9 +53,9 @@ export function injectSummary(page: string, summary: string): string {
 }
 
 /** Fetch the static page (ctx.next()), add the summary when there is data; any failure serves the static page as is. */
-export async function withSummary(next: () => Promise<Response>, summary: () => Promise<string | null>): Promise<Response> {
+export async function withSummary(req: Request, next: () => Promise<Response>, summary: () => Promise<string | null>): Promise<Response> {
   const res = await next();
-  if (res.status !== 200 || !(res.headers.get("content-type") ?? "").includes("text/html")) return res;
+  if (req.method.toUpperCase() === "HEAD" || res.status !== 200 || !(res.headers.get("content-type") ?? "").includes("text/html")) return res;
   const page = await res.text();
   let s: string | null = null;
   try { s = await summary(); } catch { s = null; }

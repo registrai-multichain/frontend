@@ -170,7 +170,8 @@ function Inner() {
   // /project/<kind>/<rest>/ is served from this same static page (builders-site/functions/project): the source is in the path
   const [pathSource, setPathSource] = useState<string | null | undefined>(undefined);
   useEffect(() => { setPathSource(sourceFromProjectPath(window.location.pathname)); }, []);
-  const source = parseSourceParam(raw) ?? pathSource ?? null;
+  // the path wins: the server rendered this URL's head and facts for the path's project
+  const source = pathSource ?? (pathSource === null ? parseSourceParam(raw) : null);
   const [state, setState] = useState<PageState>({ kind: "loading" });
 
   useEffect(() => {
@@ -178,12 +179,15 @@ function Inner() {
     let live = true;
     setState({ kind: "loading" });
     Promise.all([get(projectPath(source, false)), get(factsPath(source))]).then(([p, f]) => {
-      if (live) setState(pageState(p, f));
+      if (!live) return;
+      const st = pageState(p, f);
+      setState(st);
+      if (st.kind === "ready") document.title = `${st.profile?.name ?? source}: facts · Registrai`;
     });
     return () => { live = false; };
   }, [source]);
 
-  if (!source) return pathSource === undefined && !raw ? <p className="pa-muted">Loading…</p> : <Missing />;
+  if (!source) return pathSource === undefined ? <p className="pa-muted">Loading…</p> : <Missing />;
   if (state.kind === "loading") return <p className="pa-muted">Loading…</p>;
   if (state.kind === "missing") return <Missing />;
   if (state.kind === "error") return <LoadFailed />;

@@ -34,6 +34,7 @@ describe("server-rendered summaries for pages that load their numbers in the bro
       items: [{ alertTime: "2026-10-10T10:00:00Z", source: "domain:a.b", text: "Owner changed <b>" }] as never });
     expect(h).toContain("2026-10-10");
     expect(h).toContain("Owner changed &lt;b&gt;");
+    expect(h).toContain('href="/project/domain/a.b/"');
   });
 
   test("injection: summary right after <body>; hidden by a head style when scripts run, shown by <noscript>; page otherwise untouched", () => {
@@ -43,6 +44,16 @@ describe("server-rendered summaries for pages that load their numbers in the bro
     expect(out).not.toContain("<script");
     expect(out.replace(/<style>#ssr-summary.*?<\/noscript>/s, "").replace(/<section id="ssr-summary".*?<\/section>/s, "")).toBe(STATIC);
     expect(injectSummary("<html>no body</html>", "<p>x</p>")).toBe("<html>no body</html>");
+  });
+
+  test("HEAD: the static page, no data reads", async () => {
+    const { onRequest } = await import("../functions/builders-index/index");
+    let reads = 0;
+    const env = { INVITES: { get: async () => { reads++; return null; } } };
+    const r = await onRequest({ request: new Request("https://builder.registrai.cc/builders-index/", { method: "HEAD" }), env, params: {}, waitUntil: () => undefined,
+      next: async () => new Response(STATIC, { headers: { "content-type": "text/html" } }) } as never);
+    expect(await r.text()).toBe(STATIC);
+    expect(reads).toBe(0);
   });
 
   test("route: GET /builders-index/ returns the static page with the summary; data down → static page unchanged", async () => {
