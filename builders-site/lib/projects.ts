@@ -23,6 +23,7 @@ import { normalizeSource } from "../../src/lib/verified-builders";
 import type { Env, KV } from "./env";
 import { edgeCachedGet, errorJson, json, readJson, type EdgeCacheDeps } from "./http";
 import { readIndex } from "./invites";
+import { FACTS_SITEMAP_KEY } from "./facts";
 import { listSuggestions } from "./suggestions";
 
 export const PROJECT_PREFIX = "project:";
@@ -115,6 +116,7 @@ export async function handleAdminProject(req: Request, env: Env, rawSource: stri
     if (!v.ok) return errorJson(400, v.error);
     const profile: ProjectProfile = { ...v.value, declaredBy: admin.toLowerCase(), declaredAt: new Date(deps.now ?? Date.now()).toISOString() };
     await env.INVITES.put(key(source), JSON.stringify(profile), { metadata: { source, name: profile.name } });
+    await env.INVITES.delete(FACTS_SITEMAP_KEY).catch(() => undefined); // the sitemap's project pages list rebuilds
     return json({ profile });
   }
   return errorJson(405, "method not allowed");

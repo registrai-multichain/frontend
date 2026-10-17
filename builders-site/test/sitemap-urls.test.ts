@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { FACTS_SITEMAP_KEY, INDEXNOW_KEY, factPages, pingIndexNow, shouldPing } from "../lib/sitemap-urls";
 import { handleAdminFacts } from "../lib/facts";
+import { handleAdminProject } from "../lib/projects";
 import { MemoryKV } from "./memory-kv";
 
 const fact = (o: Record<string, unknown> = {}) => ({ id: "f1", topic: "control", text: "x", evidence: ["0x29316db42ff99f640fd4d1bb169635b6318cd430"], observedAt: "2026-10-01T00:00:00Z", ...o });
@@ -18,10 +19,27 @@ describe("facts pages in the sitemap", () => {
     const env = { INVITES: kv } as never;
     const got = await factPages(env, NOW);
     expect(got).toEqual([{ path: "/project/domain/a.b/", lastmod: "2026-10-01T00:00:00.000Z" }]);
+    const perBuild = kv.lists; // facts: and project: listings
+    expect(perBuild).toBe(2);
     await factPages(env, NOW + 3600e3);
-    expect(kv.lists).toBe(1);
+    expect(kv.lists).toBe(perBuild);
     await factPages(env, NOW + 25 * 3600e3);
-    expect(kv.lists).toBe(2);
+    expect(kv.lists).toBe(2 * perBuild);
+  });
+
+  test("a project with only a public profile is listed too (its page shows the profile)", async () => {
+    const kv = new MemoryKV();
+    await kv.put("project:domain:p.b", JSON.stringify({ source: "domain:p.b", name: "P", metrics: [], deployers: [], contracts: [], declaredBy: "0x", declaredAt: "2026-10-05T00:00:00.000Z" }), { metadata: { source: "domain:p.b" } });
+    expect(await factPages({ INVITES: kv } as never, NOW)).toEqual([{ path: "/project/domain/p.b/", lastmod: "2026-10-05T00:00:00.000Z" }]);
+  });
+
+  test("an admin profile save resets the list", async () => {
+    const kv = new MemoryKV();
+    await kv.put(FACTS_SITEMAP_KEY, JSON.stringify({ built: NOW, pages: [] }));
+    const req = new Request("https://builder.registrai.cc/api/admin/projects/domain%3Ap.b", { method: "PUT", body: JSON.stringify({ source: "domain:p.b", name: "P", website: "https://p.b", metrics: [], deployers: [], contracts: [] }) });
+    const r = await handleAdminProject(req, { INVITES: kv } as never, "domain:p.b", "0xabc", { now: NOW });
+    expect(r.status, await r.clone().text()).toBe(200);
+    expect(await kv.get(FACTS_SITEMAP_KEY)).toBeNull();
   });
 
   test("an admin save resets the list", async () => {

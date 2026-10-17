@@ -1,13 +1,15 @@
 /**
- * The builder site's URL list: /sitemap.xml and the daily IndexNow ping share it. Project facts pages are listed only when
- * something on them is public; that list is built from a KV listing at most once a day (KV list operations are scarce on
- * the free plan) and kept under one key, which an admin facts save deletes so the next sitemap rebuilds it.
+ * The builder site's URL list: /sitemap.xml and the daily IndexNow ping share it. Project pages are listed when they have
+ * a public profile or public facts; that list is built from a KV listing at most once a day (KV list operations are scarce on
+ * the free plan) and kept under one key, which an admin facts or profile save deletes so the next sitemap rebuilds it.
  */
 import type { EdgeCacheDeps } from "./http";
 import type { Env } from "./env";
 import { idToPath, loadAppList } from "./apps-data";
 import { FACTS_KEY_PREFIX, listNames, MAX_SOURCES, mapChunks } from "./kv-chunks";
 import { getVerify } from "./verify";
+import { getProfile, PROJECT_PREFIX } from "./projects";
+import { normalizeSource } from "../../src/lib/verified-builders";
 import { publicResponse, type ProjectFacts } from "../../src/lib/facts";
 import { FACTS_SITEMAP_KEY } from "./facts";
 export { FACTS_SITEMAP_KEY };
@@ -27,7 +29,7 @@ export async function factPages(env: Env, now = Date.now()): Promise<FactPage[]>
     if (cached && now - cached.built < FACTS_SITEMAP_MAX_AGE_MS) return cached.pages;
   } catch { /* rebuild */ }
   const sources = (await listNames(env.INVITES, FACTS_KEY_PREFIX)).map((n) => n.slice(FACTS_KEY_PREFIX.length)).slice(0, MAX_SOURCES);
-  const found = await mapChunks(sources, async (source): Promise<FactPage | null> => {
+  const factsFound = await mapChunks(sources, async (source): Promise<FactPage | null> => {
     try {
       const stored = JSON.parse((await env.INVITES.get(`${FACTS_KEY_PREFIX}${source}`)) ?? "null") as ProjectFacts | null;
       if (!stored || stored.source !== source || !Array.isArray(stored.facts)) return null;
@@ -36,6 +38,19 @@ export async function factPages(env: Env, now = Date.now()): Promise<FactPage[]>
       return { path: projectHref(source), ...(shown.lastReviewedAt ? { lastmod: shown.lastReviewedAt } : {}) };
     } catch { return null; }
   });
+  // a public profile alone makes the page useful (name, website, contracts): /api/projects serves every stored profile
+  const profiles = (await listNames(env.INVITES, PROJECT_PREFIX)).map((n) => n.slice(PROJECT_PREFIX.length)).filter((s) => normalizeSource(s) === s).slice(0, MAX_SOURCES);
+  const profileFound = await mapChunks(profiles, async (source): Promise<FactPage | null> => {
+    const p = await getProfile(env.INVITES, source).catch(() => null);
+    return p ? { path: projectHref(source), ...(p.declaredAt ? { lastmod: p.declaredAt } : {}) } : null;
+  });
+  const merged = new Map<string, FactPage>();
+  for (const f of [...factsFound, ...profileFound]) {
+    if (!f) continue;
+    const prev = merged.get(f.path);
+    merged.set(f.path, !prev || (f.lastmod ?? "") > (prev.lastmod ?? "") ? f : prev);
+  }
+  const found = [...merged.values()];
   const pages = found.filter((p): p is FactPage => p !== null && p.path.startsWith("/project/") && !p.path.includes("?"));
   await env.INVITES.put(FACTS_SITEMAP_KEY, JSON.stringify({ built: now, pages })).catch(() => undefined);
   return pages;
