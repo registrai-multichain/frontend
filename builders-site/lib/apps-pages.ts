@@ -8,6 +8,9 @@ import { idToPath, type AppDetail, type AppList, type AppRow } from "./apps-data
 const SITE = "https://builder.registrai.cc";
 const METHOD_URL = "/builders-index/";
 const API_DOCS_URL = "/data-api/";
+const LICENSE = "https://creativecommons.org/licenses/by/4.0/";
+const CREATOR = { "@type": "Organization", name: "Registrai", url: "https://registrai.cc/" };
+const KEYWORDS = ["USDC", "EURC", "Arc", "stablecoin payments", "stablecoin apps"];
 
 export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 // one formatter per module (review M3: a formatter per call costs CPU on the free plan's 10 ms budget)
@@ -41,6 +44,7 @@ function page(o: { title: string; canonical: string; description: string; body: 
   const ld = o.ld ? `<script type="application/ld+json">${JSON.stringify(o.ld).replace(/</g, "\\u003c")}</script>` : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(o.title)}</title><meta name="description" content="${esc(o.description)}"><link rel="canonical" href="${esc(o.canonical)}">
+<meta property="og:type" content="website"><meta property="og:site_name" content="Registrai"><meta property="og:title" content="${esc(o.title)}"><meta property="og:description" content="${esc(o.description)}"><meta property="og:url" content="${esc(o.canonical)}"><meta name="twitter:card" content="summary">
 <style>${STYLE}</style>${ld}</head><body><main>
 <nav class="muted"><a href="/builders/">Registrai builders</a><a href="/apps/">Stablecoin apps on Arc</a><a href="${METHOD_URL}">Indices</a><a href="${API_DOCS_URL}">Data API</a></nav>
 ${o.body}
@@ -61,7 +65,12 @@ export function renderAppList(l: AppList, sort: Sort): string {
 ${rows.map((r) => `<tr><td><a href="${esc(idToPath(r.id) ?? "/apps/")}">${esc(r.name)}</a></td><td>${esc(KIND_LABEL[r.kind])}</td><td>${r.verified ? "✓" : "–"}</td><td class="n">${num(r.last_24h.payments)}</td><td class="n">${esc(usd(r.last_24h.usdc))}</td><td class="n">${num(r.share)}%</td><td>${esc(day(r.first_hour))}</td></tr>`).join("\n")}
 </tbody></table></div>
 <p class="muted">The same data as JSON: <a href="/api/v1/members?index=aei">/api/v1/members?index=aei</a>. For agents: <a href="/llms.txt">llms.txt</a>, <a href="/api/v1/openapi.json">OpenAPI</a>, MCP at <code>${SITE}/api/mcp</code>.</p>`;
-  return page({ title: "Stablecoin apps on Arc · Registrai", canonical: `${SITE}/apps/`, description: `Every stablecoin app on Arc mainnet with its last 24 h of payments and volume, updated hourly. Data until ${when(l.data_until)}.`, body });
+  const ld = { "@context": "https://schema.org", "@type": "DataCatalog", name: "Stablecoin apps on Arc", url: `${SITE}/apps/`, dateModified: l.data_until,
+    description: "Hourly stablecoin payments, paying wallets and volume for every app on Arc mainnet in the Arc indices, from Registrai.",
+    license: LICENSE, creator: CREATOR, keywords: KEYWORDS,
+    mainEntity: { "@type": "ItemList", numberOfItems: rows.length,
+      itemListElement: rows.map((r, k) => ({ "@type": "ListItem", position: k + 1, name: r.name, url: `${SITE}${idToPath(r.id) ?? "/apps/"}` })) } };
+  return page({ title: "Stablecoin apps on Arc · Registrai", canonical: `${SITE}/apps/`, description: `Every stablecoin app on Arc mainnet with its last 24 h of payments and volume, updated hourly. Data until ${when(l.data_until)}.`, body, ld });
 }
 
 function spark(a: AppDetail): string {
@@ -104,11 +113,13 @@ ${last ? `<tr><th>Paying wallets, last hour</th><td class="n">${num(last.wallets
 <h2>Last 7 days</h2>
 ${a.hourly.length ? `${spark(a)}${daily(a)}` : `<p>There is no hourly history yet for this app.</p>`}
 <h2>Contracts and sources</h2>
-<p>Contracts: ${num(a.contracts)} attributed to this app (<a href="/api/index/aei/contracts">full contract map, JSON</a>).</p>
+<p>Contracts: ${num(a.contracts)} attributed to this app (<a href="/api/index/aei/contracts" rel="nofollow">full contract map, JSON</a>).</p>
 <ul>${a.facts_url ? `<li><a href="${esc(a.facts_url)}">Project facts page</a></li>` : ""}<li><a href="${esc(api)}">Hourly data as JSON</a></li><li><a href="${METHOD_URL}">How the index counts payments</a></li></ul>`;
   const ld = { "@context": "https://schema.org", "@type": "Dataset", name: `${a.name} hourly activity on Arc`, url: `${SITE}${path}`,
     description: `Hourly stablecoin payments, paying wallets, volume and index points for ${a.name} on Arc mainnet, from Registrai.`,
-    license: "https://creativecommons.org/licenses/by/4.0/", creator: { "@type": "Organization", name: "Registrai", url: "https://registrai.cc" },
+    license: LICENSE, creator: CREATOR, identifier: a.id, keywords: KEYWORDS, isAccessibleForFree: true, dateModified: a.data_until,
+    includedInDataCatalog: { "@type": "DataCatalog", name: "Stablecoin apps on Arc", url: `${SITE}/apps/` },
+    measurementTechnique: "Stablecoin transfers into the app's attributed contracts on Arc mainnet, counted hourly by the Arc Ecosystem Index method (per-wallet caps and minimums).",
     temporalCoverage: `${first}/${a.data_until}`, variableMeasured: ["points", "payments", "paying wallets", "stablecoin volume (USD)"],
     distribution: [{ "@type": "DataDownload", encodingFormat: "application/json", contentUrl: `${SITE}${api}` }] };
   return page({ title: `${a.name} on Arc · Registrai`, canonical: `${SITE}${path}`, description: `${a.name} on Arc mainnet: ${num(a.last_24h.payments)} stablecoin payments and ${usd(a.last_24h.usdc)} in the last 24 h. Data until ${when(a.data_until)}.`, body, ld });

@@ -51,3 +51,41 @@ describe("renderers", () => {
 test("M6: the totals line names USDC, the currency the totals are in", () => {
   expect(renderAppList(list(), "payments")).toMatch(/USDC payments/);
 });
+
+describe("structured data and share tags", () => {
+  const detail = () => renderApp({ ...row(), hourly: [{ hour_close: "2026-10-14T21:00:00Z", points: 9.2, points_earned: 1, payments: 1, wallets: 1, new_payers: 0, usdc: 1 }], facts_url: null, data_until: "2026-10-14T21:00:00Z" });
+  const ldOf = (h: string) => JSON.parse(h.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)![1]);
+
+  test("/apps/ carries a DataCatalog with an ItemList of every app page", () => {
+    const ld = ldOf(renderAppList(list(), "payments"));
+    expect(ld["@type"]).toBe("DataCatalog");
+    expect(ld.url).toBe("https://builder.registrai.cc/apps/");
+    expect(ld.dateModified).toBe("2026-10-14T21:00:00Z");
+    expect(ld.mainEntity["@type"]).toBe("ItemList");
+    expect(ld.mainEntity.itemListElement.map((i: { url: string }) => i.url)).toEqual(["https://builder.registrai.cc/apps/integration/uniswap/", "https://builder.registrai.cc/apps/domain/archery.wtf/"]);
+    expect(ld.mainEntity.itemListElement[0].position).toBe(1);
+  });
+
+  test("an app's Dataset has the fields Google Dataset Search reads", () => {
+    const ld = ldOf(detail());
+    expect(ld).toMatchObject({ "@type": "Dataset", identifier: "domain:archery.wtf", dateModified: "2026-10-14T21:00:00Z", isAccessibleForFree: true,
+      includedInDataCatalog: { "@type": "DataCatalog", url: "https://builder.registrai.cc/apps/" } });
+    expect(ld.keywords).toEqual(expect.arrayContaining(["USDC", "Arc", "stablecoin payments"]));
+    expect(ld.measurementTechnique).toMatch(/Arc mainnet/);
+    expect(ld.description.length).toBeGreaterThanOrEqual(50);
+  });
+
+  test("every page has Open Graph and Twitter tags matching its title and canonical", () => {
+    for (const h of [renderAppList(list(), "payments"), detail()]) {
+      const title = h.match(/<title>(.*?)<\/title>/)![1], canonical = h.match(/<link rel="canonical" href="(.*?)">/)![1];
+      expect(h).toContain(`<meta property="og:title" content="${title}">`);
+      expect(h).toContain(`<meta property="og:url" content="${canonical}">`);
+      expect(h).toContain('<meta property="og:type" content="website">');
+      expect(h).toContain('<meta name="twitter:card" content="summary">');
+    }
+  });
+
+  test("the contract-map link (robots-disallowed, 3.5 MB) is nofollow", () => {
+    expect(detail()).toContain('<a href="/api/index/aei/contracts" rel="nofollow">');
+  });
+});
