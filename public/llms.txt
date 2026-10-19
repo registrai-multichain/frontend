@@ -1,6 +1,6 @@
 # Registrai
 
-> Data on the Arc ecosystem: apps on Arc with their hourly stablecoin payments, paying wallets and volume, the Arc Builders, Integrations and Ecosystem indices, and verified builders. The data lives on builder.registrai.cc.
+> Registrai is a data company for the Arc blockchain (by Circle). Data on the Arc ecosystem: apps on Arc with their hourly stablecoin payments, paying wallets and volume, the Arc Builders, Integrations and Ecosystem indices, and verified builders. The data lives on builder.registrai.cc.
 
 ## Data
 - [Apps on Arc](https://builder.registrai.cc/apps/): every app with its last 24 h

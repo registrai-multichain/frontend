@@ -30,7 +30,8 @@ describe("landing copy", () => {
     expect(contactHref("Tabula Pro")).toBe("mailto:contact@registrai.cc?subject=Tabula%20Pro");
   });
   it("uses the decided words", () => {
-    expect(SITE_TITLE).toBe("Registrai · Data on Arc");
+    expect(SITE_TITLE).toBe("Registrai · Arc ecosystem data"); // owner 2026-10-19: unambiguous name (Claude read "Registrai" as the Lithuanian word)
+    expect(SITE_DESCRIPTION).toMatch(/^Registrai is a data company for the Arc blockchain/);
     expect(HERO.headline).toBe("The source of truth for the Arc economy.");
     expect(HERO.headline.endsWith(HERO.headlineAccent)).toBe(true);
     expect(HERO.microcopy).toBe("Independent. Not affiliated with Circle or Arc.");
@@ -119,6 +120,9 @@ describe("landing: entity and internal links for crawlers", () => {
     expect(ORG_JSONLD["@type"]).toBe("Organization");
     expect(ORG_JSONLD.url).toBe("https://registrai.cc/");
     expect(ORG_JSONLD.description).toMatch(/Arc ecosystem/);
+    expect(ORG_JSONLD.alternateName).toEqual(["Registrai Arc data", "registrai.cc"]);
+    expect(ORG_JSONLD.disambiguatingDescription).toMatch(/Arc blockchain/);
+    expect(ORG_JSONLD.knowsAbout).toEqual(expect.arrayContaining(["Arc (blockchain)", "USDC"]));
     expect(ORG_JSONLD.sameAs).toEqual(expect.arrayContaining(["https://x.com/registraicc", "https://github.com/registrai-multichain", "https://builder.registrai.cc/"]));
     expect(page).toContain('type="application/ld+json"');
   });
@@ -133,7 +137,7 @@ describe("registrai.cc robots, sitemap, llms.txt", () => {
   });
   it("llms.txt points agents at the builder data", () => {
     const t = readFileSync(resolve(__dirname, "../../public/llms.txt"), "utf8");
-    expect(t).toMatch(/^# Registrai\n/);
+    expect(t).toMatch(/^# Registrai\n\n> Registrai is a data company for the Arc blockchain/);
     expect(t).toContain("https://builder.registrai.cc/apps/");
     expect(t).toContain("https://builder.registrai.cc/llms.txt");
   });

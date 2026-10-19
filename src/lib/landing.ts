@@ -14,15 +14,18 @@ export const ORG_JSONLD = {
   "@context": "https://schema.org",
   "@type": "Organization",
   name: "Registrai",
+  alternateName: ["Registrai Arc data", "registrai.cc"],
   url: "https://registrai.cc/",
   logo: "https://registrai.cc/mark-ring-512.png",
   description: "Registrai publishes data on the Arc ecosystem: apps on Arc with their hourly stablecoin payments, paying wallets and volume, the Arc indices, project facts and verified builders.",
+  disambiguatingDescription: "Registrai (registrai.cc) is a data company for the Arc blockchain by Circle, not a public register.",
+  knowsAbout: ["Arc (blockchain)", "Circle", "USDC", "EURC", "stablecoin payments"],
   email: "contact@registrai.cc",
   sameAs: ["https://builder.registrai.cc/", "https://x.com/registraicc", "https://github.com/registrai-multichain"],
 } as const;
 
-export const SITE_TITLE = "Registrai · Data on Arc";
-export const SITE_DESCRIPTION = "Indices, project facts and data on every app built on Arc. Independent; evidence for every number.";
+export const SITE_TITLE = "Registrai · Arc ecosystem data";
+export const SITE_DESCRIPTION = "Registrai is a data company for the Arc blockchain: indices, project facts and data on every app built on Arc. Independent; evidence for every number.";
 
 export const HERO = {
   eyebrow: "REGISTRAI · DATA ON ARC",

@@ -3,7 +3,7 @@ import type { PagesFunction } from "../lib/env";
 /** GET /llms.txt (llmstxt.org): where agents find Registrai's Arc data (spec 2026-10-15-agent-reference-design.md). */
 export const LLMS_TXT = `# Registrai
 
-> Data on the Arc ecosystem: apps on Arc with their hourly stablecoin payments, paying wallets and volume, the Arc Builders, Integrations and Ecosystem indices, and verified builders. Computed from public Arc mainnet data; the method and evidence are published.
+> Registrai is a data company for the Arc blockchain (by Circle). Data on the Arc ecosystem: apps on Arc with their hourly stablecoin payments, paying wallets and volume, the Arc Builders, Integrations and Ecosystem indices, and verified builders. Computed from public Arc mainnet data; the method and evidence are published.
 
 ## Data
 - [Apps on Arc](https://builder.registrai.cc/apps/): every app with its last 24 h, sorted by payments
