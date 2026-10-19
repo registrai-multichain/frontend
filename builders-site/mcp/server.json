@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "cc.registrai/arc-data",
   "title": "Registrai Arc data",
-  "description": "Read-only hourly data on stablecoin apps on Arc: payments, volume, indices, verified builders.",
+  "description": "Read-only hourly Arc ecosystem data: apps, stablecoin payments, volume, indices, verified builders.",
   "version": "1.0.0",
   "websiteUrl": "https://builder.registrai.cc/data-api/",
   "remotes": [

@@ -11,7 +11,7 @@ const METHOD_URL = "/builders-index/";
 const API_DOCS_URL = "/data-api/";
 const LICENSE = "https://creativecommons.org/licenses/by/4.0/";
 const CREATOR = { "@type": "Organization", name: "Registrai", url: "https://registrai.cc/" };
-const KEYWORDS = ["USDC", "EURC", "Arc", "stablecoin payments", "stablecoin apps"];
+const KEYWORDS = ["Arc", "Arc ecosystem", "Arc apps", "USDC", "EURC", "stablecoin payments"];
 
 export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 // one formatter per module (review M3: a formatter per call costs CPU on the free plan's 10 ms budget)
@@ -47,7 +47,7 @@ function page(o: { title: string; canonical: string; description: string; body: 
 <title>${esc(o.title)}</title><meta name="description" content="${esc(o.description)}"><link rel="canonical" href="${esc(o.canonical)}">
 <meta property="og:type" content="website"><meta property="og:site_name" content="Registrai"><meta property="og:title" content="${esc(o.title)}"><meta property="og:description" content="${esc(o.description)}"><meta property="og:url" content="${esc(o.canonical)}"><meta name="twitter:card" content="summary">
 <style>${STYLE}</style>${ld}</head><body><main>
-<nav class="muted"><a href="/builders/">Registrai builders</a><a href="/apps/">Stablecoin apps on Arc</a><a href="${METHOD_URL}">Indices</a><a href="${API_DOCS_URL}">Data API</a></nav>
+<nav class="muted"><a href="/builders/">Registrai builders</a><a href="/apps/">Apps on Arc</a><a href="${METHOD_URL}">Indices</a><a href="${API_DOCS_URL}">Data API</a></nav>
 ${o.body}
 <footer>Data: Registrai, CC BY 4.0 · <a href="/how-we-publish/">How we publish</a> · <a href="${METHOD_URL}">Method</a> · <a href="${API_DOCS_URL}">Data API</a> · Independent. Not affiliated with Circle or Arc.</footer>
 </main></body></html>`;
@@ -57,7 +57,7 @@ export function renderAppList(l: AppList, sort: Sort): string {
   const rows = sorted(l.rows, sort);
   const others = (Object.keys(SORTS) as Sort[]).filter((s) => s !== sort).map((s) => `<a href="/apps/?sort=${s}">${esc(SORTS[s].label)}</a>`).join(" · ");
   const share = l.totals.arc_usdc_24h_est > 0 ? ` That is about ${num((100 * l.totals.usdc_24h) / l.totals.arc_usdc_24h_est)}% of the estimated ${usd(l.totals.arc_usdc_24h_est)} USDC moved on Arc in the same 24 h; the rest is not attributed to an app yet.` : "";
-  const body = `<h1>Stablecoin apps on Arc</h1>
+  const body = `<h1>Apps on Arc</h1>
 <p class="muted">Data until ${esc(when(l.data_until))}. Updated hourly from Arc mainnet.</p>
 <p>${num(l.totals.apps)} apps · ${num(l.totals.payments_24h)} USDC payments · ${usd(l.totals.usdc_24h)} USDC to these apps in the last 24 h
 <details><summary>i</summary> Payments into the apps' own contracts, counted by the Arc Ecosystem Index method (per-wallet caps and minimums apply).${esc(share)}</details></p>
@@ -66,12 +66,12 @@ export function renderAppList(l: AppList, sort: Sort): string {
 ${rows.map((r) => `<tr><td><a href="${esc(idToPath(r.id) ?? "/apps/")}">${esc(r.name)}</a></td><td>${esc(KIND_LABEL[r.kind])}</td><td>${r.verified ? "✓" : "–"}</td><td class="n">${num(r.last_24h.payments)}</td><td class="n">${esc(usd(r.last_24h.usdc))}</td><td class="n">${num(r.share)}%</td><td>${esc(day(r.first_hour))}</td></tr>`).join("\n")}
 </tbody></table></div>
 <p class="muted">The same data as JSON: <a href="/api/v1/members?index=aei">/api/v1/members?index=aei</a>. For agents: <a href="/llms.txt">llms.txt</a>, <a href="/api/v1/openapi.json">OpenAPI</a>, MCP at <code>${SITE}/api/mcp</code>.</p>`;
-  const ld = { "@context": "https://schema.org", "@type": "DataCatalog", name: "Stablecoin apps on Arc", url: `${SITE}/apps/`, dateModified: l.data_until,
+  const ld = { "@context": "https://schema.org", "@type": "DataCatalog", name: "Apps on Arc", url: `${SITE}/apps/`, dateModified: l.data_until,
     description: "Hourly stablecoin payments, paying wallets and volume for every app on Arc mainnet in the Arc indices, from Registrai.",
     license: LICENSE, creator: CREATOR, keywords: KEYWORDS,
     mainEntity: { "@type": "ItemList", numberOfItems: rows.length,
       itemListElement: rows.map((r, k) => ({ "@type": "ListItem", position: k + 1, name: r.name, url: `${SITE}${idToPath(r.id) ?? "/apps/"}` })) } };
-  return page({ title: "Stablecoin apps on Arc · Registrai", canonical: `${SITE}/apps/`, description: `Every stablecoin app on Arc mainnet with its last 24 h of payments and volume, updated hourly. Data until ${when(l.data_until)}.`, body, ld });
+  return page({ title: "Apps on Arc · Registrai", canonical: `${SITE}/apps/`, description: `Every app in the Arc indices with its last 24 h of stablecoin payments and volume on Arc mainnet, updated hourly. Data until ${when(l.data_until)}.`, body, ld });
 }
 
 function spark(a: AppDetail): string {
@@ -128,7 +128,7 @@ ${contractList(a)}
   const ld = { "@context": "https://schema.org", "@type": "Dataset", name: `${a.name} hourly activity on Arc`, url: `${SITE}${path}`,
     description: `Hourly stablecoin payments, paying wallets, volume and index points for ${a.name} on Arc mainnet, from Registrai.`,
     license: LICENSE, creator: CREATOR, identifier: a.id, keywords: KEYWORDS, isAccessibleForFree: true, dateModified: a.data_until,
-    includedInDataCatalog: { "@type": "DataCatalog", name: "Stablecoin apps on Arc", url: `${SITE}/apps/` },
+    includedInDataCatalog: { "@type": "DataCatalog", name: "Apps on Arc", url: `${SITE}/apps/` },
     measurementTechnique: "Stablecoin transfers into the app's attributed contracts on Arc mainnet, counted hourly by the Arc Ecosystem Index method (per-wallet caps and minimums).",
     temporalCoverage: `${first}/${a.data_until}`, variableMeasured: ["points", "payments", "paying wallets", "stablecoin volume (USD)"],
     distribution: [{ "@type": "DataDownload", encodingFormat: "application/json", contentUrl: `${SITE}${api}` }] };
@@ -136,7 +136,7 @@ ${contractList(a)}
 }
 
 export const renderNotFound = () =>
-  page({ title: "App not found · Registrai", canonical: `${SITE}/apps/`, description: "No Arc app with this id in the indices.", body: `<h1>App not found</h1><p>No app with this id is in the Arc indices. See <a href="/apps/">Stablecoin apps on Arc</a>.</p>` });
+  page({ title: "App not found · Registrai", canonical: `${SITE}/apps/`, description: "No Arc app with this id in the indices.", body: `<h1>App not found</h1><p>No app with this id is in the Arc indices. See <a href="/apps/">Apps on Arc</a>.</p>` });
 
 export const renderUnavailable = () =>
-  page({ title: "Data not available · Registrai", canonical: `${SITE}/apps/`, description: "The data is not available right now.", body: `<h1>Data not available right now</h1><p>Retry in a few minutes. <a href="/apps/">Stablecoin apps on Arc</a></p>` });
+  page({ title: "Data not available · Registrai", canonical: `${SITE}/apps/`, description: "The data is not available right now.", body: `<h1>Data not available right now</h1><p>Retry in a few minutes. <a href="/apps/">Apps on Arc</a></p>` });

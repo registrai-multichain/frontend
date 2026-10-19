@@ -27,7 +27,7 @@ export function renderIndexSummary(ix: IndicesJson, apps: AppList | null): strin
   const appRows = top.map((r) => `<tr><td><a href="${esc(idToPath(r.id) ?? "/apps/")}">${esc(r.name)}</a></td><td>${INT.format(r.last_24h.payments)}</td><td>$${USD.format(r.last_24h.usdc)}</td></tr>`).join("");
   return `<h1>Arc indices</h1><p>Data until ${esc(when(ix.data_until))}. Hourly, from Arc mainnet. Base 1000.</p>
 <table><thead><tr><th>Index</th><th>Close</th><th>24 h change</th><th>Members</th></tr></thead><tbody>${rows}</tbody></table>
-${appRows ? `<h2>Most used apps, last 24 h</h2><table><thead><tr><th>App</th><th>Stablecoin payments</th><th>USD</th></tr></thead><tbody>${appRows}</tbody></table><p><a href="/apps/">All stablecoin apps on Arc</a></p>` : ""}
+${appRows ? `<h2>Most used apps, last 24 h</h2><table><thead><tr><th>App</th><th>Stablecoin payments</th><th>USD</th></tr></thead><tbody>${appRows}</tbody></table><p><a href="/apps/">All apps on Arc</a></p>` : ""}
 <p>JSON: <a href="/api/v1/indices">/api/v1/indices</a> · <a href="/data-api/">Data API</a> · <a href="/how-we-publish/">How we publish</a></p>`;
 }
 

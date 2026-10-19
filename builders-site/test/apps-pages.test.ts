@@ -10,7 +10,8 @@ const list = (rows = [row(), row({ id: "integration:uniswap", name: "Uniswap", k
 describe("renderers", () => {
   test("list: title, data-until, sort default by payments, numbers in plain HTML, licence, canonical", () => {
     const h = renderAppList(list(), "payments");
-    expect(h).toContain("<title>Stablecoin apps on Arc · Registrai</title>");
+    expect(h).toContain("<title>Apps on Arc · Registrai</title>");
+    expect(h).not.toMatch(/stablecoin apps/i);
     expect(h).toContain("Data until 14 Oct 2026, 21:00 UTC");
     expect(h.indexOf("Uniswap")).toBeLessThan(h.indexOf("Archery"));
     expect(h).toContain("9,999");

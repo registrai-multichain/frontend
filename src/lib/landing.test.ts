@@ -118,6 +118,7 @@ describe("landing: entity and internal links for crawlers", () => {
     const { ORG_JSONLD } = await import("./landing");
     expect(ORG_JSONLD["@type"]).toBe("Organization");
     expect(ORG_JSONLD.url).toBe("https://registrai.cc/");
+    expect(ORG_JSONLD.description).toMatch(/Arc ecosystem/);
     expect(ORG_JSONLD.sameAs).toEqual(expect.arrayContaining(["https://x.com/registraicc", "https://github.com/registrai-multichain", "https://builder.registrai.cc/"]));
     expect(page).toContain('type="application/ld+json"');
   });

@@ -14,7 +14,7 @@ type Op = { get?: { summary?: string } };
 export const API_INDEX = {
   name: "Registrai Data API",
   version: 1,
-  description: "Hourly data on stablecoin apps on Arc: per-app payments, paying wallets and volume, the ABI, AII and AEI indices, and verified builders. No key.",
+  description: "Hourly Arc ecosystem data: per-app stablecoin payments, paying wallets and volume, the ABI, AII and AEI indices, and verified builders. No key.",
   docs: DOCS_URL, openapi: OPENAPI_URL, mcp: MCP_URL, paid: `${SITE}/api/v1/paid`, licence: LICENCE,
   endpoints: Object.entries(OPENAPI.paths as Record<string, Op>)
     .filter(([p]) => !p.includes("/paid"))
@@ -33,7 +33,7 @@ export const API_CATALOG = {
 export const MCP_SERVER_CARD = {
   name: "cc.registrai/arc-data",
   title: "Registrai Arc data",
-  description: "Read-only data on stablecoin apps on Arc: per-app USDC and EURC payments, paying wallets and volume, the Arc indices, verified builders. CC BY 4.0.",
+  description: "Read-only Arc ecosystem data: apps on Arc with their USDC and EURC payments, paying wallets and volume, the Arc indices, verified builders. CC BY 4.0.",
   version: "1.0.0",
   websiteUrl: DOCS_URL,
   remotes: [{ type: "streamable-http", url: MCP_URL }],

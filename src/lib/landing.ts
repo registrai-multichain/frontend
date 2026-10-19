@@ -16,7 +16,7 @@ export const ORG_JSONLD = {
   name: "Registrai",
   url: "https://registrai.cc/",
   logo: "https://registrai.cc/mark-ring-512.png",
-  description: "Registrai publishes hourly data on stablecoin apps on Arc: per-app payments, paying wallets and volume, the Arc indices and verified builders.",
+  description: "Registrai publishes data on the Arc ecosystem: apps on Arc with their hourly stablecoin payments, paying wallets and volume, the Arc indices, project facts and verified builders.",
   email: "contact@registrai.cc",
   sameAs: ["https://builder.registrai.cc/", "https://x.com/registraicc", "https://github.com/registrai-multichain"],
 } as const;

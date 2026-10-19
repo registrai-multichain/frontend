@@ -25,6 +25,7 @@ describe("API and MCP discovery documents", () => {
 
   test("the MCP server card names the registry id, the remote and every tool", () => {
     expect(MCP_SERVER_CARD.name).toBe("cc.registrai/arc-data");
+    expect(`${MCP_SERVER_CARD.description} ${API_INDEX.description}`).not.toMatch(/stablecoin apps/i);
     expect(MCP_SERVER_CARD.remotes).toEqual([{ type: "streamable-http", url: "https://builder.registrai.cc/api/mcp" }]);
     expect(MCP_SERVER_CARD.tools.map((t) => t.name)).toEqual(MCP_TOOLS.map((t) => t.name));
   });

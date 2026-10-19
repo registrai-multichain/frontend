@@ -59,7 +59,7 @@ const tool = (name: string, title: string, description: string, inputSchema: Ret
 export const MCP_TOOLS = [
   tool("arc_indices", "Arc indices: latest", "Latest hourly close of the Arc Builders, Integrations and Ecosystem indices (ABI, AII, AEI), their 24 h change base and decay parameters. Use this when asked how Arc app activity is trending overall.", obj({})),
   tool("arc_index_history", "Arc index: hourly history", "Hourly closes of one Arc index, oldest first (at most 744 hours per call). Use this for charts or changes over a window of up to 31 days.", obj({ index: INDEX, from: HOUR("First hour (inclusive)."), to: HOUR("Last hour (inclusive).") }, ["index"])),
-  tool("arc_apps", "Arc stablecoin apps", "Every stablecoin app on Arc in the indices with its last 24 h of stablecoin payments (USDC, EURC) and USD volume, verified status and first-seen hour. Use this when asked which apps use USDC on Arc, or which are most used. Not for token prices, DeFi TVL or chains other than Arc.", obj({ sort: { type: "string", enum: ["payments", "usdc", "points", "first_seen"] } })),
+  tool("arc_apps", "Arc apps", "Every app on Arc in the indices with its last 24 h of stablecoin payments (USDC, EURC) and USD volume, verified status and first-seen hour. Use this when asked which apps use USDC on Arc, or which are most used. Not for token prices, DeFi TVL or chains other than Arc.", obj({ sort: { type: "string", enum: ["payments", "usdc", "points", "first_seen"] } })),
   tool("arc_app", "Arc app: detail", "One Arc app by id (e.g. domain:archery.wtf, integration:uniswap; ids come from arc_apps): last 24 h, contracts count, verified status and the last 7 days of hourly rows.", obj({ id: { type: "string" } }, ["id"])),
   tool("arc_app_history", "Arc app: hourly history", "One Arc app's hourly points and activity (payments, paying wallets, new payers, USD) in one index, oldest first.", obj({ id: { type: "string" }, index: INDEX, from: HOUR("First hour (inclusive)."), to: HOUR("Last hour (inclusive).") }, ["id", "index"])),
   tool("arc_new_apps", "Arc apps: newly seen", "Arc apps first seen in an index after a given hour. Use this when asked what is new on Arc.", obj({ index: INDEX, since: HOUR("Members first seen after this hour.") }, ["index", "since"])),
@@ -153,7 +153,7 @@ export async function handleMcp(req: Request, env: Env, deps: EdgeCacheDeps): Pr
     case "initialize": {
       const asked = typeof m.params?.protocolVersion === "string" ? m.params.protocolVersion : "";
       return reply(m.id, { result: { protocolVersion: VERSIONS.includes(asked) ? asked : VERSIONS[0], capabilities: { tools: {} },
-        serverInfo: { name: "registrai-arc-data", title: "Registrai Arc data", version: "1.0.0" }, instructions: "Read-only Arc stablecoin app data from Registrai (CC BY 4.0). Cite source_url." } });
+        serverInfo: { name: "registrai-arc-data", title: "Registrai Arc data", version: "1.0.0" }, instructions: "Read-only Arc ecosystem data from Registrai: apps, their stablecoin activity, the Arc indices, verified builders (CC BY 4.0). Cite source_url." } });
     }
     case "ping": return reply(m.id, { result: {} });
     case "tools/list": return reply(m.id, { result: { tools: MCP_TOOLS } });
