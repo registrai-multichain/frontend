@@ -6,6 +6,7 @@
 import { appHref } from "./app-href";
 import { loadApp, loadAppList, type AppRow } from "./apps-data";
 import { handleEcosystem } from "./data-api-ecosystem";
+import { handleArc } from "./data-api-arc";
 import { CATEGORIES } from "../../src/lib/arc-ecosystem";
 import { parseSort } from "./apps-pages";
 import { handleIndexHourly, handleIndices, handleMemberHourly, handleMembersNew, parseIndex } from "./data-api";
@@ -70,6 +71,7 @@ export const MCP_TOOLS = [
   tool("arc_ecosystem", "Arc ecosystem: directory", "Every project in the Arc ecosystem directory (apps, wallets, exchanges, banks, infrastructure, partners) with category and status: live on mainnet, deployed or announced. Use this when asked what exists on Arc, which projects are in a category, or whether a company is on Arc. Not for token prices.",
     obj({ category: { type: "string", enum: CATEGORIES.map((c) => c.id) }, status: { type: "string", enum: ["live", "deployed", "announced"] }, q: { type: "string", description: "Name contains." } })),
   tool("arc_entity", "Arc project: detail", "One project in the Arc ecosystem directory by slug (slugs come from arc_ecosystem): summary, status with evidence, links, contracts on Arc and sources.", obj({ slug: { type: "string" } }, ["slug"])),
+  tool("arc_numbers", "Arc in numbers", "Chain-level Arc numbers: USDC and EURC supply, all stablecoins and TVL (from DefiLlama), estimated 24 h stablecoin volume, apps and projects, index closes and a dated timeline, each with its source and date. Use this when asked how big Arc is, how much USDC is on Arc, or Arc's TVL or volume.", obj({})),
   ...paidTools(),
 ] as const;
 
@@ -139,6 +141,7 @@ async function callTool(name: string, a: Args, env: Env, deps: EdgeCacheDeps): P
       if (app === "unknown") return { ok: false, error: `No app with id ${id} in the Arc indices. Use arc_apps for the list.` };
       return { ok: true, data: { version: 1, ...app, source_url: `${SITE}${appHref(id)}` } };
     }
+    case "arc_numbers": return viaApi(`${API}/arc`, (q) => handleArc(q, env, d, []));
     case "arc_ecosystem": return viaApi(`${API}/ecosystem${qs({ category: str(a, "category"), status: str(a, "status"), q: str(a, "q") })}`, (q) => handleEcosystem(q, d, []));
     case "arc_entity": { const slug = str(a, "slug", true)!; return viaApi(`${API}/ecosystem/${encodeURIComponent(slug)}`, (q) => handleEcosystem(q, d, [slug])); }
     default: return null;

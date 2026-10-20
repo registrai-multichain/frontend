@@ -87,6 +87,7 @@ describe("ecosystem in the sitemap", () => {
     expect(locs).not.toContain("https://builder.registrai.cc/ecosystem/banks/");
     expect(urls).toContainEqual({ loc: "https://builder.registrai.cc/ecosystem/archery/", lastmod: "2026-10-20" });
     expect(locs).not.toContain("https://builder.registrai.cc/apps/domain/archery.wtf/");
+    expect(locs).toContain("https://builder.registrai.cc/arc/");
   });
   test("a project page the directory claims (it 301s) is left out; an unclaimed one stays", async () => {
     const { sitemapUrls } = await import("../lib/sitemap-urls");

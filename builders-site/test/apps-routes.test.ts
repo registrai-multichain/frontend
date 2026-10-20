@@ -74,6 +74,7 @@ test("I1: sitemap is GET/HEAD only; llms.txt makes no claim the pages don't keep
   expect(LLMS_TXT).toMatch(/^# Registrai\n\n> Registrai is a data company for the Arc blockchain/);
   expect(LLMS_TXT).toContain("https://builder.registrai.cc/ecosystem/");
   expect(LLMS_TXT).toContain("https://builder.registrai.cc/api/v1/ecosystem");
+  expect(LLMS_TXT).toContain("https://builder.registrai.cc/arc/");
 });
 
 test("sitemap: data pages carry lastmod = data_until; noindexed /verify/ is out; guide, terms, privacy are in", async () => {

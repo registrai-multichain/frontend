@@ -9,6 +9,8 @@ import membersHourly from "../../docs/superpowers/specs/data-api-v1-fixtures/mem
 import verified from "../../docs/superpowers/specs/data-api-v1-fixtures/verified.json";
 import ecosystem from "../../docs/superpowers/specs/data-api-v1-fixtures/ecosystem.json";
 import ecosystemEntity from "../../docs/superpowers/specs/data-api-v1-fixtures/ecosystem-entity.json";
+import arcNow from "../../docs/superpowers/specs/data-api-v1-fixtures/arc.json";
+import arcDaily from "../../docs/superpowers/specs/data-api-v1-fixtures/arc-daily.json";
 
 type Schema = { type: string; properties?: Record<string, Schema>; required?: string[]; items?: Schema; additionalProperties?: Schema | boolean };
 
@@ -38,6 +40,13 @@ function ecosystemSchema(): Schema {
   for (const k of ["website", "first_live"]) item.properties![k] = { type: ["string", "null"] as unknown as string };
   item.required = (item.required ?? []).filter((k) => k !== "website" && k !== "first_live").concat(["website", "first_live"]);
   return s;
+}
+
+/** Arc in numbers: a figure whose source is down is null. */
+function arcSchema(s: Schema): Schema {
+  let out = s;
+  for (const sec of ["network", "stablecoins", "activity_24h"]) out = nullable(out, [sec, "*"]);
+  return nullable(nullable(nullable(out, ["ecosystem", "index_members", "*"]), ["ecosystem", "index_close", "*"]), ["ecosystem", "data_until"]);
 }
 
 const membersNew = { version: 1, index: "aii", since: "2026-10-14T19:00:00Z", data_until: "2026-10-14T21:00:00Z", members: members.members };
@@ -87,6 +96,8 @@ export const OPENAPI = {
     "/ecosystem": op("listEcosystem", "Every project in the Arc ecosystem directory", "Ecosystem", [
       { name: "category", in: "query", required: false, schema: { type: "string" } }, { name: "status", in: "query", required: false, schema: { type: "string", enum: ["live", "deployed", "announced"] } },
       { name: "q", in: "query", required: false, description: "Name or alias contains (case-insensitive).", schema: { type: "string" } }]),
+    "/arc": op("getArcNumbers", "Arc in numbers now, each figure with its source and date", "ArcNumbers"),
+    "/arc/daily": op("listArcDaily", "Daily snapshots of Arc in numbers, newest first", "ArcDaily", [{ name: "days", in: "query", required: false, description: "1-365, default 30", schema: { type: "integer" } }]),
     "/ecosystem/{slug}": op("getEcosystemEntity", "One project in the Arc ecosystem directory", "EcosystemEntity", [{ name: "slug", in: "path", required: true, schema: { type: "string" } }]),
   },
   components: {
@@ -100,6 +111,8 @@ export const OPENAPI = {
       Verified: schemaOf(verified),
       Ecosystem: ecosystemSchema(),
       EcosystemEntity: schemaOf(ecosystemEntity),
+      ArcNumbers: arcSchema(schemaOf(arcNow)),
+      ArcDaily: { type: "object", properties: { version: { type: "number" }, days: { type: "array", items: arcSchema(schemaOf(arcNow)) } }, required: ["version", "days"] },
       Error: { type: "object", properties: { error: { type: "string" } }, required: ["error"] },
       PaymentRequired: { type: "object", description: PAID_NOTE, properties: { x402Version: { type: "number" }, error: { type: "string" }, resource: { type: "object" }, accepts: { type: "array", items: { type: "object" } } }, required: ["x402Version", "accepts"] },
     },
