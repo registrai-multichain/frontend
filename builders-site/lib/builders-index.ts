@@ -11,6 +11,7 @@ import { bearerGuard } from "./bot-auth";
 import { ingestIndexFile } from "./data-api-ingest";
 import { storeAppContracts } from "./app-contracts";
 import { pingIndexNow, shouldPing, sitemapUrls } from "./sitemap-urls";
+import { snapshotArcDaily } from "./arc-daily";
 import type { Env } from "./env";
 import { edgeCachedGet, errorJson, json, type EdgeCacheDeps } from "./http";
 
@@ -107,7 +108,10 @@ export const handlePushIndex = (req: Request, env: Env, id: AbiIndexId = "abi") 
     async (d) => {
       await ingestIndexFile(env.DATA_DB, id, d); // Data API v1 history; never fails the publish
       // once a day, after the 00:00 UTC close: tell IndexNow engines the data pages changed (best effort)
-      if (id === "aei" && shouldPing(d.data_until)) await pingIndexNow((await sitemapUrls(env, {}).catch(() => [])).map((u) => u.loc));
+      if (id === "aei" && shouldPing(d.data_until)) {
+        await snapshotArcDaily(env, d.data_until.slice(0, 10)); // Arc in numbers: one fixed snapshot per day (best effort)
+        await pingIndexNow((await sitemapUrls(env, {}).catch(() => [])).map((u) => u.loc));
+      }
     });
 
 export const handlePushSeen = (req: Request, env: Env, id: AbiIndexId = "abi") =>
