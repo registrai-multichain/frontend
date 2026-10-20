@@ -35,3 +35,19 @@ describe("seed", () => {
     expect(c).toMatchObject({ slug: "beefy", status: "deployed", origins: ["defillama"], category: null });
   });
 });
+
+import { parseArcPartners } from "./arc-ecosystem-seed";
+describe("arc.io partners", () => {
+  const html = `<div data-check="Alcove" role="listitem" class="ecosystem-item w-dyn-item"><div class="u-hide"><a aria-label="ecosystem link" href="/ecosystem/alcove" class="w-inline-block"></a></div><p>Alcove</p></div>
+<div data-check="Aave" role="listitem" class="ecosystem-item w-dyn-item"><div class="u-hide"><a aria-label="ecosystem link" href="/ecosystem/aave" class="w-inline-block"></a></div></div>
+<div data-check="Bad &amp; Co" role="listitem" class="ecosystem-item"><a href="https://evil.example/x">x</a></div>`;
+  test("names and arc.io page URLs, entities decoded, non-arc.io links dropped", () => {
+    expect(parseArcPartners(html)).toEqual([{ name: "Alcove", url: "https://www.arc.io/ecosystem/alcove" }, { name: "Aave", url: "https://www.arc.io/ecosystem/aave" }]);
+  });
+  test("an arc.io partner merges into the same-name candidate; a new one is announced with its arc.io page", () => {
+    const out = mergeCandidates({ tracker: [{ company: "Aave", category: "lending", status: "live" }], members: [], llama: [], arcio: [{ name: "Aave", url: "https://www.arc.io/ecosystem/aave" }, { name: "Alcove", url: "https://www.arc.io/ecosystem/alcove" }] });
+    expect(out.find((c) => c.slug === "aave")).toMatchObject({ status: "live", arcio_url: "https://www.arc.io/ecosystem/aave" });
+    expect(out.find((c) => c.slug === "aave")!.origins).toContain("arcio");
+    expect(out.find((c) => c.slug === "alcove")).toMatchObject({ status: "announced", origins: ["arcio"], announcements: [{ url: "https://www.arc.io/ecosystem/alcove" }] });
+  });
+});
