@@ -297,7 +297,8 @@
     "name": "Aero",
     "aliases": [
       "Aerodrome",
-      "Aero Lite"
+      "Aero Lite",
+      "Velodrome"
     ],
     "category": "dexs",
     "status": "live",
@@ -7746,6 +7747,66 @@
     "last_reviewed": "2026-10-20"
   },
   {
+    "slug": "ornn",
+    "name": "Ornn",
+    "category": "trading",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle press release: Arc mainnet launch",
+        "date": "2026-10-20"
+      }
+    ],
+    "summary": "Financial products for the compute market, including an H100 index price and capacity purchases. Named among agentic-economy builders in Circle's 2026-09-16 Arc mainnet announcement.",
+    "website": "https://ornn.com",
+    "x": "OrnnExchange",
+    "first_announced": "2026-09-16",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle press release: Arc mainnet launch",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://ornn.com",
+        "title": "Ornn website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "orthogonal",
+    "name": "Orthogonal",
+    "category": "ai-agents",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle press release: Arc mainnet launch",
+        "date": "2026-10-20"
+      }
+    ],
+    "summary": "Gives AI agents access to web search, scraping and enrichment APIs through one account, via API, MCP server or CLI, with pay-per-call pricing including x402. Named among agentic-economy builders in Circle's 2026-09-16 Arc mainnet announcement.",
+    "website": "https://orthogonal.com",
+    "x": "orthogonal_sh",
+    "first_announced": "2026-09-16",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle press release: Arc mainnet launch",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://orthogonal.com",
+        "title": "Orthogonal website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
     "slug": "osl",
     "name": "OSL",
     "category": "exchanges",
@@ -7776,6 +7837,165 @@
     "last_reviewed": "2026-10-20"
   },
   {
+    "slug": "owlpay",
+    "name": "OwlPay",
+    "category": "payments",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/ecosystem/owlpay",
+        "title": "arc.io ecosystem page: OwlPay",
+        "date": "2026-10-20"
+      }
+    ],
+    "summary": "Payment platform from OwlTing for fiat payouts and stablecoin cross-border payments, plus stablecoin and card acceptance. Listed on Arc's ecosystem directory as a fintech.",
+    "website": "https://www.owlting.com/owlpay/",
+    "sources": [
+      {
+        "url": "https://www.arc.io/ecosystem/owlpay",
+        "title": "arc.io ecosystem page: OwlPay",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.owlting.com/owlpay/",
+        "title": "OwlPay website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.owlting.com/portal/?lang=en",
+        "title": "OwlTing website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "pairpoint-by-vodafone",
+    "name": "Pairpoint by Vodafone",
+    "category": "payments",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle press release: Arc public testnet",
+        "date": "2026-10-20"
+      }
+    ],
+    "summary": "Vodafone and Sumitomo Corporation's Economy of Things business, which has a payments service with Mastercard for machine-to-machine payments in fleet and logistics. Named among payments and technology firms in Circle's 2025-10-28 Arc testnet announcement.",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle press release: Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.vodafone.com/news/newsroom/technology/pairpoint-vodafone-mastercard-partnership-economy-of-things",
+        "title": "Vodafone newsroom: Pairpoint and Mastercard",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "parabolarc",
+    "name": "Parabolarc",
+    "category": "launchpads",
+    "status": "deployed",
+    "status_evidence": [
+      {
+        "url": "https://explorer.arc.io/address/0xfb56bee304c92374d5e08a5ad84540fdd69cdd8e",
+        "title": "Arc explorer, one-pair factory",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.parabolarc.xyz/docs/addresses",
+        "title": "Parabolarc docs: contract addresses",
+        "date": "2026-10-20"
+      }
+    ],
+    "summary": "Launchpad that launches each token into a locked Uniswap v4 pool; on Arc the pool is paired with USDC.",
+    "website": "https://www.parabolarc.xyz",
+    "x": "parabolarclabs",
+    "github": "https://github.com/parabolarc",
+    "docs": "https://www.parabolarc.xyz/docs",
+    "contracts": [
+      {
+        "address": "0xfb56bee304c92374d5e08a5ad84540fdd69cdd8e",
+        "role": "One-pair factory",
+        "source": "https://www.parabolarc.xyz/docs/addresses"
+      },
+      {
+        "address": "0x656d7be35e329299aa734417f18e5027917fcbbf",
+        "role": "One-pair router",
+        "source": "https://www.parabolarc.xyz/docs/addresses"
+      },
+      {
+        "address": "0xee8413f5935b3f2659c0aa5147cfabdceb4d57b9",
+        "role": "Multi factory",
+        "source": "https://www.parabolarc.xyz/docs/addresses"
+      },
+      {
+        "address": "0x16a9b565ea5515f86f1449da6481e70f35397821",
+        "role": "Stock factory",
+        "source": "https://www.parabolarc.xyz/docs/addresses"
+      },
+      {
+        "address": "0xe609ac323ae9a4edae9b8d3018f0cbd812195cef",
+        "role": "$PARC token",
+        "source": "https://www.parabolarc.xyz/docs/addresses"
+      }
+    ],
+    "sources": [
+      {
+        "url": "https://www.parabolarc.xyz/docs/addresses",
+        "title": "Parabolarc docs: contract addresses",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.parabolarc.xyz",
+        "title": "Parabolarc website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://api.llama.fi/protocol/parabolarc",
+        "title": "DefiLlama: Parabolarc",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "paysafe",
+    "name": "Paysafe",
+    "category": "payments",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle press release: Arc public testnet",
+        "date": "2026-10-20"
+      }
+    ],
+    "summary": "Payments company serving businesses and consumers, with brands such as Skrill, Neteller and Paysafecard. Named among payments firms in Circle's 2025-10-28 Arc testnet announcement.",
+    "website": "https://www.paysafe.com",
+    "x": "Paysafe",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle press release: Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.paysafe.com",
+        "title": "Paysafe website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
     "slug": "peach",
     "name": "Peach",
     "category": "dexs",
@@ -7796,6 +8016,179 @@
       {
         "url": "https://peach.ag/",
         "title": "Peach Protocol website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "peddles",
+    "name": "Peddles",
+    "category": "launchpads",
+    "tags": [
+      "consumer"
+    ],
+    "status": "deployed",
+    "status_evidence": [
+      {
+        "url": "https://explorer.arc.io/address/0x1f9d8c53028d5289c9b206b6684bfc2bac001978",
+        "title": "Arc explorer, Peddles factory",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://peddles.xyz/docs/addresses",
+        "title": "Peddles docs: contract addresses",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://docs.peddlequest.xyz/docs/integrations/contracts",
+        "title": "PeddleQuest docs: contracts, deployed on Arc 2026-10-02",
+        "date": "2026-10-20"
+      }
+    ],
+    "summary": "Launchpad where tokens launch into locked Uniswap v4 pools, on several chains including Arc. Also runs PeddleQuest, a quest platform with on-chain escrowed reward pools, deployed on Arc on 2026-10-02.",
+    "website": "https://peddles.xyz",
+    "x": "PeddlesX",
+    "github": "https://github.com/peddles-markets",
+    "docs": "https://peddles.xyz/docs",
+    "contracts": [
+      {
+        "address": "0x1f9d8c53028d5289c9b206b6684bfc2bac001978",
+        "role": "Peddles factory v2.0",
+        "source": "https://peddles.xyz/docs/addresses"
+      },
+      {
+        "address": "0x317e34de0298f23bd41bf9a853289e227e9cc0cc",
+        "role": "Peddles fee hook",
+        "source": "https://peddles.xyz/docs/addresses"
+      },
+      {
+        "address": "0xe7666f1d0d7b9026cacae4a267c14cd490c01978",
+        "role": "Launch orchestrator v2.0",
+        "source": "https://peddles.xyz/docs/addresses"
+      },
+      {
+        "address": "0x3a6a8e21fc09d27fc3f9ad57e012da69032149d4",
+        "role": "Route swap router",
+        "source": "https://peddles.xyz/docs/addresses"
+      },
+      {
+        "address": "0x16267be6d067b3d411bf779b5ad041f9eba4cade",
+        "role": "PeddleQuest escrow",
+        "source": "https://docs.peddlequest.xyz/docs/integrations/contracts"
+      },
+      {
+        "address": "0x0c90bd0a17879c9b627705206522020078c51231",
+        "role": "PeddleQuest fee router",
+        "source": "https://docs.peddlequest.xyz/docs/integrations/contracts"
+      },
+      {
+        "address": "0x704e5ea6752ebfcedb377512b67c0138461f4849",
+        "role": "PeddleQuest promotion market",
+        "source": "https://docs.peddlequest.xyz/docs/integrations/contracts"
+      },
+      {
+        "address": "0x6da219d4072a91665f702e34ca6ccacd3ea7ae91",
+        "role": "PeddleQuest badge",
+        "source": "https://docs.peddlequest.xyz/docs/integrations/contracts"
+      }
+    ],
+    "sources": [
+      {
+        "url": "https://peddles.xyz/docs/addresses",
+        "title": "Peddles docs: contract addresses",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://docs.peddlequest.xyz/docs/integrations/contracts",
+        "title": "PeddleQuest docs: contracts",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://peddles.xyz",
+        "title": "Peddles website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://peddlequest.xyz",
+        "title": "PeddleQuest website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://api.llama.fi/protocol/peddles",
+        "title": "DefiLlama: Peddles",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://api.llama.fi/protocol/peddlequest",
+        "title": "DefiLlama: PeddleQuest",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "phantom",
+    "name": "Phantom",
+    "category": "wallets",
+    "status": "live",
+    "status_evidence": [
+      {
+        "url": "https://docs.phantom.com/ethereum-monad-testnet-base-and-polygon/getting-started",
+        "title": "Phantom docs: EVM networks, lists Arc mainnet (chain ID 5042)",
+        "date": "2026-10-20",
+        "type": "mainnet-support"
+      }
+    ],
+    "summary": "Self-custodial wallet for trading across several chains. Its docs list Arc mainnet (chain ID 5042) among supported EVM networks, and Circle's 2026-09-16 announcement names it among wallets.",
+    "website": "https://phantom.com",
+    "x": "phantom",
+    "docs": "https://docs.phantom.com",
+    "first_announced": "2026-09-16",
+    "sources": [
+      {
+        "url": "https://docs.phantom.com/ethereum-monad-testnet-base-and-polygon/getting-started",
+        "title": "Phantom docs: EVM networks",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle press release: Arc mainnet launch",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://phantom.com",
+        "title": "Phantom website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "photonpay",
+    "name": "PhotonPay",
+    "category": "payments",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle press release: Arc public testnet",
+        "date": "2026-10-20"
+      }
+    ],
+    "summary": "Business payments platform covering stablecoin and fiat acceptance, multi-asset wallets, payouts, FX and corporate cards. Named among payments firms in Circle's 2025-10-28 Arc testnet announcement.",
+    "website": "https://www.photonpay.com",
+    "x": "PhotonPay",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle press release: Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.photonpay.com",
+        "title": "PhotonPay website",
         "date": "2026-10-20"
       }
     ],
@@ -7834,6 +8227,73 @@
     "last_reviewed": "2026-10-20"
   },
   {
+    "slug": "privy",
+    "name": "Privy",
+    "category": "wallets",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle press release: Arc public testnet",
+        "date": "2026-10-20"
+      }
+    ],
+    "summary": "Wallet infrastructure for embedded user wallets, agent wallets, key management and policy controls. Named among digital wallet providers in Circle's 2025-10-28 Arc testnet announcement.",
+    "website": "https://privy.io",
+    "x": "privy_io",
+    "github": "https://github.com/privy-io",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle press release: Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://privy.io",
+        "title": "Privy website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://docs.privy.io",
+        "title": "Privy docs",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20",
+    "docs": "https://docs.privy.io"
+  },
+  {
+    "slug": "proshares",
+    "name": "ProShares",
+    "category": "asset-managers",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle press release: Arc mainnet launch",
+        "date": "2026-10-20"
+      }
+    ],
+    "summary": "Issuer of exchange-traded funds, including crypto, leveraged and inverse ETFs. Named among asset managers and RWA issuers working to bring tokenized financial products onchain in Circle's 2026-09-16 announcement.",
+    "website": "https://www.proshares.com",
+    "x": "ProShares",
+    "first_announced": "2026-09-16",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle press release: Arc mainnet launch",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.proshares.com",
+        "title": "ProShares website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
     "slug": "pulsar",
     "name": "Pulsar",
     "category": "payments",
@@ -7864,6 +8324,39 @@
       {
         "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
         "title": "Arc mainnet launch press release",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "pump-fun",
+    "name": "Pump.fun",
+    "category": "trading",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle: Arc mainnet launch announcement",
+        "date": "2026-09-16"
+      }
+    ],
+    "summary": "Memecoin launch and trading platform. Named among onchain trading and liquidity protocols expanding access on Arc in Circle's 2026-09-16 mainnet announcement.",
+    "tags": [
+      "launchpads"
+    ],
+    "website": "https://pump.fun",
+    "x": "pumpfun",
+    "first_announced": "2026-09-16",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle: Arc mainnet launch announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://pump.fun",
+        "title": "Pump.fun website",
         "date": "2026-10-20"
       }
     ],
@@ -7914,6 +8407,168 @@
     "last_reviewed": "2026-10-20"
   },
   {
+    "slug": "rabby",
+    "name": "Rabby",
+    "category": "wallets",
+    "status": "live",
+    "status_evidence": [
+      {
+        "url": "https://api.rabby.io/v1/chain/list",
+        "title": "Rabby API chain list includes Arc (community_id 5042)",
+        "date": "2026-10-20",
+        "type": "mainnet-support"
+      }
+    ],
+    "summary": "Browser and mobile wallet for Ethereum and EVM chains. Arc (chain ID 5042) appears in the chain list served by Rabby's own API.",
+    "website": "https://rabby.io",
+    "docs": "https://rabby.io/docs",
+    "github": "https://github.com/RabbyHub/Rabby",
+    "sources": [
+      {
+        "url": "https://api.rabby.io/v1/chain/list",
+        "title": "Rabby API chain list",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://rabby.io",
+        "title": "Rabby website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "rain",
+    "name": "Rain",
+    "category": "payments",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+        "title": "Circle: founding validator cohort announcement",
+        "date": "2026-08-05"
+      }
+    ],
+    "summary": "Stablecoin payments infrastructure for enterprises, including stablecoin-powered cards. Named as a stablecoin payments provider routing payment and settlement flows through Arc in Circle's announcements.",
+    "website": "https://www.rain.xyz",
+    "x": "raincards",
+    "first_announced": "2026-08-05",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+        "title": "Circle: founding validator cohort announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle: Arc mainnet launch announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.rain.xyz",
+        "title": "Rain website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "rainbow",
+    "name": "Rainbow",
+    "category": "wallets",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle: Arc mainnet launch announcement",
+        "date": "2026-09-16"
+      }
+    ],
+    "summary": "Crypto wallet app. Named among digital wallet providers joining Arc at testnet (2025-10-28) and among wallets listed for Arc mainnet in Circle's 2026-09-16 announcement.",
+    "website": "https://rainbow.me",
+    "x": "rainbowdotme",
+    "github": "https://github.com/rainbow-me/rainbow",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle: Arc public testnet announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle: Arc mainnet launch announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://rainbow.me",
+        "title": "Rainbow website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "ramp",
+    "name": "Ramp",
+    "category": "payments",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle: Arc public testnet announcement",
+        "date": "2025-10-28"
+      }
+    ],
+    "summary": "Corporate card, spend management and accounts payable platform. Named among global payments and fintech participants in Circle's 2025-10-28 Arc testnet announcement.",
+    "website": "https://ramp.com",
+    "x": "tryramp",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle: Arc public testnet announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://ramp.com",
+        "title": "Ramp website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "ramp-network",
+    "name": "Ramp Network",
+    "category": "ramps",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle: Arc public testnet announcement",
+        "date": "2025-10-28"
+      }
+    ],
+    "summary": "Crypto on-ramp and off-ramp provider with a self-custodial wallet. Named among infrastructure providers for Arc in Circle's 2025-10-28 testnet announcement.",
+    "website": "https://rampnetwork.com",
+    "x": "RampNetwork",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle: Arc public testnet announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://rampnetwork.com",
+        "title": "Ramp Network website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
     "slug": "rango",
     "name": "Rango",
     "category": "bridges",
@@ -7953,6 +8608,35 @@
       {
         "url": "https://explorer.arc.io/address/0x69460570c93f9de5e2edbc3052bf10125f0ca22d",
         "title": "Arc explorer, RangoDiamond",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "re7-labs",
+    "name": "Re7 Labs",
+    "category": "lending",
+    "status": "deployed",
+    "status_evidence": [
+      {
+        "url": "https://api.llama.fi/protocol/re7-labs",
+        "title": "DefiLlama Re7 Labs lists Arc with TVL",
+        "date": "2026-10-20"
+      }
+    ],
+    "summary": "DeFi curator and advisor offering in-house research tooling and DeFi ratings for protocols. DefiLlama lists Arc among the chains for its protocol page.",
+    "website": "https://re7labs.xyz",
+    "x": "Re7Labs",
+    "sources": [
+      {
+        "url": "https://api.llama.fi/protocol/re7-labs",
+        "title": "DefiLlama protocol data: Re7 Labs",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://re7labs.xyz",
+        "title": "Re7 Labs website",
         "date": "2026-10-20"
       }
     ],
@@ -8107,6 +8791,374 @@
     "last_reviewed": "2026-10-20"
   },
   {
+    "slug": "sasai-fintech",
+    "name": "Sasai Fintech",
+    "category": "payments",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle: Arc public testnet announcement",
+        "date": "2025-10-28"
+      }
+    ],
+    "summary": "Fintech business of Cassava Technologies. Named among global payments and fintech participants in Circle's 2025-10-28 Arc testnet announcement.",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle: Arc public testnet announcement",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "sbi-holdings",
+    "name": "SBI Holdings",
+    "category": "banks",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+        "title": "Circle: founding validator cohort announcement",
+        "date": "2026-08-05"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle: Arc mainnet launch announcement",
+        "date": "2026-09-16"
+      }
+    ],
+    "summary": "Japanese financial services group. Named as a founding validator of Arc in Circle's announcements.",
+    "website": "https://www.sbigroup.co.jp",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle: Arc public testnet announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+        "title": "Circle: founding validator cohort announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle: Arc mainnet launch announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.sbigroup.co.jp",
+        "title": "SBI Holdings website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "sbi-shinsei-trust",
+    "name": "SBI Shinsei Trust",
+    "category": "stablecoin-issuers",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle: Arc mainnet launch announcement",
+        "date": "2026-09-16"
+      }
+    ],
+    "summary": "Issuer of JPYSC, a trust-type yen-pegged stablecoin. Cited in a statement from SBI Holdings' chairman in Circle's 2026-09-16 Arc mainnet announcement.",
+    "first_announced": "2026-09-16",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle: Arc mainnet launch announcement",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "securitize",
+    "name": "Securitize",
+    "category": "rwa",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle: Arc mainnet launch announcement",
+        "date": "2026-09-16"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: BUIDL, tokenized by Securitize, launches natively on Arc",
+        "date": "2026-09-16"
+      }
+    ],
+    "summary": "Tokenization platform for real-world assets. Circle's announcements name it as the tokenizer of BlackRock's BUIDL fund, which Circle lists among tokenized assets for Arc.",
+    "website": "https://securitize.io",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle: Arc public testnet announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle: Arc mainnet launch announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc mainnet is here",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://securitize.io",
+        "title": "Securitize website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "societe-generale",
+    "name": "Societe Generale",
+    "category": "banks",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle: Arc mainnet launch announcement",
+        "date": "2026-09-16"
+      }
+    ],
+    "summary": "French bank. Named among global banks with access to Arc's private mainnet in Circle's 2026-09-16 announcement, and among financial institutions at testnet in 2025.",
+    "website": "https://www.societegenerale.com",
+    "x": "societegenerale",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle: Arc public testnet announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle: Arc mainnet launch announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.societegenerale.com",
+        "title": "Societe Generale website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "sodex-bridge",
+    "name": "SoDEX",
+    "category": "bridges",
+    "status": "deployed",
+    "status_evidence": [
+      {
+        "url": "https://api.llama.fi/protocol/sodex-bridge",
+        "title": "DefiLlama SoDEX Bridge lists Arc with TVL",
+        "date": "2026-10-20"
+      }
+    ],
+    "summary": "Order-book decentralized exchange on ValueChain, incubated by SoSoValue, with a bridge product. DefiLlama lists Arc among the chains of its SoDEX Bridge protocol page, with TVL on Arc.",
+    "aliases": [
+      "SoDEX Bridge"
+    ],
+    "tags": [
+      "dexs"
+    ],
+    "website": "https://sodex.com",
+    "x": "sodex_official",
+    "sources": [
+      {
+        "url": "https://api.llama.fi/protocol/sodex-bridge",
+        "title": "DefiLlama protocol data: SoDEX Bridge",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://sodex.com",
+        "title": "SoDEX website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "solonpad",
+    "name": "SolonPad",
+    "aliases": [
+      "Solon Labs",
+      "Solon Borrow",
+      "SolonLend"
+    ],
+    "category": "launchpads",
+    "tags": [
+      "lending"
+    ],
+    "status": "live",
+    "status_evidence": [
+      {
+        "url": "https://explorer.arc.io/address/0xd36687146385f7dc84a18fea3d00319d39d6d1a0",
+        "title": "SOLON token contract on Arc explorer",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://solonpad.fun/docs/changelog",
+        "title": "SolonPad changelog: V3 live on Arc mainnet",
+        "date": "2026-10-03"
+      }
+    ],
+    "summary": "Token launchpad on Arc where a share of each coin's trading fee is paid to holders in stock tokens backed 1:1 on Robinhood Chain. Also runs SolonLend, a USDC vault and NVDA.sol-collateral market on Arc's Morpho deployment.",
+    "website": "https://solonpad.fun/",
+    "x": "Solonlabs1",
+    "github": "https://github.com/solonlend",
+    "docs": "https://solonpad.fun/docs",
+    "contracts": [
+      {
+        "address": "0xd36687146385f7dc84a18fea3d00319d39d6d1a0",
+        "role": "SOLON token",
+        "source": "https://solonpad.fun"
+      },
+      {
+        "address": "0xf48e05c437b27bd447c443847947c186ed3ddcc2",
+        "role": "SolonLend oracle",
+        "source": "https://solonpad.fun/docs/contracts"
+      },
+      {
+        "address": "0xd02ece663c03d2786033140c77bb71d85f552b0c",
+        "role": "SolonLend USDC vault (Morpho factory instance)",
+        "source": "https://solonpad.fun/docs/contracts"
+      }
+    ],
+    "sources": [
+      {
+        "url": "https://solonpad.fun",
+        "title": "SolonPad website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://solonpad.fun/docs",
+        "title": "SolonPad docs",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://solonpad.fun/docs/contracts",
+        "title": "SolonPad docs: contracts",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://solonpad.fun/docs/lending",
+        "title": "SolonPad docs: lending",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://solonpad.fun/docs/changelog",
+        "title": "SolonPad changelog",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://solonlend.xyz",
+        "title": "Solon (Solon Borrow) website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://api.llama.fi/protocol/solonpad-v3",
+        "title": "DefiLlama: SolonPad V3",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://api.llama.fi/protocol/solon-borrow",
+        "title": "DefiLlama: Solon Borrow",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "stablecorp",
+    "name": "Stablecorp",
+    "category": "stablecoin-issuers",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle announcement: Arc public testnet",
+        "date": "2025-10-28"
+      }
+    ],
+    "summary": "Canadian digital-asset company that issues QCAD, a Canadian dollar stablecoin. Named as the issuer of QCAD among stablecoins joining Arc for testnet in Circle's 28 October 2025 announcement.",
+    "website": "https://stablecorp.ca/",
+    "x": "stablecorp",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle announcement: Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://stablecorp.ca/",
+        "title": "Stablecorp website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "standard-chartered",
+    "name": "Standard Chartered",
+    "category": "banks",
+    "tags": [
+      "validators"
+    ],
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+        "title": "Circle announcement: founding validator cohort",
+        "date": "2026-08-05"
+      }
+    ],
+    "summary": "Global bank serving corporate, institutional and affluent clients across Asia, Africa and the Middle East. Named as an Arc founding validator in Circle's 5 August 2026 announcement and as a bank with access to Arc's private mainnet on 16 September 2026.",
+    "website": "https://www.sc.com/en/",
+    "x": "stanchart",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle announcement: Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+        "title": "Circle announcement: founding validator cohort",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle announcement: Arc mainnet launch",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.sc.com/en/",
+        "title": "Standard Chartered website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
     "slug": "stargate",
     "name": "Stargate",
     "category": "bridges",
@@ -8137,6 +9189,43 @@
       {
         "url": "https://transfer.layerzero-api.com/v1/chains",
         "title": "LayerZero transfer API: supported chains",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "state-street",
+    "name": "State Street",
+    "category": "banks",
+    "tags": [
+      "custody"
+    ],
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle announcement: Arc mainnet launch",
+        "date": "2026-09-16"
+      }
+    ],
+    "summary": "Global custody bank. Named among capital markets firms engaging with Arc in Circle's October 2025 testnet announcement and as a bank with access to Arc's private mainnet in the 16 September 2026 announcement.",
+    "website": "https://www.statestreet.com/",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle announcement: Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle announcement: Arc mainnet launch",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.statestreet.com/",
+        "title": "State Street website",
         "date": "2026-10-20"
       }
     ],
@@ -8199,6 +9288,202 @@
     "last_reviewed": "2026-10-20"
   },
   {
+    "slug": "sumitomo-corporation",
+    "name": "Sumitomo Corporation",
+    "category": "validators",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+        "title": "Circle announcement: founding validator cohort",
+        "date": "2026-08-05"
+      }
+    ],
+    "summary": "Japanese integrated trading company. Named as a member of Arc's founding validator cohort in Circle's 5 August 2026 announcement, and listed among payments and fintech ecosystem participants at testnet launch.",
+    "website": "https://www.sumitomocorp.com/en/jp",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle announcement: Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+        "title": "Circle announcement: founding validator cohort",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle announcement: Arc mainnet launch",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.sumitomocorp.com/en/jp",
+        "title": "Sumitomo Corporation website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "superform",
+    "name": "Superform",
+    "category": "lending",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle announcement: Arc public testnet",
+        "date": "2025-10-28"
+      }
+    ],
+    "summary": "Financial app for buying US stocks, earning on USD and trading crypto from one account. Named among yield providers for Arc in Circle's 28 October 2025 testnet announcement.",
+    "website": "https://www.superform.xyz/",
+    "x": "Superformxyz",
+    "github": "https://github.com/superform-xyz",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle announcement: Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.superform.xyz/",
+        "title": "Superform website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "sushiswap",
+    "name": "SushiSwap",
+    "aliases": [
+      "Sushi",
+      "SushiSwap V3",
+      "SushiSwap V4"
+    ],
+    "category": "dexs",
+    "status": "live",
+    "status_evidence": [
+      {
+        "url": "https://explorer.arc.io/address/0x7282249282902e1f99c2cb0a04230091bd30fe3a",
+        "title": "SushiSwap V3 factory on Arc explorer",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://explorer.arc.io/address/0x81d732702f87d2d652ae79e9f52bf44928eca210",
+        "title": "SushiSwap V4 CL pool manager on Arc explorer",
+        "date": "2026-10-20"
+      }
+    ],
+    "summary": "Decentralized exchange with concentrated-liquidity AMMs and a swap aggregator on many chains. On Arc, its V3 and V4 contracts are deployed and listed by DefiLlama with liquidity.",
+    "website": "https://sushi.com/",
+    "docs": "https://docs.sushi.com",
+    "contracts": [
+      {
+        "address": "0x7282249282902e1f99c2cb0a04230091bd30fe3a",
+        "role": "SushiSwap V3 factory",
+        "source": "https://www.npmjs.com/package/sushi"
+      },
+      {
+        "address": "0x287c6a19395800cd53b16368df2121f1f336a7f3",
+        "role": "SushiSwap V3 position manager",
+        "source": "https://www.npmjs.com/package/sushi"
+      },
+      {
+        "address": "0x475d8dab6decbbf89db860d2673f2472fa58e5f4",
+        "role": "SushiSwap V3 quoter",
+        "source": "https://www.npmjs.com/package/sushi"
+      },
+      {
+        "address": "0xeb4f1e157d18b1a4d09a5207a96e17601ea354b2",
+        "role": "SushiSwap V4 vault",
+        "source": "https://www.npmjs.com/package/sushi"
+      },
+      {
+        "address": "0x81d732702f87d2d652ae79e9f52bf44928eca210",
+        "role": "SushiSwap V4 CL pool manager",
+        "source": "https://www.npmjs.com/package/sushi"
+      },
+      {
+        "address": "0xd3d35fbc4e44523ca3cd383c1948322ddb42f644",
+        "role": "SushiSwap V4 CL position manager",
+        "source": "https://www.npmjs.com/package/sushi"
+      },
+      {
+        "address": "0xe52abd50ad151ecdf56427effd715e703696a6b1",
+        "role": "Red Snwapper (swap router)",
+        "source": "https://www.npmjs.com/package/sushi"
+      }
+    ],
+    "sources": [
+      {
+        "url": "https://sushi.com/",
+        "title": "Sushi website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.npmjs.com/package/sushi",
+        "title": "Sushi SDK package (Arc deployment addresses)",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://api.llama.fi/protocol/sushiswap-v3",
+        "title": "DefiLlama: SushiSwap V3",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://api.llama.fi/protocol/sushiswap-v4",
+        "title": "DefiLlama: SushiSwap V4",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "symbiosis",
+    "name": "Symbiosis",
+    "category": "bridges",
+    "tags": [
+      "dexs"
+    ],
+    "status": "live",
+    "status_evidence": [
+      {
+        "url": "https://api.symbiosis.finance/crosschain/v1/chains",
+        "title": "Symbiosis API: supported chains include Arc (chain id 5042)",
+        "date": "2026-10-20",
+        "type": "mainnet-support"
+      }
+    ],
+    "summary": "Cross-chain swap and liquidity protocol connecting EVM and non-EVM networks. Its API lists Arc (chain id 5042) among supported chains, and DefiLlama shows Symbiosis liquidity on Arc.",
+    "website": "https://symbiosis.finance/",
+    "x": "symbiosis_fi",
+    "github": "https://github.com/symbiosis-finance",
+    "docs": "https://docs.symbiosis.finance",
+    "sources": [
+      {
+        "url": "https://symbiosis.finance/",
+        "title": "Symbiosis website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://api.symbiosis.finance/crosschain/v1/chains",
+        "title": "Symbiosis API: chains",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://api.llama.fi/protocol/symbiosis",
+        "title": "DefiLlama: Symbiosis",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
     "slug": "synthra",
     "name": "Synthra",
     "category": "dexs",
@@ -8226,6 +9511,71 @@
       {
         "url": "https://app.synthra.org/",
         "title": "Synthra app",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "taurus",
+    "name": "Taurus",
+    "category": "custody",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle announcement: Arc public testnet",
+        "date": "2025-10-28"
+      }
+    ],
+    "summary": "Swiss digital-asset infrastructure provider offering custody, tokenization, trading and collateral management for banks. Named among custodians for Arc in Circle's 28 October 2025 testnet announcement.",
+    "website": "https://www.taurushq.com/",
+    "x": "taurus_hq",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle announcement: Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.taurushq.com/",
+        "title": "Taurus website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "team-finance",
+    "name": "Team Finance",
+    "category": "developer-tools",
+    "status": "live",
+    "status_evidence": [
+      {
+        "url": "https://www.team.finance/arc",
+        "title": "Team Finance on Arc",
+        "date": "2026-10-20",
+        "type": "mainnet-support"
+      }
+    ],
+    "summary": "Token tooling platform for creating tokens and for locking liquidity, team tokens and NFTs, with vesting, staking pools, airdrops and multisender. Its Arc page lists these services on Arc mainnet, including Uniswap V3 liquidity locks.",
+    "website": "https://www.team.finance",
+    "x": "teamfinance_",
+    "sources": [
+      {
+        "url": "https://www.team.finance/arc",
+        "title": "Team Finance on Arc",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.team.finance/",
+        "title": "Team Finance website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://defillama.com/protocol/team-finance",
+        "title": "DefiLlama: Team Finance",
         "date": "2026-10-20"
       }
     ],
@@ -8305,6 +9655,40 @@
     "last_reviewed": "2026-10-20"
   },
   {
+    "slug": "thunes",
+    "name": "Thunes",
+    "category": "payments",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+        "title": "Circle founding validator cohort announcement",
+        "date": "2026-08-05"
+      }
+    ],
+    "summary": "Named as a stablecoin payments provider in Circle's 2026-08-05 announcement and among global payments firms in the 2026-09-16 mainnet announcement. Provides B2B cross-border payments to 140 countries, in fiat and stablecoins.",
+    "website": "https://www.thunes.com",
+    "first_announced": "2026-08-05",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+        "title": "Circle founding validator cohort announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle launches Arc mainnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.thunes.com",
+        "title": "Thunes website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
     "slug": "tolly",
     "name": "Tolly",
     "aliases": [
@@ -8338,6 +9722,207 @@
       {
         "url": "https://tollylabs.com/guide",
         "title": "Tolly guide",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "topaz-cl",
+    "name": "Topaz DEX",
+    "aliases": [
+      "Topaz CL",
+      "Topaz"
+    ],
+    "category": "dexs",
+    "status": "live",
+    "status_evidence": [
+      {
+        "url": "https://www.topazdex.com/docs/contracts",
+        "title": "Topaz DEX contracts: live on Arc",
+        "date": "2026-10-20",
+        "type": "mainnet-support"
+      },
+      {
+        "url": "https://explorer.arc.io/address/0x18226f64a850163c0f0aba453653cc206eae99f3",
+        "title": "Topaz Router on Arc explorer"
+      }
+    ],
+    "summary": "Omnichain ve(3,3) decentralized exchange with a BNB Chain hub and spokes on Ethereum, Base, Robinhood Chain and Arc. Its Arc deployment includes pools, routers, concentrated liquidity, voting and the Topaz Auto vault factory.",
+    "website": "https://www.topazdex.com",
+    "x": "TopazDex",
+    "docs": "https://www.topazdex.com/docs",
+    "contracts": [
+      {
+        "address": "0x18226f64a850163c0f0aba453653cc206eae99f3",
+        "role": "Router",
+        "source": "https://www.topazdex.com/docs/contracts"
+      },
+      {
+        "address": "0x1e3ac31cf96b20619c913384c9bf6010a824fb95",
+        "role": "Pool factory",
+        "source": "https://www.topazdex.com/docs/contracts"
+      },
+      {
+        "address": "0xaa5865dc3a60b25d305226d66fd573021f0d8ffb",
+        "role": "Concentrated liquidity factory",
+        "source": "https://www.topazdex.com/docs/contracts"
+      },
+      {
+        "address": "0x2e7395a6e0de6ee1f390bece891069cd18ff8572",
+        "role": "Swap router",
+        "source": "https://www.topazdex.com/docs/contracts"
+      },
+      {
+        "address": "0x7b1d8745079c85af80ff7a7ea7c2c4769eab5348",
+        "role": "Universal router",
+        "source": "https://www.topazdex.com/docs/contracts"
+      },
+      {
+        "address": "0x522bf4b5c9280bb6bb719f2ce7f514dd63c8c0c5",
+        "role": "Nonfungible position manager",
+        "source": "https://www.topazdex.com/docs/contracts"
+      },
+      {
+        "address": "0xb509071a8a33fc2184b169dfc029b3de3cf5172b",
+        "role": "Voter",
+        "source": "https://www.topazdex.com/docs/contracts"
+      },
+      {
+        "address": "0x1aa89c4ab9884cb65b759a3cc3a1690744d687a6",
+        "role": "xTOPAZ token and LayerZero bridge (XTopazOFT)",
+        "source": "https://www.topazdex.com/docs/contracts"
+      },
+      {
+        "address": "0x35d7ac512f465f48d2bcb4c7322dd34c7bb7c777",
+        "role": "xTOPAZ voting vault",
+        "source": "https://www.topazdex.com/docs/contracts"
+      },
+      {
+        "address": "0xd791ed4a795f4a8f774cb42873963dd2906e2591",
+        "role": "Topaz Auto vault factory",
+        "source": "https://www.topazdex.com/docs/contracts"
+      }
+    ],
+    "sources": [
+      {
+        "url": "https://www.topazdex.com/docs/contracts",
+        "title": "Topaz DEX contracts",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.topazdex.com/",
+        "title": "Topaz DEX website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://api.topazdex.com/v1/chains",
+        "title": "Topaz API chain registry",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://defillama.com/protocol/topaz-cl",
+        "title": "DefiLlama: Topaz CL",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "transak",
+    "name": "Transak",
+    "category": "ramps",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2025-10-28"
+      }
+    ],
+    "summary": "Listed under infrastructure in Circle's 2025-10-28 Arc public testnet announcement. Provides a crypto on- and off-ramp that applications embed to let users buy and sell crypto, handling KYC and fiat payment methods.",
+    "website": "https://transak.com",
+    "x": "transak",
+    "docs": "https://docs.transak.com",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://transak.com",
+        "title": "Transak website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://docs.transak.com",
+        "title": "Transak documentation",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "trm",
+    "name": "TRM",
+    "aliases": [
+      "TRM Labs"
+    ],
+    "category": "infrastructure",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2025-10-28"
+      }
+    ],
+    "summary": "Listed under infrastructure in Circle's 2025-10-28 Arc public testnet announcement. TRM Labs provides blockchain intelligence and investigation software for tracing illicit activity.",
+    "website": "https://www.trmlabs.com",
+    "x": "trmlabs",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.trmlabs.com",
+        "title": "TRM Labs website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "trust-wallet",
+    "name": "Trust Wallet",
+    "category": "wallets",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle launches Arc mainnet",
+        "date": "2026-09-16"
+      }
+    ],
+    "summary": "Named among digital wallets in Circle's 2026-09-16 Arc mainnet announcement. Self-custody multi-chain wallet app for crypto, NFTs and DeFi.",
+    "website": "https://trustwallet.com",
+    "x": "TrustWallet",
+    "github": "https://github.com/trustwallet",
+    "first_announced": "2026-09-16",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle launches Arc mainnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://trustwallet.com",
+        "title": "Trust Wallet website",
         "date": "2026-10-20"
       }
     ],
@@ -8518,6 +10103,541 @@
     "last_reviewed": "2026-10-20"
   },
   {
+    "slug": "upbit",
+    "name": "Upbit",
+    "category": "exchanges",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+        "title": "Circle founding validator cohort announcement",
+        "date": "2026-08-05"
+      }
+    ],
+    "summary": "Named among major exchanges and wallet providers in Circle's 2026-08-05 announcement and among digital asset exchanges in the 2026-09-16 mainnet announcement. Digital asset exchange serving the Korean market.",
+    "website": "https://www.upbit.com",
+    "x": "Official_Upbit",
+    "first_announced": "2026-08-05",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+        "title": "Circle founding validator cohort announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle launches Arc mainnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.upbit.com",
+        "title": "Upbit website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "uqpay",
+    "name": "UQPay",
+    "aliases": [
+      "UQPAY"
+    ],
+    "category": "payments",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.uqpay.com/en",
+        "title": "UQPay news: Day 1 Support for Arc (2026-09-16)",
+        "date": "2026-10-20"
+      }
+    ],
+    "summary": "Payments platform offering global acquiring, multi-currency accounts, card issuance and stablecoin services. Its news page lists a 2026-09-16 item announcing support for Arc.",
+    "website": "https://www.uqpay.com",
+    "x": "UQPAYSG",
+    "first_announced": "2026-09-16",
+    "sources": [
+      {
+        "url": "https://www.uqpay.com/en",
+        "title": "UQPay website and news",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "vfat-io",
+    "name": "vfat.io",
+    "category": "asset-managers",
+    "status": "deployed",
+    "status_evidence": [
+      {
+        "url": "https://defillama.com/protocol/vfat.io",
+        "title": "DefiLlama: vfat.io lists Arc TVL",
+        "date": "2026-10-20"
+      }
+    ],
+    "summary": "Yield aggregator built on Sickle, a per-user smart contract wallet that batches steps such as swapping, adding liquidity and staking into single transactions while the user keeps custody. DefiLlama lists it on Arc.",
+    "website": "https://vfat.io/yield",
+    "x": "vfat_io",
+    "github": "https://github.com/vfat-io",
+    "docs": "https://docs.vfat.io/",
+    "sources": [
+      {
+        "url": "https://defillama.com/protocol/vfat.io",
+        "title": "DefiLlama: vfat.io",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://vfat.io/yield",
+        "title": "vfat.io website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://docs.vfat.io/sickle/",
+        "title": "Sickle documentation",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "virtuals",
+    "name": "Virtuals",
+    "aliases": [
+      "Virtuals Protocol"
+    ],
+    "category": "ai-agents",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle launches Arc mainnet",
+        "date": "2026-09-16"
+      }
+    ],
+    "summary": "Listed among builders of the agentic economy in Circle's 2026-09-16 Arc mainnet announcement. Platform for AI agents that operate as economic entities with identity, capital, markets and governance.",
+    "website": "https://www.virtuals.io",
+    "x": "virtuals_io",
+    "docs": "https://whitepaper.virtuals.io",
+    "first_announced": "2026-09-16",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle launches Arc mainnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.virtuals.io",
+        "title": "Virtuals website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "visa",
+    "name": "Visa",
+    "category": "payments",
+    "tags": [
+      "validators"
+    ],
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+        "title": "Circle founding validator cohort announcement",
+        "date": "2026-08-05"
+      }
+    ],
+    "summary": "Global payments network. Named in Circle's announcements as a member of Arc's founding validator cohort (2026-08-05) and among global payments firms (2026-09-16).",
+    "website": "https://www.visa.com",
+    "x": "visa",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+        "title": "Circle founding validator cohort announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle launches Arc mainnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.visa.com/en-us",
+        "title": "Visa website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "vultisig",
+    "name": "Vultisig",
+    "category": "wallets",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2025-10-28"
+      }
+    ],
+    "summary": "Listed among digital wallets in Circle's 2025-10-28 Arc public testnet announcement. Open-source multi-party computation wallet that uses multi-device signing instead of a seed phrase.",
+    "website": "https://vultisig.com",
+    "x": "vultisig",
+    "github": "https://github.com/vultisig",
+    "docs": "https://docs.vultisig.com",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://vultisig.com",
+        "title": "Vultisig website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "wenia",
+    "name": "Wenia",
+    "category": "exchanges",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle launches Arc mainnet",
+        "date": "2026-09-16"
+      },
+      {
+        "url": "https://www.arc.io/ecosystem/wenia",
+        "title": "Wenia on arc.io ecosystem"
+      }
+    ],
+    "summary": "Crypto platform operated by Wenia Ltd, licensed in Bermuda, where users buy, convert, send and sell crypto through its app. Named as a digital asset exchange in Circle's 2026-09-16 Arc mainnet announcement.",
+    "website": "https://www.wenia.com",
+    "x": "weniaoficial",
+    "first_announced": "2026-09-16",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle launches Arc mainnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.wenia.com/es",
+        "title": "Wenia website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/ecosystem/wenia",
+        "title": "wenia on arc.io ecosystem",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "wintermute",
+    "name": "Wintermute",
+    "category": "market-makers",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2025-10-28"
+      }
+    ],
+    "summary": "Algorithmic trading firm offering OTC, DeFi liquidity and API liquidity. Named among market makers and OTCs in Circle's 2025-10-28 Arc public testnet announcement.",
+    "website": "https://www.wintermute.com",
+    "x": "wintermute_t",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.wintermute.com",
+        "title": "Wintermute website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "wirex",
+    "name": "Wirex",
+    "category": "payments",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+        "title": "Circle founding validator cohort and integrations announcement",
+        "date": "2026-08-05"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle launches Arc mainnet",
+        "date": "2026-09-16"
+      },
+      {
+        "url": "https://www.arc.io/ecosystem/wirex",
+        "title": "Wirex on arc.io ecosystem"
+      }
+    ],
+    "summary": "Crypto wallet and payment platform with cards, exchange and global transfers, plus a business offering for stablecoin accounts and cards. Named as a stablecoin payments provider in Circle's 2026-08-05 Arc announcement.",
+    "website": "https://wirexapp.com",
+    "x": "wirexapp",
+    "first_announced": "2026-08-05",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+        "title": "Circle founding validator cohort and integrations announcement",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle launches Arc mainnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://wirexapp.com",
+        "title": "Wirex website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/ecosystem/wirex",
+        "title": "wirex on arc.io ecosystem",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "wisdomtree",
+    "name": "WisdomTree",
+    "category": "asset-managers",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2025-10-28"
+      },
+      {
+        "url": "https://www.arc.io/ecosystem/wisdomtree",
+        "title": "WisdomTree on arc.io ecosystem"
+      }
+    ],
+    "summary": "Exchange-traded fund and product sponsor and asset manager. Circle's 2025-10-28 Arc testnet announcement names its tokenized funds WTGXX and CRDT as yield-bearing tokenized investment funds.",
+    "website": "https://www.wisdomtree.com",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/ecosystem/wisdomtree",
+        "title": "wisdomtree on arc.io ecosystem",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "wonk-fun",
+    "name": "Wonk Fun",
+    "aliases": [
+      "Wonk"
+    ],
+    "category": "launchpads",
+    "status": "deployed",
+    "status_evidence": [
+      {
+        "url": "https://explorer.arc.io/address/0x34f3da4d04394173ded7b0f430af114a0ff27952",
+        "title": "Wonk factory contract on Arc explorer"
+      },
+      {
+        "url": "https://defillama.com/protocol/wonk-fun",
+        "title": "Wonk Fun on DefiLlama"
+      }
+    ],
+    "summary": "Token launchpad on Arc. Each launch is a Uniswap V4 pool behind the Wonk hook contract; graduated positions are held in a locker contract. Listed on DefiLlama as a launchpad.",
+    "contracts": [
+      {
+        "address": "0x34f3da4d04394173ded7b0f430af114a0ff27952",
+        "role": "Launch factory",
+        "source": "https://github.com/DefiLlama/DefiLlama-Adapters/blob/main/projects/wonk-fun/index.js"
+      },
+      {
+        "address": "0x21bdc377265e2a26ba336f24381e67e768253044",
+        "role": "Wonk Uniswap V4 hook",
+        "source": "https://github.com/DefiLlama/DefiLlama-Adapters/blob/main/projects/wonk-fun/index.js"
+      },
+      {
+        "address": "0x0a787cf22782418381d4a5eef0c492acb5cc4839",
+        "role": "Position locker",
+        "source": "https://github.com/DefiLlama/DefiLlama-Adapters/blob/main/projects/wonk-fun/index.js"
+      },
+      {
+        "address": "0x548df4bf91624d8cec46d606211eb13f7492e27e",
+        "role": "WONK token",
+        "source": "https://github.com/DefiLlama/DefiLlama-Adapters/blob/main/projects/wonk-fun/index.js"
+      }
+    ],
+    "sources": [
+      {
+        "url": "https://defillama.com/protocol/wonk-fun",
+        "title": "Wonk Fun on DefiLlama",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://github.com/DefiLlama/DefiLlama-Adapters/blob/main/projects/wonk-fun/index.js",
+        "title": "DefiLlama adapter for Wonk Fun",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://api.llama.fi/protocol/wonk-fun",
+        "title": "DefiLlama API: Wonk Fun",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "wormhole",
+    "name": "Wormhole",
+    "category": "bridges",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2025-10-28"
+      },
+      {
+        "url": "https://www.arc.io/ecosystem/wormhole",
+        "title": "Wormhole on arc.io ecosystem"
+      }
+    ],
+    "summary": "Open-source cross-chain messaging and token-transfer infrastructure. Named among crosschain providers in Circle's 2025-10-28 Arc testnet announcement; Arc is registered as chain id 71 in the Wormhole TypeScript SDK.",
+    "website": "https://wormhole.com",
+    "x": "wormhole",
+    "first_announced": "2025-10-28",
+    "github": "https://github.com/wormhole-foundation",
+    "docs": "https://wormhole.com/docs",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://raw.githubusercontent.com/wormhole-foundation/wormhole-sdk-ts/main/core/base/src/constants/chains.ts",
+        "title": "Wormhole SDK chain constants",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://wormhole.com",
+        "title": "Wormhole website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/ecosystem/wormhole",
+        "title": "wormhole on arc.io ecosystem",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "xstocks",
+    "name": "xStocks",
+    "category": "rwa",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle launches Arc mainnet",
+        "date": "2026-09-16"
+      }
+    ],
+    "summary": "Tokenized US equities and ETFs backed 1:1, offered by Payward. Named among asset managers and RWA issuers in Circle's 2026-09-16 Arc mainnet announcement.",
+    "website": "https://xstocks.fi",
+    "x": "xstocksfi",
+    "first_announced": "2026-09-16",
+    "docs": "https://docs.xstocks.fi",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle launches Arc mainnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://xstocks.fi",
+        "title": "xStocks website",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "yellow-card",
+    "name": "Yellow Card",
+    "category": "payments",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2025-10-28"
+      },
+      {
+        "url": "https://www.arc.io/ecosystem/yellow-card",
+        "title": "Yellow Card on arc.io ecosystem"
+      }
+    ],
+    "summary": "Licensed stablecoin payments infrastructure provider covering USD and local currencies in emerging markets. Named among global payments firms in Circle's 2025-10-28 Arc testnet announcement.",
+    "website": "https://yellowcard.io",
+    "x": "yellowcard_app",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://yellowcard.io",
+        "title": "Yellow Card website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/ecosystem/yellow-card",
+        "title": "yellow-card on arc.io ecosystem",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
     "slug": "zerodev",
     "name": "ZeroDev",
     "category": "developer-tools",
@@ -8582,6 +10702,87 @@
       {
         "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
         "title": "Circle press release: Arc public testnet",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "zodia-custody",
+    "name": "Zodia Custody",
+    "category": "custody",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2025-10-28"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle launches Arc mainnet",
+        "date": "2026-09-16"
+      },
+      {
+        "url": "https://www.arc.io/ecosystem/zodia-custody",
+        "title": "Zodia Custody on arc.io ecosystem"
+      }
+    ],
+    "summary": "Institutional digital asset custodian. Named as a custody provider in Circle's Arc public testnet (2025-10-28) and mainnet (2026-09-16) announcements.",
+    "website": "https://www.zodia-custody.com",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle launches Arc mainnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/ecosystem/zodia-custody",
+        "title": "zodia-custody on arc.io ecosystem",
+        "date": "2026-10-20"
+      }
+    ],
+    "last_reviewed": "2026-10-20"
+  },
+  {
+    "slug": "zodia-markets",
+    "name": "Zodia Markets",
+    "category": "market-makers",
+    "status": "announced",
+    "status_evidence": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2025-10-28"
+      },
+      {
+        "url": "https://www.arc.io/ecosystem/zodia-markets",
+        "title": "Zodia Markets on arc.io ecosystem"
+      }
+    ],
+    "summary": "Institutional digital-asset brokerage offering fiat and crypto pairs. Named among market makers and OTCs in Circle's 2025-10-28 Arc public testnet announcement.",
+    "website": "https://zodiamarkets.com",
+    "first_announced": "2025-10-28",
+    "sources": [
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+        "title": "Circle launches Arc public testnet",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://zodiamarkets.com",
+        "title": "Zodia Markets website",
+        "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/ecosystem/zodia-markets",
+        "title": "zodia-markets on arc.io ecosystem",
         "date": "2026-10-20"
       }
     ],
