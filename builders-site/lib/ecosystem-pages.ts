@@ -88,7 +88,7 @@ export function renderDirectory(all: ArcEntity[], status: EntityStatus | null): 
 <h2>By category</h2><ul>${cats}</ul>
 <h2>${status ? esc(STATUS_LABEL[status]) : "All projects"}</h2><p class="muted">Show: ${filters}</p>
 ${table(shown)}
-<p class="muted">The same data as JSON: <a href="/api/v1/ecosystem">/api/v1/ecosystem</a>.</p>`;
+<p class="muted">The same data as JSON: <a href="/api/v1/ecosystem">/api/v1/ecosystem</a>. Chain-level figures: <a href="/arc/">Arc in numbers</a>.</p>`;
   const ld = { "@context": "https://schema.org", "@type": "DataCatalog", name: "Arc ecosystem", url: `${ECO_SITE}/ecosystem/`, dateModified: latest(all), license: LICENSE, creator: CREATOR,
     mainEntity: { "@type": "ItemList", numberOfItems: all.length, itemListElement: sortByName(all).map((e, k) => ({ "@type": "ListItem", position: k + 1, name: e.name, url: `${ECO_SITE}${entityHref(e.slug)}` })) } };
   return page({ title: "Arc ecosystem · Registrai", canonical: `${ECO_SITE}/ecosystem/`, description: `Every project on Arc with its category and status: ${n("live")} live on mainnet, ${n("deployed")} deployed, ${n("announced")} announced.`, body, ld });
