@@ -14,6 +14,8 @@ import { publicResponse, type ProjectFacts } from "../../src/lib/facts";
 import { FACTS_SITEMAP_KEY } from "./facts";
 export { FACTS_SITEMAP_KEY };
 import { projectHref } from "../../src/lib/project-page";
+import { ECOSYSTEM } from "../../src/lib/arc-ecosystem-data";
+import { CATEGORIES, categoryHref, entityHref } from "../../src/lib/arc-ecosystem";
 
 export const SITE = "https://builder.registrai.cc";
 const FACTS_SITEMAP_MAX_AGE_MS = 24 * 3600e3;
@@ -61,7 +63,12 @@ export async function sitemapUrls(env: Env, deps: EdgeCacheDeps, now = Date.now(
   const mod = l?.data_until;
   const apps = (l?.rows ?? []).map((r) => idToPath(r.id)).filter((p): p is string => p !== null);
   const at = (p: string, lastmod?: string) => ({ loc: `${SITE}${p}`, ...(lastmod ? { lastmod } : {}) });
-  return [...DATA.map((p) => at(p, mod)), ...STATIC.map((p) => at(p)), ...apps.map((p) => at(p, mod)), ...facts.map((f) => at(f.path, f.lastmod))];
+  const eco = ECOSYSTEM.entities;
+  const ecoMod = eco.map((e) => e.last_reviewed).sort().pop();
+  const claimed = new Set(eco.flatMap((e) => (e.index_ids ?? []).map((id) => idToPath(id))));
+  const cats = CATEGORIES.filter((c) => eco.some((e) => e.category === c.id || (e.tags ?? []).includes(c.id)));
+  const ecoUrls = eco.length ? [at("/ecosystem/", ecoMod), ...cats.map((c) => at(categoryHref(c.id), ecoMod)), ...eco.map((e) => at(entityHref(e.slug), e.last_reviewed))] : [];
+  return [...DATA.map((p) => at(p, mod)), ...STATIC.map((p) => at(p)), ...ecoUrls, ...apps.filter((p) => !claimed.has(p)).map((p) => at(p, mod)), ...facts.map((f) => at(f.path, f.lastmod))];
 }
 
 /** IndexNow (Bing, Yandex, Seznam, Naver): the key is public by design; the file at /<key>.txt proves the host is ours. */

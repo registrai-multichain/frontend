@@ -6,6 +6,7 @@ export const LLMS_TXT = `# Registrai
 > Registrai is a data company for the Arc blockchain (by Circle). Data on the Arc ecosystem: apps on Arc with their hourly stablecoin payments, paying wallets and volume, the Arc Builders, Integrations and Ecosystem indices, and verified builders. Computed from public Arc mainnet data; the method and evidence are published.
 
 ## Data
+- [Arc ecosystem directory](https://builder.registrai.cc/ecosystem/): every project on Arc with category, status and sources; JSON at https://builder.registrai.cc/api/v1/ecosystem
 - [Apps on Arc](https://builder.registrai.cc/apps/): every app with its last 24 h, sorted by payments
 - [Arc indices](https://builder.registrai.cc/builders-index/): ABI, AII, AEI, hourly
 - [Data API v1](https://builder.registrai.cc/data-api/): public JSON API, no key, CC BY 4.0

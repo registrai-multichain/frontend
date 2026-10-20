@@ -1,4 +1,5 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+import { indexEntities as ix } from "../../src/lib/arc-ecosystem";
 import { FACTS_SITEMAP_KEY, INDEXNOW_KEY, factPages, pingIndexNow, shouldPing } from "../lib/sitemap-urls";
 import { handleAdminFacts } from "../lib/facts";
 import { handleAdminProject } from "../lib/projects";
@@ -68,5 +69,23 @@ describe("IndexNow", () => {
   test("the key file is served at /<key>.txt", async () => {
     const { onRequest } = await import("../functions/10dec8b5c4706a0c957248ee188ce526.txt");
     expect(await (await onRequest({ request: new Request(`https://builder.registrai.cc/${INDEXNOW_KEY}.txt`) } as never)).text()).toBe(INDEXNOW_KEY);
+  });
+});
+
+vi.mock("../../src/lib/arc-ecosystem-data", () => ({ ECOSYSTEM: ix([{ slug: "archery", name: "Archery", category: "consumer", status: "live", summary: "A game.",
+  status_evidence: [{ url: "https://explorer.arc.io/address/0x0000000000000000000000000000000000000001" }], sources: [{ url: "https://archery.wtf/" }],
+  index_ids: ["domain:archery.wtf"], last_reviewed: "2026-10-20" }]) }));
+
+describe("ecosystem in the sitemap", () => {
+  test("directory, non-empty categories and entity pages; claimed /apps pages are left out", async () => {
+    const { sitemapUrls } = await import("../lib/sitemap-urls");
+    const kv = new MemoryKV();
+    const urls = await sitemapUrls({ INVITES: kv, DATA_DB: undefined } as never, { cache: null }, NOW);
+    const locs = urls.map((u) => u.loc);
+    expect(urls).toContainEqual({ loc: "https://builder.registrai.cc/ecosystem/", lastmod: "2026-10-20" });
+    expect(locs).toContain("https://builder.registrai.cc/ecosystem/consumer/");
+    expect(locs).not.toContain("https://builder.registrai.cc/ecosystem/banks/");
+    expect(urls).toContainEqual({ loc: "https://builder.registrai.cc/ecosystem/archery/", lastmod: "2026-10-20" });
+    expect(locs).not.toContain("https://builder.registrai.cc/apps/domain/archery.wtf/");
   });
 });
