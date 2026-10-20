@@ -1,4 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
+// these tests cover unclaimed apps/projects; claimed ones redirect to /ecosystem (ecosystem-redirects.test.ts)
+vi.mock("../../src/lib/arc-ecosystem-data", async () => ({ ECOSYSTEM: (await import("../../src/lib/arc-ecosystem")).indexEntities([]) }));
 import { handleMcp, MCP_TOOLS } from "../lib/mcp";
 vi.mock("../lib/data-api-verified", async (orig) => ({ ...(await orig<typeof import("../lib/data-api-verified")>()), verifiedIds: async () => new Set<string>(), handleVerified: async () => new Response(JSON.stringify({ version: 1, updated: "x", verified: [] }), { status: 200 }) }));
 import { resolve } from "node:path";

@@ -1,4 +1,6 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+// these tests cover unclaimed apps/projects; claimed ones redirect to /ecosystem (ecosystem-redirects.test.ts)
+vi.mock("../../src/lib/arc-ecosystem-data", async () => ({ ECOSYSTEM: (await import("../../src/lib/arc-ecosystem")).indexEntities([]) }));
 import { esc, parseSort, renderApp, renderAppList, renderNotFound } from "../lib/apps-pages";
 import type { AppDetail, AppList } from "../lib/apps-data";
 

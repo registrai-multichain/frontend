@@ -1,5 +1,7 @@
 import { resolve } from "node:path";
 import { describe, expect, test, vi } from "vitest";
+// these tests cover unclaimed apps/projects; claimed ones redirect to /ecosystem (ecosystem-redirects.test.ts)
+vi.mock("../../src/lib/arc-ecosystem-data", async () => ({ ECOSYSTEM: (await import("../../src/lib/arc-ecosystem")).indexEntities([]) }));
 import { injectSummary, renderIndexSummary, renderTrackSummary } from "../lib/ssr-summary";
 import { DATA_MIGRATIONS } from "../lib/data-api-ingest";
 import { ABI_INDICES, type AbiData } from "../../src/lib/builders-index";
