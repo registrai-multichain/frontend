@@ -9,7 +9,7 @@ import { evidenceHref, PUBLIC_REVIEWER, type Fact } from "../../src/lib/facts";
 import { evidenceLabel, groupFacts, safeHttpsHref, type PageState } from "../../src/lib/project-page";
 import { recheckedLine } from "../../src/lib/record-page";
 
-type Ready = Extract<PageState, { kind: "ready" }>;
+export type Ready = Extract<PageState, { kind: "ready" }>;
 const day = (iso: string) => (iso || "").slice(0, 10);
 const link = (e: string) => `<a href="${esc(evidenceHref(e))}" rel="noreferrer">${esc(evidenceLabel(e))}</a>`;
 
@@ -21,12 +21,10 @@ function factItem(f: Fact, struck = false): string {
 
 export const projectName = (source: string, s: Ready) => s.profile?.name ?? source;
 
-export function renderProjectSummary(source: string, s: Ready): string {
+/** Footprint, off-Arc line and topic groups (no H1): shared by the project page and the ecosystem entity page. */
+export function factsHtml(s: Ready): string {
   const { profile, facts } = s;
-  const website = safeHttpsHref(profile?.website);
-  const parts = [`<h1>${esc(projectName(source, s))}</h1>`, `<p><code>${esc(source)}</code>${website ? ` · <a href="${esc(website)}" rel="noreferrer">${esc(website)}</a>` : ""}</p>`];
-  if (facts?.summary) parts.push(`<p>${esc(facts.summary)}</p>`);
-  if (facts?.lastReviewedAt) parts.push(`<p>Last reviewed ${esc(day(facts.lastReviewedAt))} by ${esc(PUBLIC_REVIEWER)}</p>`);
+  const parts: string[] = [];
   if (profile && (profile.contracts.length || profile.deployers.length || profile.token)) {
     parts.push(`<h2>On-chain footprint</h2>`);
     if (profile.deployers.length) parts.push(`<p>Deployers: ${profile.deployers.map((d) => link(d.address)).join(" ")}</p>`);
@@ -39,7 +37,16 @@ export function renderProjectSummary(source: string, s: Ready): string {
     if (g.current.length) parts.push(`<ul>${g.current.map((f) => factItem(f)).join("")}</ul>`);
     if (g.superseded.length) parts.push(`<details><summary>Earlier facts</summary><ul>${g.superseded.map((f) => factItem(f, true)).join("")}</ul></details>`);
   }
-  parts.push(`<p><a href="/how-we-publish/">How we publish</a></p>`);
+  return parts.join("\n");
+}
+
+export function renderProjectSummary(source: string, s: Ready): string {
+  const { profile, facts } = s;
+  const website = safeHttpsHref(profile?.website);
+  const parts = [`<h1>${esc(projectName(source, s))}</h1>`, `<p><code>${esc(source)}</code>${website ? ` · <a href="${esc(website)}" rel="noreferrer">${esc(website)}</a>` : ""}</p>`];
+  if (facts?.summary) parts.push(`<p>${esc(facts.summary)}</p>`);
+  if (facts?.lastReviewedAt) parts.push(`<p>Last reviewed ${esc(day(facts.lastReviewedAt))} by ${esc(PUBLIC_REVIEWER)}</p>`);
+  parts.push(factsHtml(s), `<p><a href="/how-we-publish/">How we publish</a></p>`);
   return parts.join("\n");
 }
 

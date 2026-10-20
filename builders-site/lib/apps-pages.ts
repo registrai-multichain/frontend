@@ -16,11 +16,11 @@ const KEYWORDS = ["Arc", "Arc ecosystem", "Arc apps", "USDC", "EURC", "stablecoi
 export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 // one formatter per module (review M3: a formatter per call costs CPU on the free plan's 10 ms budget)
 const NUM = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }), USD = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
-const num = (n: number) => NUM.format(n);
-const usd = (n: number) => `$${USD.format(n)}`;
+export const num = (n: number) => NUM.format(n);
+export const usd = (n: number) => `$${USD.format(n)}`;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export const when = (iso: string) => { const d = new Date(iso); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${String(d.getUTCHours()).padStart(2, "0")}:00 UTC`; };
-const day = (iso: string) => { const d = new Date(iso); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+export const day = (iso: string) => { const d = new Date(iso); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 const KIND_LABEL: Record<AppRow["kind"], string> = { builder: "Builder app", integration: "Integration", base: "Arc base layer" };
 const INDEX_LABEL = { abi: "ABI", aii: "AII", aei: "AEI" } as const;
 
@@ -41,7 +41,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}details{display:inl
 footer{margin-top:36px;padding-top:12px;border-top:1px solid #d9cfb8;font-size:13px;color:#5c5345}nav a{margin-right:14px}svg{max-width:100%;height:auto;background:#fffdf7;border:1px solid #d9cfb8}
 .wrap{overflow-x:auto}`;
 
-function page(o: { title: string; canonical: string; description: string; body: string; ld?: unknown }): string {
+export function page(o: { title: string; canonical: string; description: string; body: string; ld?: unknown }): string {
   const ld = o.ld ? `<script type="application/ld+json">${JSON.stringify(o.ld).replace(/</g, "\\u003c")}</script>` : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(o.title)}</title><meta name="description" content="${esc(o.description)}"><link rel="canonical" href="${esc(o.canonical)}">
@@ -94,22 +94,16 @@ ${[...byDay].reverse().map(([d, x]) => `<tr><td>${esc(day(`${d}T00:00:00Z`))}</t
 </tbody></table></div>`;
 }
 
-function contractList(a: AppDetail): string {
+export function contractList(a: AppDetail): string {
   const l = a.contracts_sample ?? [];
   if (!l.length) return "";
   const more = a.contracts - l.length;
   return `<ul>${l.map((c) => `<li><a href="${esc(evidenceHref(c))}" rel="noreferrer"><code>${esc(c)}</code></a></li>`).join("")}</ul>${more > 0 ? `<p class="muted">and ${num(more)} more</p>` : ""}`;
 }
 
-export function renderApp(a: AppDetail): string {
-  const path = idToPath(a.id) ?? "/apps/";
-  const api = `/api/v1/members/${encodeURIComponent(a.id)}/hourly?index=aei`;
-  const first = a.hourly[0]?.hour_close ?? a.first_hour;
+export function activityHtml(a: AppDetail): string {
   const last = a.hourly[a.hourly.length - 1];
-  const body = `<h1>${esc(a.name)}</h1>
-<p class="muted">${esc(KIND_LABEL[a.kind])} · <code>${esc(a.id)}</code> · indices: ${a.indices.map((i) => INDEX_LABEL[i]).join(", ")} · ${a.verified ? "verified builder (registry)" : "not verified"} · first seen ${esc(day(a.first_hour))}</p>
-<p class="muted">Data until ${esc(when(a.data_until))}.</p>
-<h2>Last 24 h</h2>
+  return `<h2>Last 24 h</h2>
 <table><tbody>
 <tr><th>Stablecoin payments</th><td class="n">${num(a.last_24h.payments)}</td></tr>
 <tr><th>Stablecoin volume</th><td class="n">${esc(usd(a.last_24h.usdc))}</td></tr>
@@ -119,7 +113,17 @@ export function renderApp(a: AppDetail): string {
 ${last ? `<tr><th>Paying wallets, last hour</th><td class="n">${num(last.wallets)}</td></tr><tr><th>New payers, last hour</th><td class="n">${num(last.new_payers)}</td></tr>` : ""}
 </tbody></table>
 <h2>Last 7 days</h2>
-${a.hourly.length ? `${spark(a)}${daily(a)}` : `<p>There is no hourly history yet for this app.</p>`}
+${a.hourly.length ? `${spark(a)}${daily(a)}` : `<p>There is no hourly history yet for this app.</p>`}`;
+}
+
+export function renderApp(a: AppDetail): string {
+  const path = idToPath(a.id) ?? "/apps/";
+  const api = `/api/v1/members/${encodeURIComponent(a.id)}/hourly?index=aei`;
+  const first = a.hourly[0]?.hour_close ?? a.first_hour;
+  const body = `<h1>${esc(a.name)}</h1>
+<p class="muted">${esc(KIND_LABEL[a.kind])} · <code>${esc(a.id)}</code> · indices: ${a.indices.map((i) => INDEX_LABEL[i]).join(", ")} · ${a.verified ? "verified builder (registry)" : "not verified"} · first seen ${esc(day(a.first_hour))}</p>
+<p class="muted">Data until ${esc(when(a.data_until))}.</p>
+${activityHtml(a)}
 <h2>Contracts and sources</h2>
 <p>Contracts: ${num(a.contracts)} attributed to this app.</p>
 ${contractList(a)}

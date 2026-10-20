@@ -103,3 +103,13 @@ describe("review fixes", () => {
     expect(r.headers.get("cache-control")).toBe("no-store");
   });
 });
+
+describe("factsHtml", () => {
+  test("the facts part of the summary, without the H1", async () => {
+    const { factsHtml } = await import("../lib/project-ssr");
+    const s = factsHtml(ready);
+    expect(s).toContain("<h2>Who controls it</h2>");
+    expect(s).not.toContain("<h1>");
+    expect(renderProjectSummary("domain:www.myarcade.fun", ready)).toContain(s);
+  });
+});

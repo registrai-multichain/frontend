@@ -90,3 +90,14 @@ describe("structured data and share tags", () => {
     expect(detail()).toContain('<a href="/api/index/aei/contracts" rel="nofollow">');
   });
 });
+
+describe("sections reused by the ecosystem pages", () => {
+  test("activityHtml is exactly the activity part of the app page", async () => {
+    const { activityHtml } = await import("../lib/apps-pages");
+    const a = { ...row(), hourly: [{ hour_close: "2026-10-14T21:00:00Z", points: 9.2, points_earned: 1, payments: 1, wallets: 1, new_payers: 0, usdc: 1 }], facts_url: null, data_until: "2026-10-14T21:00:00Z" } as AppDetail;
+    const s = activityHtml(a);
+    expect(s).toMatch(/^<h2>Last 24 h<\/h2>/);
+    expect(s).toContain("<h2>Last 7 days</h2>");
+    expect(renderApp(a)).toContain(s);
+  });
+});
