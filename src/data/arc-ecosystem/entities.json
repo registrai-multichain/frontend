@@ -460,7 +460,7 @@
         "title": "ArcLand"
       }
     ],
-    "summary": "Digital land project for Arc with a 10,000-land supply and on-chain ownership. Its site shows a waitlist and states it launches with Arc mainnet.",
+    "summary": "Digital land project for Arc with a 10,000-land supply and on-chain ownership. Its contracts are on Arc mainnet; its site shows a waitlist.",
     "website": "https://arcland.app/",
     "first_live": "2026-10-10",
     "index_ids": [
@@ -524,7 +524,7 @@
         "title": "Astock: tokenized stocks, built on Arc"
       }
     ],
-    "summary": "Tokenized stocks project built on Arc. Its page titles it \"tokenized stocks, built on Arc\"; the site is a JavaScript app and lists no further product detail.",
+    "summary": "Tokenized stocks project built on Arc. Its page titles it \"tokenized stocks, built on Arc\".",
     "website": "https://astock.fi/",
     "x": "TryArcStocks",
     "first_live": "2026-10-10",
@@ -665,7 +665,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-20",
+    "facts_source": "domain:arctools.fun"
   },
   {
     "slug": "bankr",
@@ -1006,7 +1007,7 @@
         "type": "mainnet-support"
       }
     ],
-    "summary": "Crypto exchange. Its 2026-09-17 announcement opens USDC deposits and withdrawals on Arc, with a zero-fee withdrawal programme and deposit events.",
+    "summary": "Crypto exchange. Its 2026-09-17 announcement opened USDC deposits and withdrawals on Arc.",
     "website": "https://www.bybit.com",
     "first_announced": "2025-10-28",
     "first_live": "2026-09-17",
@@ -1251,7 +1252,7 @@
         "type": "mainnet-support"
       }
     ],
-    "summary": "Decentralized exchange for perpetual futures across FX, US stocks, commodities and crypto. On Arc it lists over 150 perpetual pairs margined and settled in USDC, with a Genesis rewards campaign from 2026-09-16 to 2026-10-16.",
+    "summary": "Decentralized exchange for perpetual futures across FX, US stocks, commodities and crypto. On Arc it lists over 150 perpetual pairs margined and settled in USDC.",
     "website": "https://www.edgex.exchange",
     "x": "edgeX_exchange",
     "first_announced": "2026-09-16",
@@ -1396,7 +1397,7 @@
         "date": "2026-09-16"
       }
     ],
-    "summary": "Cross-chain trading app. Named in Arc's 2026-09-16 mainnet announcement among the day-one trading infrastructure; no Arc-specific page or contract from fomo was found.",
+    "summary": "Cross-chain trading app. Named in Arc's 2026-09-16 mainnet announcement among the day-one trading infrastructure.",
     "website": "https://fomo.family/",
     "x": "fomo",
     "first_announced": "2026-09-16",
@@ -1470,7 +1471,7 @@
         "date": "2026-09-16"
       }
     ],
-    "summary": "Yield curator for onchain vault strategies. Named in Arc's 2026-09-16 mainnet announcement among firms supporting Arc credit markets, including through curated vault strategies; no Arc contracts were found.",
+    "summary": "Yield curator for onchain vault strategies. Named in Arc's 2026-09-16 mainnet announcement among firms supporting Arc credit markets, including through curated vault strategies.",
     "website": "https://www.gauntlet.xyz/",
     "x": "gauntlet_xyz",
     "first_announced": "2026-09-16",
@@ -2557,7 +2558,7 @@
         "title": "Peach Protocol app"
       }
     ],
-    "summary": "Peach Protocol web app with Trade (token swap with a 0.5% fee shown), Terminal, Launchpad and Bridge sections and an ARCConnect wallet prompt. Limited public documentation was found.",
+    "summary": "Peach Protocol web app on Arc with Trade (token swap with a 0.5% fee shown), Terminal, Launchpad and Bridge sections.",
     "website": "https://peach.ag/",
     "first_live": "2026-10-10",
     "index_ids": [
@@ -2889,7 +2890,7 @@
         "date": "2026-10-20"
       }
     ],
-    "summary": "Cross-chain transfer protocol built on LayerZero. Announced as a crosschain partner for Arc on 2025-10-28; LayerZero's chain list shows Arc (chain 5042) with USDC, but no Stargate-specific Arc contracts were confirmed.",
+    "summary": "Cross-chain transfer protocol built on LayerZero. Announced as a crosschain partner for Arc on 2025-10-28.",
     "website": "https://stargate.finance",
     "x": "StargateFinance",
     "github": "https://github.com/stargate-protocol",
@@ -3159,7 +3160,7 @@
         "date": "2026-10-20"
       }
     ],
-    "summary": "Memecoin launchpad on Arc. Its site says coins launch in one click and holders earn a share of trading fees as daily USDC.",
+    "summary": "Memecoin launchpad on Arc. Its site says coins launch in one click and that a share of trading fees is paid to holders in USDC daily.",
     "website": "https://ubi.fun/",
     "first_live": "2026-10-10",
     "index_ids": [

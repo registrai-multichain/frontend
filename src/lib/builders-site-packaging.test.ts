@@ -68,4 +68,11 @@ describe("builders-site packaging", () => {
     expect(toml).not.toMatch(/^NONCE_SECRET\s*=/m);
     expect(readFileSync(resolve(FRONTEND, "scripts/deploy-builders-site.sh"), "utf8")).toContain("NONCE_SECRET");
   });
+
+  test("the build validates the ecosystem directory file before packaging (a bad entry never ships)", () => {
+    const build = readFileSync(resolve(FRONTEND, "scripts/build-builders-site.sh"), "utf8");
+    const v = build.indexOf("npx tsx scripts/ecosystem-validate.ts src/data/arc-ecosystem/entities.json");
+    expect(v).toBeGreaterThan(0);
+    expect(v).toBeLessThan(build.indexOf('rm -rf "$D"'));
+  });
 });

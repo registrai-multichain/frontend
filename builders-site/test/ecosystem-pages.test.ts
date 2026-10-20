@@ -82,3 +82,17 @@ describe("directory and category pages", () => {
   });
   test("not found page", () => expect(renderEcosystemNotFound()).toContain("<h1>Not in the Arc ecosystem directory</h1>"));
 });
+
+describe("review fixes", () => {
+  test("the activity block says when its data is from, and the index verified status", () => {
+    const h = renderEntity({ entity: ent(), app, facts: null });
+    expect(h).toMatch(/<h2>Activity<\/h2>\s*<p class="muted">Data until 20 Oct 2026, 10:00 UTC · verified builder \(registry\) · indices: ABI, AEI<\/p>/);
+  });
+  test("index membership is shown as status evidence: a contract on the explorer and the hourly data", () => {
+    const e = ent({ status_evidence: [{ url: "https://archery.wtf/", title: "Archery website" }], contracts: [] });
+    const h = renderEntity({ entity: e, app, facts: null });
+    expect(h).toMatch(/Evidence: .*Contract on the Arc explorer.*Hourly activity in the Arc indices/);
+    expect(h).toContain('href="https://explorer.arc.io/address/0x0000000000000000000000000000000000000001"');
+    expect(renderEntity({ entity: e, app: null, facts: null })).toContain("Listed in the Arc indices");
+  });
+});

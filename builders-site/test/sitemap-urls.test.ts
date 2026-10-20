@@ -74,7 +74,7 @@ describe("IndexNow", () => {
 
 vi.mock("../../src/lib/arc-ecosystem-data", () => ({ ECOSYSTEM: ix([{ slug: "archery", name: "Archery", category: "consumer", status: "live", summary: "A game.",
   status_evidence: [{ url: "https://explorer.arc.io/address/0x0000000000000000000000000000000000000001" }], sources: [{ url: "https://archery.wtf/" }],
-  index_ids: ["domain:archery.wtf"], last_reviewed: "2026-10-20" }]) }));
+  index_ids: ["domain:archery.wtf"], facts_source: "domain:archery.wtf", last_reviewed: "2026-10-20" }]) }));
 
 describe("ecosystem in the sitemap", () => {
   test("directory, non-empty categories and entity pages; claimed /apps pages are left out", async () => {
@@ -87,5 +87,15 @@ describe("ecosystem in the sitemap", () => {
     expect(locs).not.toContain("https://builder.registrai.cc/ecosystem/banks/");
     expect(urls).toContainEqual({ loc: "https://builder.registrai.cc/ecosystem/archery/", lastmod: "2026-10-20" });
     expect(locs).not.toContain("https://builder.registrai.cc/apps/domain/archery.wtf/");
+  });
+  test("a project page the directory claims (it 301s) is left out; an unclaimed one stays", async () => {
+    const { sitemapUrls } = await import("../lib/sitemap-urls");
+    const kv = new MemoryKV();
+    const prof = (s: string) => JSON.stringify({ source: s, name: "P", metrics: [], deployers: [], contracts: [], declaredBy: "0x", declaredAt: "2026-10-05T00:00:00.000Z" });
+    await kv.put("project:domain:archery.wtf", prof("domain:archery.wtf"), { metadata: { source: "domain:archery.wtf" } });
+    await kv.put("project:domain:other.app", prof("domain:other.app"), { metadata: { source: "domain:other.app" } });
+    const locs = (await sitemapUrls({ INVITES: kv, DATA_DB: undefined } as never, { cache: null }, NOW)).map((u) => u.loc);
+    expect(locs).not.toContain("https://builder.registrai.cc/project/domain/archery.wtf/");
+    expect(locs).toContain("https://builder.registrai.cc/project/domain/other.app/");
   });
 });

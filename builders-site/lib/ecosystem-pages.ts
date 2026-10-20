@@ -4,7 +4,7 @@
  */
 import { CATEGORIES, STATUS_LABEL, categoryHref, categoryOf, entityHref, sortByName, type ArcEntity, type Category, type EntityStatus } from "../../src/lib/arc-ecosystem";
 import { evidenceHref } from "../../src/lib/facts";
-import { activityHtml, contractList, esc, page } from "./apps-pages";
+import { activityHtml, contractList, esc, page, when } from "./apps-pages";
 import { factsHtml, type Ready } from "./project-ssr";
 import type { AppDetail } from "./apps-data";
 
@@ -34,6 +34,16 @@ function contractsHtml(e: ArcEntity, app: AppDetail | null): string {
   return `<h2>Contracts on Arc</h2>${ownHtml}${extra ? `${own.length ? "<p class=\"muted\">Also attributed by the Arc indices:</p>" : ""}${contractList(extra)}` : ""}`;
 }
 
+/** Index members: the index's own evidence (a contract on the explorer, the hourly data), so a "live" badge never rests on a homepage alone. */
+function indexEvidence(e: ArcEntity, app: AppDetail | null): string[] {
+  const id = e.index_ids?.[0];
+  if (!id) return [];
+  const hourly = `/api/v1/members/${encodeURIComponent(id)}/hourly?index=aei`;
+  if (!app) return [a(hourly, "Listed in the Arc indices (hourly data)")];
+  const contract = e.contracts?.[0]?.address ?? app.contracts_sample?.[0];
+  return [...(contract ? [a(evidenceHref(contract), "Contract on the Arc explorer")] : []), a(hourly, "Hourly activity in the Arc indices")];
+}
+
 export function renderEntity(v: EntityView): string {
   const e = v.entity, url = `${ECO_SITE}${entityHref(e.slug)}`;
   const tags = (e.tags ?? []).map((t) => `<a href="${categoryHref(t)}">${esc(catName(t))}</a>`).join(", ");
@@ -43,9 +53,9 @@ export function renderEntity(v: EntityView): string {
 <p>${esc(e.summary)}</p>
 ${links(e)}
 <h2>Status</h2>
-${dates ? `<ul>${dates}</ul>` : ""}<p>Evidence: ${e.status_evidence.map((s) => a(s.url, s.title ?? s.url)).join(" · ")}</p>
+${dates ? `<ul>${dates}</ul>` : ""}<p>Evidence: ${[...e.status_evidence.map((s) => a(s.url, s.title ?? s.url)), ...indexEvidence(e, v.app)].join(" · ")}</p>
 ${contractsHtml(e, v.app)}
-${v.app ? `<h2>Activity</h2>${activityHtml(v.app)}<p class="muted">Hourly data: <a href="/api/v1/members/${esc(encodeURIComponent(v.app.id))}/hourly?index=aei">JSON</a></p>` : ""}
+${v.app ? `<h2>Activity</h2><p class="muted">Data until ${esc(when(v.app.data_until))} · ${v.app.verified ? "verified builder (registry)" : "not verified"} · indices: ${v.app.indices.map((i) => i.toUpperCase()).join(", ")}</p>${activityHtml(v.app)}<p class="muted">Hourly data: <a href="/api/v1/members/${esc(encodeURIComponent(v.app.id))}/hourly?index=aei">JSON</a></p>` : ""}
 ${v.facts ? `<h2>Project facts</h2>${factsHtml(v.facts)}` : ""}
 <h2>Sources</h2>
 <ol>${e.sources.map((s) => `<li>${a(s.url, s.title ?? s.url)}${s.date ? ` (${esc(s.date)})` : ""}</li>`).join("")}</ol>

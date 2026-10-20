@@ -9,6 +9,10 @@ import { edgeCachedGet } from "../../lib/http";
 const html = (body: string, status = 200, head = false) =>
   new Response(head ? null : body, { status, headers: { "content-type": "text/html; charset=utf-8", "x-content-type-options": "nosniff", "cache-control": status === 200 ? "public, max-age=300" : "no-store" } });
 
+/** The directory and category pages depend only on the bundled data: rendered once per isolate (free plan: 10 ms CPU). */
+const memo = new Map<string, string>();
+const once = (key: string, render: () => string) => { let h = memo.get(key); if (h === undefined) { h = render(); memo.set(key, h); } return h; };
+
 export const onRequest: PagesFunction = async (ctx) => {
   const req = ctx.request, url = new URL(req.url), m = req.method.toUpperCase();
   if (m !== "GET" && m !== "HEAD") return new Response("Only GET is supported.", { status: 405, headers: { allow: "GET" } });
@@ -19,11 +23,11 @@ export const onRequest: PagesFunction = async (ctx) => {
   const all = ECOSYSTEM.entities;
   if (parts.length === 0) {
     const status = parseStatus(url.searchParams.get("status"));
-    return html(renderDirectory(all, status), 200, head);
+    return html(once(`dir:${status ?? ""}`, () => renderDirectory(all, status)), 200, head);
   }
   if (parts.length !== 1) return html(renderEcosystemNotFound(), 404, head);
   const cat = categoryOf(parts[0]);
-  if (cat) return html(renderCategory(cat, all), 200, head);
+  if (cat) return html(once(`cat:${cat.id}`, () => renderCategory(cat, all)), 200, head);
   const e = ECOSYSTEM.bySlug.get(parts[0]);
   if (!e) return html(renderEcosystemNotFound(), 404, head);
   const res = await edgeCachedGet(new Request(url.toString()), deps, async () => html(renderEntity(await loadEntityView(ctx.env, deps, e, url.origin))), 300, `entity:${e.slug}`);

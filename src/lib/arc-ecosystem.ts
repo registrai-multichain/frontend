@@ -112,7 +112,8 @@ export function validateEntities(list: unknown): { ok: true; entities: ArcEntity
 
 export const entityHref = (slug: string) => `/ecosystem/${slug}/`;
 export const categoryHref = (id: CategoryId) => `/ecosystem/${id}/`;
-export const sortByName = (l: ArcEntity[]) => [...l].sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }) || (a.slug < b.slug ? -1 : 1));
+const COLLATOR = new Intl.Collator("en", { sensitivity: "base" }); // one collator: localeCompare with options per comparison is slow
+export const sortByName = (l: ArcEntity[]) => [...l].sort((a, b) => COLLATOR.compare(a.name, b.name) || (a.slug < b.slug ? -1 : 1));
 
 export type EcosystemIndex = { entities: ArcEntity[]; bySlug: Map<string, ArcEntity>; byIndexId: Map<string, ArcEntity>; byFactsSource: Map<string, ArcEntity> };
 export function indexEntities(entities: ArcEntity[]): EcosystemIndex {
