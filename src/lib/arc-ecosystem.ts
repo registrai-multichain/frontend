@@ -125,3 +125,9 @@ export function indexEntities(entities: ArcEntity[]): EcosystemIndex {
   }
   return { entities, bySlug, byIndexId, byFactsSource };
 }
+
+/** Announced entries not re-checked for more than `days` (the spec's monthly re-check: they may have gone live, or quiet). */
+export function staleEntries(l: ArcEntity[], today: string, days = 90): ArcEntity[] {
+  const cutoff = Date.parse(`${today}T00:00:00Z`) - days * 86400e3;
+  return l.filter((e) => e.status === "announced" && Date.parse(`${e.last_reviewed}T00:00:00Z`) < cutoff);
+}

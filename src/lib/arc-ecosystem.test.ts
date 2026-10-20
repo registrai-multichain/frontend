@@ -79,3 +79,9 @@ describe("indexes", () => {
     expect(sortByName(ix.entities).map((e) => e.slug)).toEqual(["aave", "archery"]);
   });
 });
+
+import { staleEntries } from "./arc-ecosystem";
+test("stale: announced entries not reviewed for more than 90 days", () => {
+  const l = [ok({ slug: "a", status: "announced", status_evidence: [{ url: "https://www.arc.io/x" }], last_reviewed: "2026-07-01" }), ok({ slug: "b", last_reviewed: "2026-07-01" }), ok({ slug: "c", status: "announced", status_evidence: [{ url: "https://www.arc.io/x" }], last_reviewed: "2026-10-01" })];
+  expect(staleEntries(l, "2026-10-20").map((e) => e.slug)).toEqual(["a"]);
+});
