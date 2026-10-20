@@ -78,3 +78,43 @@ describe("Arc in numbers", () => {
     expect(r.errors.join()).toMatch(/index/);
   });
 });
+
+describe("review fixes", () => {
+  test("I1: an overall deadline: a hanging source resolves as an error, not a hang", async () => {
+    const { collectArcNumbers } = await import("../lib/arc-numbers");
+    const hang = vi.fn(() => new Promise<Response>(() => undefined));
+    const t0 = Date.now();
+    const n = await collectArcNumbers({ INVITES: new MemoryKV() } as never, hang as never, NOW, { deadlineMs: 50 });
+    expect(Date.now() - t0).toBeLessThan(1000);
+    expect(n.network.block_height).toBeNull();
+    expect(n.errors.join()).toMatch(/deadline/);
+  });
+  test("I1: the AEI file can be passed in (the push has it) instead of being read back from KV", async () => {
+    const { collectArcNumbers } = await import("../lib/arc-numbers");
+    const aei = { data_until: "2026-10-21T00:00:00Z", projects: [{}, {}], candles: [["x", 1, 1, 1, 970]], volume_24h: { USDC: { members_usd: 1, members_payments: 1, base_usd_est: 100, base_transfers_est: 5 } } };
+    const n = await collectArcNumbers({ INVITES: new MemoryKV() } as never, fakeFetch() as never, NOW, { aei: aei as never });
+    expect(n.activity_24h).toMatchObject({ data_until: "2026-10-21T00:00:00Z", usdc_moved_usd_est: 100, attributed_share_pct: 1 });
+    expect(n.ecosystem.index_members.aei).toBe(2);
+  });
+  test("I2: all stablecoins sums every peg DefiLlama reports", async () => {
+    const { collectArcNumbers } = await import("../lib/arc-numbers");
+    const f = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).includes("stablecoincharts")) return new Response(JSON.stringify([{ date: "1792454400", totalCirculatingUSD: { peggedUSD: 742300000, peggedEUR: 8000000, peggedGBP: 500000 } }]));
+      return fakeFetch()(url, init);
+    });
+    const n = await collectArcNumbers({ INVITES: await kvWithIndices() } as never, f as never, NOW);
+    expect(n.stablecoins.all_stablecoins_usd).toBe(750800000);
+  });
+  test("M1 (regraded): a failed old-block lookup loses only the block time; the supplies stay", async () => {
+    const { collectArcNumbers } = await import("../lib/arc-numbers");
+    const f = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const b = init?.body ? JSON.parse(String(init.body)) : null;
+      if (b?.method === "eth_getBlockByNumber" && b.params[0] !== "latest") throw new Error("old block unavailable");
+      return fakeFetch()(url, init);
+    });
+    const n = await collectArcNumbers({ INVITES: await kvWithIndices() } as never, f as never, NOW);
+    expect(n.network.block_time_s).toBeNull();
+    expect(n.network.block_height).toBe(26976520);
+    expect(n.stablecoins.usdc_supply).toBe(758938840.361892);
+  });
+});

@@ -13,21 +13,25 @@ const usd = (x: number | null) => (x === null ? NA : `$${N0.format(x)}`);
 const amt = (x: number | null, unit: string) => (x === null ? NA : `${N0.format(x)} ${unit}`);
 const int = (x: number | null) => (x === null ? NA : N0.format(x));
 const row = (label: string, value: string, source = "") => `<tr><th>${esc(label)}</th><td class="n">${esc(value)}</td><td class="muted">${esc(source)}</td></tr>`;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** Live reads to the minute (when() rounds to the index hour). */
+const at = (s: string) => { const d = new Date(s); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`; };
+const LLAMA_NOTE = "DefiLlama counts the circulating supply of every stablecoin on Arc (all pegs, in USD); it can differ from the token contracts' totalSupply shown above.";
 const METHOD = "Stablecoin transfers on Arc in the last 24 h, estimated from sampled hours by the Arc Ecosystem Index; tracked apps = transfers into contracts the index attributes to an app.";
 
 export function renderArc(n: ArcNumbers, history: ArcNumbers[]): string {
-  const rpcAt = n.network.as_of ? `Arc RPC, ${when(n.network.as_of)}` : "Arc RPC";
+  const rpcAt = n.network.as_of ? `Arc RPC, ${at(n.network.as_of)}` : "Arc RPC";
   const llamaAt = n.stablecoins.defillama_date ? `Source: DefiLlama, ${day(`${n.stablecoins.defillama_date}T00:00:00Z`)}` : "Source: DefiLlama";
   const a = n.activity_24h, e = n.ecosystem;
   const idx = (k: "abi" | "aii" | "aei") => `${k.toUpperCase()} ${e.index_members[k] === null ? "–" : N0.format(e.index_members[k]!)}`;
   const close = (k: "abi" | "aii" | "aei") => `${k.toUpperCase()} ${e.index_close[k] === null ? "–" : N2.format(e.index_close[k]!)}`;
   const hist = history.length
     ? `<div class="wrap"><table><thead><tr><th>Snapshot</th><th class="n">USDC supply</th><th class="n">All stablecoins</th><th class="n">TVL</th><th class="n">USDC moved, 24 h (est.)</th><th class="n">Attributed to apps</th></tr></thead><tbody>
-${history.map((h) => `<tr><td>${esc(when(h.generated_at))}</td><td class="n">${esc(amt(h.stablecoins.usdc_supply, "USDC"))}</td><td class="n">${esc(usd(h.stablecoins.all_stablecoins_usd))}</td><td class="n">${esc(usd(h.stablecoins.tvl_usd))}</td><td class="n">${esc(usd(h.activity_24h.usdc_moved_usd_est))}</td><td class="n">${h.activity_24h.attributed_share_pct === null ? NA : `${N2.format(h.activity_24h.attributed_share_pct)}%`}</td></tr>`).join("\n")}
+${history.map((h) => `<tr><td>${esc(at(h.generated_at))}</td><td class="n">${esc(amt(h.stablecoins.usdc_supply, "USDC"))}</td><td class="n">${esc(usd(h.stablecoins.all_stablecoins_usd))}</td><td class="n">${esc(usd(h.stablecoins.tvl_usd))}</td><td class="n">${esc(usd(h.activity_24h.usdc_moved_usd_est))}</td><td class="n">${h.activity_24h.attributed_share_pct === null ? NA : `${N2.format(h.activity_24h.attributed_share_pct)}%`}</td></tr>`).join("\n")}
 </tbody></table></div>`
     : "<p>Daily snapshots start at the next 00:00 UTC close.</p>";
   const body = `<h1>Arc in numbers</h1>
-<p class="muted">Arc is the layer-1 blockchain built by Circle. Generated ${esc(when(n.generated_at))}; each figure gives its source and date.</p>
+<p class="muted">Arc is the layer-1 blockchain built by Circle. Generated ${esc(at(n.generated_at))}; each figure gives its source and date.</p>
 <h2>Network</h2>
 <table><tbody>
 ${row("Chain ID", String(n.network.chain_id), "Arc docs")}
@@ -40,9 +44,10 @@ ${row("Average block time", n.network.block_time_s === null ? NA : `${n.network.
 <table><tbody>
 ${row("USDC supply", amt(n.stablecoins.usdc_supply, "USDC"), rpcAt)}
 ${row("EURC supply", amt(n.stablecoins.eurc_supply, "EURC"), rpcAt)}
-${row("All stablecoins (USD)", usd(n.stablecoins.all_stablecoins_usd), llamaAt)}
+${row("All stablecoins, circulating (USD value)", usd(n.stablecoins.all_stablecoins_usd), llamaAt)}
 ${row("TVL", usd(n.stablecoins.tvl_usd), llamaAt)}
 </tbody></table>
+<p class="muted"><details><summary>i</summary> ${esc(LLAMA_NOTE)}</details></p>
 <h2>Activity, last 24 h</h2>
 <p class="muted">${a.data_until ? `Data until ${esc(when(a.data_until))}` : NA} · Source: Arc Ecosystem Index (Registrai) <details><summary>i</summary> ${esc(METHOD)}</details></p>
 <table><tbody>

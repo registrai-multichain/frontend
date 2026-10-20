@@ -50,3 +50,16 @@ describe("Arc in numbers: daily snapshots", () => {
     } finally { vi.unstubAllGlobals(); }
   });
 });
+
+test("I1: the snapshot and the IndexNow ping run after the response (waitUntil), so a slow RPC cannot fail the 00:00 publish", async () => {
+  vi.stubGlobal("fetch", () => new Promise<Response>(() => undefined));   // every outside call hangs
+  try {
+    const later: Promise<unknown>[] = [];
+    const env = { INVITES: new MemoryKV(), ABI_PUSH_TOKEN: TOKEN, DATA_DB: db() } as never;
+    const t0 = Date.now();
+    const r = await handlePushIndex(post(withHour("2026-10-21T00:00:00Z")), env, "aei", { waitUntil: (p) => { later.push(p); } });
+    expect(r.status).toBe(200);
+    expect(Date.now() - t0).toBeLessThan(2000);
+    expect(later.length).toBeGreaterThanOrEqual(1);
+  } finally { vi.unstubAllGlobals(); }
+});

@@ -65,3 +65,18 @@ describe("Arc in numbers page", () => {
     } finally { vi.unstubAllGlobals(); }
   });
 });
+
+describe("review fixes (page)", () => {
+  test("M2 (regraded): live reads show minutes, not the hour", async () => {
+    const { renderArc } = await import("../lib/arc-pages");
+    const h = renderArc(full({ generated_at: "2026-10-20T18:17:11.351Z", network: { chain_id: 5042, gas_token: "USDC", mainnet_since: "2026-09-16", block_height: 1, block_time_s: 0.5, as_of: "2026-10-20T18:17:11.351Z" } }), []);
+    expect(h).toContain("Generated 20 Oct 2026, 18:17 UTC");
+    expect(h).toContain("Arc RPC, 20 Oct 2026, 18:17 UTC");
+  });
+  test("I2: the stablecoin row says it is DefiLlama's circulating total, with an i note", async () => {
+    const { renderArc } = await import("../lib/arc-pages");
+    const h = renderArc(full(), []);
+    expect(h).toContain("All stablecoins, circulating (USD value)");
+    expect(h).toMatch(/<details><summary>i<\/summary>[^<]*circulating supply[^<]*totalSupply/);
+  });
+});

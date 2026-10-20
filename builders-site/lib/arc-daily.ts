@@ -1,6 +1,7 @@
 /** Arc in numbers: one snapshot per UTC day in D1 (written after the 00:00 AEI close), read newest first. */
 import { collectArcNumbers, type ArcNumbers } from "./arc-numbers";
 import type { D1Database, Env } from "./env";
+import type { AbiData } from "../../src/lib/builders-index";
 
 export function clampDays(v: string | null): number {
   const n = v === null ? NaN : Number(v);
@@ -18,10 +19,10 @@ export async function readArcDaily(db: D1Database, days: number): Promise<ArcNum
 }
 
 /** Best effort: never throws (it runs inside the index publish). `day` = the UTC date of the 00:00 close. */
-export async function snapshotArcDaily(env: Env, day: string, fetcher?: typeof fetch): Promise<void> {
+export async function snapshotArcDaily(env: Env, day: string, opts: { aei?: AbiData | null; fetcher?: typeof fetch } = {}): Promise<void> {
   try {
     if (!env.DATA_DB) return;
-    await storeArcDaily(env.DATA_DB, day, await collectArcNumbers(env, fetcher));
+    await storeArcDaily(env.DATA_DB, day, await collectArcNumbers(env, opts.fetcher, Date.now(), { aei: opts.aei }));
   } catch (err) {
     console.warn("arc daily snapshot failed", err instanceof Error ? err.message : err);
   }

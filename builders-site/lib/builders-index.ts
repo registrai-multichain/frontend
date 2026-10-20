@@ -103,14 +103,19 @@ async function push<D>(req: Request, env: Env, key: string, maxBytes: number, va
   return json({ ok: true, ...summary(v.data) });
 }
 
-export const handlePushIndex = (req: Request, env: Env, id: AbiIndexId = "abi") =>
+export const handlePushIndex = (req: Request, env: Env, id: AbiIndexId = "abi", deps: { waitUntil?: (p: Promise<unknown>) => void } = {}) =>
   push(req, env, ABI_INDICES[id].key, ABI_LIMITS.bytes, validateIndex, (d) => ({ index: id, updated: d.updated, points: d.series.length }), dataUntilRank, undefined,
     async (d) => {
       await ingestIndexFile(env.DATA_DB, id, d); // Data API v1 history; never fails the publish
       // once a day, after the 00:00 UTC close: tell IndexNow engines the data pages changed (best effort)
       if (id === "aei" && shouldPing(d.data_until)) {
-        await snapshotArcDaily(env, d.data_until.slice(0, 10)); // Arc in numbers: one fixed snapshot per day (best effort)
-        await pingIndexNow((await sitemapUrls(env, {}).catch(() => [])).map((u) => u.loc));
+        // after the response when the runtime allows (waitUntil): the keeper waits 30 s for this post, and a slow RPC or
+        // DefiLlama must never turn its 00:00 close into a failure
+        const later = (async () => {
+          await snapshotArcDaily(env, d.data_until.slice(0, 10), { aei: d as never }); // Arc in numbers: one fixed snapshot per day
+          await pingIndexNow((await sitemapUrls(env, {}).catch(() => [])).map((u) => u.loc));
+        })().catch(() => undefined);
+        if (deps.waitUntil) deps.waitUntil(later); else await later;
       }
     });
 
