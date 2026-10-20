@@ -101,7 +101,7 @@ export function renderCategory(cat: Category, all: ArcEntity[]): string {
 ${table(l)}`;
   const ld = { "@context": "https://schema.org", "@type": "ItemList", name: cat.label, url: `${ECO_SITE}${categoryHref(cat.id)}`, numberOfItems: l.length,
     itemListElement: sortByName(l).map((e, k) => ({ "@type": "ListItem", position: k + 1, name: e.name, url: `${ECO_SITE}${entityHref(e.slug)}` })) };
-  return page({ title: `${cat.label} · Registrai`, canonical: `${ECO_SITE}${categoryHref(cat.id)}`, description: `${cat.label}: ${l.length} projects with their status and sources.`, body, ld });
+  return page({ title: `${cat.label} · Registrai`, canonical: `${ECO_SITE}${categoryHref(cat.id)}`, description: `${cat.label}: ${l.length} projects with their status and sources.`, body, ld, noindex: l.length === 0 });
 }
 
 export const renderEcosystemNotFound = () =>

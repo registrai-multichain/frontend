@@ -96,3 +96,8 @@ describe("review fixes", () => {
     expect(renderEntity({ entity: e, app: null, facts: null })).toContain("Listed in the Arc indices");
   });
 });
+
+test("an empty category page is noindex; a non-empty one is not", () => {
+  expect(renderCategory(categoryOf("banks")!, [ent()])).toContain('<meta name="robots" content="noindex">');
+  expect(renderCategory(categoryOf("consumer")!, [ent()])).not.toContain('name="robots"');
+});
