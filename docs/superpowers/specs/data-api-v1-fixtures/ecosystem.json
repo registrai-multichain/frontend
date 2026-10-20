@@ -1,0 +1,2 @@
+{ "version": 1, "updated": "2026-10-20", "count": 1,
+  "entities": [{ "slug": "aave", "name": "Aave", "category": "lending", "status": "live", "summary": "Lending on Arc.", "website": "https://aave.com/", "first_live": "2026-10-10", "url": "https://builder.registrai.cc/ecosystem/aave/" }] }

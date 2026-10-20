@@ -27,6 +27,10 @@ export const ENDPOINTS: Endpoint[] = [
     example: curl("/members/new?index=abi&since=2026-10-13T00:00:00Z") },
   { method: "GET", path: "/verified", params: "none", returns: "Projects whose builder proof validates against the Arc mainnet builder registry.",
     example: curl("/verified") },
+  { method: "GET", path: "/ecosystem", params: "category, status, q (optional)", returns: "Every project in the Arc ecosystem directory: category, status (live, deployed, announced), summary and page URL.",
+    example: curl("/ecosystem?category=dexs") },
+  { method: "GET", path: "/ecosystem/{slug}", params: "none", returns: "One project: summary, status with evidence, links, contracts on Arc, index ids and sources.",
+    example: curl("/ecosystem/aave") },
 ];
 
 export const FIELDS: { name: string; text: string }[] = [
@@ -48,7 +52,7 @@ export const ERRORS: { status: number; text: string }[] = [
 export const PRECISION_NOTE =
   "Closes come from the hourly candles at 3 decimals. points is full precision. points_earned and usdc are rounded to 1 and 2 decimals. Activity is served under its hour's close. A missed hour has no row (never null) and may be filled in later.";
 
-export const CHANGELOG = [{ date: "2026-10-14", text: "v1 released: indices, members, member history, verified projects." }];
+export const CHANGELOG = [{ date: "2026-10-14", text: "v1 released: indices, members, member history, verified projects." }, { date: "2026-10-20", text: "Arc ecosystem directory: /ecosystem and /ecosystem/{slug}." }];
 
 export const LICENCE = 'Free to use under CC BY 4.0 with the attribution "Data: Registrai". No warranty; not financial advice.';
 

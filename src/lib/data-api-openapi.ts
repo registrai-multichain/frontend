@@ -7,6 +7,8 @@ import members from "../../docs/superpowers/specs/data-api-v1-fixtures/members-a
 import memberHourly from "../../docs/superpowers/specs/data-api-v1-fixtures/member-hourly.json";
 import membersHourly from "../../docs/superpowers/specs/data-api-v1-fixtures/members-hourly-aii.json";
 import verified from "../../docs/superpowers/specs/data-api-v1-fixtures/verified.json";
+import ecosystem from "../../docs/superpowers/specs/data-api-v1-fixtures/ecosystem.json";
+import ecosystemEntity from "../../docs/superpowers/specs/data-api-v1-fixtures/ecosystem-entity.json";
 
 type Schema = { type: string; properties?: Record<string, Schema>; required?: string[]; items?: Schema; additionalProperties?: Schema | boolean };
 
@@ -27,6 +29,15 @@ function nullable(s: Schema, path: string[]): Schema {
   const [head, ...rest] = path, props = { ...(s.properties ?? {}) };
   for (const k of head === "*" ? Object.keys(props) : [head]) if (props[k]) props[k] = nullable(props[k], rest);
   return { ...s, properties: props };
+}
+
+/** The ecosystem list schema: website and first_live are null when the project has none. */
+function ecosystemSchema(): Schema {
+  const s = schemaOf(ecosystem);
+  const item = s.properties!.entities.items!;
+  for (const k of ["website", "first_live"]) item.properties![k] = { type: ["string", "null"] as unknown as string };
+  item.required = (item.required ?? []).filter((k) => k !== "website" && k !== "first_live").concat(["website", "first_live"]);
+  return s;
 }
 
 const membersNew = { version: 1, index: "aii", since: "2026-10-14T19:00:00Z", data_until: "2026-10-14T21:00:00Z", members: members.members };
@@ -73,6 +84,10 @@ export const OPENAPI = {
     "/members/new": op("listNewMembers", "Members first seen after an hour", "MembersNew", [indexQuery, { ...hourParam("since", "Hour close; members first seen after it."), required: true }]),
     ...Object.fromEntries(PAID_DOCS.map((d) => [d.path, paidOp(d)])),
     "/verified": op("listVerified", "Projects whose builder proof validates against the Arc mainnet registry", "Verified"),
+    "/ecosystem": op("listEcosystem", "Every project in the Arc ecosystem directory", "Ecosystem", [
+      { name: "category", in: "query", required: false, schema: { type: "string" } }, { name: "status", in: "query", required: false, schema: { type: "string", enum: ["live", "deployed", "announced"] } },
+      { name: "q", in: "query", required: false, description: "Name or alias contains (case-insensitive).", schema: { type: "string" } }]),
+    "/ecosystem/{slug}": op("getEcosystemEntity", "One project in the Arc ecosystem directory", "EcosystemEntity", [{ name: "slug", in: "path", required: true, schema: { type: "string" } }]),
   },
   components: {
     schemas: {
@@ -83,6 +98,8 @@ export const OPENAPI = {
       MembersHourly: schemaOf(membersHourly),
       MembersNew: schemaOf(membersNew),
       Verified: schemaOf(verified),
+      Ecosystem: ecosystemSchema(),
+      EcosystemEntity: schemaOf(ecosystemEntity),
       Error: { type: "object", properties: { error: { type: "string" } }, required: ["error"] },
       PaymentRequired: { type: "object", description: PAID_NOTE, properties: { x402Version: { type: "number" }, error: { type: "string" }, resource: { type: "object" }, accepts: { type: "array", items: { type: "object" } } }, required: ["x402Version", "accepts"] },
     },
