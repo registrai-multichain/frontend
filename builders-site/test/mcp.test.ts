@@ -40,7 +40,7 @@ describe("MCP", () => {
     expect(init.result.capabilities).toEqual({ tools: {} });
     const list = await (await rpc(env, { jsonrpc: "2.0", id: 2, method: "tools/list" })).json();
     expect(list.result.tools.map((t: { name: string }) => t.name)).toEqual(MCP_TOOLS.map((t) => t.name));
-    expect(list.result.tools).toHaveLength(13); // 7 free + 6 paid (x402)
+    expect(list.result.tools).toHaveLength(15); // 9 free + 6 paid (x402)
     const n = await rpc(env, { jsonrpc: "2.0", method: "notifications/initialized" });
     expect(n.status).toBe(202);
     expect((await (await rpc(env, { jsonrpc: "2.0", id: 3, method: "ping" })).json()).result).toEqual({});
@@ -109,7 +109,7 @@ describe("paid MCP tools (x402 over MCP)", () => {
     handleMcp(new Request("https://builder.registrai.cc/api/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args, ...(meta ? { _meta: meta } : {}) } }) }), env as never, deps).then((r) => r.json());
 
   test("13 tools; the six paid ones say x402 and are read-only", () => {
-    expect(MCP_TOOLS).toHaveLength(13);
+    expect(MCP_TOOLS).toHaveLength(15);
     const paid = MCP_TOOLS.filter((t) => t.description.includes("x402"));
     expect(paid.map((t) => t.name)).toEqual(["arc_index_history_deep", "arc_app_history_deep", "arc_members_day", "arc_events", "arc_contract", "arc_project_scope"]);
     for (const t of paid) expect(t.annotations.readOnlyHint).toBe(true);
@@ -173,5 +173,21 @@ describe("MCP tool metadata for directories", () => {
   test("initialize names the server with a title", async () => {
     const r = await (await rpc({}, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } })).json();
     expect(r.result.serverInfo.title).toBe("Registrai Arc data");
+  });
+});
+
+describe("ecosystem tools", () => {
+  test("arc_ecosystem and arc_entity are listed with titles and answer from the directory API", async () => {
+    const names = MCP_TOOLS.map((t) => t.name);
+    expect(names).toEqual(expect.arrayContaining(["arc_ecosystem", "arc_entity"]));
+    const t = MCP_TOOLS.find((x) => x.name === "arc_ecosystem")!;
+    expect(t.title).toBe("Arc ecosystem: directory");
+    expect(t.description).toMatch(/Use this when/);
+    const r = await (await rpc({}, { jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "arc_ecosystem", arguments: { status: "evil" } } })).json();
+    expect(r.result.isError).toBe(true);
+    expect(r.result.content[0].text).toMatch(/status must be/);
+    const one = await (await rpc({}, { jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "arc_entity", arguments: {} } })).json();
+    expect(one.result.isError).toBe(true);
+    expect(one.result.content[0].text).toMatch(/slug is required/);
   });
 });

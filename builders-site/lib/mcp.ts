@@ -4,7 +4,9 @@
  * agent can cite. API-backed tools call the v1 handlers in-process, so tool output and API output cannot differ.
  */
 import { appHref } from "./app-href";
-import { idToPath, loadApp, loadAppList, type AppRow } from "./apps-data";
+import { loadApp, loadAppList, type AppRow } from "./apps-data";
+import { handleEcosystem } from "./data-api-ecosystem";
+import { CATEGORIES } from "../../src/lib/arc-ecosystem";
 import { parseSort } from "./apps-pages";
 import { handleIndexHourly, handleIndices, handleMemberHourly, handleMembersNew, parseIndex } from "./data-api";
 import { handleVerified } from "./data-api-verified";
@@ -65,6 +67,9 @@ export const MCP_TOOLS = [
   tool("arc_app_history", "Arc app: hourly history", "One Arc app's hourly points and activity (payments, paying wallets, new payers, USD) in one index, oldest first.", obj({ id: { type: "string" }, index: INDEX, from: HOUR("First hour (inclusive)."), to: HOUR("Last hour (inclusive).") }, ["id", "index"])),
   tool("arc_new_apps", "Arc apps: newly seen", "Arc apps first seen in an index after a given hour. Use this when asked what is new on Arc.", obj({ index: INDEX, since: HOUR("Members first seen after this hour.") }, ["index", "since"])),
   tool("arc_verified", "Arc builders: verified", "Arc projects whose builder proof validates against the Arc mainnet builder registry.", obj({})),
+  tool("arc_ecosystem", "Arc ecosystem: directory", "Every project in the Arc ecosystem directory (apps, wallets, exchanges, banks, infrastructure, partners) with category and status: live on mainnet, deployed or announced. Use this when asked what exists on Arc, which projects are in a category, or whether a company is on Arc. Not for token prices.",
+    obj({ category: { type: "string", enum: CATEGORIES.map((c) => c.id) }, status: { type: "string", enum: ["live", "deployed", "announced"] }, q: { type: "string", description: "Name contains." } })),
+  tool("arc_entity", "Arc project: detail", "One project in the Arc ecosystem directory by slug (slugs come from arc_ecosystem): summary, status with evidence, links, contracts on Arc and sources.", obj({ slug: { type: "string" } }, ["slug"])),
   ...paidTools(),
 ] as const;
 
@@ -134,6 +139,8 @@ async function callTool(name: string, a: Args, env: Env, deps: EdgeCacheDeps): P
       if (app === "unknown") return { ok: false, error: `No app with id ${id} in the Arc indices. Use arc_apps for the list.` };
       return { ok: true, data: { version: 1, ...app, source_url: `${SITE}${appHref(id)}` } };
     }
+    case "arc_ecosystem": return viaApi(`${API}/ecosystem${qs({ category: str(a, "category"), status: str(a, "status"), q: str(a, "q") })}`, (q) => handleEcosystem(q, d, []));
+    case "arc_entity": { const slug = str(a, "slug", true)!; return viaApi(`${API}/ecosystem/${encodeURIComponent(slug)}`, (q) => handleEcosystem(q, d, [slug])); }
     default: return null;
   }
 }
