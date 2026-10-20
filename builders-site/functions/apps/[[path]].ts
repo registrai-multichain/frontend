@@ -2,6 +2,8 @@ import type { PagesFunction } from "../../lib/env";
 import { loadApp, loadAppList, pathToId } from "../../lib/apps-data";
 import { parseSort, renderApp, renderAppList, renderNotFound, renderUnavailable } from "../../lib/apps-pages";
 import { edgeCachedGet } from "../../lib/http";
+import { ECOSYSTEM } from "../../../src/lib/arc-ecosystem-data";
+import { entityHref } from "../../../src/lib/arc-ecosystem";
 
 /** GET /apps/ and /apps/<prefix>/<rest>/: server-rendered app facts for crawlers and agents (spec 2026-10-15-agent-reference-design.md). */
 const html = (body: string, status = 200) =>
@@ -22,6 +24,8 @@ export const onRequest: PagesFunction = async (ctx) => {
   }
   const id = pathToId(parts);
   if (!id) return html(renderNotFound(), 404);
+  const claimed = ECOSYSTEM.byIndexId.get(id);
+  if (claimed) return Response.redirect(`${url.origin}${entityHref(claimed.slug)}`, 301); // one page per project
   return edgeCachedGet(req, deps, async () => {
     const a = await loadApp(ctx.env, deps, id);
     if (a === null) return html(renderUnavailable(), 503);

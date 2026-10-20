@@ -3,6 +3,7 @@
  * HTTP POST (Streamable HTTP without sessions or SSE). Tools answer with the same JSON as Data API v1, plus a source_url an
  * agent can cite. API-backed tools call the v1 handlers in-process, so tool output and API output cannot differ.
  */
+import { appHref } from "./app-href";
 import { idToPath, loadApp, loadAppList, type AppRow } from "./apps-data";
 import { parseSort } from "./apps-pages";
 import { handleIndexHourly, handleIndices, handleMemberHourly, handleMembersNew, parseIndex } from "./data-api";
@@ -123,7 +124,7 @@ async function callTool(name: string, a: Args, env: Env, deps: EdgeCacheDeps): P
       const l = await loadAppList(env, deps);
       if (!l) return { ok: false, error: "The data is not available right now. Retry later." };
       const key: Record<string, (r: AppRow) => number> = { payments: (r) => r.last_24h.payments, usdc: (r) => r.last_24h.usdc, points: (r) => r.points, first_seen: (r) => Date.parse(r.first_hour) };
-      const rows = [...l.rows].sort((x, y) => key[sort](y) - key[sort](x) || (x.id < y.id ? -1 : 1)).map((r) => ({ ...r, source_url: `${SITE}${idToPath(r.id)}` }));
+      const rows = [...l.rows].sort((x, y) => key[sort](y) - key[sort](x) || (x.id < y.id ? -1 : 1)).map((r) => ({ ...r, source_url: `${SITE}${appHref(r.id)}` }));
       return { ok: true, data: { version: 1, data_until: l.data_until, sort, totals: l.totals, rows, source_url: `${SITE}/apps/` } };
     }
     case "arc_app": {
@@ -131,7 +132,7 @@ async function callTool(name: string, a: Args, env: Env, deps: EdgeCacheDeps): P
       const app = await loadApp(env, deps, id);
       if (app === null) return { ok: false, error: "The data is not available right now. Retry later." };
       if (app === "unknown") return { ok: false, error: `No app with id ${id} in the Arc indices. Use arc_apps for the list.` };
-      return { ok: true, data: { version: 1, ...app, source_url: `${SITE}${idToPath(id)}` } };
+      return { ok: true, data: { version: 1, ...app, source_url: `${SITE}${appHref(id)}` } };
     }
     default: return null;
   }

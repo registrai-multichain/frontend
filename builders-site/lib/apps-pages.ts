@@ -5,6 +5,7 @@
  */
 import { idToPath, type AppDetail, type AppList, type AppRow } from "./apps-data";
 import { evidenceHref } from "../../src/lib/facts";
+import { appHref } from "./app-href";
 
 const SITE = "https://builder.registrai.cc";
 const METHOD_URL = "/builders-index/";
@@ -63,14 +64,14 @@ export function renderAppList(l: AppList, sort: Sort): string {
 <details><summary>i</summary> Payments into the apps' own contracts, counted by the Arc Ecosystem Index method (per-wallet caps and minimums apply).${esc(share)}</details></p>
 <p class="muted">Sorted by ${esc(SORTS[sort].label)}. Sort by ${others}.</p>
 <div class="wrap"><table><thead><tr><th>App</th><th>Kind</th><th>Verified</th><th class="n">24 h payments</th><th class="n">24 h USD</th><th class="n">Index share</th><th>First seen</th></tr></thead><tbody>
-${rows.map((r) => `<tr><td><a href="${esc(idToPath(r.id) ?? "/apps/")}">${esc(r.name)}</a></td><td>${esc(KIND_LABEL[r.kind])}</td><td>${r.verified ? "✓" : "–"}</td><td class="n">${num(r.last_24h.payments)}</td><td class="n">${esc(usd(r.last_24h.usdc))}</td><td class="n">${num(r.share)}%</td><td>${esc(day(r.first_hour))}</td></tr>`).join("\n")}
+${rows.map((r) => `<tr><td><a href="${esc(appHref(r.id))}">${esc(r.name)}</a></td><td>${esc(KIND_LABEL[r.kind])}</td><td>${r.verified ? "✓" : "–"}</td><td class="n">${num(r.last_24h.payments)}</td><td class="n">${esc(usd(r.last_24h.usdc))}</td><td class="n">${num(r.share)}%</td><td>${esc(day(r.first_hour))}</td></tr>`).join("\n")}
 </tbody></table></div>
 <p class="muted">The same data as JSON: <a href="/api/v1/members?index=aei">/api/v1/members?index=aei</a>. For agents: <a href="/llms.txt">llms.txt</a>, <a href="/api/v1/openapi.json">OpenAPI</a>, MCP at <code>${SITE}/api/mcp</code>.</p>`;
   const ld = { "@context": "https://schema.org", "@type": "DataCatalog", name: "Apps on Arc", url: `${SITE}/apps/`, dateModified: l.data_until,
     description: "Hourly stablecoin payments, paying wallets and volume for every app on Arc mainnet in the Arc indices, from Registrai.",
     license: LICENSE, creator: CREATOR, keywords: KEYWORDS,
     mainEntity: { "@type": "ItemList", numberOfItems: rows.length,
-      itemListElement: rows.map((r, k) => ({ "@type": "ListItem", position: k + 1, name: r.name, url: `${SITE}${idToPath(r.id) ?? "/apps/"}` })) } };
+      itemListElement: rows.map((r, k) => ({ "@type": "ListItem", position: k + 1, name: r.name, url: `${SITE}${appHref(r.id)}` })) } };
   return page({ title: "Apps on Arc · Registrai", canonical: `${SITE}/apps/`, description: `Every app in the Arc indices with its last 24 h of stablecoin payments and volume on Arc mainnet, updated hourly. Data until ${when(l.data_until)}.`, body, ld });
 }
 

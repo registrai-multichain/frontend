@@ -5,6 +5,8 @@ import { injectSummary } from "../../lib/ssr-summary";
 import { projectName, renderProjectSummary, setHead } from "../../lib/project-ssr";
 import { pageState, parseSourceParam, projectHref, sourceFromProjectPath } from "../../../src/lib/project-page";
 import { builderUrl } from "../../../src/lib/public-site";
+import { ECOSYSTEM } from "../../../src/lib/arc-ecosystem-data";
+import { entityHref } from "../../../src/lib/arc-ecosystem";
 
 const read = async (r: Response) => ({ status: r.status, body: await r.json().catch(() => ({})) });
 /** Next's own files for the /project/ route (RSC payloads, prefetch trees): served as static assets. */
@@ -41,6 +43,8 @@ export const onRequest: PagesFunction = async (ctx) => {
   const source = sourceFromProjectPath(url.pathname);
   if (!source) return respond(setHead(page, { title: "Project not found · Registrai", description: "No project with this id.", canonical: builderUrl("project"), noindex: true }), 404);
   if (url.pathname !== projectHref(source)) return Response.redirect(`${url.origin}${projectHref(source)}`, 301);
+  const claimed = ECOSYSTEM.byFactsSource.get(source);
+  if (claimed) return Response.redirect(`${url.origin}${entityHref(claimed.slug)}`, 301); // one page per project
   const canonical = `${builderUrl("")}${projectHref(source).slice(1)}`;
   const deps = { waitUntil: (p: Promise<unknown>) => ctx.waitUntil(p) };
   const enc = encodeURIComponent(source);
