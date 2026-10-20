@@ -36,7 +36,8 @@ export type EntityStatus = "live" | "deployed" | "announced";
 export const STATUS_LABEL: Record<EntityStatus, string> = { live: "Live on mainnet", deployed: "Deployed", announced: "Announced" };
 export const parseStatus = (v: string | null): EntityStatus | null => (v === "live" || v === "deployed" || v === "announced" ? v : null);
 
-export type Source = { url: string; title?: string; date?: string };
+/** type "mainnet-support": the project's own page stating it supports Arc mainnet (for integrations without their own contracts). */
+export type Source = { url: string; title?: string; date?: string; type?: "mainnet-support" };
 export type ArcEntity = {
   slug: string; name: string; aliases?: string[]; category: CategoryId; tags?: CategoryId[];
   status: EntityStatus; status_evidence: Source[]; summary: string;
@@ -74,7 +75,10 @@ export function validateEntities(list: unknown): { ok: true; entities: ArcEntity
     if (!parseStatus(String(e.status))) err("status must be live, deployed or announced");
     if (!Array.isArray(e.status_evidence) || !e.status_evidence.length) err("status_evidence is required");
     if (!Array.isArray(e.sources) || !e.sources.length) err("sources are required");
-    for (const s of [...(e.status_evidence ?? []), ...(e.sources ?? [])]) if (!https(s?.url)) err(`not an https URL: ${String(s?.url)}`);
+    for (const s of [...(e.status_evidence ?? []), ...(e.sources ?? [])]) {
+      if (!https(s?.url)) err(`not an https URL: ${String(s?.url)}`);
+      if (s?.type !== undefined && s.type !== "mainnet-support") err(`unknown evidence type ${String(s.type)}`);
+    }
     if (typeof e.summary !== "string" || !e.summary.trim()) err("summary is required");
     else {
       if (e.summary.length > SUMMARY_MAX) err(`summary is over ${SUMMARY_MAX} characters`);
@@ -100,8 +104,8 @@ export function validateEntities(list: unknown): { ok: true; entities: ArcEntity
       else if (factsSources.has(e.facts_source)) err(`facts_source ${e.facts_source} also on ${factsSources.get(e.facts_source)}`);
       else factsSources.set(e.facts_source, String(e.slug));
     }
-    const explorer = (e.status_evidence ?? []).some((s) => urlOf(s?.url)?.hostname === "explorer.arc.io");
-    if (e.status === "live" && !(e.contracts?.length || e.index_ids?.length || explorer)) err("live needs mainnet evidence: a contract, an index id or an explorer.arc.io link");
+    const explorer = (e.status_evidence ?? []).some((s) => urlOf(s?.url)?.hostname === "explorer.arc.io" || s?.type === "mainnet-support");
+    if (e.status === "live" && !(e.contracts?.length || e.index_ids?.length || explorer)) err("live needs mainnet evidence: a contract, an index id, an explorer.arc.io link or a mainnet-support page");
   });
   return errors.length ? { ok: false, errors } : { ok: true, entities: list as ArcEntity[] };
 }

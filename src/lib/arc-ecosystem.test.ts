@@ -44,6 +44,9 @@ describe("validateEntities", () => {
     expect(errs([ok({ status_evidence: [{ url: "https://archery.wtf/" }] })]).join()).toMatch(/mainnet evidence/);
     expect(errs([ok({ status_evidence: [{ url: "https://archery.wtf/" }], index_ids: ["domain:archery.wtf"] })])).toEqual([]);
     expect(errs([ok({ status: "announced", status_evidence: [{ url: "https://www.arc.io/pressroom/x" }] })])).toEqual([]);
+    // integrations without their own contracts (exchanges, RPC providers): the project's own page stating Arc mainnet support
+    expect(errs([ok({ status_evidence: [{ url: "https://www.kraken.com/support/arc", type: "mainnet-support" }] })])).toEqual([]);
+    expect(errs([ok({ status_evidence: [{ url: "https://x.y/", type: "rumour" as never }] })]).join()).toMatch(/evidence type/);
   });
   test("summary: required, at most 280 characters, no verdict word", () => {
     expect(errs([ok({ summary: "x".repeat(281) })]).join()).toMatch(/280/);
