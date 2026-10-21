@@ -12,6 +12,7 @@ import { ingestIndexFile } from "./data-api-ingest";
 import { storeAppContracts } from "./app-contracts";
 import { pingIndexNow, shouldPing, sitemapUrls } from "./sitemap-urls";
 import { snapshotArcDaily } from "./arc-daily";
+import { purgeCorrections } from "./corrections";
 import type { Env } from "./env";
 import { edgeCachedGet, errorJson, json, type EdgeCacheDeps } from "./http";
 
@@ -113,6 +114,7 @@ export const handlePushIndex = (req: Request, env: Env, id: AbiIndexId = "abi", 
         // DefiLlama must never turn its 00:00 close into a failure
         const later = (async () => {
           await snapshotArcDaily(env, d.data_until.slice(0, 10), { aei: d as never }); // Arc in numbers: one fixed snapshot per day
+          if (env.DATA_DB) await purgeCorrections(env.DATA_DB).catch(() => 0);   // corrections: 30-day privacy purge, once a day
           await pingIndexNow((await sitemapUrls(env, {}).catch(() => [])).map((u) => u.loc));
         })().catch(() => undefined);
         if (deps.waitUntil) deps.waitUntil(later); else await later;

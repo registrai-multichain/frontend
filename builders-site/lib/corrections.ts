@@ -2,14 +2,17 @@
  * Ecosystem corrections (spec docs/superpowers/specs/2026-10-21-ecosystem-corrections-design.md).
  *
  *   POST /api/ecosystem/corrections   public HTML form (x-www-form-urlencoded, same origin), Turnstile, rate-limited
+ *   GET  /api/admin/corrections       open items, then the last 50 decided (any admin session)
+ *   POST /api/admin/corrections       {id, decision: approve | reject, public_note} (role admin only)
  *
  * Checks run in this order: fields (400 / ?error=), rate limits (429 / ?error=rate), Turnstile (?error=antibot). Error
  * redirects carry a code, never user input. Emails and IP hashes are never returned by any public route.
  */
 import { CORRECTION_FIELDS, type CorrectionField } from "../../src/lib/arc-ecosystem-corrections";
 import { ECOSYSTEM } from "../../src/lib/arc-ecosystem-data";
-import type { Env } from "./env";
-import { siteOrigin } from "./http";
+import type { Role } from "./auth";
+import type { D1Database, Env } from "./env";
+import { json, siteOrigin } from "./http";
 
 export const CORRECT_MAX_BODY = 4096;
 export const RATE_IP_HOURLY = 5;
@@ -110,4 +113,44 @@ export async function handleCorrectionPost(req: Request, env: Env, fetcher: type
   const row = await env.DATA_DB!.prepare(`INSERT INTO corrections (slug, field, text, source_url, email, name, domain_match, ip_hash, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`).bind(v.slug, v.field, v.text, v.source_url, v.email, v.name, domainMatch(v.email, website) ? 1 : 0, ipHash, Math.floor(now / 1000)).first<{ id: number }>();
   return wantsJson ? asJson({ id: row?.id ?? null }, 201) : seeOther(`/ecosystem/${v.slug}/correct/?sent=1`);
+}
+
+export type AdminCorrection = { id: number; slug: string; name: string; field: string; text: string; source_url: string | null; email: string | null; person: string | null;
+  domain_match: boolean; status: "open" | "approved" | "rejected" | "applied"; public_note: string | null; created_at: number; decided_at: number | null; decided_by: string | null; applied_at: number | null };
+const COLS = "id, slug, field, text, source_url, email, name, domain_match, status, public_note, created_at, decided_at, decided_by, applied_at";
+const toAdmin = (r: Record<string, unknown>): AdminCorrection => ({
+  id: Number(r.id), slug: String(r.slug), name: ECOSYSTEM.bySlug.get(String(r.slug))?.name ?? String(r.slug), field: String(r.field), text: String(r.text),
+  source_url: (r.source_url as string | null) ?? null, email: (r.email as string | null) ?? null, person: (r.name as string | null) ?? null, domain_match: Number(r.domain_match) === 1,
+  status: r.status as AdminCorrection["status"], public_note: (r.public_note as string | null) ?? null, created_at: Number(r.created_at),
+  decided_at: r.decided_at == null ? null : Number(r.decided_at), decided_by: (r.decided_by as string | null) ?? null, applied_at: r.applied_at == null ? null : Number(r.applied_at),
+});
+
+export async function handleAdminCorrections(req: Request, env: Env, who: { address: string; role: Role }, now = Date.now()): Promise<Response> {
+  const db = env.DATA_DB;
+  if (!db) return json({ error: "DATA_DB is not bound" }, 503);
+  const m = req.method.toUpperCase();
+  if (m === "GET") {
+    const open = (await db.prepare(`SELECT ${COLS} FROM corrections WHERE status = 'open' ORDER BY created_at, id`).all()).results.map(toAdmin);
+    const decided = (await db.prepare(`SELECT ${COLS} FROM corrections WHERE status != 'open' ORDER BY decided_at DESC, id DESC LIMIT 50`).all()).results.map(toAdmin);
+    return json({ open, decided });
+  }
+  if (m !== "POST") return json({ error: "Only GET and POST are supported." }, 405);
+  if (who.role !== "admin") return json({ error: "Only the admin role can decide corrections." }, 403);
+  const b = (await req.json().catch(() => null)) as { id?: unknown; decision?: unknown; public_note?: unknown } | null;
+  const id = Number(b?.id), decision = b?.decision, note = typeof b?.public_note === "string" ? b.public_note.trim() : "";
+  if (!Number.isInteger(id) || id < 1 || (decision !== "approve" && decision !== "reject")) return json({ error: "Send {id, decision: approve | reject, public_note}." }, 400);
+  if (decision === "approve" && (note.length < 5 || note.length > 200)) return json({ error: "The public note must be 5-200 characters." }, 400);
+  const res = await db.prepare(`UPDATE corrections SET status = ?, public_note = ?, decided_at = ?, decided_by = ? WHERE id = ? AND status = 'open'`)
+    .bind(decision === "approve" ? "approved" : "rejected", decision === "approve" ? note : null, Math.floor(now / 1000), who.address, id).run();
+  const row = await db.prepare(`SELECT ${COLS} FROM corrections WHERE id = ?`).bind(id).first<Record<string, unknown>>();
+  if (!row) return json({ error: "No such correction." }, 404);
+  if (!res.meta.changes) return json({ error: "This correction was already decided.", correction: toAdmin(row) }, 409);
+  return json({ correction: toAdmin(row) });
+}
+
+/** Clears email, name and IP hash 30 days after the decision (spec: privacy). Open items are never cleared. */
+export async function purgeCorrections(db: D1Database, now = Date.now()): Promise<number> {
+  const r = await db.prepare(`UPDATE corrections SET email = NULL, name = NULL, ip_hash = '' WHERE decided_at IS NOT NULL AND decided_at < ? AND (email IS NOT NULL OR name IS NOT NULL OR ip_hash != '')`)
+    .bind(Math.floor(now / 1000) - RETAIN_S).run();
+  return r.meta.changes ?? 0;
 }

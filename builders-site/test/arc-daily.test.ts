@@ -45,6 +45,9 @@ describe("Arc in numbers: daily snapshots", () => {
       const row = d.sqlite.prepare("SELECT day, json FROM arc_daily").all()[0] as { day: string; json: string };
       expect(row.day).toBe("2026-10-21");
       expect(JSON.parse(row.json).errors.join()).toMatch(/rpc/);   // RPC returned nothing: recorded, not thrown
+      d.sqlite.exec("INSERT INTO corrections (slug, field, text, email, domain_match, ip_hash, created_at, status, decided_at) VALUES ('x','other','old one here','o@x.com',0,'h',1,'rejected',1)");
+      expect((await handlePushIndex(post(withHour("2026-10-23T00:00:00Z")), env, "aei")).status).toBe(200);
+      expect(d.sqlite.prepare("SELECT email FROM corrections").all()[0]).toEqual({ email: null });   // purged in the daily job
       const broken = { INVITES: new MemoryKV(), ABI_PUSH_TOKEN: TOKEN, DATA_DB: { prepare: () => { throw new Error("d1 down"); } } } as never;
       expect((await handlePushIndex(post(withHour("2026-10-22T00:00:00Z")), broken, "aei")).status).toBe(200);
     } finally { vi.unstubAllGlobals(); }
