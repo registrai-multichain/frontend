@@ -4,7 +4,8 @@ import { categoryOf, parseStatus } from "../../../src/lib/arc-ecosystem";
 import { renderCategory, renderDirectory, renderEcosystemNotFound, renderEntity } from "../../lib/ecosystem-pages";
 import { loadEntityView } from "../../lib/ecosystem-load";
 import { renderCorrectionForm, renderCorrectionsLog, renderRemoved } from "../../lib/corrections-pages";
-import { correctionsOpen, ERROR_TEXT, type ErrorCode } from "../../lib/corrections";
+import { correctionsOpen } from "../../lib/corrections";
+import { ERROR_TEXT, type ErrorCode } from "../../lib/corrections-codes";
 import { edgeCachedGet } from "../../lib/http";
 
 /** GET /ecosystem/, /ecosystem/<category>/, /ecosystem/<slug>/ (spec 2026-10-19-arc-ecosystem-directory-design.md). */

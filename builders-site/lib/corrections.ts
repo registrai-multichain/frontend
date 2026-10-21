@@ -5,29 +5,28 @@
  *   GET  /api/admin/corrections       open items, then the last 50 decided (any admin session)
  *   POST /api/admin/corrections       {id, decision: approve | reject, public_note} (role admin only)
  *
- * Checks run in this order: fields (400 / ?error=), rate limits (429 / ?error=rate), Turnstile (?error=antibot). Error
- * redirects carry a code, never user input. Emails and IP hashes are never returned by any public route.
+ * Checks run in this order: fields (400), rate limits read (429), Turnstile (400); only then are the counters written and
+ * the row stored, so a token-less bot costs no KV writes (review #1). A refused form post gets the form back, prefilled
+ * from its own body (review #2); nothing the visitor typed goes into a URL. Emails and IP hashes are never returned by
+ * any public route.
  */
 import { CORRECTION_FIELDS, type CorrectionField } from "../../src/lib/arc-ecosystem-corrections";
 import { ECOSYSTEM } from "../../src/lib/arc-ecosystem-data";
 import type { Role } from "./auth";
 import type { D1Database, Env } from "./env";
 import { json, siteOrigin } from "./http";
+import { ERROR_TEXT, type ErrorCode, type FormValues } from "./corrections-codes";
+import { renderCorrectionForm } from "./corrections-pages";
+export { ERROR_TEXT, type ErrorCode };
 
-export const CORRECT_MAX_BODY = 4096;
+/** Form-encoded CJK text is ~9 bytes a character and a Turnstile token up to 2,048: 1,000 characters fit with room (review #3). */
+export const CORRECT_MAX_BODY = 16_384;
 export const RATE_IP_HOURLY = 5;
 export const RATE_EMAIL_DAILY = 3;
 export const RETAIN_S = 30 * 24 * 3600;
 const NEEDS_SOURCE: ReadonlySet<CorrectionField> = new Set(["status", "contracts", "dates"]);
 const TURNSTILE_VERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
-export type ErrorCode = "slug" | "field" | "text" | "source_required" | "source" | "email" | "name" | "too_large" | "rate" | "antibot";
-export const ERROR_TEXT: Record<ErrorCode, string> = {
-  slug: "Unknown project.", field: "Choose what is wrong.", text: "The correction must be 10 to 1,000 characters.",
-  source_required: "Add a source link for status, contract and date corrections.", source: "The source must be an https link.",
-  email: "Enter a valid email address.", name: "Name and role can be at most 100 characters.", too_large: "The correction is too long.",
-  rate: "Too many corrections from you today. Try again later.", antibot: "Anti-bot check failed, try again.",
-};
 export type CorrectionInput = { slug: string; field: CorrectionField; text: string; source_url: string | null; email: string; name: string | null };
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -65,12 +64,13 @@ async function hmacHex(secret: string, msg: string, bytes = 12): Promise<string>
 }
 const ipOf = (req: Request) => req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
 
-/** One counter per window in KV; false once the window already holds `max`. */
-async function underLimit(kv: Env["INVITES"], key: string, max: number, ttl: number): Promise<boolean> {
-  const n = Number((await kv.get(key)) ?? "0") || 0;
-  if (n >= max) return false;
-  await kv.put(key, String(n + 1), { expirationTtl: Math.max(60, ttl) });
-  return true;
+/** KV counters per window. A KV error (daily quota, one write per second per key) never fails the post: reads count as 0
+ *  and writes are skipped (review #1). */
+async function count(kv: Env["INVITES"], key: string): Promise<number> {
+  try { return Number((await kv.get(key)) ?? "0") || 0; } catch { return 0; }
+}
+async function bump(kv: Env["INVITES"], key: string, n: number, ttl: number): Promise<void> {
+  try { await kv.put(key, String(n + 1), { expirationTtl: Math.max(60, ttl) }); } catch { /* best effort */ }
 }
 
 async function turnstileOk(secret: string, token: string, ip: string, fetcher: typeof fetch): Promise<boolean> {
@@ -92,26 +92,30 @@ export async function handleCorrectionPost(req: Request, env: Env, fetcher: type
   const origin = siteOrigin(env);
   if (!origin || req.headers.get("origin") !== origin) return plain("Cross-origin request refused.", 403);
   if ((req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase() !== "application/x-www-form-urlencoded") return plain("Send the form.", 415);
+  if (Number(req.headers.get("content-length") ?? "0") > CORRECT_MAX_BODY) return plain(ERROR_TEXT.too_large, 413);
   const raw = await req.text();
-  if (raw.length > CORRECT_MAX_BODY) return plain(ERROR_TEXT.too_large, 400);
+  if (raw.length > CORRECT_MAX_BODY) return plain(ERROR_TEXT.too_large, 413);
   const form = new URLSearchParams(raw);
   const wantsJson = (req.headers.get("accept") ?? "").includes("application/json");
   const slugs = new Set(ECOSYSTEM.entities.map((e) => e.slug));
-  const slug = (form.get("slug") ?? "").trim();
-  // a form post goes back to its form with a code; a JSON caller (or an unknown slug: no form to go back to) gets the status
-  const fail = (code: ErrorCode, status: number) => (wantsJson || !slugs.has(slug) ? asJson({ error: code, message: ERROR_TEXT[code] }, status) : seeOther(`/ecosystem/${slug}/correct/?error=${code}`));
+  const entity = ECOSYSTEM.bySlug.get((form.get("slug") ?? "").trim());
+  const values: FormValues = { field: form.get("field") ?? "", text: form.get("text") ?? "", source_url: form.get("source_url") ?? "", email: form.get("email") ?? "", name: form.get("name") ?? "" };
+  // a form post gets its form back, prefilled; a JSON caller (or an unknown slug: no form to go back to) gets the status
+  const fail = (code: ErrorCode, status: number) => (wantsJson || !entity
+    ? asJson({ error: code, message: ERROR_TEXT[code] }, status)
+    : new Response(renderCorrectionForm(entity, { siteKey: env.TURNSTILE_SITE_KEY!, sent: false, error: code, values }), { status, headers: { "content-type": "text/html; charset=utf-8", "x-content-type-options": "nosniff", "cache-control": "no-store" } }));
   const p = parseCorrection(form, slugs);
   if (!p.ok) return fail(p.code, 400);
   const v = p.value, ip = ipOf(req), secret = env.NONCE_SECRET ?? "registrai-corrections";
-  const ipHash = await hmacHex(secret, `correct:${ip}`);
-  const emailHash = await hmacHex(secret, `correct-email:${v.email}`);
   const hour = Math.floor(now / 3600e3), day = Math.floor(now / 86400e3);
-  if (!(await underLimit(env.INVITES, `correct-rl:${ipHash}:${hour}`, RATE_IP_HOURLY, 3600))) return fail("rate", 429);
-  if (!(await underLimit(env.INVITES, `correct-em:${emailHash}:${day}`, RATE_EMAIL_DAILY, 86400))) return fail("rate", 429);
+  const ipKey = `correct-rl:${await hmacHex(secret, `correct:${ip}`)}:${hour}`, emailKey = `correct-em:${await hmacHex(secret, `correct-email:${v.email}`)}:${day}`;
+  const [ipN, emailN] = await Promise.all([count(env.INVITES, ipKey), count(env.INVITES, emailKey)]);
+  if (ipN >= RATE_IP_HOURLY || emailN >= RATE_EMAIL_DAILY) return fail("rate", 429);
   if (!(await turnstileOk(env.TURNSTILE_SECRET!, form.get("cf-turnstile-response") ?? "", ip, fetcher))) return fail("antibot", 400);
-  const website = ECOSYSTEM.bySlug.get(v.slug)?.website;
+  await Promise.all([bump(env.INVITES, ipKey, ipN, 3600), bump(env.INVITES, emailKey, emailN, 86400)]);
+  const ipHash = ipKey.split(":")[1];
   const row = await env.DATA_DB!.prepare(`INSERT INTO corrections (slug, field, text, source_url, email, name, domain_match, ip_hash, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`).bind(v.slug, v.field, v.text, v.source_url, v.email, v.name, domainMatch(v.email, website) ? 1 : 0, ipHash, Math.floor(now / 1000)).first<{ id: number }>();
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`).bind(v.slug, v.field, v.text, v.source_url, v.email, v.name, domainMatch(v.email, entity?.website) ? 1 : 0, ipHash, Math.floor(now / 1000)).first<{ id: number }>();
   return wantsJson ? asJson({ id: row?.id ?? null }, 201) : seeOther(`/ecosystem/${v.slug}/correct/?sent=1`);
 }
 

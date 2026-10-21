@@ -87,6 +87,10 @@ PILOT_MAX_LEV = "10"
 # Wallets that may not open positions (milestone recorders, audit F4): comma-separated, lowercase. Their closes
 # still work. Empty = nobody is blocked.
 PILOT_BLOCKED_WALLETS = ""
+# Cloudflare Turnstile widget "Registrai corrections" (public site key; hostnames builder.registrai.cc and
+# registrai-builders.pages.dev). The corrections form opens only with this AND the TURNSTILE_SECRET secret set;
+# otherwise project pages keep the mailto links (spec 2026-10-21-ecosystem-corrections-design.md).
+TURNSTILE_SITE_KEY = "0x4AAAAAAFfPs9UTpNIB3zpg"
 
 # ── Secrets (NOT here: set once per project, they survive deploys) ──────────
 # NONCE_SECRET   HMAC key of the stateless /admin sign-in nonces
@@ -101,4 +105,7 @@ PILOT_BLOCKED_WALLETS = ""
 #                least 32 characters. Without it pilot sign-in answers 503 (fail closed):
 #                  openssl rand -base64 48 | npx wrangler pages secret put PILOT_SESSION_SECRET --project-name=registrai-builders
 #                Rotating it signs every pilot user out.
+# TURNSTILE_SECRET  the secret key of the Turnstile widget above (dashboard → Turnstile → Registrai corrections).
+#                Copy it, then:  pbpaste | npx wrangler pages secret put TURNSTILE_SECRET --project-name=registrai-builders
+#                Without it the corrections form stays closed (mailto links, POST 503).
 # ABI_PUSH_TOKEN (already set for /api/index) is also the bearer of POST /api/index/mark (live/mark.py).

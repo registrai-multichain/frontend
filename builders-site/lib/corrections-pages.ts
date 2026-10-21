@@ -2,7 +2,7 @@
 import type { ArcEntity } from "../../src/lib/arc-ecosystem";
 import { CORRECTION_FIELDS, FIELD_LABEL, type CorrectionEntry } from "../../src/lib/arc-ecosystem-corrections";
 import { esc, page } from "./apps-pages";
-import { ERROR_TEXT, type ErrorCode } from "./corrections";
+import { ERROR_TEXT, type ErrorCode, type FormValues } from "./corrections-codes";
 
 const SITE = "https://builder.registrai.cc";
 const FROM = { project: "From the project", reader: "From a reader" } as const;
@@ -35,24 +35,26 @@ const DISCLOSURE = "We use your email only to reply about this correction. Appro
 const mailto = (slug: string) => `mailto:contact@registrai.cc?subject=${encodeURIComponent(`Registrai ecosystem: ${slug}`)}`;
 
 /** The form (Turnstile keys set), the email fallback (not set), or "Received" after a post. */
-export function renderCorrectionForm(e: ArcEntity, o: { siteKey: string | null; sent: boolean; error: ErrorCode | null }): string {
+export function renderCorrectionForm(e: ArcEntity, o: { siteKey: string | null; sent: boolean; error: ErrorCode | null; values?: FormValues }): string {
+  const val = o.values ?? { field: "", text: "", source_url: "", email: "", name: "" };
+  const attr = (x: string) => (x ? ` value="${esc(x)}"` : "");
   const back = `/ecosystem/${esc(e.slug)}/`, canonical = `${SITE}/ecosystem/${e.slug}/correct/`;
   const title = `Suggest a correction: ${e.name} · Registrai`;
   if (o.sent) return page({ title, canonical, description: `Correction received for ${e.name}.`, noindex: true,
     body: `<h1>Received</h1><p>We review corrections within 7 days.</p><p><a href="${back}">Back to ${esc(e.name)}</a></p>` });
   if (!o.siteKey) return page({ title, canonical, description: `Suggest a correction to ${e.name}.`, noindex: true,
     body: `<h1>Suggest a correction</h1><p>Email <a href="${esc(mailto(e.slug))}">contact@registrai.cc</a> with what is wrong on <a href="${back}">${esc(e.name)}</a> and a source.</p>` });
-  const options = CORRECTION_FIELDS.map((f) => `<option value="${f}">${esc(FIELD_LABEL[f])}</option>`).join("");
+  const options = CORRECTION_FIELDS.map((f) => `<option value="${f}"${f === val.field ? " selected" : ""}>${esc(FIELD_LABEL[f])}</option>`).join("");
   const body = `<h1>Suggest a correction</h1>
 <p class="muted">For <a href="${back}">${esc(e.name)}</a>. Nothing changes until we review it.</p>
 ${o.error ? `<p class="error" role="alert">${esc(ERROR_TEXT[o.error])}</p>` : ""}
 <form method="post" action="/api/ecosystem/corrections">
 <input type="hidden" name="slug" value="${esc(e.slug)}">
 <p><label>What is wrong<br><select name="field" required><option value="">Choose…</option>${options}</select></label></p>
-<p><label>Correction<br><textarea name="text" required minlength="10" maxlength="1000" rows="6"></textarea></label></p>
-<p><label>Source link (required for status, contracts and dates)<br><input type="url" name="source_url" maxlength="500" placeholder="https://"></label></p>
-<p><label>Email<br><input type="email" name="email" required maxlength="254"></label></p>
-<p><label>Name and role (optional)<br><input type="text" name="name" maxlength="100"></label></p>
+<p><label>Correction<br><textarea name="text" required minlength="10" maxlength="1000" rows="6">${esc(val.text)}</textarea></label></p>
+<p><label>Source link (required for status, contracts and dates)<br><input type="url" name="source_url" maxlength="500" pattern="https://.+" placeholder="https://"${attr(val.source_url)}></label></p>
+<p><label>Email<br><input type="email" name="email" required maxlength="254"${attr(val.email)}></label></p>
+<p><label>Name and role (optional)<br><input type="text" name="name" maxlength="100"${attr(val.name)}></label></p>
 <div class="cf-turnstile" data-sitekey="${esc(o.siteKey)}"></div>
 <p class="muted">${DISCLOSURE}</p>
 <p><button type="submit">Send correction</button></p>
