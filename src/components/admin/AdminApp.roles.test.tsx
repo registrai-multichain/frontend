@@ -63,6 +63,11 @@ const FALLBACK = {
   "admin-suggestions": [
     { source: "domain:gamma.example", name: "Gamma", website: "https://gamma.example", by: [], wallets: ["0x70997970c51812dc3a010c7d01b50e0d17dc79c8"], count: 1, firstAt: NOW, lastAt: NOW },
   ],
+  "admin-corrections": {
+    open: [{ id: 3, slug: "visa", name: "Visa", field: "summary", text: "<b>x</b> bad summary", source_url: "https://visa.com/news", email: "ana@visa.com", person: "Ana",
+      domain_match: true, status: "open", public_note: null, created_at: 1792540800, decided_at: null, decided_by: null, applied_at: null }],
+    decided: [],
+  },
   "admin-register-requests": [{ source: "domain:delta.example", builder: "0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc", requestedAt: NOW }],
   // Alpha: not invited (its step is "invite"). Beta: invited and saved ("save", "nominate").
   "admin-drafts": [draft("domain:alpha.example", "Alpha"), draft("domain:beta.example", "Beta")],
@@ -87,12 +92,12 @@ describe("/admin by role", () => {
   const onboarder = render("onboarder");
 
   test("the rail and the mounted sections follow the role", () => {
-    const all = ["invites", "register-requests", "suggestions", "onboarding", "badges", "recovery", "projects"];
+    const all = ["invites", "register-requests", "suggestions", "corrections", "onboarding", "badges", "recovery", "projects"];
     const nom = NOMINATIONS ? ["nominations", "facts"] : ["facts"];
     expect(sections(admin)).toEqual([...all, ...nom].sort());
     expect(rail(admin)).toEqual([...all, ...nom].map((s) => `#${s}`));
-    expect(sections(onboarder)).toEqual(["invites", "register-requests", "suggestions", "onboarding", ...nom].sort());
-    expect(rail(onboarder)).toEqual(["#invites", "#register-requests", "#suggestions", "#onboarding", ...nom.map((s) => `#${s}`)]);
+    expect(sections(onboarder)).toEqual(["invites", "register-requests", "suggestions", "corrections", "onboarding", ...nom].sort());
+    expect(rail(onboarder)).toEqual(["#invites", "#register-requests", "#suggestions", "#corrections", "#onboarding", ...nom.map((s) => `#${s}`)]);
   });
 
   test("every section is mounted; only the active one (Invites, no hash) is shown", () => {
@@ -101,6 +106,20 @@ describe("/admin by role", () => {
     expect(admin).toMatch(/Signed in as <br\/?>.*· admin/);
     expect(onboarder).toMatch(/Signed in as <br\/?>.*· onboarder/);
     expect(onboarder).toContain("Onboarder session.");
+  });
+
+  test("corrections: text is shown as text, the domain hint shows, only the admin can approve or reject", () => {
+    const c = (html: string) => html.slice(html.indexOf('data-section="corrections"'), html.indexOf('data-section="onboarding"'));
+    for (const html of [admin, onboarder]) {
+      expect(c(html)).toContain("&lt;b&gt;x&lt;/b&gt; bad summary");
+      expect(c(html)).not.toContain("<b>x</b>");
+      expect(c(html)).toContain("domain matches project website (not confirmed)");
+      expect(c(html)).toContain("ana@visa.com");
+    }
+    expect(buttons(c(admin), "approve")).toBe(1);
+    expect(buttons(c(admin), "reject")).toBe(1);
+    expect(buttons(c(onboarder), "approve")).toBe(0);
+    expect(buttons(c(onboarder), "reject")).toBe(0);
   });
 
   test("register requests: the admin downloads the Safe batch, an onboarder is told an admin does", () => {

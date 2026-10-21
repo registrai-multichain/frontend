@@ -41,6 +41,7 @@ import { formatCountdown, recoveryView, transferTargetError, utcMinute } from "@
 import { verifiedBuilderAbi } from "@/lib/verified-builders-chain";
 import { badgeImageBase, serialLabel } from "@/lib/verified-builder-badge";
 import { suggestionInvite, type AdminSuggestion } from "@/lib/suggestions";
+import { defaultNote, type AdminCorrection } from "@/lib/corrections-admin";
 import { normalizeSource, sourceLabel } from "@/lib/verified-builders";
 import {
   onboardStepCall,
@@ -540,6 +541,7 @@ export function Dashboard({
         </AdminPage>
 
         <SuggestionsSection onInvited={() => invites.mutate()} onSignedOut={onSignedOut} />
+        <CorrectionsSection onSignedOut={onSignedOut} />
 
         <GaslessSection builders={chain.data ?? null} chainNote={chainNote} onSignedOut={onSignedOut} />
 
@@ -792,6 +794,101 @@ function SuggestionsSection({ onInvited, onSignedOut }: { onInvited: () => void;
       {msg.error && <p className={cx.error}>{msg.error}</p>}
       </Section>
     </AdminPage>
+  );
+}
+
+// ───────────────────────────── ecosystem corrections ─────────────────────────────
+
+/** A unix-seconds time as YYYY-MM-DD. */
+const unixDay = (s: number) => new Date(s * 1000).toISOString().slice(0, 10);
+
+function CorrectionsSection({ onSignedOut }: { onSignedOut: () => void }) {
+  const view = useContext(ViewCtx);
+  const list = useSWR<{ open: AdminCorrection[]; decided: AdminCorrection[] }>(
+    "admin-corrections",
+    async () => {
+      const r = await call<{ open?: AdminCorrection[]; decided?: AdminCorrection[]; error?: string }>("/api/admin/corrections");
+      if (r.status === 401) throw new SignedOut();
+      if (r.status !== 200 || !r.body.open) throw new Error(r.body.error ?? `corrections (${r.status})`);
+      return { open: r.body.open, decided: r.body.decided ?? [] };
+    },
+    { revalidateOnFocus: false, shouldRetryOnError: false },
+  );
+  useEffect(() => {
+    if (list.error instanceof SignedOut) onSignedOut();
+  }, [list.error, onSignedOut]);
+  useRailCount("corrections", list.data?.open.length);
+  const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
+
+  async function decide(id: number, decision: "approve" | "reject", public_note?: string) {
+    setMsg({});
+    const r = await call<{ correction?: AdminCorrection; error?: string }>("/api/admin/corrections", { method: "POST", body: { id, decision, public_note } });
+    if (r.status === 200) setMsg({ ok: decision === "approve" ? "Approved: it goes live with the next data deploy." : "Rejected." });
+    else setMsg({ error: r.body.error ?? `could not decide (${r.status})` });
+    await list.mutate();
+  }
+
+  return (
+    <AdminPage id="corrections">
+      <Section>
+        {list.error && !(list.error instanceof SignedOut) ? (
+          <p className={cx.error}>Could not read the corrections: {(list.error as Error).message}</p>
+        ) : !list.data ? (
+          <p className={cx.hint}>Reading corrections…</p>
+        ) : list.data.open.length === 0 ? (
+          <p className={cx.hint}>No open corrections.</p>
+        ) : (
+          <ul className={cx.rows}>
+            {list.data.open.map((c) => <CorrectionRow key={c.id} c={c} canDecide={view.inviteForm} onDecide={decide} />)}
+          </ul>
+        )}
+        {msg.ok && <p className={cx.ok}>{msg.ok}</p>}
+        {msg.error && <p className={cx.error}>{msg.error}</p>}
+      </Section>
+      {list.data && list.data.decided.length > 0 && (
+        <Section title="Decided (last 50)">
+          <ul className={cx.rows}>
+            {list.data.decided.map((c) => (
+              <li key={c.id}>
+                <b>{c.name}</b> <span className={cx.sub}>{c.field} · {c.status}{c.decided_at ? ` · ${unixDay(c.decided_at)}` : ""}</span>
+                {c.public_note && <div className={cx.sub}>{c.public_note}</div>}
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+    </AdminPage>
+  );
+}
+
+function CorrectionRow({ c, canDecide, onDecide }: { c: AdminCorrection; canDecide: boolean; onDecide: (id: number, d: "approve" | "reject", note?: string) => Promise<void> }) {
+  const [note, setNote] = useState(() => defaultNote(c.text));
+  const [busy, setBusy] = useState(false);
+  const run = async (d: "approve" | "reject") => {
+    setBusy(true);
+    try {
+      await onDecide(c.id, d, d === "approve" ? note : undefined);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <li>
+      <b><a href={`/ecosystem/${c.slug}/`} target="_blank" rel="noreferrer noopener">{c.name}</a></b>{" "}
+      <span className={cx.sub}>{c.field} · {unixDay(c.created_at)}</span>
+      <div className={cx.sub}>{c.text}</div>
+      {c.source_url && <div className={cx.sub}><a href={c.source_url} target="_blank" rel="noreferrer noopener">{c.source_url} ↗</a></div>}
+      <div className={cx.sub}>
+        {c.email ?? "email cleared"}{c.person ? ` · ${c.person}` : ""}{c.domain_match ? " · domain matches project website (not confirmed)" : ""}
+      </div>
+      {canDecide && (
+        <span className={cx.rowActions}>
+          <input aria-label="Public note" value={note} maxLength={200} onChange={(ev) => setNote(ev.target.value)} />
+          <button type="button" className={cx.mini} disabled={busy || note.trim().length < 5} onClick={() => run("approve")}>approve</button>
+          <button type="button" className={cx.miniDanger} disabled={busy} onClick={() => run("reject")}>reject</button>
+        </span>
+      )}
+    </li>
   );
 }
 

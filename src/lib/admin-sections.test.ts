@@ -8,15 +8,15 @@ const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
 describe("adminSections: the rail follows adminView, as the page gated its sections before", () => {
   test("an admin sees every deployed section, in rail order", () => {
     expect(ids(adminSections(adminView("admin"), ALL))).toEqual([
-      "invites", "register-requests", "suggestions", "onboarding", "badges", "recovery", "projects", "nominations", "facts", "wonder",
+      "invites", "register-requests", "suggestions", "corrections", "onboarding", "badges", "recovery", "projects", "nominations", "facts", "wonder",
     ]);
   });
   test("an onboarder has no badges, recovery, projects or wonder; nominations stay (directOnboard)", () => {
-    expect(ids(adminSections(adminView("onboarder"), ALL))).toEqual(["invites", "register-requests", "suggestions", "onboarding", "nominations", "facts"]);
+    expect(ids(adminSections(adminView("onboarder"), ALL))).toEqual(["invites", "register-requests", "suggestions", "corrections", "onboarding", "nominations", "facts"]);
   });
   test("what is not deployed is left out", () => {
     expect(ids(adminSections(adminView("admin"), { registry: false, nominations: false, wonder: false }))).toEqual([
-      "invites", "register-requests", "suggestions", "onboarding", "badges", "recovery", "facts",
+      "invites", "register-requests", "suggestions", "corrections", "onboarding", "badges", "recovery", "facts",
     ]);
   });
   test("every section has a heading and a one-line lede", () => {
@@ -71,7 +71,7 @@ describe("adminNav", () => {
 describe("before sign-in and by role", () => {
   test("signed out, the rail has only the sections every role has", () => {
     const out = ids(signedOutSections(ALL, adminView("onboarder")));
-    expect(out).toEqual(["invites", "register-requests", "suggestions", "onboarding", "nominations", "facts"]);
+    expect(out).toEqual(["invites", "register-requests", "suggestions", "corrections", "onboarding", "nominations", "facts"]);
     for (const id of ["badges", "recovery", "projects", "wonder"]) expect(out).not.toContain(id);
     // Every one of them is also an admin's and an onboarder's.
     const admin = ids(adminSections(adminView("admin"), ALL));
@@ -84,6 +84,9 @@ describe("before sign-in and by role", () => {
     expect(sectionLede(invites, adminView("admin"))).toMatch(/^Invite a project/);
     expect(sectionLede(invites, adminView("onboarder"))).not.toMatch(/invite a project/i);
     expect(sectionLede(suggestions, adminView("admin"))).toMatch(/invite it or dismiss it/);
+    const c = ADMIN_SECTIONS.find((s) => s.id === "corrections")!;
+    expect(sectionLede(c, adminView("admin"))).toMatch(/approve/i);
+    expect(sectionLede(c, adminView("onboarder"))).toMatch(/only the admin role/i);
     expect(sectionLede(suggestions, adminView("onboarder"))).not.toMatch(/invite|dismiss/i);
     const onboarding = ADMIN_SECTIONS.find((s) => s.id === "onboarding")!;
     expect(sectionLede(onboarding, adminView("onboarder"))).toBe(onboarding.lede);

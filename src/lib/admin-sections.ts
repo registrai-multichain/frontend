@@ -10,6 +10,7 @@ export type AdminSectionId =
   | "invites"
   | "register-requests"
   | "suggestions"
+  | "corrections"
   | "onboarding"
   | "badges"
   | "recovery"
@@ -50,6 +51,13 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     title: "Project suggestions",
     lede: "What the public suggested at /suggest: invite it or dismiss it.",
     ledeReadOnly: "What the public suggested at /suggest, with its social proof.",
+  },
+  {
+    id: "corrections",
+    label: "Corrections",
+    title: "Ecosystem corrections",
+    lede: "Corrections the public sent from Arc ecosystem pages: approve with a public note, or reject. Approved ones go live with the next data deploy.",
+    ledeReadOnly: "Corrections the public sent from Arc ecosystem pages. Only the admin role can approve or reject.",
   },
   {
     id: "onboarding",
@@ -101,6 +109,7 @@ export function adminSections(view: AdminView, has: AdminDeployment): AdminSecti
     invites: true,
     "register-requests": true,
     suggestions: true,
+    corrections: true,
     onboarding: true,
     badges: view.badges,
     recovery: view.recovery,
