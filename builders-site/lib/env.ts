@@ -76,6 +76,9 @@ export interface Env {
   PILOT_DB?: D1Database;
   /** Data API v1 history (registrai-data; lib/data-api*.ts). */
   DATA_DB?: D1Database;
+  /** Cloudflare Turnstile for the corrections form: both set → the form is open (spec 2026-10-21-ecosystem-corrections-design.md). */
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SECRET?: string;
   /** x402 paid extras: revenue wallet (unset = payments not configured), "arc" | "arcTestnet", the gas wallet key (secret). */
   X402_PAY_TO?: string;
   X402_NETWORK?: string;

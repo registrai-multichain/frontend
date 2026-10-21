@@ -3,7 +3,7 @@ import type { AbiData } from "../../src/lib/builders-index";
 import type { D1Database } from "./env";
 import { indexHourRows, memberHourRows, type IndexHourRow, type IndexId, type MemberHourRow } from "./data-api-rows";
 
-export const DATA_MIGRATIONS = ["0001_data_api.sql", "0002_x402.sql", "0003_arc_daily.sql"];
+export const DATA_MIGRATIONS = ["0001_data_api.sql", "0002_x402.sql", "0003_arc_daily.sql", "0004_corrections.sql"];
 /** Closes are re-upserted for this many hours back on every push, so a gap of up to two days heals itself. */
 export const INGEST_INDEX_LOOKBACK_H = 48;
 
