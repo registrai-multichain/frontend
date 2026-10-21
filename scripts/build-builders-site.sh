@@ -22,7 +22,7 @@ if [ "$(mtime out/index.html)" -lt "$(git log -1 --format=%ct HEAD)" ]; then
   exit 1
 fi
 # The Arc ecosystem directory is bundled into the Functions: a bad entry must stop the build, never reach the site.
-[ ! -f src/data/arc-ecosystem/entities.json ] || npx tsx scripts/ecosystem-validate.ts src/data/arc-ecosystem/entities.json >/dev/null || { echo "build-builders-site: refusing: src/data/arc-ecosystem/entities.json has invalid entries (npx tsx scripts/ecosystem-validate.ts src/data/arc-ecosystem/entities.json)" >&2; exit 1; }
+[ ! -f src/data/arc-ecosystem/entities.json ] || npx tsx scripts/ecosystem-validate.ts src/data/arc-ecosystem/entities.json >/dev/null || { echo "build-builders-site: refusing: src/data/arc-ecosystem/entities.json or corrections.json has invalid entries (npx tsx scripts/ecosystem-validate.ts src/data/arc-ecosystem/entities.json)" >&2; exit 1; }
 D=dist-builders
 rm -rf "$D"; mkdir -p "$D"
 for x in 404 404.html _headers _next _not-found apple-icon.png icon.png admin badge brand builders guide how-we-publish project suggest track-record record builders-index verify terms privacy pilot-rules data-api \

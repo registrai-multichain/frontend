@@ -51,7 +51,7 @@ export const SUMMARY_MAX = 280;
 const FIELDS = new Set(["slug", "name", "aliases", "category", "tags", "status", "status_evidence", "summary", "website", "x", "github", "docs",
   "first_announced", "first_live", "contracts", "index_ids", "facts_source", "sources", "last_reviewed"]);
 /** Path words a slug may not take (they would read as routes or files under /ecosystem/). */
-const RESERVED = new Set(["api", "category", "categories", "entities", "status", "search", "index", "all"]);
+const RESERVED = new Set(["api", "category", "categories", "entities", "status", "search", "index", "all", "corrections"]);
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/, DAY = /^\d{4}-\d{2}-\d{2}$/, ADDR = /^0x[0-9a-f]{40}$/, ID = /^[a-z]+:\S+$/, HANDLE = /^[A-Za-z0-9_]{1,15}$/;
 const urlOf = (u: unknown): URL | null => { if (typeof u !== "string") return null; try { return new URL(u); } catch { return null; } };
 const https = (u: unknown) => { const x = urlOf(u); return !!x && x.protocol === "https:" && !x.username && !x.password; };
