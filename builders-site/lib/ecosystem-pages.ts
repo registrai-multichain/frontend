@@ -10,7 +10,7 @@ import { factsHtml, type Ready } from "./project-ssr";
 import type { AppDetail } from "./apps-data";
 
 export const ECO_SITE = "https://builder.registrai.cc";
-export type EntityView = { entity: ArcEntity; app: AppDetail | null; facts: Ready | null };
+export type EntityView = { entity: ArcEntity; app: AppDetail | null; facts: Ready | null; correctionsOpen?: boolean };
 const LICENSE = "https://creativecommons.org/licenses/by/4.0/";
 const CREATOR = { "@type": "Organization", name: "Registrai", url: "https://registrai.cc/" };
 const mail = (subject: string) => `mailto:contact@registrai.cc?subject=${encodeURIComponent(subject)}`;
@@ -55,6 +55,9 @@ export function renderEntity(v: EntityView): string {
   const e = v.entity, url = `${ECO_SITE}${entityHref(e.slug)}`;
   const tags = (e.tags ?? []).map((t) => `<a href="${categoryHref(t)}">${esc(catName(t))}</a>`).join(", ");
   const dates = [e.first_announced ? `<li>First announced ${esc(e.first_announced)}</li>` : "", e.first_live ? `<li>Live on Arc mainnet since ${esc(e.first_live)}</li>` : ""].join("");
+  const errorLinks = v.correctionsOpen
+    ? `<a href="/ecosystem/${esc(e.slug)}/correct/">Suggest a correction</a>`
+    : `<a href="${esc(mail(`Registrai ecosystem: ${e.slug}`))}">Report an error</a> · <a href="${esc(mail(`Removal: ${e.slug}`))}">Ask for removal</a>`;
   const body = `<h1>${esc(e.name)}</h1>
 <p class="muted">${esc(STATUS_LABEL[e.status])} · <a href="${categoryHref(e.category)}">${esc(catName(e.category))}</a>${tags ? ` · also ${tags}` : ""} · Last reviewed ${esc(e.last_reviewed)}</p>
 <p>${esc(e.summary)}</p>
@@ -67,7 +70,7 @@ ${v.facts ? `<h2>Project facts</h2>${factsHtml(v.facts)}` : ""}
 <h2>Sources</h2>
 <ol>${e.sources.map((s) => `<li>${a(s.url, s.title ?? s.url)}${s.date ? ` (${esc(s.date)})` : ""}</li>`).join("")}</ol>
 ${correctionsLine(e.slug)}
-<p class="muted"><a href="${esc(mail(`Registrai ecosystem: ${e.slug}`))}">Report an error</a> · <a href="${esc(mail(`Removal: ${e.slug}`))}">Ask for removal</a> · <a href="/how-we-publish/">How we publish</a> · <a href="/ecosystem/">Arc ecosystem</a></p>`;
+<p class="muted">${errorLinks} · <a href="/how-we-publish/">How we publish</a> · <a href="/ecosystem/">Arc ecosystem</a></p>`;
   const sameAs = [e.website, e.x ? `https://x.com/${e.x}` : undefined, e.github].filter((x): x is string => !!x);
   const graph: unknown[] = [{ "@type": "Organization", name: e.name, ...(e.aliases?.length ? { alternateName: e.aliases } : {}), url: e.website ?? url, ...(sameAs.length ? { sameAs } : {}), description: e.summary, mainEntityOfPage: url }];
   if (v.app) graph.push({ "@type": "Dataset", name: `${e.name} hourly activity on Arc`, url, description: `Hourly stablecoin payments, paying wallets, volume and index points for ${e.name} on Arc mainnet, from Registrai.`,

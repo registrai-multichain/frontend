@@ -3,7 +3,8 @@ import { CORRECTIONS, ECOSYSTEM } from "../../../src/lib/arc-ecosystem-data";
 import { categoryOf, parseStatus } from "../../../src/lib/arc-ecosystem";
 import { renderCategory, renderDirectory, renderEcosystemNotFound, renderEntity } from "../../lib/ecosystem-pages";
 import { loadEntityView } from "../../lib/ecosystem-load";
-import { renderCorrectionsLog, renderRemoved } from "../../lib/corrections-pages";
+import { renderCorrectionForm, renderCorrectionsLog, renderRemoved } from "../../lib/corrections-pages";
+import { correctionsOpen, ERROR_TEXT, type ErrorCode } from "../../lib/corrections";
 import { edgeCachedGet } from "../../lib/http";
 
 /** GET /ecosystem/, /ecosystem/<category>/, /ecosystem/<slug>/ (spec 2026-10-19-arc-ecosystem-directory-design.md). */
@@ -26,6 +27,14 @@ export const onRequest: PagesFunction = async (ctx) => {
     const status = parseStatus(url.searchParams.get("status"));
     return html(once(`dir:${status ?? ""}`, () => renderDirectory(all, status)), 200, head);
   }
+  if (parts.length === 2 && parts[1] === "correct") {
+    const target = ECOSYSTEM.bySlug.get(parts[0]);
+    if (!target) return html(renderEcosystemNotFound(), 404, head);
+    const code = url.searchParams.get("error");
+    const error = code && Object.hasOwn(ERROR_TEXT, code) ? (code as ErrorCode) : null;
+    const h = renderCorrectionForm(target, { siteKey: correctionsOpen(ctx.env) ? ctx.env.TURNSTILE_SITE_KEY! : null, sent: url.searchParams.get("sent") === "1", error });
+    return new Response(head ? null : h, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "x-content-type-options": "nosniff", "cache-control": "no-store" } });
+  }
   if (parts.length !== 1) return html(renderEcosystemNotFound(), 404, head);
   if (parts[0] === "corrections") return html(once("corrections", () => renderCorrectionsLog(CORRECTIONS.all, new Map(all.map((e) => [e.slug, e.name])))), 200, head);
   const cat = categoryOf(parts[0]);
@@ -35,6 +44,6 @@ export const onRequest: PagesFunction = async (ctx) => {
     const gone = CORRECTIONS.removed.get(parts[0]);
     return gone ? html(renderRemoved(gone), 410, head) : html(renderEcosystemNotFound(), 404, head);
   }
-  const res = await edgeCachedGet(new Request(url.toString()), deps, async () => html(renderEntity(await loadEntityView(ctx.env, deps, e, url.origin))), 300, `entity:${e.slug}`);
+  const res = await edgeCachedGet(new Request(url.toString()), deps, async () => html(renderEntity(await loadEntityView(ctx.env, deps, e, url.origin))), 300, `entity:${e.slug}:${correctionsOpen(ctx.env) ? "c" : "m"}`);
   return head ? new Response(null, { status: res.status, headers: res.headers }) : res;
 };

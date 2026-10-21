@@ -6,6 +6,7 @@ import { handlePublicProject } from "./projects";
 import type { Env } from "./env";
 import type { EdgeCacheDeps } from "./http";
 import type { EntityView } from "./ecosystem-pages";
+import { correctionsOpen } from "./corrections";
 
 const read = async (r: Response) => ({ status: r.status, body: await r.json().catch(() => ({})) });
 
@@ -25,5 +26,5 @@ export async function loadEntityView(env: Env, deps: EdgeCacheDeps, e: ArcEntity
       facts = s.kind === "ready" ? s : null;
     } catch { facts = null; }
   }
-  return { entity: e, app, facts };
+  return { entity: e, app, facts, correctionsOpen: correctionsOpen(env) };
 }
