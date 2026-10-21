@@ -1,8 +1,9 @@
 import type { PagesFunction } from "../../lib/env";
-import { ECOSYSTEM } from "../../../src/lib/arc-ecosystem-data";
+import { CORRECTIONS, ECOSYSTEM } from "../../../src/lib/arc-ecosystem-data";
 import { categoryOf, parseStatus } from "../../../src/lib/arc-ecosystem";
 import { renderCategory, renderDirectory, renderEcosystemNotFound, renderEntity } from "../../lib/ecosystem-pages";
 import { loadEntityView } from "../../lib/ecosystem-load";
+import { renderCorrectionsLog, renderRemoved } from "../../lib/corrections-pages";
 import { edgeCachedGet } from "../../lib/http";
 
 /** GET /ecosystem/, /ecosystem/<category>/, /ecosystem/<slug>/ (spec 2026-10-19-arc-ecosystem-directory-design.md). */
@@ -26,10 +27,14 @@ export const onRequest: PagesFunction = async (ctx) => {
     return html(once(`dir:${status ?? ""}`, () => renderDirectory(all, status)), 200, head);
   }
   if (parts.length !== 1) return html(renderEcosystemNotFound(), 404, head);
+  if (parts[0] === "corrections") return html(once("corrections", () => renderCorrectionsLog(CORRECTIONS.all, new Map(all.map((e) => [e.slug, e.name])))), 200, head);
   const cat = categoryOf(parts[0]);
   if (cat) return html(once(`cat:${cat.id}`, () => renderCategory(cat, all)), 200, head);
   const e = ECOSYSTEM.bySlug.get(parts[0]);
-  if (!e) return html(renderEcosystemNotFound(), 404, head);
+  if (!e) {
+    const gone = CORRECTIONS.removed.get(parts[0]);
+    return gone ? html(renderRemoved(gone), 410, head) : html(renderEcosystemNotFound(), 404, head);
+  }
   const res = await edgeCachedGet(new Request(url.toString()), deps, async () => html(renderEntity(await loadEntityView(ctx.env, deps, e, url.origin))), 300, `entity:${e.slug}`);
   return head ? new Response(null, { status: res.status, headers: res.headers }) : res;
 };

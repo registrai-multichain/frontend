@@ -6,7 +6,7 @@ const E: ArcEntity[] = [
     sources: [{ url: "https://archery.wtf/" }], index_ids: ["domain:archery.wtf"], facts_source: "domain:archery.wtf", last_reviewed: "2026-10-20" },
   { slug: "aave", name: "Aave", category: "lending", status: "announced", summary: "Lending.", status_evidence: [{ url: "https://www.arc.io/pressroom/a" }], sources: [{ url: "https://aave.com/" }], last_reviewed: "2026-10-20" },
 ];
-vi.mock("../../src/lib/arc-ecosystem-data", () => ({ ECOSYSTEM: indexEntities(E) }));
+vi.mock("../../src/lib/arc-ecosystem-data", () => ({ CORRECTIONS: { all: [], bySlug: new Map(), removed: new Map() }, ECOSYSTEM: indexEntities(E) }));
 const loadApp = vi.fn();
 vi.mock("../lib/apps-data", async (orig) => ({ ...(await orig<typeof import("../lib/apps-data")>()), loadApp: (...a: unknown[]) => loadApp(...a) }));
 

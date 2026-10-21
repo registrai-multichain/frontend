@@ -8,7 +8,7 @@ const E = [
     sources: [{ url: "https://aave.com/" }], website: "https://aave.com/", first_live: "2026-10-10", last_reviewed: "2026-10-20" },
   { slug: "circle-wallets", name: "Circle Wallets", category: "wallets", status: "announced", summary: "Wallets.", status_evidence: [{ url: "https://www.arc.io/pressroom/a" }], sources: [{ url: "https://www.circle.com/" }], last_reviewed: "2026-10-19" },
 ] as ArcEntity[];
-vi.mock("../../src/lib/arc-ecosystem-data", () => ({ ECOSYSTEM: indexEntities(E) }));
+vi.mock("../../src/lib/arc-ecosystem-data", () => ({ CORRECTIONS: { all: [], bySlug: new Map(), removed: new Map() }, ECOSYSTEM: indexEntities(E) }));
 
 const get = async (path: string) => {
   const { handleEcosystem } = await import("../lib/data-api-ecosystem");

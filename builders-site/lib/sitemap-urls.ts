@@ -14,7 +14,7 @@ import { publicResponse, type ProjectFacts } from "../../src/lib/facts";
 import { FACTS_SITEMAP_KEY } from "./facts";
 export { FACTS_SITEMAP_KEY };
 import { projectHref, sourceFromProjectPath } from "../../src/lib/project-page";
-import { ECOSYSTEM } from "../../src/lib/arc-ecosystem-data";
+import { CORRECTIONS, ECOSYSTEM } from "../../src/lib/arc-ecosystem-data";
 import { CATEGORIES, categoryHref, entityHref } from "../../src/lib/arc-ecosystem";
 
 export const SITE = "https://builder.registrai.cc";
@@ -69,7 +69,7 @@ export async function sitemapUrls(env: Env, deps: EdgeCacheDeps, now = Date.now(
   const ecoMod = eco.map((e) => e.last_reviewed).sort().pop();
   const claimed = new Set(eco.flatMap((e) => (e.index_ids ?? []).map((id) => idToPath(id))));
   const cats = CATEGORIES.filter((c) => eco.some((e) => e.category === c.id || (e.tags ?? []).includes(c.id)));
-  const ecoUrls = eco.length ? [at("/arc/", mod ?? ecoMod), at("/ecosystem/", ecoMod), ...cats.map((c) => at(categoryHref(c.id), ecoMod)), ...eco.map((e) => at(entityHref(e.slug), e.last_reviewed))] : [];
+  const ecoUrls = eco.length ? [at("/arc/", mod ?? ecoMod), at("/ecosystem/", ecoMod), at("/ecosystem/corrections/", CORRECTIONS.all[0]?.date ?? ecoMod), ...cats.map((c) => at(categoryHref(c.id), ecoMod)), ...eco.map((e) => at(entityHref(e.slug), e.last_reviewed))] : [];
   return [...DATA.map((p) => at(p, mod)), ...STATIC.map((p) => at(p)), ...ecoUrls, ...apps.filter((p) => !claimed.has(p)).map((p) => at(p, mod)), ...facts.filter((f) => !claimedProject(f.path)).map((f) => at(f.path, f.lastmod))];
 }
 

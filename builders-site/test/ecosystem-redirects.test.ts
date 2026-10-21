@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { indexEntities, type ArcEntity } from "../../src/lib/arc-ecosystem";
 
-vi.mock("../../src/lib/arc-ecosystem-data", () => ({ ECOSYSTEM: indexEntities([{ slug: "archery", name: "Archery", category: "consumer", status: "live", summary: "A game.",
+vi.mock("../../src/lib/arc-ecosystem-data", () => ({ CORRECTIONS: { all: [], bySlug: new Map(), removed: new Map() }, ECOSYSTEM: indexEntities([{ slug: "archery", name: "Archery", category: "consumer", status: "live", summary: "A game.",
   status_evidence: [{ url: "https://explorer.arc.io/address/0x0000000000000000000000000000000000000001" }], sources: [{ url: "https://archery.wtf/" }],
   index_ids: ["domain:archery.wtf"], facts_source: "domain:archery.wtf", last_reviewed: "2026-10-20" } as ArcEntity]) }));
 

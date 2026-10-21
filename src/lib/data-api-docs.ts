@@ -31,6 +31,8 @@ export const ENDPOINTS: Endpoint[] = [
     example: curl("/ecosystem?category=dexs") },
   { method: "GET", path: "/ecosystem/{slug}", params: "none", returns: "One project: summary, status with evidence, links, contracts on Arc, index ids and sources.",
     example: curl("/ecosystem/aave") },
+  { method: "GET", path: "/ecosystem/corrections", params: "none", returns: "Every correction to the Arc ecosystem directory, newest first: date, project, field, what changed, source, and whether it came from the project or a reader.",
+    example: curl("/ecosystem/corrections") },
   { method: "GET", path: "/arc", params: "none", returns: "Arc in numbers now: USDC and EURC supply, all stablecoins and TVL (DefiLlama), estimated 24 h stablecoin volume, apps and projects, index closes, timeline. Each figure with its source and date.",
     example: curl("/arc") },
   { method: "GET", path: "/arc/daily", params: "days (optional, 1-365, default 30)", returns: "Daily snapshots of Arc in numbers, newest first (one per UTC day, after the 00:00 close).",
@@ -56,7 +58,7 @@ export const ERRORS: { status: number; text: string }[] = [
 export const PRECISION_NOTE =
   "Closes come from the hourly candles at 3 decimals. points is full precision. points_earned and usdc are rounded to 1 and 2 decimals. Activity is served under its hour's close. A missed hour has no row (never null) and may be filled in later.";
 
-export const CHANGELOG = [{ date: "2026-10-14", text: "v1 released: indices, members, member history, verified projects." }, { date: "2026-10-20", text: "Arc ecosystem directory: /ecosystem and /ecosystem/{slug}." }, { date: "2026-10-20", text: "Arc in numbers: /arc and /arc/daily." }];
+export const CHANGELOG = [{ date: "2026-10-14", text: "v1 released: indices, members, member history, verified projects." }, { date: "2026-10-20", text: "Arc ecosystem directory: /ecosystem and /ecosystem/{slug}." }, { date: "2026-10-20", text: "Arc in numbers: /arc and /arc/daily." }, { date: "2026-10-21", text: "Directory corrections log: /ecosystem/corrections." }];
 
 export const LICENCE = 'Free to use under CC BY 4.0 with the attribution "Data: Registrai". No warranty; not financial advice.';
 

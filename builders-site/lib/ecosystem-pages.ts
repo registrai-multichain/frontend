@@ -3,6 +3,7 @@
  * directory and the category pages. Pure: data in, HTML out; every value goes through esc(); JSON-LD escapes "<" (page()).
  */
 import { CATEGORIES, STATUS_LABEL, categoryHref, categoryOf, entityHref, sortByName, type ArcEntity, type Category, type EntityStatus } from "../../src/lib/arc-ecosystem";
+import { CORRECTIONS } from "../../src/lib/arc-ecosystem-data";
 import { evidenceHref } from "../../src/lib/facts";
 import { activityHtml, contractList, esc, page, when } from "./apps-pages";
 import { factsHtml, type Ready } from "./project-ssr";
@@ -13,6 +14,12 @@ export type EntityView = { entity: ArcEntity; app: AppDetail | null; facts: Read
 const LICENSE = "https://creativecommons.org/licenses/by/4.0/";
 const CREATOR = { "@type": "Organization", name: "Registrai", url: "https://registrai.cc/" };
 const mail = (subject: string) => `mailto:contact@registrai.cc?subject=${encodeURIComponent(subject)}`;
+/** "Corrected N times · latest DATE", linked to the log; empty when the entry has none. */
+export function correctionsLine(slug: string): string {
+  const l = CORRECTIONS.bySlug.get(slug);
+  if (!l?.length) return "";
+  return `<p class="muted"><a href="/ecosystem/corrections/#${esc(slug)}">Corrected ${l.length} time${l.length === 1 ? "" : "s"} · latest ${esc(l[0].date)}</a></p>`;
+}
 const a = (href: string, text: string) => `<a href="${esc(href)}" rel="noreferrer">${esc(text)}</a>`;
 const catName = (id: string) => categoryOf(id)?.name ?? id;
 
@@ -59,6 +66,7 @@ ${v.app ? `<h2>Activity</h2><p class="muted">Data until ${esc(when(v.app.data_un
 ${v.facts ? `<h2>Project facts</h2>${factsHtml(v.facts)}` : ""}
 <h2>Sources</h2>
 <ol>${e.sources.map((s) => `<li>${a(s.url, s.title ?? s.url)}${s.date ? ` (${esc(s.date)})` : ""}</li>`).join("")}</ol>
+${correctionsLine(e.slug)}
 <p class="muted"><a href="${esc(mail(`Registrai ecosystem: ${e.slug}`))}">Report an error</a> · <a href="${esc(mail(`Removal: ${e.slug}`))}">Ask for removal</a> · <a href="/how-we-publish/">How we publish</a> · <a href="/ecosystem/">Arc ecosystem</a></p>`;
   const sameAs = [e.website, e.x ? `https://x.com/${e.x}` : undefined, e.github].filter((x): x is string => !!x);
   const graph: unknown[] = [{ "@type": "Organization", name: e.name, ...(e.aliases?.length ? { alternateName: e.aliases } : {}), url: e.website ?? url, ...(sameAs.length ? { sameAs } : {}), description: e.summary, mainEntityOfPage: url }];

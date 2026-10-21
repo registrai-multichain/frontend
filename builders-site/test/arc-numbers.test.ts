@@ -8,7 +8,7 @@ const E = [
   { slug: "b", name: "B", category: "dexs", status: "announced", summary: "x", status_evidence: [{ url: "https://www.arc.io/x" }], sources: [{ url: "https://b.c/" }], last_reviewed: "2026-10-20" },
   { slug: "c", name: "C", category: "banks", status: "deployed", summary: "x", status_evidence: [{ url: "https://www.arc.io/x" }], sources: [{ url: "https://c.d/" }], last_reviewed: "2026-10-20" },
 ] as ArcEntity[];
-vi.mock("../../src/lib/arc-ecosystem-data", () => ({ ECOSYSTEM: indexEntities(E) }));
+vi.mock("../../src/lib/arc-ecosystem-data", () => ({ CORRECTIONS: { all: [], bySlug: new Map(), removed: new Map() }, ECOSYSTEM: indexEntities(E) }));
 
 const NOW = Date.parse("2026-10-20T17:30:00Z");
 const hex = (n: bigint | number) => `0x${BigInt(n).toString(16)}`;

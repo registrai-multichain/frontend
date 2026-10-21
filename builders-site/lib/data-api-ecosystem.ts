@@ -1,5 +1,5 @@
 /** GET /api/v1/ecosystem[/{slug}]: the Arc ecosystem directory as JSON (CC BY 4.0). Static data: cached 5 min. */
-import { ECOSYSTEM } from "../../src/lib/arc-ecosystem-data";
+import { CORRECTIONS, ECOSYSTEM } from "../../src/lib/arc-ecosystem-data";
 import { categoryOf, entityHref, parseStatus, sortByName } from "../../src/lib/arc-ecosystem";
 import { cached, v1Error, v1Json } from "./data-api";
 import type { EdgeCacheDeps } from "./http";
@@ -9,6 +9,7 @@ export function handleEcosystem(req: Request, deps: EdgeCacheDeps, parts: string
   const url = new URL(req.url);
   if (parts.length > 1) return Promise.resolve(v1Error(404, "Not found. Use /api/v1/ecosystem or /api/v1/ecosystem/{slug}."));
   if (parts.length === 1) {
+    if (parts[0] === "corrections") return cached(req, deps, "eco-corrections", () => v1Json(req, { version: 1, corrections: CORRECTIONS.all }, 300), 300);
     const e = ECOSYSTEM.bySlug.get(parts[0]);
     if (!e) return Promise.resolve(v1Error(404, `No project with slug ${parts[0]}. Use /api/v1/ecosystem for the list.`));
     return cached(req, deps, `eco:${e.slug}`, () => v1Json(req, { entity: { ...e, url: `${SITE}${entityHref(e.slug)}` } }, 300), 300);

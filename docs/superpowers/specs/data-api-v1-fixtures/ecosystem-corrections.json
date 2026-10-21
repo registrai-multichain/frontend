@@ -1,0 +1,1 @@
+{ "version": 1, "corrections": [ { "id": 1, "date": "2026-10-22", "slug": "aave", "field": "summary", "change": "Summary now names the Arc market.", "source": "https://aave.com/", "from": "project" } ] }
