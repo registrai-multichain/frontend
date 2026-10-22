@@ -37,6 +37,8 @@ export const ENDPOINTS: Endpoint[] = [
     example: curl("/arc") },
   { method: "GET", path: "/arc/daily", params: "days (optional, 1-365, default 30)", returns: "Daily snapshots of Arc in numbers, newest first (one per UTC day, after the 00:00 close).",
     example: curl("/arc/daily?days=7") },
+  { method: "GET", path: "/arc/apps-week", params: "none", returns: "Apps on Arc over the last 7 days (168 closed hours of the Arc Ecosystem Index): stablecoin payments received in USD, payments, new paying wallets and the first hour each app received payments, ranked by USD.",
+    example: curl("/arc/apps-week") },
 ];
 
 export const FIELDS: { name: string; text: string }[] = [
@@ -58,7 +60,7 @@ export const ERRORS: { status: number; text: string }[] = [
 export const PRECISION_NOTE =
   "Closes come from the hourly candles at 3 decimals. points is full precision. points_earned and usdc are rounded to 1 and 2 decimals. Activity is served under its hour's close. A missed hour has no row (never null) and may be filled in later.";
 
-export const CHANGELOG = [{ date: "2026-10-14", text: "v1 released: indices, members, member history, verified projects." }, { date: "2026-10-20", text: "Arc ecosystem directory: /ecosystem and /ecosystem/{slug}." }, { date: "2026-10-20", text: "Arc in numbers: /arc and /arc/daily." }, { date: "2026-10-21", text: "Directory corrections log: /ecosystem/corrections." }];
+export const CHANGELOG = [{ date: "2026-10-14", text: "v1 released: indices, members, member history, verified projects." }, { date: "2026-10-20", text: "Arc ecosystem directory: /ecosystem and /ecosystem/{slug}." }, { date: "2026-10-20", text: "Arc in numbers: /arc and /arc/daily." }, { date: "2026-10-21", text: "Directory corrections log: /ecosystem/corrections." }, { date: "2026-10-22", text: "Arc apps over 7 days: /arc/apps-week." }];
 
 export const LICENCE = 'Free to use under CC BY 4.0 with the attribution "Data: Registrai". No warranty; not financial advice.';
 

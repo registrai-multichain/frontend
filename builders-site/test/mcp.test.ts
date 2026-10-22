@@ -42,7 +42,8 @@ describe("MCP", () => {
     expect(init.result.capabilities).toEqual({ tools: {} });
     const list = await (await rpc(env, { jsonrpc: "2.0", id: 2, method: "tools/list" })).json();
     expect(list.result.tools.map((t: { name: string }) => t.name)).toEqual(MCP_TOOLS.map((t) => t.name));
-    expect(list.result.tools).toHaveLength(16); // 10 free + 6 paid (x402)
+    expect(list.result.tools).toHaveLength(17); // 11 free + 6 paid (x402)
+    expect(list.result.tools).toContainEqual(expect.objectContaining({ name: "arc_apps_week", title: "Arc apps, last 7 days" }));
     const n = await rpc(env, { jsonrpc: "2.0", method: "notifications/initialized" });
     expect(n.status).toBe(202);
     expect((await (await rpc(env, { jsonrpc: "2.0", id: 3, method: "ping" })).json()).result).toEqual({});
@@ -111,7 +112,7 @@ describe("paid MCP tools (x402 over MCP)", () => {
     handleMcp(new Request("https://builder.registrai.cc/api/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args, ...(meta ? { _meta: meta } : {}) } }) }), env as never, deps).then((r) => r.json());
 
   test("13 tools; the six paid ones say x402 and are read-only", () => {
-    expect(MCP_TOOLS).toHaveLength(16);
+    expect(MCP_TOOLS).toHaveLength(17);
     const paid = MCP_TOOLS.filter((t) => t.description.includes("x402"));
     expect(paid.map((t) => t.name)).toEqual(["arc_index_history_deep", "arc_app_history_deep", "arc_members_day", "arc_events", "arc_contract", "arc_project_scope"]);
     for (const t of paid) expect(t.annotations.readOnlyHint).toBe(true);

@@ -11,6 +11,7 @@ import ecosystem from "../../docs/superpowers/specs/data-api-v1-fixtures/ecosyst
 import ecosystemEntity from "../../docs/superpowers/specs/data-api-v1-fixtures/ecosystem-entity.json";
 import arcNow from "../../docs/superpowers/specs/data-api-v1-fixtures/arc.json";
 import arcDaily from "../../docs/superpowers/specs/data-api-v1-fixtures/arc-daily.json";
+import arcAppsWeek from "../../docs/superpowers/specs/data-api-v1-fixtures/arc-apps-week.json";
 import ecosystemCorrections from "../../docs/superpowers/specs/data-api-v1-fixtures/ecosystem-corrections.json";
 
 type Schema = { type: string; properties?: Record<string, Schema>; required?: string[]; items?: Schema; additionalProperties?: Schema | boolean };
@@ -99,6 +100,7 @@ export const OPENAPI = {
       { name: "q", in: "query", required: false, description: "Name or alias contains (case-insensitive).", schema: { type: "string" } }]),
     "/arc": op("getArcNumbers", "Arc in numbers now, each figure with its source and date", "ArcNumbers"),
     "/arc/daily": op("listArcDaily", "Daily snapshots of Arc in numbers, newest first", "ArcDaily", [{ name: "days", in: "query", required: false, description: "1-365, default 30", schema: { type: "integer" } }]),
+    "/arc/apps-week": op("listArcAppsWeek", "Apps on Arc over the last 7 days", "ArcAppsWeek"),
     "/ecosystem/corrections": op("listEcosystemCorrections", "Every correction to the Arc ecosystem directory, newest first", "EcosystemCorrections"),
     "/ecosystem/{slug}": op("getEcosystemEntity", "One project in the Arc ecosystem directory", "EcosystemEntity", [{ name: "slug", in: "path", required: true, schema: { type: "string" } }]),
   },
@@ -112,6 +114,7 @@ export const OPENAPI = {
       MembersNew: schemaOf(membersNew),
       Verified: schemaOf(verified),
       Ecosystem: ecosystemSchema(),
+      ArcAppsWeek: (() => { const s = schemaOf(arcAppsWeek); const it = s.properties!.apps.items!; for (const k of ["category", "first_hour"]) it.properties![k] = { type: [it.properties![k].type, "null"] as unknown as string }; return s; })(),
       EcosystemCorrections: (() => { const s = schemaOf(ecosystemCorrections); const it = s.properties!.corrections.items!; it.required = (it.required ?? []).filter((k) => k !== "source"); return s; })(),
       EcosystemEntity: schemaOf(ecosystemEntity),
       ArcNumbers: arcSchema(schemaOf(arcNow)),

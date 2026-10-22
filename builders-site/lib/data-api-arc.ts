@@ -1,6 +1,8 @@
-/** GET /api/v1/arc (live Arc in numbers, cached 10 min) and /api/v1/arc/daily?days= (daily snapshots, newest first). */
+/** GET /api/v1/arc (live Arc in numbers, cached 10 min), /api/v1/arc/daily?days= (daily snapshots, newest first) and
+ *  /api/v1/arc/apps-week (apps over the last 168 closed AEI hours). */
 import { collectArcNumbers } from "./arc-numbers";
 import { clampDays, readArcDaily } from "./arc-daily";
+import { loadArcWeek, WINDOW_H } from "./arc-week";
 import { cached, v1Error, v1Json } from "./data-api";
 import type { Env } from "./env";
 import type { EdgeCacheDeps } from "./http";
@@ -14,5 +16,11 @@ export function handleArc(req: Request, env: Env, deps: EdgeCacheDeps, parts: st
       try { return await v1Json(req, { days: await readArcDaily(env.DATA_DB!, days) }, 600); } catch { return v1Error(503, "The history is not available right now. Retry later."); }
     }, 600);
   }
-  return Promise.resolve(v1Error(404, "Not found. Use /api/v1/arc or /api/v1/arc/daily."));
+  if (parts.length === 1 && parts[0] === "apps-week") {
+    return cached(req, deps, "arc-apps-week", async () => {
+      const w = await loadArcWeek(env, deps);
+      return w ? v1Json(req, { version: 1, until: w.until, window_hours: WINDOW_H, apps: w.apps }, 600) : v1Error(503, "Weekly data is not available right now.");
+    }, 600);
+  }
+  return Promise.resolve(v1Error(404, "Not found. Use /api/v1/arc, /api/v1/arc/daily or /api/v1/arc/apps-week."));
 }

@@ -48,3 +48,17 @@ describe("computeArcWeek", () => {
     expect(await computeArcWeek({ DATA_DB: { prepare: () => { throw new Error("d1 down"); } }, INVITES: new MemoryKV() } as never)).toBeNull();
   });
 });
+
+describe("API /api/v1/arc/apps-week", () => {
+  test("returns the week; 503 without data", async () => {
+    const { handleArc } = await import("../lib/data-api-arc");
+    const req = new Request("https://builder.registrai.cc/api/v1/arc/apps-week");
+    const r = await handleArc(req, await setup(), { cache: null }, ["apps-week"]);
+    expect(r.status).toBe(200);
+    const b = await r.json() as { version: number; window_hours: number; apps: { id: string }[] };
+    expect(b).toMatchObject({ version: 1, window_hours: 168 });
+    expect(b.apps[0].id).toBe("domain:big.example");
+    const none = await handleArc(req, { INVITES: new MemoryKV() } as never, { cache: null }, ["apps-week"]);
+    expect(none.status).toBe(503);
+  });
+});

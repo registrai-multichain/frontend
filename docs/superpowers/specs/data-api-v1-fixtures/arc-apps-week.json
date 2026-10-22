@@ -1,0 +1,2 @@
+{ "version": 1, "until": "2026-10-22T16:00:00Z", "window_hours": 168, "apps": [
+  { "id": "domain:archery.wtf", "name": "Archery", "href": "/ecosystem/archery/", "category": "dexs", "usd": 150, "payments": 3, "new_payers": 2, "first_hour": 499600 } ] }
