@@ -3,6 +3,7 @@
 import { collectArcNumbers } from "./arc-numbers";
 import { clampDays, readArcDaily } from "./arc-daily";
 import { loadArcWeek, WINDOW_H } from "./arc-week";
+import { isoHour } from "./data-api-rows";
 import { cached, v1Error, v1Json } from "./data-api";
 import type { Env } from "./env";
 import type { EdgeCacheDeps } from "./http";
@@ -19,7 +20,9 @@ export function handleArc(req: Request, env: Env, deps: EdgeCacheDeps, parts: st
   if (parts.length === 1 && parts[0] === "apps-week") {
     return cached(req, deps, "arc-apps-week", async () => {
       const w = await loadArcWeek(env, deps);
-      return w ? v1Json(req, { version: 1, until: w.until, window_hours: WINDOW_H, apps: w.apps }, 600) : v1Error(503, "Weekly data is not available right now.");
+      // first_hour as an ISO hour like /members, and an absolute page URL (review #6)
+      const apps = w?.apps.map(({ href, first_hour, ...a }) => ({ ...a, url: `https://builder.registrai.cc${href}`, first_hour: first_hour === null ? null : isoHour(first_hour) }));
+      return w ? v1Json(req, { version: 1, until: w.until, window_hours: WINDOW_H, apps: apps! }, 600) : v1Error(503, "Weekly data is not available right now.");
     }, 600);
   }
   return Promise.resolve(v1Error(404, "Not found. Use /api/v1/arc, /api/v1/arc/daily or /api/v1/arc/apps-week."));

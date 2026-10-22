@@ -114,11 +114,12 @@ These are new routes in `functions/arc/[[path]].ts`, which today serves `/arc/` 
 
 ### 3. `/arc/new/`: "New on Arc this week"
 
-- **Opening sentence:** "In the 7 days to {until}, {a} projects in the directory went live on Arc and {b} apps started
-  receiving payments in Registrai's index."
+- **Opening sentence:** "In the 7 days to {until}, {a} projects in the directory went live on Arc and {b} apps were
+  added to Registrai's index." (Corrected 2026-10-22 after review: `member_first` is the first hour an app was *seen*
+  in the index, not its first payment.)
 - **Table 1, "Went live":** directory entities with `first_live` within the 7 days. Columns: Project, Category,
   Live since.
-- **Table 2, "Started receiving payments":** apps with `first_hour` within the window. Columns: App, First payment hour,
+- **Table 2, "Added to Registrai's index":** apps with `first_hour` within the window. Columns: App, First seen,
   Payments (7 d).
 - **Empty tables:** say "None this week."
 

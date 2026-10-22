@@ -37,7 +37,7 @@ export const ENDPOINTS: Endpoint[] = [
     example: curl("/arc") },
   { method: "GET", path: "/arc/daily", params: "days (optional, 1-365, default 30)", returns: "Daily snapshots of Arc in numbers, newest first (one per UTC day, after the 00:00 close).",
     example: curl("/arc/daily?days=7") },
-  { method: "GET", path: "/arc/apps-week", params: "none", returns: "Apps on Arc over the last 7 days (168 closed hours of the Arc Ecosystem Index): stablecoin payments received in USD, payments, new paying wallets and the first hour each app received payments, ranked by USD.",
+  { method: "GET", path: "/arc/apps-week", params: "none", returns: "Apps on Arc over the last 7 days (168 closed hours of the Arc Ecosystem Index): stablecoin payments received in USD, payments, new paying wallets and the hour each app was first seen in the index, ranked by USD.",
     example: curl("/arc/apps-week") },
 ];
 

@@ -58,6 +58,10 @@ describe("API /api/v1/arc/apps-week", () => {
     const b = await r.json() as { version: number; window_hours: number; apps: { id: string }[] };
     expect(b).toMatchObject({ version: 1, window_hours: 168 });
     expect(b.apps[0].id).toBe("domain:big.example");
+    const big = (b.apps as unknown as Record<string, unknown>[])[0];
+    expect(big.first_hour).toBe(new Date((U - 10) * 3600e3).toISOString().replace(".000Z", "Z"));   // review #6: ISO, like /members
+    expect(big.url).toBe("https://builder.registrai.cc/apps/domain/big.example/");
+    expect(big).not.toHaveProperty("href");
     const none = await handleArc(req, { INVITES: new MemoryKV() } as never, { cache: null }, ["apps-week"]);
     expect(none.status).toBe(503);
   });

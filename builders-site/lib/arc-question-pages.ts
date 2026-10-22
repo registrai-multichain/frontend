@@ -9,6 +9,9 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 export const atHour = (iso: string) => { const d = new Date(iso); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`; };
 const usd = (x: number) => `$${x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const int = (x: number) => x.toLocaleString("en-US");
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const lastReviewed = () => ECOSYSTEM.entities.map((e) => e.last_reviewed).sort().pop() ?? "";
+const DIR_SOURCE = () => `<p class="muted">Source: Registrai Arc ecosystem directory; each status links its evidence. Last reviewed ${esc(lastReviewed())}.</p>`;
 const NA = `<p class="muted">Not available right now (source: Registrai index database).</p>`;
 const METHOD = "Payments into each app's contracts in USDC and other registered stablecoins, converted to USD, as attributed by the Arc Ecosystem Index. New paying wallets: wallets paying the app for the first time.";
 const catName = (id: string | null) => (id ? categoryOf(id)?.name ?? id : "–");
@@ -41,7 +44,7 @@ export function renderMostUsed(w: ArcWeek | null): string {
   if (!w) return shell(path, title, "Data not available right now.", NA, []);
   const paid = w.apps.filter((a) => a.payments > 0);
   const first = paid.length && paid[0].usd > 0
-    ? `In the 7 days to ${atHour(w.until)}, ${paid[0].name} received the most in stablecoin payments of the ${paid.length} apps Registrai measures on Arc: ${usd(paid[0].usd)}.`
+    ? `In the 7 days to ${atHour(w.until)}, ${paid[0].name} received the most in stablecoin payments of the ${plural(paid.length, "app", "apps")} with payments in Registrai's Arc index: ${usd(paid[0].usd)}.`
     : `No measured app received payments in the 7 days to ${atHour(w.until)}.`;
   const rows = paid.map((a, i) => [String(i + 1), appLink(a), esc(catName(a.category)), usd(a.usd), int(a.payments), int(a.new_payers)]);
   return shell(path, title, first, `${paid.length ? table(["#", "App", "Category", "Received (USD)", "Payments", "New paying wallets"], rows) : ""}\n${source(w)}`, paid.map((a) => a.name));
@@ -49,13 +52,14 @@ export function renderMostUsed(w: ArcWeek | null): string {
 
 export function renderAcceptsUsdc(w: ArcWeek | null): string {
   const [path, title] = [QUESTION_PAGES[1].path, QUESTION_PAGES[1].title];
-  const measuredIds = new Set((w?.apps ?? []).filter((a) => a.payments > 0).map((a) => a.id));
+  const measuredIds = new Set((w?.apps ?? []).map((a) => a.id));   // every index member in the window, paid or not (review #3)
   const listed = ECOSYSTEM.entities.filter((e) => inCat(e, "payments") && !(e.index_ids ?? []).some((id) => measuredIds.has(id)))
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || (a.name < b.name ? -1 : 1));
-  const listedHtml = `<h2>Listed, not measured</h2>\n${listed.length ? table(["Project", "Status", "Evidence"], listed.map((e) => [entLink(e), esc(STATUS_LABEL[e.status]), evidence(e)])) : "<p>None.</p>"}`;
+  const listedHtml = `<h2>Listed, not measured</h2>\n${listed.length ? table(["Project", "Status", "Evidence"], listed.map((e) => [entLink(e), esc(STATUS_LABEL[e.status]), evidence(e)])) : "<p>None.</p>"}\n${DIR_SOURCE()}`;
+  const by = (st: EntityStatus) => listed.filter((e) => e.status === st).length;
   if (!w) return shell(path, title, "Data not available right now.", `<h2>Measured</h2>\n${NA}\n${listedHtml}`, listed.map((e) => e.name));
   const paid = w.apps.filter((a) => a.payments > 0);
-  const first = `${paid.length} apps on Arc received stablecoin payments in the 7 days to ${atHour(w.until)}. ${listed.length} more payment apps list USDC on Arc but are not measured by Registrai.`;
+  const first = `${plural(paid.length, "app", "apps")} on Arc received stablecoin payments in the 7 days to ${atHour(w.until)}. ${listed.length} more payment ${listed.length === 1 ? "project is" : "projects are"} listed in Registrai's Arc directory (${by("live")} live, ${by("deployed")} deployed, ${by("announced")} announced) but not measured by Registrai.`;
   const measured = paid.length ? table(["App", "Category", "Payments (7 d)", "Received (USD, 7 d)"], paid.map((a) => [appLink(a), esc(catName(a.category)), int(a.payments), usd(a.usd)])) : "<p>None this week.</p>";
   return shell(path, title, first, `<h2>Measured</h2>\n${measured}\n${source(w)}\n${listedHtml}`, [...paid.map((a) => a.name), ...listed.map((e) => e.name)]);
 }
@@ -66,11 +70,11 @@ export function renderNew(w: ArcWeek | null, today: string): string {
   const [path, title] = [QUESTION_PAGES[2].path, QUESTION_PAGES[2].title];
   const end = w ? w.until.slice(0, 10) : today, start = minusDays(end, 7);
   const live = sortByName(ECOSYSTEM.entities.filter((e) => e.first_live && e.first_live > start && e.first_live <= end));
-  const liveHtml = `<h2>Went live</h2>\n${live.length ? table(["Project", "Category", "Live since"], live.map((e) => [entLink(e), esc(catName(e.category)), esc(e.first_live!)])) : "<p>None this week.</p>"}`;
-  if (!w) return shell(path, title, "Data not available right now.", `${liveHtml}\n<h2>Started receiving payments</h2>\n${NA}`, live.map((e) => e.name));
+  const liveHtml = `<h2>Went live</h2>\n${live.length ? table(["Project", "Category", "Live since"], live.map((e) => [entLink(e), esc(catName(e.category)), esc(e.first_live!)])) : "<p>None this week.</p>"}\n${DIR_SOURCE()}`;
+  if (!w) return shell(path, title, "Data not available right now.", `${liveHtml}\n<h2>${esc("Added to Registrai's index")}</h2>\n${NA}`, live.map((e) => e.name));
   const fresh = w.apps.filter((a) => a.first_hour !== null && a.first_hour > w.until_hour - WINDOW_H && a.first_hour <= w.until_hour);
-  const first = `In the 7 days to ${atHour(w.until)}, ${live.length} projects in the directory went live on Arc and ${fresh.length} apps started receiving payments in Registrai's index.`;
-  const freshHtml = `<h2>Started receiving payments</h2>\n${fresh.length ? table(["App", "First payment hour", "Payments (7 d)"], fresh.map((a) => [appLink(a), esc(atHour(new Date(a.first_hour! * 3600e3).toISOString())), int(a.payments)])) : "<p>None this week.</p>"}\n${source(w)}`;
+  const first = `In the 7 days to ${atHour(w.until)}, ${plural(live.length, "project", "projects")} in the directory went live on Arc and ${plural(fresh.length, "app was", "apps were")} added to Registrai's index.`;
+  const freshHtml = `<h2>${esc("Added to Registrai's index")}</h2>\n${fresh.length ? table(["App", "First seen", "Payments (7 d)"], fresh.map((a) => [appLink(a), esc(atHour(new Date(a.first_hour! * 3600e3).toISOString())), int(a.payments)])) : "<p>None this week.</p>"}\n${source(w)}`;
   return shell(path, title, first, `${liveHtml}\n${freshHtml}`, [...live.map((e) => e.name), ...fresh.map((a) => a.name)]);
 }
 

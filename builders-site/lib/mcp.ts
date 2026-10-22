@@ -72,7 +72,7 @@ export const MCP_TOOLS = [
     obj({ category: { type: "string", enum: CATEGORIES.map((c) => c.id) }, status: { type: "string", enum: ["live", "deployed", "announced"] }, q: { type: "string", description: "Name contains." } })),
   tool("arc_entity", "Arc project: detail", "One project in the Arc ecosystem directory by slug (slugs come from arc_ecosystem): summary, status with evidence, links, contracts on Arc and sources.", obj({ slug: { type: "string" } }, ["slug"])),
   tool("arc_numbers", "Arc in numbers", "Chain-level Arc numbers: USDC and EURC supply, all stablecoins and TVL (from DefiLlama), estimated 24 h stablecoin volume, apps and projects, index closes and a dated timeline, each with its source and date. Use this when asked how big Arc is, how much USDC is on Arc, or Arc's TVL or volume.", obj({})),
-  tool("arc_apps_week", "Arc apps, last 7 days", "Apps on Arc ranked by stablecoin payments received in the last 7 days (USD, payments, new paying wallets) and when each first received payments. Use this when asked which apps on Arc are most used, which accept USDC, or what is new on Arc.", obj({})),
+  tool("arc_apps_week", "Arc apps, last 7 days", "Apps on Arc ranked by stablecoin payments received in the last 7 days (USD, payments, new paying wallets) and the hour each was first seen in Registrai's index. Use this when asked which apps on Arc are most used, which accept USDC, or what is new on Arc.", obj({})),
   ...paidTools(),
 ] as const;
 

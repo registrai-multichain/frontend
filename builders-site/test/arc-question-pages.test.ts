@@ -18,12 +18,39 @@ const W = { until_hour: U, until: "2026-10-22T16:00:00Z", apps: [
 ] };
 const ld = (h: string) => JSON.parse(h.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)![1]);
 
+describe("review fixes", () => {
+  test("#3: a payments app that is an index member with a quiet week is not 'not measured'", async () => {
+    const { renderAcceptsUsdc } = await import("../lib/arc-question-pages");
+    const w = { ...W, apps: [...W.apps, { id: "domain:payco.example", name: "PayCo", href: "/ecosystem/payco/", category: "payments", usd: 0, payments: 0, new_payers: 0, first_hour: U - 900 }] };
+    const ix = await import("../../src/lib/arc-ecosystem-data");
+    const payco = ix.ECOSYSTEM.bySlug.get("payco")!;
+    (payco as { index_ids?: string[] }).index_ids = ["domain:payco.example"];
+    try {
+      expect(renderAcceptsUsdc(w)).not.toContain('<a href="/ecosystem/payco/">PayCo</a></td><td>Announced');
+    } finally { delete (payco as { index_ids?: string[] }).index_ids; }
+  });
+  test("#7: singular forms", async () => {
+    const { renderMostUsed } = await import("../lib/arc-question-pages");
+    expect(renderMostUsed({ ...W, apps: [W.apps[0]] })).toContain("of the 1 app with payments in Registrai&#39;s Arc index");
+  });
+  test("#1: MCP and docs no longer claim a first payment", async () => {
+    const { MCP_TOOLS } = await import("../lib/mcp");
+    const t = MCP_TOOLS.find((x) => x.name === "arc_apps_week")!;
+    expect(JSON.stringify(t)).not.toContain("first received payments");
+    expect(JSON.stringify(t)).toContain("first seen");
+    const { ENDPOINTS } = await import("../../src/lib/data-api-docs");
+    const e = ENDPOINTS.find((x) => x.path === "/arc/apps-week")!;
+    expect(e.returns).not.toContain("first hour each app received payments");
+    expect(e.returns).toContain("first seen");
+  });
+});
+
 describe("question pages", () => {
   test("most used: dated first sentence, ranked by USD, escaped, source + i, ItemList", async () => {
     const { renderMostUsed } = await import("../lib/arc-question-pages");
     const h = renderMostUsed(W);
     expect(h).toContain("<h1>Most-used apps on Arc, last 7 days</h1>");
-    expect(h).toContain("In the 7 days to 22 Oct 2026, 16:00 UTC, Big &lt;b&gt;App&lt;/b&gt; received the most in stablecoin payments of the 2 apps Registrai measures on Arc: $900.50.");
+    expect(h).toContain("In the 7 days to 22 Oct 2026, 16:00 UTC, Big &lt;b&gt;App&lt;/b&gt; received the most in stablecoin payments of the 2 apps with payments in Registrai&#39;s Arc index: $900.50.");
     expect(h.indexOf("Big &lt;b&gt;App")).toBeLessThan(h.indexOf(">Archery<"));
     expect(h).not.toContain(">Quiet<");
     expect(h).toContain("Received (USD)");
@@ -44,7 +71,8 @@ describe("question pages", () => {
   test("accepts USDC: measured table, then listed-not-measured payment apps", async () => {
     const { renderAcceptsUsdc } = await import("../lib/arc-question-pages");
     const h = renderAcceptsUsdc(W);
-    expect(h).toContain("2 apps on Arc received stablecoin payments in the 7 days to 22 Oct 2026, 16:00 UTC. 1 more payment apps list USDC on Arc but are not measured by Registrai.");
+    expect(h).toContain("2 apps on Arc received stablecoin payments in the 7 days to 22 Oct 2026, 16:00 UTC. 1 more payment project is listed in Registrai&#39;s Arc directory (0 live, 0 deployed, 1 announced) but not measured by Registrai.");
+    expect(h).toMatch(/<h2>Listed, not measured<\/h2>[^]*Source: Registrai Arc ecosystem directory/);
     expect(h.indexOf("<h2>Measured</h2>")).toBeLessThan(h.indexOf("<h2>Listed, not measured</h2>"));
     expect(h).toContain('href="/ecosystem/payco/"');
     expect(h).toContain('href="https://payco.example/arc"');
@@ -55,7 +83,11 @@ describe("question pages", () => {
   test("new: went live within 7 days, started receiving payments within the window (edge hour excluded)", async () => {
     const { renderNew } = await import("../lib/arc-question-pages");
     const h = renderNew(W, "2026-10-22");
-    expect(h).toContain("In the 7 days to 22 Oct 2026, 16:00 UTC, 1 projects in the directory went live on Arc and 1 apps started receiving payments in Registrai&#39;s index.");
+    expect(h).toContain("In the 7 days to 22 Oct 2026, 16:00 UTC, 1 project in the directory went live on Arc and 1 app was added to Registrai&#39;s index.");
+    expect(h).toContain("<h2>Added to Registrai&#39;s index</h2>");
+    expect(h).toContain("<th>First seen</th>");
+    expect(h).not.toContain("started receiving payments");
+    expect(h).toMatch(/<h2>Went live<\/h2>[^]*Source: Registrai Arc ecosystem directory/);
     expect(h).toContain('href="/ecosystem/archery/">Archery</a></td><td>DEXs</td><td>2026-10-20');
     expect(h).toContain("Big &lt;b&gt;App&lt;/b&gt;");
     expect(h).not.toContain(">Quiet<");     // first_hour === until - 168: not new
