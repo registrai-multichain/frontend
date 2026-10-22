@@ -5,6 +5,7 @@
 import { categoryHref, type CategoryId } from "../../src/lib/arc-ecosystem";
 import { day, esc, page, when } from "./apps-pages";
 import type { ArcNumbers } from "./arc-numbers";
+import { QUESTION_PAGES } from "./arc-question-pages";
 
 const SITE = "https://builder.registrai.cc";
 const N0 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }), N2 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
@@ -64,6 +65,8 @@ ${row("Share attributed to apps", a.attributed_share_pct === null ? NA : `${N2.f
 <p>Apps in the <a href="/builders-index/">Arc indices</a>: ${idx("abi")} · ${idx("aii")} · ${idx("aei")}. Closes: ${close("abi")} · ${close("aii")} · ${close("aei")}${e.data_until ? ` (${esc(when(e.data_until))})` : ""}.</p>
 <h2>Timeline</h2>
 <ul>${n.timeline.map((t) => `<li>${esc(day(`${t.date}T00:00:00Z`))}: ${esc(t.text)} (<a href="${esc(t.source)}" rel="noreferrer">source</a>)</li>`).join("")}</ul>
+<h2>Questions</h2>
+<ul>${QUESTION_PAGES.map((q) => `<li><a href="${q.path}">${esc(q.title)}</a></li>`).join("")}</ul>
 <h2>History</h2>
 ${hist}
 <p class="muted">JSON: <a href="/api/v1/arc">/api/v1/arc</a> · <a href="/api/v1/arc/daily">/api/v1/arc/daily</a>. Registrai figures CC BY 4.0; DefiLlama figures as labelled.</p>`;

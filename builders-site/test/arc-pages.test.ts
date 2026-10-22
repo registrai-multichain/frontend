@@ -30,6 +30,8 @@ describe("Arc in numbers page", () => {
     expect(h).toContain('<a href="/ecosystem/">258 projects</a>');
     expect(h).toContain('href="https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet"');
     expect(h).toContain("Daily snapshots start at the next 00:00 UTC close.");
+    expect(h).toContain("<h2>Questions</h2>");
+    expect(h).toContain('<a href="/arc/most-used-apps/">Most-used apps on Arc, last 7 days</a>');
     expect(ld(h)["@type"]).toBe("Dataset");
   });
 

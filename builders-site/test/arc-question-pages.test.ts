@@ -69,3 +69,24 @@ describe("question pages", () => {
     expect(h).toMatch(/Announced[^]*Bridgy/);
   });
 });
+
+describe("question page routes", () => {
+  const call = async (path: string, env: Record<string, unknown> = {}, method = "GET") => {
+    const { onRequest } = await import("../functions/arc/[[path]]");
+    const u = new URL(`https://builder.registrai.cc${path}`);
+    return onRequest({ request: new Request(u, { method }), env: { INVITES: { get: async () => null }, ...env },
+      params: { path: u.pathname.replace(/^\/arc\/?/, "").split("/").filter(Boolean) }, waitUntil: () => undefined } as never);
+  };
+  test("each page answers 200 even without DATA_DB; get-usdc never needs it; slash 301; unknown 404; HEAD empty", async () => {
+    for (const p of ["/arc/most-used-apps/", "/arc/apps-that-accept-usdc/", "/arc/new/", "/arc/get-usdc/"]) {
+      const r = await call(p);
+      expect(r.status, p).toBe(200);
+      expect(r.headers.get("cache-control"), p).toBe("public, max-age=600");
+    }
+    expect(await (await call("/arc/most-used-apps/")).text()).toContain("Not available right now");
+    expect(await (await call("/arc/get-usdc/")).text()).toContain("USDC reaches Arc three ways");
+    expect((await call("/arc/new")).status).toBe(301);
+    expect((await call("/arc/other/")).status).toBe(404);
+    expect(await (await call("/arc/new/", {}, "HEAD")).text()).toBe("");
+  });
+});

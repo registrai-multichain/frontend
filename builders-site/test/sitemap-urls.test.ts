@@ -84,6 +84,7 @@ describe("ecosystem in the sitemap", () => {
     const locs = urls.map((u) => u.loc);
     expect(urls).toContainEqual({ loc: "https://builder.registrai.cc/ecosystem/", lastmod: "2026-10-20" });
     expect(locs).toContain("https://builder.registrai.cc/ecosystem/consumer/");
+    for (const p of ["most-used-apps", "apps-that-accept-usdc", "new", "get-usdc"]) expect(locs).toContain(`https://builder.registrai.cc/arc/${p}/`);
     expect(urls).toContainEqual({ loc: "https://builder.registrai.cc/ecosystem/corrections/", lastmod: "2026-10-20" });
     expect(locs).not.toContain("https://builder.registrai.cc/ecosystem/banks/");
     expect(urls).toContainEqual({ loc: "https://builder.registrai.cc/ecosystem/archery/", lastmod: "2026-10-20" });

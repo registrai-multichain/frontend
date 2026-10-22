@@ -61,6 +61,10 @@ test("sitemap lists every app page; llms.txt names the API and MCP", async () =>
   const t = await (await llms(ctx("/llms.txt"))).text();
   expect(t).toContain("https://builder.registrai.cc/api/v1/openapi.json");
   expect(t).toContain("https://builder.registrai.cc/api/mcp");
+  for (const q of ["most-used-apps", "apps-that-accept-usdc", "new", "get-usdc"]) expect(t).toContain(`https://builder.registrai.cc/arc/${q}/`);
+  const { readFileSync } = await import("node:fs");
+  const { resolve } = await import("node:path");
+  expect(readFileSync(resolve(__dirname, "../../public/llms.txt"), "utf8")).toContain("https://builder.registrai.cc/arc/most-used-apps/");
 });
 
 });
