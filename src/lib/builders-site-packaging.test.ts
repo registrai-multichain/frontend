@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
@@ -74,5 +74,15 @@ describe("builders-site packaging", () => {
     const v = build.indexOf("npx tsx scripts/ecosystem-validate.ts src/data/arc-ecosystem/entities.json");
     expect(v).toBeGreaterThan(0);
     expect(v).toBeLessThan(build.indexOf('rm -rf "$D"'));
+  });
+  test("a route the builders site serves with a Function is never redirected to registrai.cc by the build (e.g. /methodology/)", () => {
+    const build = readFileSync(resolve(FRONTEND, "scripts/build-builders-site.sh"), "utf8");
+    const keep = new Set(build.match(/case "\$d" in ([^)]+)\)/)![1].split("|"));
+    const fnDir = resolve(FRONTEND, "builders-site/functions");
+    const routes = readdirSync(fnDir).filter((d) => d !== "api" && !d.startsWith(".") && statSync(resolve(fnDir, d)).isDirectory());
+    // a folder of that name in the static export (public/ or src/app/) would otherwise get a 302 to registrai.cc
+    const exported = routes.filter((d) => existsSync(resolve(FRONTEND, "public", d)) || existsSync(resolve(FRONTEND, "src/app", d)));
+    for (const d of exported) expect(keep.has(d), `/${d}/ is a builders-site Function but the build redirects it`).toBe(true);
+    expect(exported).toContain("methodology");
   });
 });

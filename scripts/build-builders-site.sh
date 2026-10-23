@@ -44,7 +44,7 @@ mkdir -p "$D/social" && cp out/social/registrai-landing-regi.png "$D/social/"
   echo "/            /builders/  302"
   echo "/index.html  /builders/  302"
   for d in $(cd out && ls -d */ | tr -d /); do
-    case "$d" in _next|_not-found|admin|badge|brand|builders|guide|how-we-publish|project|suggest|track-record|record|builders-index|verify|terms|privacy|pilot-rules|data-api|social|404) ;;
+    case "$d" in _next|_not-found|admin|badge|brand|builders|guide|how-we-publish|project|suggest|track-record|record|builders-index|verify|terms|privacy|pilot-rules|data-api|social|404|methodology) ;;
       # the retired markets app (src/lib/public-site.ts RETIRED_ROUTES)
       atlas|perennial|rounds|propose) echo "/$d    /builders/    301"; echo "/$d/*  /builders/    301" ;;
       *) echo "/$d    https://registrai.cc/$d/    302"; echo "/$d/*  https://registrai.cc/$d/:splat  302" ;;
