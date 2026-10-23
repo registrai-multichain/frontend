@@ -2,7 +2,7 @@
  * Server-rendered Arc ecosystem pages (spec 2026-10-19-arc-ecosystem-directory-design.md): one page per project, the
  * directory and the category pages. Pure: data in, HTML out; every value goes through esc(); JSON-LD escapes "<" (page()).
  */
-import { CATEGORIES, STATUS_LABEL, categoryHref, categoryOf, entityHref, sortByName, type ArcEntity, type Category, type EntityStatus } from "../../src/lib/arc-ecosystem";
+import { CATEGORIES, STATUS_LABEL, categoryHref, categoryOf, entityHref, sortByName, whatItDoes, type ArcEntity, type Category, type EntityStatus } from "../../src/lib/arc-ecosystem";
 import { CORRECTIONS } from "../../src/lib/arc-ecosystem-data";
 import { evidenceHref } from "../../src/lib/facts";
 import { activityHtml, contractList, esc, page, when } from "./apps-pages";
@@ -106,10 +106,10 @@ export function categoryAnswer(cat: Category, all: ArcEntity[], week: ArcWeek | 
   const second = top.length ? ` Most used over the last 7 days, by stablecoin payments received: ${joinAnd(top.map((e) => `<a href="${entityHref(e.slug)}">${esc(e.name)}</a>`))}.` : "";
   return `${esc(first)}${second}`;
 }
-function table(l: ArcEntity[]): string {
+function table(l: ArcEntity[], { category = true }: { category?: boolean } = {}): string {
   if (!l.length) return "<p>No projects in this category yet.</p>";
-  return `<div class="wrap"><table><thead><tr><th>Project</th><th>Category</th><th>Status</th><th>Live since</th></tr></thead><tbody>
-${sortByName(l).map((e) => `<tr><td><a href="${entityHref(e.slug)}">${esc(e.name)}</a></td><td>${esc(catName(e.category))}</td><td>${esc(STATUS_LABEL[e.status])}</td><td>${esc(e.first_live ?? "–")}</td></tr>`).join("\n")}
+  return `<div class="wrap"><table><thead><tr><th>Project</th><th>What it does on Arc</th><th>Status</th><th>Live since</th></tr></thead><tbody>
+${sortByName(l).map((e) => `<tr><td><a href="${entityHref(e.slug)}">${esc(e.name)}</a>${category ? `<br><span class="muted">${esc(catName(e.category))}</span>` : ""}</td><td>${esc(whatItDoes(e))}</td><td>${esc(STATUS_LABEL[e.status])}</td><td>${esc(e.first_live ?? "–")}</td></tr>`).join("\n")}
 </tbody></table></div>`;
 }
 const latest = (l: ArcEntity[]) => l.map((e) => e.last_reviewed).sort().pop() ?? "";
@@ -137,7 +137,7 @@ export function renderCategory(cat: Category, all: ArcEntity[], week: ArcWeek | 
   const body = `<h1>${esc(cat.label)}</h1>
 <p>${categoryAnswer(cat, all, week)}</p>
 <p class="muted"><a href="/ecosystem/">All categories</a></p>
-${table(l)}`;
+${table(l, { category: false })}`;
   const ld = { "@context": "https://schema.org", "@type": "ItemList", name: cat.label, url: `${ECO_SITE}${categoryHref(cat.id)}`, numberOfItems: l.length,
     itemListElement: sortByName(l).map((e, k) => ({ "@type": "ListItem", position: k + 1, name: e.name, url: `${ECO_SITE}${entityHref(e.slug)}` })) };
   return page({ markdown: true, title: `${cat.label}, Circle's blockchain · Registrai`, canonical: `${ECO_SITE}${categoryHref(cat.id)}`,

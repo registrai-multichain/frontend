@@ -1727,7 +1727,7 @@
         "type": "arc-official-live"
       }
     ],
-    "summary": "Announced as an exchange giving users access to Arc at mainnet launch on 2026-09-16, per Circle's launch release. A third-party relay reports Binance opened USDC deposits on Arc the same day.",
+    "summary": "Centralized crypto exchange. Arc's mainnet launch post (2026-09-16) lists Binance among the exchanges that are live on Arc. A third-party relay reports Binance opened USDC deposits on Arc the same day.",
     "website": "https://www.binance.com",
     "first_announced": "2026-09-16",
     "sources": [
@@ -3820,7 +3820,7 @@
         "type": "mainnet-support"
       }
     ],
-    "summary": "Wallet-as-a-service and key management platform for banks, fintechs and businesses. Listed as an Arc ecosystem partner; its documentation lists Arc testnet among supported networks.",
+    "summary": "Wallet-as-a-service and key management platform for banks, fintechs and businesses. Listed as an Arc ecosystem partner; its documentation lists Arc in the Mainnet column of supported networks.",
     "website": "https://dfns.co/",
     "x": "dfnsHQ",
     "github": "https://github.com/dfns",

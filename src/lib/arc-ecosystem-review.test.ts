@@ -56,4 +56,11 @@ describe("applyReview", () => {
     const r = applyReview(e, C, [dated], "2026-10-23");
     expect(r.entities[0].status_evidence.find((s) => s.url === "https://www.arc.io/blog/launch")?.title).toBe("Arc launch post");
   });
+  test("a summary item replaces the summary and logs field summary; too long throws", () => {
+    const r = applyReview(E(), C, [{ slug: "b", field: "summary", set: { summary: "B, an exchange, supports Arc mainnet." }, change: "Summary updated: live on Arc per the launch post", source: "https://www.arc.io/x" }], "2026-10-23");
+    expect(r.entities[1].summary).toBe("B, an exchange, supports Arc mainnet.");
+    expect(r.corrections.at(-1)).toMatchObject({ field: "summary", from: "review" });
+    expect(() => applyReview(E(), C, [{ slug: "b", field: "summary", set: { summary: "x".repeat(281) }, change: "too long summary", source: "https://x.io/" }], "2026-10-23")).toThrow(/summary/);
+  });
 });
+

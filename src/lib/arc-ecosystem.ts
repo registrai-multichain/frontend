@@ -50,6 +50,15 @@ export type ArcEntity = {
 };
 export const SUMMARY_MAX = 280;
 
+/** The summary's first sentence, at most 140 characters, for "What it does on Arc" (spec 2026-10-23-replace-competitor-citations §2).
+ *  A sentence ends at ". " before a capital letter, never after an abbreviation like "e.g." or "i.e.". */
+export function whatItDoes(e: Pick<ArcEntity, "summary">): string {
+  const s = e.summary.trim();
+  const m = /^(.+?(?<!\b(?:e\.g|i\.e|etc|vs|approx))\.)\s+(?=[A-Z])/.exec(s);
+  const first = m ? m[1] : s;
+  return first.length <= 140 ? first : `${first.slice(0, 140).replace(/\s+\S*$/, "")}…`;
+}
+
 const FIELDS = new Set(["slug", "name", "aliases", "category", "tags", "status", "status_evidence", "summary", "website", "x", "github", "docs",
   "first_announced", "first_live", "contracts", "index_ids", "facts_source", "sources", "last_reviewed"]);
 /** Path words a slug may not take (they would read as routes or files under /ecosystem/). */

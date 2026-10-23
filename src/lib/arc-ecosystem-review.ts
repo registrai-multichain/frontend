@@ -3,11 +3,11 @@
  * applied to the entity and logged as a public correction from "review". A launch date or a new status needs evidence;
  * a date must equal its evidence's date. Pure: data in, data out.
  */
-import type { ArcEntity, CategoryId, EntityStatus, Source } from "./arc-ecosystem";
+import { SUMMARY_MAX, type ArcEntity, type CategoryId, type EntityStatus, type Source } from "./arc-ecosystem";
 import type { CorrectionEntry } from "./arc-ecosystem-corrections";
 
-export type ReviewItem = { slug: string; field: "dates" | "status" | "category";
-  set: { first_live?: string | null; status?: EntityStatus; category?: CategoryId; add_tags?: CategoryId[] };
+export type ReviewItem = { slug: string; field: "dates" | "status" | "category" | "summary";
+  set: { first_live?: string | null; status?: EntityStatus; category?: CategoryId; add_tags?: CategoryId[]; summary?: string };
   evidence?: Source; change: string; source: string };
 
 export function applyReview(entities: ArcEntity[], corrections: CorrectionEntry[], items: ReviewItem[], day: string): { entities: ArcEntity[]; corrections: CorrectionEntry[] } {
@@ -17,6 +17,7 @@ export function applyReview(entities: ArcEntity[], corrections: CorrectionEntry[
     const e = out.find((x) => x.slug === it.slug);
     if (!e) throw new Error(`unknown slug ${it.slug}`);
     if (it.set.status && !it.evidence) throw new Error(`${it.slug}: status needs evidence`);
+    if (it.set.summary !== undefined && (!it.set.summary.trim() || it.set.summary.length > SUMMARY_MAX)) throw new Error(`${it.slug}: summary must be 1-${SUMMARY_MAX} characters`);
     const fl = it.set.first_live;
     if (typeof fl === "string" && it.evidence?.date !== fl && ![...e.status_evidence, ...e.sources].some((s) => s.date === fl))
       throw new Error(`${it.slug}: date must match its evidence`);
@@ -28,6 +29,7 @@ export function applyReview(entities: ArcEntity[], corrections: CorrectionEntry[
     }
     if (fl === null) delete e.first_live; else if (fl !== undefined) e.first_live = fl;
     if (it.set.status) e.status = it.set.status;
+    if (it.set.summary !== undefined) e.summary = it.set.summary;
     if (it.set.category) e.category = it.set.category;
     if (it.set.add_tags || it.set.category) {
       const tags = [...new Set([...(e.tags ?? []), ...(it.set.add_tags ?? [])])].filter((t) => t !== e.category);

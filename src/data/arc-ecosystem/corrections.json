@@ -718,5 +718,23 @@
     "change": "Also listed under Validators: named in Circle’s founding validator cohort",
     "source": "https://www.circle.com/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
     "from": "review"
+  },
+  {
+    "id": 81,
+    "date": "2026-10-23",
+    "slug": "binance",
+    "field": "summary",
+    "change": "Summary updated: Arc's launch post lists Binance among exchanges live on Arc",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 82,
+    "date": "2026-10-23",
+    "slug": "dfns",
+    "field": "summary",
+    "change": "Summary updated: its docs now list Arc mainnet, not only testnet",
+    "source": "https://docs.dfns.co/networks",
+    "from": "review"
   }
 ]

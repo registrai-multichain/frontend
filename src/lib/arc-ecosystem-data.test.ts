@@ -23,5 +23,8 @@ describe("the published directory file", () => {
     expect(ECOSYSTEM.entities.filter((e) => e.first_live && e.status !== "live").map((e) => `${e.slug} ${e.status}`)).toEqual([]);
     for (const slug of ["coins-ph", "ether-fi"]) expect(ECOSYSTEM.bySlug.get(slug)?.status, slug).toBe("live");
   });
+  test("no live entry's summary starts with 'Announced' (spec 2026-10-23-replace-competitor-citations §2)", () => {
+    expect(ECOSYSTEM.entities.filter((e) => e.status === "live" && /^Announced/.test(e.summary)).map((e) => e.slug)).toEqual([]);
+  });
 });
 

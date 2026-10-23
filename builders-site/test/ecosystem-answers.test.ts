@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import { categoryOf, type ArcEntity } from "../../src/lib/arc-ecosystem";
 import type { ArcWeek } from "../lib/arc-week";
 
-const ent = (slug: string, o: Partial<ArcEntity>): ArcEntity => ({ slug, name: slug.toUpperCase(), category: "dexs", status: "live", summary: `${slug} summary.`,
+const ent = (slug: string, o: Partial<ArcEntity>): ArcEntity => ({ slug, name: slug.toUpperCase(), category: "dexs", status: "live", summary: `${slug} a summary.`,
   status_evidence: [{ url: "https://www.arc.io/x" }], sources: [{ url: `https://${slug}.io/` }], last_reviewed: "2026-10-23", ...o });
 const ALL = [ent("a", { index_ids: ["domain:a.io"] }), ent("b", { index_ids: ["domain:b.io"] }), ent("c", { status: "announced" }), ent("l", { category: "lending", index_ids: ["domain:z.io"] })];
 const week = (apps: { id: string; usd: number }[]): ArcWeek => ({ until_hour: 1, until: "2026-10-23T12:00:00Z",
@@ -31,6 +31,17 @@ describe("category answers", () => {
     expect(d).toContain("Registrai's Arc ecosystem directory lists 4 projects on Circle's Arc blockchain with their status and evidence: 3 live on mainnet, 0 deployed, 1 announced.");
     expect(d).toContain("<title>Arc ecosystem: projects on Circle&#39;s blockchain · Registrai</title>");
     expect(renderEntity({ entity: ALL[0], app: null, facts: null })).toContain("<title>A on Arc, Circle&#39;s blockchain · Registrai</title>");
+  });
+});
+
+describe("what each project does on Arc", () => {
+  test("tables show it; category pages drop the Category column", async () => {
+    const { renderCategory, renderDirectory } = await import("../lib/ecosystem-pages");
+    const c = renderCategory(dexs, ALL, null);
+    expect(c).toContain("<th>What it does on Arc</th>");
+    expect(c).not.toContain("<th>Category</th>");
+    expect(c).toContain("a summary.");
+    expect(renderDirectory(ALL, null)).toContain("<th>What it does on Arc</th>");
   });
 });
 

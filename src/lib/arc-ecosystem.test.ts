@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { CATEGORIES, categoryHref, categoryOf, entityHref, indexEntities, parseStatus, sortByName, validateEntities, type ArcEntity } from "./arc-ecosystem";
+import { CATEGORIES, categoryHref, categoryOf, entityHref, indexEntities, parseStatus, sortByName, validateEntities, whatItDoes, type ArcEntity } from "./arc-ecosystem";
 
 const ok = (o: Partial<ArcEntity> = {}): ArcEntity => ({
   slug: "archery", name: "Archery", category: "consumer", status: "live",
@@ -96,3 +96,21 @@ describe("official Arc evidence", () => {
     expect((r as { errors: string[] }).errors.join()).toMatch(/arc-official-live must be an arc.io or circle.com page/);
   });
 });
+
+describe("whatItDoes (spec 2026-10-23-replace-competitor-citations §2)", () => {
+  const w = (summary: string) => whatItDoes({ summary });
+  test("first sentence; abbreviations, versions, decimals and URLs don't end it", () => {
+    expect(w("Decentralized exchange protocol and app. Uniswap v2, v3, v4 went live.")).toBe("Decentralized exchange protocol and app.");
+    expect(w("Blocks every 0.5 s on Arc. More.")).toBe("Blocks every 0.5 s on Arc.");
+    expect(w("Wallets, e.g. Rabby, on Arc. More.")).toBe("Wallets, e.g. Rabby, on Arc.");
+    expect(w("Docs at docs.arc.io describe it. More.")).toBe("Docs at docs.arc.io describe it.");
+    expect(w("No full stop here")).toBe("No full stop here");
+  });
+  test("cut at 140 characters on a word boundary with …", () => {
+    const r = w(`${"word ".repeat(40)}end.`);
+    expect(r.length).toBeLessThanOrEqual(141);
+    expect(r.endsWith("…")).toBe(true);
+    expect(r).not.toMatch(/\s…$/);
+  });
+});
+
