@@ -23,7 +23,12 @@ function fakeFetch(opts: { llamaDown?: boolean; rpcDown?: boolean } = {}) {
       return new Response(JSON.stringify([{ date: "1792454400", totalCirculatingUSD: { peggedUSD: 742300000 } }]));
     }
     if (opts.rpcDown) throw new Error("rpc down");
-    const body = JSON.parse(String(init?.body));
+    const parsed = JSON.parse(String(init?.body)) as { id: number; method: string; params: { to: string }[] }[] | { id: number };
+    if (Array.isArray(parsed)) {   // batches: tx counts per block, token totalSupply (USDC 758,938,840.361892; others 1,000,000)
+      return new Response(JSON.stringify(parsed.map((c) => ({ jsonrpc: "2.0", id: c.id, result: c.method === "eth_getBlockTransactionCountByNumber" ? "0x3"
+        : hex(c.params[0].to.toLowerCase() === "0x3600000000000000000000000000000000000000" ? 758938840361892n : 1000000000000n) }))));
+    }
+    const body = parsed as { id: number; method: string; params: { to: string }[] & string[] };
     const res = (r: unknown) => new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: r }));
     if (body.method === "eth_getBlockByNumber") {
       return body.params[0] === "latest" ? res({ number: hex(26976520), timestamp: hex(1792516227) }) : res({ number: body.params[0], timestamp: hex(1792511158) });
@@ -117,4 +122,21 @@ describe("review fixes", () => {
     expect(n.network.block_height).toBe(26976520);
     expect(n.stablecoins.usdc_supply).toBe(758938840.361892);
   });
+  test("ai-search gaps: RPC/explorer, every listed stablecoin's supply, sampled transactions; RPC down → nulls with errors", async () => {
+    const { collectArcNumbers } = await import("../lib/arc-numbers");
+    const { CHAIN_FACTS } = await import("../../src/lib/arc-chain-facts");
+    const n = await collectArcNumbers({ INVITES: await kvWithIndices() } as never, fakeFetch() as never, NOW);
+    expect(n.network).toMatchObject({ rpc_url: CHAIN_FACTS.network.rpc_url, explorer_url: CHAIN_FACTS.network.explorer_url });
+    expect(n.stablecoins.tokens!.map((t) => t.symbol)).toEqual(CHAIN_FACTS.stablecoins.map((t) => t.symbol));
+    expect(n.stablecoins.tokens!.find((t) => t.symbol === "USDC")?.supply).toBe(n.stablecoins.usdc_supply);
+    expect(n.activity_24h.transactions_est).toBe(Math.round((3 * Math.round(86400 / n.network.block_time_s!)) / 1000) * 1000);
+    expect(n.activity_24h.tx_sample?.blocks).toBe(240);
+    expect(n.errors).toEqual([]);
+    const r = await collectArcNumbers({ INVITES: new MemoryKV() } as never, fakeFetch({ rpcDown: true }) as never, NOW);
+    expect(r.stablecoins.tokens!.every((t) => t.supply === null)).toBe(true);
+    expect(r.activity_24h.transactions_est).toBeNull();
+    expect(r.activity_24h.tx_sample).toBeNull();
+    expect(r.errors.join()).toMatch(/rpc token supplies/);
+  });
 });
+

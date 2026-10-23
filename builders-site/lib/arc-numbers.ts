@@ -4,6 +4,7 @@
  * on its own with a timeout; a failed source leaves its fields null and adds a line to `errors`, never throws.
  */
 import { CATEGORIES } from "../../src/lib/arc-ecosystem";
+import { CHAIN_FACTS } from "../../src/lib/arc-chain-facts";
 import { ECOSYSTEM } from "../../src/lib/arc-ecosystem-data";
 import type { AbiData } from "../../src/lib/builders-index";
 import { indexFile } from "./data-api";
@@ -17,6 +18,8 @@ const LLAMA_TVL = "https://api.llama.fi/v2/historicalChainTvl/Arc";
 const LLAMA_STABLES = "https://stablecoins.llama.fi/stablecoincharts/Arc";
 const TIMEOUT_MS = 8000;
 const BLOCK_SPAN = 10_000;
+export const RPC_BLOCKDAEMON = RPCS[0];
+const SAMPLE = 240, SAMPLE_BATCH = 80, SAMPLE_MIN = 200;
 
 export const ARC_TIMELINE = [
   { date: "2025-10-28", text: "Arc public testnet launched", source: "https://www.arc.io/pressroom/circle-launches-arc-public-testnet" },
@@ -27,10 +30,13 @@ export const ARC_TIMELINE = [
 type ByIndex = Record<IndexId, number | null>;
 export type ArcNumbers = {
   version: 1; generated_at: string;
-  network: { chain_id: 5042; gas_token: "USDC"; mainnet_since: "2026-09-16"; block_height: number | null; block_time_s: number | null; as_of: string | null };
-  stablecoins: { usdc_supply: number | null; eurc_supply: number | null; as_of: string | null; all_stablecoins_usd: number | null; tvl_usd: number | null; defillama_date: string | null };
+  network: { chain_id: 5042; gas_token: "USDC"; mainnet_since: "2026-09-16"; block_height: number | null; block_time_s: number | null; as_of: string | null;
+    rpc_url?: string; explorer_url?: string };   // optional: snapshots before 2026-10-23 lack the new fields
+  stablecoins: { usdc_supply: number | null; eurc_supply: number | null; as_of: string | null; all_stablecoins_usd: number | null; tvl_usd: number | null; defillama_date: string | null;
+    tokens?: { symbol: string; issuer: string; address: string | null; supply: number | null }[] };
   activity_24h: { data_until: string | null; usdc_moved_usd_est: number | null; eurc_moved_usd_est: number | null; usdc_transfers_est: number | null;
-    app_payments: number | null; app_usd: number | null; attributed_share_pct: number | null };
+    app_payments: number | null; app_usd: number | null; attributed_share_pct: number | null;
+    transactions_est?: number | null; tx_sample?: { blocks: number; from_block: number; to_block: number } | null };
   ecosystem: { projects: number; live: number; deployed: number; announced: number; top_categories: { id: string; label: string; count: number }[];
     index_members: ByIndex; index_close: ByIndex; data_until: string | null };
   timeline: typeof ARC_TIMELINE;
@@ -79,6 +85,47 @@ async function llamaStables(fetcher: Fetcher) {
   return { all_stablecoins_usd: pegs.reduce((a, b) => a + b, 0), date: iso(Number(s.date) * 1000).slice(0, 10) };   // every peg (USD, EUR, GBP, …) in USD
 }
 
+/** One JSON-RPC batch to one endpoint: each call's result, or null for an error item or a missing answer. */
+export async function rpcBatch(fetcher: Fetcher, url: string, calls: { method: string; params: unknown[] }[]): Promise<(unknown | null)[]> {
+  const r = await fetcher(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(calls.map((c, id) => ({ jsonrpc: "2.0", id, ...c }))), signal: AbortSignal.timeout(TIMEOUT_MS) });
+  const j = (await r.json()) as unknown;
+  const out: (unknown | null)[] = calls.map(() => null);
+  if (Array.isArray(j)) for (const x of j as { id?: unknown; result?: unknown }[])
+    if (typeof x?.id === "number" && Number.isInteger(x.id) && x.id >= 0 && x.id < out.length && x.result !== undefined && x.result !== null) out[x.id] = x.result;
+  return out;
+}
+
+/** Transactions in the last 24 h, estimated from 240 evenly spaced blocks (Blockdaemon only: the public RPC rate-limits batches). */
+export async function sampleTransactions(fetcher: Fetcher, head: number, blockTimeS: number): Promise<{ estimate: number; blocks: number; from_block: number; to_block: number } | null> {
+  const span = Math.round(86400 / blockTimeS), step = span / SAMPLE;
+  const nums = Array.from({ length: SAMPLE }, (_, i) => head - Math.round(i * step));
+  const counts: number[] = [];
+  try {
+    for (let k = 0; k < SAMPLE; k += SAMPLE_BATCH) {
+      const res = await rpcBatch(fetcher, RPC_BLOCKDAEMON, nums.slice(k, k + SAMPLE_BATCH).map((n) => ({ method: "eth_getBlockTransactionCountByNumber", params: [`0x${n.toString(16)}`] })));
+      for (const x of res) if (typeof x === "string" && /^0x[0-9a-f]+$/i.test(x)) counts.push(parseInt(x, 16));
+    }
+  } catch { return null; }
+  if (counts.length < SAMPLE_MIN) return null;
+  const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
+  return { estimate: Math.round((mean * span) / 1000) * 1000, blocks: counts.length, from_block: nums[nums.length - 1], to_block: head };
+}
+
+/** totalSupply of each token with an address, in one batch (Blockdaemon, then the public RPC); null where it fails. Throws only when no endpoint answers. */
+export async function tokenSupplies(fetcher: Fetcher, tokens: { address: string | null; decimals: number }[]): Promise<(number | null)[]> {
+  const idx = tokens.map((t, i) => (t.address ? i : -1)).filter((i) => i >= 0);
+  const calls = idx.map((i) => ({ method: "eth_call", params: [{ to: tokens[i].address, data: "0x18160ddd" }, "latest"] }));
+  let best: (unknown | null)[] | null = null, last: unknown = null;
+  for (const url of RPCS) {
+    try { best = await rpcBatch(fetcher, url, calls); } catch (e) { last = e; continue; }
+    if (best.some((x) => x !== null)) break;
+  }
+  if (!best) throw new Error(`no RPC answered: ${last instanceof Error ? last.message : String(last)}`.slice(0, 120));
+  const out: (number | null)[] = tokens.map(() => null);
+  idx.forEach((i, k) => { const v = best![k]; if (typeof v === "string" && /^0x[0-9a-f]+$/i.test(v)) out[i] = Number(BigInt(v)) / 10 ** tokens[i].decimals; });
+  return out;
+}
+
 const lastClose = (d: AbiData) => (d.candles?.length ? (d.candles[d.candles.length - 1][4] as number) : null);
 
 /** Every source is independent and the whole collection has one deadline (it may run inside the hourly index publish). */
@@ -100,7 +147,12 @@ export async function collectArcNumbers(env: Env, fetcher: Fetcher = fetch, now 
     caught("defillama stablecoins", llamaStables(fetcher)),
     Promise.all(INDEX_IDS.map((id) => (id === "aei" && opts.aei ? Promise.resolve(opts.aei) : indexFile(env, id).catch(() => null)))),
   ]);
-  const c = { block_height: head?.number ?? null, block_time_s: back ? Math.round(((back[0].ts - back[1].ts) / BLOCK_SPAN) * 10000) / 10000 : null,
+  const blockTime = back ? Math.round(((back[0].ts - back[1].ts) / BLOCK_SPAN) * 10000) / 10000 : null;
+  const [supplies, sample] = await Promise.all([
+    caught("rpc token supplies", tokenSupplies(fetcher, CHAIN_FACTS.stablecoins)),
+    head && blockTime ? caught("rpc tx sample", sampleTransactions(fetcher, head.number, blockTime).then((s) => s ?? Promise.reject(new Error("too few samples")))) : Promise.resolve(null),
+  ]);
+  const c = { block_height: head?.number ?? null, block_time_s: blockTime,
     usdc_supply: usdcSupply, eurc_supply: eurcSupply, as_of: head || usdcSupply !== null ? iso(now) : null };
   const l = { tvl_usd: tvl?.tvl_usd ?? null, all_stablecoins_usd: stables?.all_stablecoins_usd ?? null, defillama_date: tvl?.date ?? stables?.date ?? null };
   const byId = Object.fromEntries(INDEX_IDS.map((id, k) => [id, files[k]])) as Record<IndexId, AbiData | null>;
@@ -111,12 +163,15 @@ export async function collectArcNumbers(env: Env, fetcher: Fetcher = fetch, now 
   const count = (id: string) => e.filter((x) => x.category === id || (x.tags ?? []).includes(id as never)).length;
   return {
     version: 1, generated_at: iso(now),
-    network: { chain_id: 5042, gas_token: "USDC", mainnet_since: "2026-09-16", block_height: c.block_height, block_time_s: c.block_time_s, as_of: c.as_of },
+    network: { chain_id: 5042, gas_token: "USDC", mainnet_since: "2026-09-16", block_height: c.block_height, block_time_s: c.block_time_s, as_of: c.as_of,
+      rpc_url: CHAIN_FACTS.network.rpc_url, explorer_url: CHAIN_FACTS.network.explorer_url },
     stablecoins: { usdc_supply: c.usdc_supply, eurc_supply: c.eurc_supply, as_of: c.as_of,
-      all_stablecoins_usd: l.all_stablecoins_usd, tvl_usd: l.tvl_usd, defillama_date: l.defillama_date },
+      all_stablecoins_usd: l.all_stablecoins_usd, tvl_usd: l.tvl_usd, defillama_date: l.defillama_date,
+      tokens: CHAIN_FACTS.stablecoins.map((t, i) => ({ symbol: t.symbol, issuer: t.issuer, address: t.address, supply: supplies?.[i] ?? null })) },
     activity_24h: { data_until: byId.aei?.data_until ?? null, usdc_moved_usd_est: usdc?.base_usd_est ?? null, eurc_moved_usd_est: eurc?.base_usd_est ?? null,
       usdc_transfers_est: usdc?.base_transfers_est ?? null, app_payments: usdc?.members_payments ?? null, app_usd: usdc?.members_usd ?? null,
-      attributed_share_pct: usdc && usdc.base_usd_est > 0 ? round2((100 * usdc.members_usd) / usdc.base_usd_est) : null },
+      attributed_share_pct: usdc && usdc.base_usd_est > 0 ? round2((100 * usdc.members_usd) / usdc.base_usd_est) : null,
+      transactions_est: sample?.estimate ?? null, tx_sample: sample ? { blocks: sample.blocks, from_block: sample.from_block, to_block: sample.to_block } : null },
     ecosystem: {
       projects: e.length, live: e.filter((x) => x.status === "live").length, deployed: e.filter((x) => x.status === "deployed").length, announced: e.filter((x) => x.status === "announced").length,
       top_categories: CATEGORIES.map((cat) => ({ id: cat.id, label: cat.label, count: count(cat.id) })).filter((x) => x.count > 0)
