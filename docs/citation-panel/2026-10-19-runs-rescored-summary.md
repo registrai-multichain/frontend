@@ -27,14 +27,18 @@ Retrieved but not cited: anthropic 0
 
 All engines. Leader = the domain cited in the most answers of the topic; gap = its share minus Registrai's cited share.
 
-| Topic | Answers | Registrai cited | Mentioned | Recommended | Leaders | Gap |
-|---|---|---|---|---|---|---|
-| chain | 63 | 0% | 0% | 0% | arc.io 47.6%, circle.com 42.9%, bitcoinfoundation.org 34.9%, coinbureau.com 27%, eco.com 20.6% | 47.6 pts |
-| ecosystem | 108 | 0% | 0% | 0% | arc.io 36.1%, circle.com 30.6%, bitcoinfoundation.org 26.9%, airdropalert.com 13%, cryptorank.io 10.2% | 36.1 pts |
-| data | 72 | 1.4% | 1.4% | 1.4% | defillama.com 22.2%, arc.io 20.8%, kucoin.com 19.4%, bitquery.io 15.3%, bitcoinfoundation.org 13.9% | 20.8 pts |
-| entity | 72 | 0% | 0% | 0% | github.com 16.7%, arcland.app 12.5%, arclight.com 11.1%, cryptobriefing.com 11.1%, en.wikipedia.org 11.1% | 16.7 pts |
-| developer | 54 | 0% | 1.9% | 0% | arc.io 35.2%, github.com 31.5%, circle.com 29.6%, docs.arc.io 20.4%, trustswap.com 20.4% | 35.2 pts |
-| brand | 36 | 30.6% | 91.7% | 55.6% | github.com 25%, glama.ai 19.4%, notas-it.com 11.1%, x.com 11.1%, best-domain-registrars.com 8.3% | -5.6 pts |
+| Topic | Answers | Registrai cited | builtonarc.app | Mentioned | Recommended | Leaders | Gap |
+|---|---|---|---|---|---|---|---|
+| chain | 63 | 0% | 1.6% | 0% | 0% | arc.io 47.6%, circle.com 42.9%, bitcoinfoundation.org 34.9%, coinbureau.com 27%, eco.com 20.6% | 47.6 pts |
+| ecosystem | 108 | 0% | 3.7% | 0% | 0% | arc.io 36.1%, circle.com 30.6%, bitcoinfoundation.org 26.9%, airdropalert.com 13%, cryptorank.io 10.2% | 36.1 pts |
+| data | 72 | 1.4% | 0% | 1.4% | 1.4% | defillama.com 22.2%, arc.io 20.8%, kucoin.com 19.4%, bitquery.io 15.3%, bitcoinfoundation.org 13.9% | 20.8 pts |
+| entity | 72 | 0% | 0% | 0% | 0% | github.com 16.7%, arcland.app 12.5%, arclight.com 11.1%, cryptobriefing.com 11.1%, en.wikipedia.org 11.1% | 16.7 pts |
+| developer | 54 | 0% | 0% | 1.9% | 0% | arc.io 35.2%, github.com 31.5%, circle.com 29.6%, docs.arc.io 20.4%, trustswap.com 20.4% | 35.2 pts |
+| brand | 36 | 30.6% | 0% | 91.7% | 55.6% | github.com 25%, glama.ai 19.4%, notas-it.com 11.1%, x.com 11.1%, best-domain-registrars.com 8.3% | -5.6 pts |
+
+## Competitors
+
+- builtonarc.app: cited in 5 answers (gemini 0, anthropic 0, openai 5); Registrai also cited in 0 of them
 
 ## Pages that win each topic
 

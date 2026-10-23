@@ -129,3 +129,17 @@ describe("citation panel: retrieval (Claude focus, 2026-10-23)", () => {
     expect(scoreRecord({ text: "", urls: [], searched: ["https://www.registrai.cc/"], queries: [] }).registrai_retrieved).toBe(true);
   });
 });
+
+describe("citation panel: competitor share (spec 2026-10-23-replace-competitor-citations §4)", () => {
+  const r = (engine: string, domains: string[], cited = false): PanelRecord => ({ engine, model: "m", prompt_id: "e11", group: "ecosystem", run: 1, at: "t", answer: "",
+    urls: domains.map((d) => `https://${d}/x`), searched: [], cited_domains: domains, registrai_cited: cited, registrai_mentioned: false, registrai_recommended: false, queries: [] });
+  test("topic gaps carry each competitor's share; the summary has a column and a Competitors line", async () => {
+    const { topicGaps, renderSummary, COMPETITORS } = await import("./citation-panel");
+    expect(COMPETITORS).toContain("builtonarc.app");
+    const recs = [r("openai", ["builtonarc.app", "arc.io"]), r("openai", ["builder.registrai.cc"], true)];
+    expect(topicGaps(recs).find((g) => g.group === "ecosystem")!.competitors["builtonarc.app"]).toBe(50);
+    const md = renderSummary(recs, "2026-10-24", { openai: "gpt" });
+    expect(md).toMatch(/\| Topic \| Answers \| Registrai cited \| builtonarc\.app \|/);
+    expect(md).toContain("builtonarc.app: cited in 1 answers (openai 1); Registrai also cited in 0 of them");
+  });
+});

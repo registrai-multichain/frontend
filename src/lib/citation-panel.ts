@@ -153,6 +153,10 @@ export function summarize(records: PanelRecord[]) {
   return { engines, top_domains };
 }
 
+/** Sites competing for the same answers, reported beside Registrai (spec 2026-10-23-replace-competitor-citations §4). */
+export const COMPETITORS = ["builtonarc.app"] as const;
+const isSite = (d: string, site: string) => d === site || d.endsWith(`.${site}`);
+
 const GROUPS: PanelGroup[] = ["chain", "ecosystem", "data", "entity", "developer", "brand"];
 const ok = (records: PanelRecord[]) => records.filter((r) => !r.error);
 const top = <T,>(m: Map<T, number>, n: number) => [...m].sort((a, b) => b[1] - a[1] || (String(a[0]) < String(b[0]) ? -1 : 1)).slice(0, n);
@@ -165,7 +169,8 @@ export function topicGaps(records: PanelRecord[]) {
     for (const r of g) for (const d of uniq(r.cited_domains)) if (!isRegistrai(d)) count.set(d, (count.get(d) ?? 0) + 1);
     const leaders = top(count, 5).map(([domain, n]) => ({ domain, pct: pct(n, g.length) }));
     const cited_pct = pct(g.filter((r) => r.registrai_cited).length, g.length);
-    return { group, answers: g.length, cited_pct, mentioned_pct: pct(g.filter((r) => r.registrai_mentioned).length, g.length),
+    const competitors = Object.fromEntries(COMPETITORS.map((c) => [c, pct(g.filter((r) => r.cited_domains.some((d) => isSite(d, c))).length, g.length)]));
+    return { group, answers: g.length, cited_pct, competitors, mentioned_pct: pct(g.filter((r) => r.registrai_mentioned).length, g.length),
       recommended_pct: pct(g.filter((r) => r.registrai_recommended).length, g.length), leaders, gap: Math.round(10 * ((leaders[0]?.pct ?? 0) - cited_pct)) / 10 };
   }).filter((x) => x.answers > 0);
 }
@@ -218,8 +223,14 @@ export function renderSummary(records: PanelRecord[], day: string, models: Recor
     "", "## Cited by question group", "", `| Group | ${engines.join(" | ")} |`, `|---|${engines.map(() => "---").join("|")}|`,
     ...GROUPS.map((g) => `| ${g} | ${engines.map((e) => { const x = s.engines[e]?.by_group[g]; return x ? `${x.cited_pct}% (${x.runs})` : "–"; }).join(" | ")} |`),
     "", "## Topic gaps", "", "All engines. Leader = the domain cited in the most answers of the topic; gap = its share minus Registrai's cited share.", "",
-    "| Topic | Answers | Registrai cited | Mentioned | Recommended | Leaders | Gap |", "|---|---|---|---|---|---|---|",
-    ...gaps.map((g) => `| ${g.group} | ${g.answers} | ${g.cited_pct}% | ${g.mentioned_pct}% | ${g.recommended_pct}% | ${g.leaders.map((l) => `${l.domain} ${l.pct}%`).join(", ")} | ${g.gap} pts |`),
+    `| Topic | Answers | Registrai cited | ${COMPETITORS.join(" | ")} | Mentioned | Recommended | Leaders | Gap |`, `|---|---|---|${COMPETITORS.map(() => "---|").join("")}---|---|---|---|`,
+    ...gaps.map((g) => `| ${g.group} | ${g.answers} | ${g.cited_pct}% | ${COMPETITORS.map((c) => `${g.competitors[c]}%`).join(" | ")} | ${g.mentioned_pct}% | ${g.recommended_pct}% | ${g.leaders.map((l) => `${l.domain} ${l.pct}%`).join(", ")} | ${g.gap} pts |`),
+    "", "## Competitors", "",
+    ...COMPETITORS.map((c) => {
+      const hit = ok(records).filter((r) => r.cited_domains.some((d) => isSite(d, c)));
+      const by = engines.map((e) => `${e} ${hit.filter((r) => r.engine === e).length}`).join(", ");
+      return `- ${c}: cited in ${hit.length} answers (${by}); Registrai also cited in ${hit.filter((r) => r.registrai_cited).length} of them`;
+    }),
     "", "## Pages that win each topic", "",
     ...Object.entries(pages).flatMap(([g, l]) => [`### ${g}`, "", ...l.map((p) => `- ${p.url} (${p.answers})`), ""]),
     "## Searches underneath the prompts", "",
