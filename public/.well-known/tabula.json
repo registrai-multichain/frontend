@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "declaration": {
+    "builder": "0xb7ecf980a4732b75e57e2ec80903dee3964f2573",
+    "source": "domain:registrai.cc",
+    "chain": 5042,
+    "contracts": [
+      "0xbdc4b03bf67b4ef70195b1862303ace61f0d77ce",
+      "0x52bb229697c552d8b8e01298525093572420a7eb",
+      "0x82cc64bc010bc244e63654817202b5330f1ac112",
+      "0xbb6f4b18776fd20bb53a1205375273373dd1e5ba",
+      "0x64725935d90f0aa6f3c8642bb9cacf44caa46224",
+      "0xf229d2ed13cc35d46fa7676a579495e5c80cfeb2"
+    ],
+    "wallets": [
+      {
+        "address": "0xfee926e8be2d1c6192213cf20f31d94dad1e80fb",
+        "label": "admin safe"
+      },
+      {
+        "address": "0xb7ecf980a4732b75e57e2ec80903dee3964f2573",
+        "label": "funder"
+      }
+    ],
+    "domains": [
+      "registrai.cc",
+      "app.registrai.cc",
+      "builder.registrai.cc"
+    ],
+    "repos": [],
+    "telegram": [],
+    "thresholds": {
+      "outflowPct": 10,
+      "outflowMin": 1000,
+      "outflowAbs": 10000
+    },
+    "issued": "2026-10-01"
+  },
+  "signature": "0x7755ae506dcd2b9fc6e762cd9a69a6160de89d523bec2b6fc6eae362e725e024592aec9ea4b09cf7c968f8dcef1464cda178a38f701cba672b051c08da08125f1b"
+}

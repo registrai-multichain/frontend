@@ -81,7 +81,7 @@ export function SuffixPanel({ pool }: { pool: SuffixPool }) {
   return (
     <div>
       {/* live band visualization */}
-      <div className="border border-line/60 bg-bg-elev/20 p-5 mb-px">
+      <div className="border border-line bg-bg-elev p-5 mb-px">
         <div className="caption text-2xs text-fg-dim mb-3">live price band (${pool.symbol})</div>
         <div className="grid grid-cols-3 gap-px bg-line text-center">
           <Band label={`floor · k=${s ? pct(s.kBps) : "—"}`} value={s ? px(s.seniorFloorPrice) : "—"} sub="buyback floor" tone="floor" />
@@ -139,7 +139,7 @@ export function SuffixPanel({ pool }: { pool: SuffixPool }) {
 }
 
 function Band({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: "floor" | "spot" | "froth" }) {
-  const color = tone === "floor" ? "text-emerald-400" : tone === "froth" ? "text-amber-300" : "text-accent";
+  const color = tone === "floor" ? "text-up" : tone === "froth" ? "text-accent" : "text-accent";
   return (
     <div className="bg-bg p-4">
       <div className="caption text-2xs text-fg-dim mb-1">{label}</div>
@@ -151,7 +151,7 @@ function Band({ label, value, sub, tone }: { label: string; value: string; sub: 
 
 function Stat({ label, value }: { label: string; value?: string }) {
   return (
-    <div className="flex items-center justify-between py-1 border-b border-line/30 last:border-0">
+    <div className="flex items-center justify-between py-1 border-b border-line last:border-0">
       <span className="caption text-2xs text-fg-dim">{label}</span>
       <span className={`text-[14px] ${value === undefined ? "text-fg-dim/40 animate-pulse" : ""}`}>
         {value ?? "···"}

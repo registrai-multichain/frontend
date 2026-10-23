@@ -1,11 +1,26 @@
 import type { Metadata, Viewport } from "next";
-import { JetBrains_Mono, Instrument_Serif } from "next/font/google";
+import { JetBrains_Mono, Instrument_Serif, Instrument_Sans } from "next/font/google";
 import { Providers } from "@/components/Providers";
+import { SITE_DESCRIPTION, SITE_TITLE } from "@/lib/landing";
+import { REGISTRAI_X_HANDLE } from "@/lib/regi";
 import "./globals.css";
+import "./paper.css";
+import "../styles/paper-ui.css";
 
 const mono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
+  display: "swap",
+});
+
+// Workhorse face for the landing page. Instrument Sans is a refined grotesk
+// with enough character to avoid reading as a default, and it shares design
+// DNA with Instrument Serif, which the rest of the site already loads.
+// Additive only: `body` still defaults to --font-mono, so no existing route
+// changes typeface.
+const sans = Instrument_Sans({
+  subsets: ["latin"],
+  variable: "--font-sans",
   display: "swap",
 });
 
@@ -17,12 +32,11 @@ const serif = Instrument_Serif({
   display: "swap",
 });
 
-const TITLE = "Registrai · Onchain oracles, with aggregation you can verify";
-const DESCRIPTION =
-  "Permissionless onchain registry of bonded oracle agents. The aggregation rule is bytecode anyone can re-execute — not a methodology document anyone has to trust. Live on Arc testnet.";
+const TITLE = SITE_TITLE;
+const DESCRIPTION = SITE_DESCRIPTION;
 
 export const viewport: Viewport = {
-  themeColor: "#1a1815",
+  themeColor: "#0d0d0c",
   width: "device-width",
   initialScale: 1,
 };
@@ -39,13 +53,15 @@ export const metadata: Metadata = {
     url: "https://registrai.cc/",
     title: TITLE,
     description: DESCRIPTION,
-    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Registrai · Onchain oracle protocol" }],
+    images: [{ url: "/social/registrai-og.png", width: 1200, height: 630, alt: "Registrai · The data company for the Arc economy." }],
   },
   twitter: {
     card: "summary_large_image",
+    site: `@${REGISTRAI_X_HANDLE}`,
+    creator: `@${REGISTRAI_X_HANDLE}`,
     title: TITLE,
     description: DESCRIPTION,
-    images: ["/opengraph-image"],
+    images: ["/social/registrai-og.png"],
   },
 };
 
@@ -55,7 +71,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${mono.variable} ${serif.variable}`}>
+    <html lang="en" className={`${mono.variable} ${serif.variable} ${sans.variable}`}>
       <body className="min-h-screen antialiased">
         <Providers>{children}</Providers>
       </body>

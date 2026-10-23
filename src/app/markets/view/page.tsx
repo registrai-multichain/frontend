@@ -184,14 +184,14 @@ function ViewMarketInner() {
           <div className="space-y-8 min-w-0">
             <section>
               <div className="caption mb-3">description</div>
-              <div className="border border-line bg-bg-elev/30 p-5">
+              <div className="border border-line bg-bg-elev p-5">
                 <MarketDescriptionLive marketId={market.id} fallback={undefined} />
               </div>
             </section>
 
             <section>
               <div className="caption mb-3">resolution rule</div>
-              <div className="border border-line bg-bg-elev/40 p-5">
+              <div className="border border-line bg-bg p-5">
                 <p className="text-[13.5px] leading-relaxed text-fg">
                   At <span className="text-accent tnum">{isoDateTime(market.expiry)}</span>{" "}
                   UTC, the market reads{" "}
@@ -279,7 +279,8 @@ function chainToMarket(
   const comparator = ([">", ">=", "<", "<="] as Comparator[])[
     Number(m.comparator)
   ] ?? ">";
-  const phase: MarketPhase = m.phase === 1 ? "resolved" : "trading";
+  // Phase enum: Trading, Resolved, Voided. "Not 1" is not "trading".
+  const phase: MarketPhase = m.phase === 1 ? "resolved" : m.phase === 2 ? "voided" : "trading";
   // For markets in the static manifest we'd have nice feed metadata; for
   // ad-hoc markets created via the UI we have only the feedId on chain.
   const feedSymbol =

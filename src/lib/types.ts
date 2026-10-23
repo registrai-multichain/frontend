@@ -30,7 +30,7 @@ export interface Attestation {
 }
 
 export type Comparator = ">" | ">=" | "<" | "<=";
-export type MarketPhase = "trading" | "resolved";
+export type MarketPhase = "trading" | "resolved" | "voided";
 
 export interface Market {
   id: `0x${string}`;

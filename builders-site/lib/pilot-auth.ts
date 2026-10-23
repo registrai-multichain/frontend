@@ -1,0 +1,413 @@
+/**
+ * ABI points pilot sign-in: the builder site's nonce + personal_sign pattern (lib/auth.ts), with its own
+ * session. The admin session is restricted to the admin / onboarder allowlists, so the pilot has a separate one:
+ *
+ *   GET    /api/pilot/auth   -> { nonce }            stateless (NONCE_SECRET), no write
+ *   POST   /api/pilot/auth   { message, signature }  -> { address } + cookie (the wallet must hold the admission REGI)
+ *   DELETE /api/pilot/auth                           -> 204, every session of the wallet ended
+ *
+ * Cookie __Host-rb_pilot = "<wallet>.<epoch>.<exp>.<mac>", mac = HMAC-SHA256(PILOT_SESSION_SECRET,
+ * "abi-pilot|<wallet>|<epoch>|<exp>"), HttpOnly, Secure, SameSite=Strict, 12 h. A session is valid only while
+ * <epoch> equals the account's session_epoch; sign-out bumps it. Mutating calls pass the same CSRF checks as
+ * /api/admin. The sign-in message names the wallet; only plain (EOA) signatures that recover to it are accepted
+ * (smart-contract wallets are refused). A nonce is single use (D1 used_nonces, written at a successful sign-in).
+ *
+ * REGI gate (owner decisions 2026-10-13, plan 2026-10-13 R2): a wallet must hold PILOT_ADMIT_USD (default $10) of REGI,
+ * converted at the 24 h median pool price (lib/pilot-regi.ts), at sign-in AND when it places each order; both read the
+ * balance fresh from the RPC (no cache) and fail closed (an RPC failure or an unknown price refuses). A wallet with
+ * open positions may always sign in, since closes never need REGI. Only when PILOT_REGI_SNAPSHOT_BLOCK is set must the
+ * wallet also have held the admission amount at that block (the whole REGI held there is cached permanently per wallet
+ * and block). The account view shows the last known state (cached ≤ 10 min). An RPC failure is "unknown" (null),
+ * never "no REGI", and backs the wallet off the RPC for 30 s. With PILOT_OPEN "1", a malformed, future or pre-REGI
+ * snapshot block (an empty one is fine: no snapshot), or a malformed PILOT_ADMIT_USD / PILOT_LOCK_USD /
+ * PILOT_LOCK_FACTORY / PILOT_MAX_LEV, makes the pilot "misconfigured": every order is refused, loudly (audit PE-7).
+ */
+import { recoverMessageAddress, type Hex } from "viem";
+import { issuedFresh } from "../../src/lib/builders-admin";
+import {
+  ARC_RPC_URL,
+  BALANCE_OF_SELECTOR,
+  PILOT_LIMITS,
+  PILOT_SESSION_COOKIE,
+  PILOT_SESSION_TTL_S,
+  PILOT_MAX_LEV_DEFAULT,
+  REGI_ADDRESS,
+  REGI_CACHE_S,
+  PILOT_ADMIT_USD_DEFAULT,
+  REGI_DEPLOY_BLOCK,
+  REGI_PRICE_UPDATING,
+  REGI_UNIT,
+  holdUsdText,
+  parsePilotLoginMessage,
+  type RegiView,
+} from "../../src/lib/abi-pilot-api";
+import { RULES } from "../../src/lib/abi-pilot";
+import { makeNonce, nonceProblem, NONCE_MAX_AGE_MS, NONCE_SECRET_MISSING } from "./auth";
+import { readCapped } from "./builders-index";
+import type { D1Database, Env } from "./env";
+import { csrfFailure, errorJson, getCookie, json, siteOrigin } from "./http";
+import { admitUsdOf, lockFactoryOf, lockUsdOf, regiAt, regiPrice } from "./pilot-regi";
+import { SQL } from "./pilot-sql";
+
+export const PILOT_SEASON = 1;
+export const PILOT_UNCONFIGURED = "points pilot is not configured";
+export const SMART_WALLET = "Smart-contract wallets aren't supported yet";
+const SECRET_MIN = 32;
+const ADDR_RE = /^0x[0-9a-f]{40}$/;
+
+/** Injectable clock, network and randomness for the handlers (tests). */
+export interface PilotDeps {
+  now?: () => number;
+  fetch?: typeof fetch;
+  random?: () => number;
+  cache?: Cache | null;
+  waitUntil?: (p: Promise<unknown>) => void;
+}
+export const nowMsOf = (deps: PilotDeps) => (deps.now ?? Date.now)();
+export const nowSOf = (deps: PilotDeps) => Math.floor(nowMsOf(deps) / 1000);
+
+/** PILOT_REGI_SNAPSHOT_BLOCK as a block number, or null (unset / not a block number). Unset = no snapshot check. */
+export function snapshotBlock(env: Env): number | null {
+  const s = (env.PILOT_REGI_SNAPSHOT_BLOCK ?? "").trim();
+  return /^\d{1,15}$/.test(s) ? Number(s) : null;
+}
+
+
+/** PILOT_MAX_LEV as a raw number (unset: PILOT_MAX_LEV_DEFAULT), or null when it is not an integer ≥ 1. */
+function maxLevSetting(env: Env): number | null {
+  const s = (env.PILOT_MAX_LEV ?? "").trim();
+  if (s === "") return PILOT_MAX_LEV_DEFAULT;
+  return /^\d{1,4}$/.test(s) && Number(s) >= 1 ? Number(s) : null;
+}
+/** The pilot's leverage cap as a level of RULES.levels (the highest at or under PILOT_MAX_LEV); 1 when it is invalid. */
+export function pilotMaxLev(env: Env): number {
+  const n = maxLevSetting(env) ?? 1;
+  return RULES.levels.filter((l) => l <= n).pop() ?? 1;
+}
+
+/** PILOT_BLOCKED_WALLETS: wallets that may not open positions (audit F4: milestone recorders). */
+export function blockedWallet(env: Env, wallet: string): boolean {
+  const list = (env.PILOT_BLOCKED_WALLETS ?? "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+  return list.includes(wallet.toLowerCase());
+}
+
+/**
+ * Why the pilot is misconfigured (PILOT_OPEN "1" only), or null. head: the latest Arc block known (the mark row's);
+ * null skips the future-block check (it can't be told yet).
+ */
+export function pilotProblem(env: Env, head: number | null): string | null {
+  if ((env.PILOT_OPEN ?? "").trim() !== "1") return null;
+  const raw = (env.PILOT_REGI_SNAPSHOT_BLOCK ?? "").trim();
+  const b = snapshotBlock(env);
+  // empty: no snapshot requirement (owner decision 2026-10-12); set, it must be a real past block
+  if (raw !== "" && b === null) return `PILOT_REGI_SNAPSHOT_BLOCK is not a block number (${raw.slice(0, 40)})`;
+  if (b !== null && b < REGI_DEPLOY_BLOCK) return `PILOT_REGI_SNAPSHOT_BLOCK ${b} is before REGI existed (block ${REGI_DEPLOY_BLOCK})`;
+  if (b !== null && head !== null && b > head) return `PILOT_REGI_SNAPSHOT_BLOCK ${b} is in the future (head ${head})`;
+  if (admitUsdOf(env) === null) return `PILOT_ADMIT_USD is not a positive number of dollars (${(env.PILOT_ADMIT_USD ?? "").slice(0, 40)})`;
+  if (lockUsdOf(env) === null) return `PILOT_LOCK_USD is not a positive number of dollars (${(env.PILOT_LOCK_USD ?? "").slice(0, 40)})`;
+  if (lockFactoryOf(env) === undefined) return `PILOT_LOCK_FACTORY is not an address (${(env.PILOT_LOCK_FACTORY ?? "").slice(0, 60)})`;
+  if (maxLevSetting(env) === null) return `PILOT_MAX_LEV is not an integer ≥ 1 (${(env.PILOT_MAX_LEV ?? "").slice(0, 40)})`;
+  return null;
+}
+
+const logged = new Set<string>();
+export type PilotState = "closed" | "open" | "misconfigured";
+/**
+ * closed: the kill switch is off. misconfigured: it is on but a setting is wrong (every order is refused, and the
+ * reason is logged once per isolate). open: new orders accepted.
+ */
+export function pilotState(env: Env, head: number | null): PilotState {
+  if ((env.PILOT_OPEN ?? "").trim() !== "1") return "closed";
+  const problem = pilotProblem(env, head);
+  if (problem === null) return "open";
+  if (!logged.has(problem)) {
+    logged.add(problem);
+    console.error(`pilot misconfigured: ${problem}; every order is refused`);
+  }
+  return "misconfigured";
+}
+
+// ───────────────────────────── session cookie ─────────────────────────────
+
+function b64url(bytes: Uint8Array): string {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function unb64url(s: string): Uint8Array | null {
+  if (!/^[A-Za-z0-9_-]+$/.test(s)) return null;
+  try {
+    const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (s.length % 4)) % 4));
+    return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+async function hmacKey(secret: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
+}
+const sessionPayload = (wallet: string, epoch: number, exp: number) => new TextEncoder().encode(`abi-pilot|${wallet}|${epoch}|${exp}`);
+
+export async function makePilotSession(secret: string, wallet: string, epoch: number, nowS: number): Promise<string> {
+  const exp = nowS + PILOT_SESSION_TTL_S;
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", await hmacKey(secret), sessionPayload(wallet, epoch, exp)));
+  return `${wallet}.${epoch}.${exp}.${b64url(mac)}`;
+}
+
+/** The wallet and epoch of a well-formed, unexpired token with a valid MAC (constant time), or null. The epoch is checked by pilotWallet. */
+export async function verifyPilotSession(secret: string, token: string, nowS: number): Promise<{ wallet: string; epoch: number } | null> {
+  const parts = token.split(".");
+  if (parts.length !== 4) return null;
+  const [wallet, epochS, expS, macS] = parts;
+  if (!ADDR_RE.test(wallet) || !/^\d{1,9}$/.test(epochS) || !/^\d{1,12}$/.test(expS)) return null;
+  const epoch = Number(epochS), exp = Number(expS);
+  if (exp <= nowS || exp > nowS + PILOT_SESSION_TTL_S) return null;
+  const mac = unb64url(macS);
+  if (!mac || mac.length !== 32) return null;
+  const ok = await crypto.subtle.verify("HMAC", await hmacKey(secret), mac.slice(), sessionPayload(wallet, epoch, exp));
+  return ok ? { wallet, epoch } : null;
+}
+
+const pilotCookie = (token: string) => `${PILOT_SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${PILOT_SESSION_TTL_S}`;
+const clearPilotCookie = () => `${PILOT_SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
+
+const secretOk = (env: Env) => (env.PILOT_SESSION_SECRET ?? "").length >= SECRET_MIN;
+
+export async function sessionOf(req: Request, env: Env, nowS: number): Promise<{ wallet: string; epoch: number } | null> {
+  if (!secretOk(env)) return null;
+  const token = getCookie(req, PILOT_SESSION_COOKIE);
+  if (!token || token.length > 200) return null;
+  return verifyPilotSession(env.PILOT_SESSION_SECRET!, token, nowS);
+}
+
+/** The signed-in pilot wallet (lowercase), or null: a valid token whose epoch is the account's current one. */
+export async function pilotWallet(req: Request, env: Env, nowS: number): Promise<string | null> {
+  const s = await sessionOf(req, env, nowS);
+  if (!s || !env.PILOT_DB) return null;
+  const row = await env.PILOT_DB.prepare("SELECT session_epoch FROM accounts WHERE wallet = ?").bind(s.wallet).first<{ session_epoch: number }>();
+  return row && row.session_epoch === s.epoch ? s.wallet : null;
+}
+
+// ───────────────────────────── rate limits ─────────────────────────────
+
+/**
+ * Counts one call in the current one-minute window; true while the count is within `limit` (atomic upsert). Once
+ * the limit is reached the statement writes nothing (audit SS-2).
+ */
+export async function rateOk(db: D1Database, key: string, limit: number, nowS: number): Promise<boolean> {
+  const r = await db.prepare(SQL.rateHit).bind(key, Math.floor(nowS / 60), limit).first<{ n: number }>();
+  return r !== null && r.n <= limit;
+}
+
+/**
+ * The sign-in rate-limit key of a client address (audit SS-2): IPv4 whole; IPv6 by its /64, since one host
+ * usually holds a whole /64 and could otherwise use 2^64 keys. Malformed input is kept as is (cut to 64 chars).
+ */
+export function ipKey(raw: string | null): string {
+  const s = (raw ?? "").trim().toLowerCase();
+  if (!s) return "unknown";
+  if (!s.includes(":")) return s.slice(0, 64);
+  const mapped = /^(?:0{0,4}:){0,5}:?ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(s);
+  if (mapped) return mapped[1];
+  const parts = s.split("::");
+  if (parts.length > 2) return s.slice(0, 64);
+  const head = parts[0] ? parts[0].split(":") : [], tail = parts.length === 2 && parts[1] ? parts[1].split(":") : [];
+  const groups = parts.length === 2 ? [...head, ...Array(Math.max(0, 8 - head.length - tail.length)).fill("0"), ...tail] : head;
+  if (groups.length !== 8 || !groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return s.slice(0, 64);
+  return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":")}::/64`;
+}
+
+export const tooMany = () => errorJson(429, "too many requests; wait a minute");
+
+// ───────────────────────────── REGI ─────────────────────────────
+
+/** balanceOf(wallet) on REGI through the Arc RPC (raw units), at `block` (default latest). Throws when the RPC does not answer cleanly. */
+export async function regiBalance(wallet: string, fetchFn: typeof fetch = fetch, block?: number): Promise<bigint> {
+  const data = BALANCE_OF_SELECTOR + wallet.slice(2).toLowerCase().padStart(64, "0");
+  const tag = block === undefined ? "latest" : `0x${block.toString(16)}`;
+  const res = await fetchFn(ARC_RPC_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: REGI_ADDRESS, data }, tag] }),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) throw new Error(`rpc ${res.status}`);
+  const j = (await res.json()) as { result?: unknown; error?: unknown };
+  if (j.error !== undefined || typeof j.result !== "string" || !/^0x[0-9a-fA-F]{0,64}$/.test(j.result)) throw new Error("rpc: bad answer");
+  return j.result === "0x" ? 0n : BigInt(j.result);
+}
+/** Whole REGI (floored), as stored in accounts.regi_snap. */
+const wholeRegi = (raw: bigint) => Number(raw / REGI_UNIT > BigInt(Number.MAX_SAFE_INTEGER) ? BigInt(Number.MAX_SAFE_INTEGER) : raw / REGI_UNIT);
+
+export interface AccountRow {
+  wallet: string;
+  balance: number;
+  season: number;
+  created: number;
+  regi_ok: number;
+  regi_checked: number;
+  /** Whole REGI held at regi_snap_block (floored); migration 0001's comment predates this (it was 0/1 for ≥ 1 REGI). */
+  regi_snap: number | null;
+  regi_snap_block: number | null;
+  regi_retry_at: number;
+  session_epoch: number;
+}
+
+const ACCOUNT_COLS = "wallet, balance, season, created, regi_ok, regi_checked, regi_snap, regi_snap_block, regi_retry_at, session_epoch";
+
+export async function getAccount(db: D1Database, wallet: string): Promise<AccountRow | null> {
+  return db.prepare(`SELECT ${ACCOUNT_COLS} FROM accounts WHERE wallet = ?`).bind(wallet).first<AccountRow>();
+}
+
+/** The wallet's account, created with the starting balance on first use (once per wallet per season). */
+export async function ensureAccount(db: D1Database, wallet: string, nowS: number): Promise<AccountRow> {
+  const a = await getAccount(db, wallet);
+  if (a) return a;
+  await db
+    .prepare("INSERT INTO accounts (wallet, balance, season, created) VALUES (?, ?, ?, ?) ON CONFLICT (wallet) DO NOTHING")
+    .bind(wallet, RULES.startBalance, PILOT_SEASON, nowS)
+    .run();
+  return (await getAccount(db, wallet))!;
+}
+
+/**
+ * The REGI gate for an account: the snapshot answer (only when PILOT_REGI_SNAPSHOT_BLOCK is set: the whole-REGI
+ * balance at that block, permanent per block; else null and not required) and the current balance (≤ REGI_CACHE_S
+ * old, or always fresh from the RPC with forceNow, as sign-in and an order need), against `min`: the admission
+ * amount in raw REGI at today's median price (plan 2026-10-13 R2). min null (the price is unknown): nothing is
+ * decided (all null). ok = every required answer true; false if one is false; else null. During the 30 s back-off
+ * after an RPC failure nothing is re-read (it stays null).
+ */
+export async function regiStatus(db: D1Database, acct: AccountRow, env: Env, nowS: number, deps: PilotDeps, opts: { forceNow?: boolean; min: bigint | null }): Promise<RegiView> {
+  const min = opts.min;
+  if (min === null) return { ok: null, snapshot: null, now: null };
+  const f = deps.fetch ?? fetch;
+  const snapBlock = snapshotBlock(env);
+  const backoff = acct.regi_retry_at > nowS;
+  let snapshot: boolean | null = null, now: boolean | null = null, failed = false;
+  if (snapBlock !== null) {
+    if (acct.regi_snap !== null && acct.regi_snap_block === snapBlock) snapshot = BigInt(acct.regi_snap) * REGI_UNIT >= min;
+    else if (!backoff) {
+      try {
+        const held = await regiBalance(acct.wallet, f, snapBlock);
+        snapshot = held >= min;
+        await db.prepare("UPDATE accounts SET regi_snap = ?, regi_snap_block = ? WHERE wallet = ?").bind(wholeRegi(held), snapBlock, acct.wallet).run();
+        acct.regi_snap = wholeRegi(held);
+        acct.regi_snap_block = snapBlock;
+      } catch {
+        failed = true;
+      }
+    }
+  }
+  const cached = !opts.forceNow && acct.regi_checked > 0 && nowS - acct.regi_checked <= REGI_CACHE_S;
+  if (cached) now = acct.regi_ok === 1;
+  else if (!backoff && !failed && snapshot !== false) {
+    try {
+      now = (await regiBalance(acct.wallet, f)) >= min;
+      await db.prepare("UPDATE accounts SET regi_ok = ?, regi_checked = ? WHERE wallet = ?").bind(now ? 1 : 0, nowS, acct.wallet).run();
+      acct.regi_ok = now ? 1 : 0;
+      acct.regi_checked = nowS;
+    } catch {
+      failed = true;
+    }
+  }
+  if (failed) {
+    acct.regi_retry_at = nowS + PILOT_LIMITS.regiRetryS;
+    await db.prepare("UPDATE accounts SET regi_retry_at = ? WHERE wallet = ?").bind(acct.regi_retry_at, acct.wallet).run();
+  }
+  const snapOk = snapBlock === null ? true : snapshot;
+  const ok = snapOk === false || now === false ? false : snapOk === true && now === true ? true : null;
+  return { ok, snapshot, now };
+}
+
+/** The admission amount in raw REGI at today's median (null while the price is unknown). */
+export async function admitMin(db: D1Database, env: Env, nowS: number): Promise<bigint | null> {
+  return regiAt(admitUsdOf(env) ?? PILOT_ADMIT_USD_DEFAULT, await regiPrice(db, nowS));
+}
+/** "Hold at least $10 of REGI to join the points pilot." (PILOT_ADMIT_USD) */
+export const holdRegi = (env: Env) => holdUsdText(admitUsdOf(env) ?? PILOT_ADMIT_USD_DEFAULT);
+export const REGI_UNCHECKED = "Couldn't check REGI right now";
+
+// ───────────────────────────── handlers ─────────────────────────────
+
+export async function handlePilotNonce(env: Env, deps: PilotDeps = {}): Promise<Response> {
+  if (!env.NONCE_SECRET) return errorJson(500, NONCE_SECRET_MISSING);
+  return json({ nonce: await makeNonce(env.NONCE_SECRET, nowMsOf(deps)) });
+}
+
+export async function handlePilotLogin(req: Request, env: Env, deps: PilotDeps = {}): Promise<Response> {
+  const db = env.PILOT_DB;
+  if (!db || !secretOk(env)) return errorJson(503, PILOT_UNCONFIGURED);
+  const csrf = csrfFailure(req, siteOrigin(env));
+  if (csrf) return errorJson(403, csrf);
+  if (!env.NONCE_SECRET) return errorJson(500, NONCE_SECRET_MISSING);
+  const nowMs = nowMsOf(deps), nowS = Math.floor(nowMs / 1000);
+
+  // audit SS-2: the request's shape, the nonce's MAC and age, the origin and the issue time are checked before
+  // anything touches D1; then the rate limit (no write once it is reached), then the signature
+  const text = await readCapped(req, 8192);
+  let body: unknown;
+  try {
+    body = JSON.parse(text ?? "");
+  } catch {
+    return errorJson(400, "body must be JSON");
+  }
+  const b = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
+  const { message, signature } = b;
+  if (typeof message !== "string" || message.length > 1000) return errorJson(400, "message is required");
+  if (typeof signature !== "string" || !/^0x[0-9a-fA-F]+$/.test(signature)) return errorJson(400, "signature must be hex");
+  // ERC-1271 / ERC-6492 signatures are longer than 65 bytes; only plain (EOA, incl. EIP-7702) signatures are accepted
+  if (signature.length !== 132) return errorJson(400, SMART_WALLET);
+  const login = parsePilotLoginMessage(message);
+  if (!login) return errorJson(400, "not a points pilot sign-in message");
+  const problem = await nonceProblem(login.nonce, env.NONCE_SECRET, nowMs);
+  if (problem) return errorJson(401, problem);
+  const origin = siteOrigin(env);
+  if (!origin || login.origin !== origin) return errorJson(401, `message is for ${login.origin}, this site is ${origin || "(SITE_ORIGIN unset)"}`);
+  if (!issuedFresh(login.issued, nowMs)) return errorJson(401, "sign-in message expired; sign in again");
+  if (!(await rateOk(db, `login:${ipKey(req.headers.get("cf-connecting-ip"))}`, PILOT_LIMITS.loginsPerMin, nowS))) return tooMany();
+  let wallet: string;
+  try {
+    wallet = (await recoverMessageAddress({ message, signature: signature as Hex })).toLowerCase();
+  } catch {
+    return errorJson(401, "bad signature");
+  }
+  // a smart account's owner key signs for it: the signature then recovers to a different address
+  if (wallet !== login.address) return errorJson(401, SMART_WALLET);
+  const used = await db.prepare(SQL.nonceUse).bind(login.nonce, nowS + Math.ceil(NONCE_MAX_AGE_MS / 1000) + 60).run();
+  if (used.meta.changes !== 1) return errorJson(401, "nonce already used; sign in again");
+
+  // R2 (owner decision 2026-10-13): the wallet must hold the admission amount now (a fresh read, fail closed). A wallet
+  // with open positions is let in regardless: closes never need REGI
+  const known = await getAccount(db, wallet);
+  const holding = known !== null && (await db.prepare("SELECT 1 AS x FROM positions WHERE wallet = ? AND closed_at IS NULL LIMIT 1").bind(wallet).first()) !== null;
+  let held: bigint | null = null;
+  if (!holding) {
+    if (admitUsdOf(env) === null) return errorJson(503, "pilot misconfigured");
+    const min = await admitMin(db, env, nowS);
+    if (min === null) return errorJson(503, REGI_PRICE_UPDATING);
+    try {
+      held = await regiBalance(wallet, deps.fetch ?? fetch);
+    } catch {
+      return errorJson(503, REGI_UNCHECKED);
+    }
+    if (held < min) {
+      if (known) await db.prepare("UPDATE accounts SET regi_ok = 0, regi_checked = ? WHERE wallet = ?").bind(nowS, wallet).run();
+      return errorJson(403, holdRegi(env));
+    }
+  }
+  const acct = await ensureAccount(db, wallet, nowS);
+  if (held !== null) await db.prepare("UPDATE accounts SET regi_ok = 1, regi_checked = ? WHERE wallet = ?").bind(nowS, wallet).run();
+  const token = await makePilotSession(env.PILOT_SESSION_SECRET!, wallet, acct.session_epoch, nowS);
+  return json({ address: wallet }, 200, { "set-cookie": pilotCookie(token) });
+}
+
+/** Sign-out: bumps the wallet's session epoch (every session of it ends), then clears the cookie. */
+export async function handlePilotLogout(req: Request, env: Env, deps: PilotDeps = {}): Promise<Response> {
+  const csrf = csrfFailure(req, siteOrigin(env));
+  if (csrf) return errorJson(403, csrf);
+  const nowS = nowSOf(deps);
+  const wallet = await pilotWallet(req, env, nowS);
+  if (wallet && env.PILOT_DB) await env.PILOT_DB.prepare(SQL.sessionBump).bind(wallet).run();
+  return new Response(null, { status: 204, headers: { "set-cookie": clearPilotCookie(), "cache-control": "no-store" } });
+}

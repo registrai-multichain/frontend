@@ -1,0 +1,178 @@
+/** A deterministic mock of the Arc RPC for the live engine's tests (also drives the reference live.js). */
+import { EMITTER, TRANSFER } from "./abi-live";
+import index from "./fixtures/builders-index.json";
+import { validateIndex } from "./builders-index";
+
+export type LiveData = import("./builders-index").AbiData & { live: import("./builders-index").AbiLive };
+// the page only ever sees a validated file: the tests use the same shape (defaults for keys the fixture predates)
+const checked = validateIndex(index);
+if (!checked.ok || !checked.data.live) throw new Error("fixture: " + (checked.ok ? "no live block" : checked.error));
+export const INDEX = checked.data as LiveData;
+export const HS = INDEX.live!.hour_start;
+export const HB = INDEX.live!.hour_start_block;
+export const ARGUS = "0x07a688a001f416cc433c68ff56aa26bc5131cc6e";
+export const PEACH = "0x139271e6694b4047949cdd0d4343d116dc732113";
+export const ARGUS_DEPLOYER = "0x7d613c6316ede9d257f3bf512777cb4ea4a6bee4";
+const w = (n: string) => "0x" + n.repeat(40);
+export const WALLET_A = w("a"), WALLET_B = w("b"), WALLET_C = w("c");
+export const ZERO = "0x" + "0".repeat(40);
+
+/** Block n has timestamp HS + floor((n - HB) / 2). */
+export const tsOf = (n: number) => HS + Math.floor((n - HB) / 2);
+const pad = (a: string) => "0x" + "0".repeat(24) + a.slice(2);
+const usdc = (v: number) => "0x" + (BigInt(Math.round(v * 1e6)) * 10n ** 12n).toString(16); // 18 decimals
+
+type Log = { blockNumber: string; blockTimestamp?: string; topics: string[]; data: string };
+export const log = (offset: number, from: string, to: string, v: number, withTs = true): Log => ({
+  blockNumber: "0x" + (HB + offset).toString(16),
+  ...(withTs ? { blockTimestamp: "0x" + tsOf(HB + offset).toString(16) } : {}),
+  topics: [TRANSFER, pad(from), pad(to)],
+  data: usdc(v),
+});
+
+export const CHAIN_LOGS: Log[] = [
+  log(20, WALLET_A, ARGUS, 5), // new payer
+  log(30, WALLET_A, ARGUS, 1500, false), // over the cap; timestamp looked up from the block
+  log(40, WALLET_B, ARGUS, 12), // B is in the seen file: not new
+  log(50, ARGUS_DEPLOYER, ARGUS, 40), // own deployer: excluded
+  log(60, PEACH, ARGUS, 40), // from a tracked contract: excluded
+  log(70, ZERO, ARGUS, 40), // mint: excluded
+  log(4000, WALLET_C, PEACH, 50), // second getLogs chunk
+  log(7250, WALLET_A, ARGUS, 3), // next hour
+  // base layer sample (first 240 blocks): untracked senders, plus a self-transfer and a mint that do not count
+  log(5, w("d"), w("e"), 100), log(6, w("d"), w("f"), 20), log(7, w("e"), w("f"), 7.5), log(8, w("f"), w("f"), 9), log(9, ZERO, w("d"), 9),
+];
+
+export const SEEN = { hour_start: HS, seen: { "domain:argus.world": WALLET_B.slice(2, 12) } };
+
+/* ---------- fiat stablecoins and milestones (spec §12, §13) ---------- */
+export const EURC = "0xbef5f6d51cb62b58e6a8f77868681825c6fe21c1";
+export const JPYC = "0xe7c3d8c9a439fede00d2600032d5db0be71c3c29";
+export const GBPA = "0xbbe6aab0ed76e90aea0d1cd978ec231c8adcdf8b"; // added one hour after HS: counts from the next hour
+export const NOT_REGISTERED = "0x" + "5".repeat(40);
+const raw = (v: number, dec: number) => "0x" + (BigInt(Math.round(v * 1e6)) * 10n ** BigInt(dec - 6)).toString(16);
+type ScLog = Log & { address: string };
+const sc = (token: string, dec: number, offset: number, from: string, to: string, v: number, withTs = true): ScLog => ({ address: token, ...log(offset, from, to, 0, withTs), data: raw(v, dec) });
+
+export const SC_LOGS: ScLog[] = [
+  sc(EURC, 6, 25, WALLET_C, ARGUS, 100), // new payer into Argus, EUR at the 8 Oct fix
+  sc(JPYC, 18, 45, w("9"), PEACH, 1000, false), // 18 decimals (raw over 2^53); timestamp looked up from the block
+  sc(EURC, 6, 55, ARGUS_DEPLOYER, ARGUS, 500), // own deployer: excluded
+  sc(EURC, 6, 65, ZERO, ARGUS, 500), // mint: excluded
+  sc(GBPA, 6, 80, WALLET_A, ARGUS, 20), // before GBPA's `added`: excluded this hour
+  sc(EURC, 6, 4050, WALLET_B, PEACH, 2500), // second getLogs chunk; over the per-payer cap in USD
+  sc(GBPA, 6, 7260, WALLET_A, ARGUS, 20), // next hour: GBPA counts now
+  // base layer sample: d already sent USDC (merged per sender after USDC); a self-transfer and a mint do not count
+  sc(EURC, 6, 11, w("d"), w("e"), 50), sc(JPYC, 18, 12, w("8"), w("7"), 30000), sc(EURC, 6, 13, w("7"), w("7"), 9), sc(EURC, 6, 14, ZERO, w("7"), 9),
+  sc(NOT_REGISTERED, 6, 15, w("8"), ARGUS, 1e6), // a token the registry does not hold: never asked for
+];
+
+/** The fixture with three registered coins, ECB fixes and three synthetic milestones (two in the open hour, one in the next). */
+export function scIndex(): LiveData {
+  const d = JSON.parse(JSON.stringify(INDEX)) as LiveData;
+  d.live.stablecoins = {
+    [EURC]: { symbol: "EURC", currency: "EUR", decimals: 6, added: HS - 3600 },
+    [JPYC]: { symbol: "JPYC", currency: "JPY", decimals: 18, added: HS },
+    [GBPA]: { symbol: "GBPA", currency: "GBP", decimals: 6, added: HS + 3600 },
+  };
+  // HS is 9 Oct 21:00 UTC: payments that day use the 8 Oct fix, never the 9 Oct one
+  d.live_fx = {
+    "2026-10-07": { EUR: 1.1177, JPY: 0.0063200452, GBP: 1.3204560222 },
+    "2026-10-08": { EUR: 1.1186, JPY: 0.0063179893, GBP: 1.3206923422 },
+    "2026-10-09": { EUR: 1.1206, JPY: 0.0063189354, GBP: 1.3220390972 },
+  };
+  d.milestones = [
+    { id: "test-arc-upgrade", t: HS + 1800, target: "base:arc", tier: "arc-upgrade", mult: 1.25, title: "Arc network upgrade (synthetic)", evidence: ["https://docs.arc.io/"] },
+    { id: "test-release", t: HS + 2700, target: "domain:argus.world", tier: "project-release", mult: 1.1, title: "Argus release (synthetic)", evidence: [ARGUS] },
+    { id: "test-next-hour", t: HS + 3620, target: "domain:peach.ag", tier: "project-release", mult: 1.1, title: "Peach release (synthetic)", evidence: ["0x" + "ab".repeat(32)] },
+  ];
+  return d;
+}
+
+/** The JSON-RPC handler: `head` is the chain's latest block number. */
+export function mockRpc(head: number, stats = { calls: [] as string[] }, extra: Log[] = []) {
+  return async (method: string, params: unknown[]): Promise<unknown> => {
+    stats.calls.push(method);
+    if (method === "eth_getBlockByNumber") {
+      const tag = params[0] as string;
+      const n = tag === "latest" ? head : parseInt(tag, 16);
+      return { number: "0x" + n.toString(16), timestamp: "0x" + tsOf(n).toString(16) };
+    }
+    if (method === "eth_getLogs") {
+      const f = params[0] as { fromBlock: string; toBlock: string; address: string | string[]; topics: (string | string[] | null)[] };
+      const from = parseInt(f.fromBlock, 16), to = parseInt(f.toBlock, 16);
+      if (to - from >= 10_000) throw new Error("RPC range too large");
+      const source: Log[] = Array.isArray(f.address) ? SC_LOGS.filter((l) => (f.address as string[]).includes(l.address)) : f.address === EMITTER ? [...CHAIN_LOGS, ...extra] : [];
+      return source.filter((l) => {
+        const b = parseInt(l.blockNumber, 16);
+        if (b < from || b > to || l.topics[0] !== f.topics[0]) return false;
+        const t2 = f.topics[2];
+        return !t2 || (Array.isArray(t2) && t2.includes(l.topics[2]));
+      }).map((l) => ({ ...l }));
+    }
+    throw new Error("unexpected " + method);
+  };
+}
+
+/* ---------- integrated products (spec §15) ---------- */
+export const ROUTER = "0x" + "7".repeat(40), POOL = "0x" + "8".repeat(40);
+/** Uniswap-like member: ROUTER and POOL are its contracts and open senders. */
+export function integIndex(): LiveData {
+  const d = JSON.parse(JSON.stringify(INDEX)) as LiveData;
+  d.live.contracts[ROUTER] = "integration:uniswap"; d.live.contracts[POOL] = "integration:uniswap";
+  d.live.open_senders = [ROUTER, POOL];
+  return d;
+}
+export const INTEG_LOGS: Log[] = [
+  log(21, w("1"), ROUTER, 30), // a payment into the router: counts for the integration
+  log(22, ROUTER, POOL, 30), // the router paying its own pool: internal, not counted again
+  log(23, ROUTER, ARGUS, 25), // routed payment into a project: counts for Argus
+  log(24, POOL, PEACH, 10), // pool paying out to a project: counts for Peach
+];
+
+/* ---------- "close the gaps": a large member list in its own document ---------- */
+/** The integrated-products index with its contract map moved out (contracts_sha256) and padded past WIDE_ABOVE with
+ * idle pool addresses, so the engine fetches every transfer and filters locally. */
+export function wideIntegIndex(pad = 1200): { index: LiveData; doc: { contracts: Record<string, string>; open_senders: string[] } } {
+  const d = integIndex();
+  const contracts = { ...d.live.contracts };
+  for (let i = 0; i < pad; i++) contracts["0x" + (0xa000000 + i).toString(16).padStart(40, "0")] = "integration:uniswap";
+  const doc = { contracts, open_senders: [...(d.live.open_senders ?? [])].sort() };
+  d.live.contracts = {};
+  delete d.live.open_senders;
+  d.live.contracts_sha256 = "0".repeat(64);
+  d.live.contracts_count = Object.keys(contracts).length;
+  return { index: d, doc };
+}
+
+/* ---------- audit F1: dust, the $10 new-payer bar, the per-hour bonus cap, phased entry ---------- */
+/** Peach restarts from zero (its entry phases in); min_pay 0.5, new_payer_min 10, new_payer_max_h 2, entry_step = entry/24. */
+export function f1Index(): LiveData {
+  const d = JSON.parse(JSON.stringify(INDEX)) as LiveData;
+  Object.assign(d.live, { min_pay: 0.5, new_payer_min: 10, new_payer_max_h: 2, entry_step: d.live.entry / 24 });
+  d.live.P["domain:peach.ag"] = 0; d.live.roots_prev["domain:peach.ag"] = 0;
+  return d;
+}
+export const F1_LOGS: Log[] = [
+  log(31, w("2"), PEACH, 0.2), log(32, w("3"), PEACH, 0.3), // dust: ignored
+  log(33, w("4"), PEACH, 9), // under the $10 bar: points, no bonus, not marked
+  log(34, w("5"), PEACH, 11), log(35, w("6"), PEACH, 12), log(36, w("7"), PEACH, 15), // 3 new payers: only 2 bonuses this hour
+  log(37, w("4"), PEACH, 20), // the $9 payer comes back with $20: now a new payer, but the cap is reached
+];
+
+/** §18: the wide integrated-products index with ROUTER and POOL joining today (live.contracts_add), not in the base map. */
+export function addIntegIndex(): { index: LiveData; doc: { contracts: Record<string, string>; open_senders: string[] } } {
+  const { index, doc } = wideIntegIndex();
+  const base = { ...doc.contracts };
+  const add: Record<string, string> = {};
+  for (const a of [ROUTER, POOL]) { add[a] = base[a]; delete base[a]; }
+  index.live.contracts_add = add;
+  return { index, doc: { contracts: base, open_senders: doc.open_senders.filter((a) => !(a in add)) } };
+}
+
+/* ---------- §21 volume term: cap $10k per payer per hour, +1 point per $100 counted, base keeps $1k log-only ---------- */
+export function volIndex(): LiveData {
+  const d = JSON.parse(JSON.stringify(INDEX)) as LiveData;
+  Object.assign(d.live, { cap: 10_000, vol_cap: 10_000, vol_unit: 100, base_cap: 1000 });
+  return d;
+}

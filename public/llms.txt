@@ -1,0 +1,20 @@
+# Registrai
+
+> Registrai is a data company for the Arc blockchain (by Circle). Data on the Arc ecosystem: apps on Arc with their hourly stablecoin payments, paying wallets and volume, the Arc Builders, Integrations and Ecosystem indices, and verified builders. The data lives on builder.registrai.cc.
+
+## Data
+- [Full reference](https://builder.registrai.cc/llms-full.txt): every project, the method, Arc in numbers and the question pages in one file
+- [Arc in numbers](https://builder.registrai.cc/arc/): USDC and EURC supply on Arc, stablecoins and TVL, estimated 24 h volume, projects and a dated timeline; JSON at https://builder.registrai.cc/api/v1/arc
+- [Methodology](https://builder.registrai.cc/methodology/): definitions of every figure (payments, paying wallets, received USD, index points, the 7-day window, directory statuses), sources, the attributed share and known limits
+- [Most-used apps on Arc, last 7 days](https://builder.registrai.cc/arc/most-used-apps/): apps ranked by stablecoin payments received (USD), payments and new paying wallets; JSON at https://builder.registrai.cc/api/v1/arc/apps-week
+- [Apps that accept USDC on Arc](https://builder.registrai.cc/arc/apps-that-accept-usdc/): apps measured receiving payments in the last 7 days, and payment apps listed but not measured
+- [New on Arc this week](https://builder.registrai.cc/arc/new/): projects that went live and apps added to Registrai's index in the last 7 days
+- [How to get USDC onto Arc](https://builder.registrai.cc/arc/get-usdc/): on-ramps, exchanges and bridges for Arc, each with its evidence
+- [Arc vs Ethereum vs Solana for stablecoin payments](https://builder.registrai.cc/arc/arc-vs-ethereum-vs-solana/): fee currency, measured block times, finality, estimated USDC transfer fees in USD and USDC in circulation per chain, each with its source
+- [Arc ecosystem directory](https://builder.registrai.cc/ecosystem/): every project on Arc with category, status and sources; JSON at https://builder.registrai.cc/api/v1/ecosystem
+- [Apps on Arc](https://builder.registrai.cc/apps/): every app with its last 24 h
+- [Arc indices](https://builder.registrai.cc/builders-index/): ABI, AII, AEI, hourly
+- [Data API v1](https://builder.registrai.cc/data-api/): public JSON API, no key, CC BY 4.0
+- [Full agent guide](https://builder.registrai.cc/llms.txt): API, OpenAPI and MCP server
+
+Licence: CC BY 4.0. Credit: "Registrai, builder.registrai.cc, CC BY 4.0".

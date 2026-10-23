@@ -69,13 +69,13 @@ export function SuffixPriceChart({ pool }: { pool: SuffixPool }) {
   useEffect(() => { void load(); }, [load]);
 
   return (
-    <div className="border border-line/60 bg-bg-elev/20 p-5">
+    <div className="border border-line bg-bg-elev p-5">
       <div className="caption text-2xs text-fg-dim mb-3">price · realized trades (on-chain)</div>
       <Chart pts={pts} floor={floor} froth={froth} />
       <div className="flex gap-4 mt-3 text-2xs text-fg-dim">
         <span><span className="inline-block w-3 border-t border-accent align-middle" /> spot</span>
-        <span><span className="inline-block w-3 border-t border-emerald-400 align-middle" /> floor</span>
-        <span><span className="inline-block w-3 border-t border-dashed border-amber-300/70 align-middle" /> froth top</span>
+        <span><span className="inline-block w-3 border-t border-up align-middle" /> floor</span>
+        <span><span className="inline-block w-3 border-t border-dashed border-accent/70 align-middle" /> froth top</span>
       </div>
     </div>
   );
@@ -106,10 +106,10 @@ function Chart({ pts, floor, froth }: { pts?: Pt[]; floor?: number; froth?: numb
         </linearGradient>
       </defs>
       {froth !== undefined && froth <= hi && froth >= lo && (
-        <line x1={PAD} x2={W - PAD} y1={sy(froth)} y2={sy(froth)} className="stroke-amber-300/60" strokeWidth="1" strokeDasharray="4 3" />
+        <line x1={PAD} x2={W - PAD} y1={sy(froth)} y2={sy(froth)} className="stroke-accent/60" strokeWidth="1" strokeDasharray="4 3" />
       )}
       {floor !== undefined && floor <= hi && floor >= lo && (
-        <line x1={PAD} x2={W - PAD} y1={sy(floor)} y2={sy(floor)} className="stroke-emerald-400/70" strokeWidth="1" />
+        <line x1={PAD} x2={W - PAD} y1={sy(floor)} y2={sy(floor)} className="stroke-up/70" strokeWidth="1" />
       )}
       <path d={area} fill="url(#ai-fill)" className="text-accent" />
       <path d={line} fill="none" className="stroke-accent" strokeWidth="1.5" />

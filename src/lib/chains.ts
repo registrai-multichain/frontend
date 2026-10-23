@@ -1,19 +1,36 @@
 import { defineChain, fallback, http, type Address, type Chain, type Transport } from "viem";
 import live from "./live-data.json";
+import { paceLogs } from "./rpc-pacing";
 
-// Arc testnet RPCs. Canteen's swarm endpoint is primary so the project's
-// read traffic is attributed to us on their dashboards; Arc-official is the
-// automatic failover so the app keeps working if Canteen flakes (as it did
-// for ~3 days). The swrm path token is an intentionally-public testnet
-// attribution key — no funds or production access behind it.
-export const ARC_RPC_CANTEEN =
-  "https://rpc.testnet.arc-node.thecanteenapp.com/v1/swrm_ab2685dbd14cd9d0af6037f396de151143407b65fe21073bc08d31e6246db546";
-export const ARC_RPC_OFFICIAL = "https://rpc.testnet.arc.network";
+// Circle's official Arc RPC endpoints — the ONLY endpoints the app reads from or
+// hands to a wallet. Project rule: no third-party RPC and no API keys in the
+// bundle (a key here is public the moment the site is built).
+export const ARC_TESTNET_RPC = "https://rpc.testnet.arc.io";
+export const ARC_MAINNET_RPC = "https://rpc.mainnet.arc.io";
 
-/** Read transport for Arc: Canteen primary, Arc-official failover. Writes go
+/** Read transport for Arc testnet: Circle's official endpoint only. Writes go
  *  through the user's wallet RPC (custom transport), not this. */
 export function arcTransport(): Transport {
-  return fallback([http(ARC_RPC_CANTEEN), http(ARC_RPC_OFFICIAL)]);
+  return fallback([http(ARC_TESTNET_RPC)]);
+}
+
+/** Read transport for a given chain entry: its own (official) RPC list only.
+ *  `batch` coalesces concurrent reads into JSON-RPC batches (Circle's Arc
+ *  endpoints accept them), which keeps multi-read views under the rate limit. */
+export function transportFor(chain: WalletChain, opts: { batch?: boolean } = {}): Transport {
+  return fallback(
+    chain.rpcUrls.map((url) =>
+      // eth_getLogs is paced page-wide (rpc-pacing.ts): Arc allows ~4 a second per IP.
+      paceLogs(http(url, {
+        // The Arc RPC rate-limits large JSON-RPC batches per IP (batches of 25 were
+        // refused; <= 10 pass), and a 429 there also hits the user's wallet on the
+        // same IP. Keep batches small; contract reads go through Multicall3 anyway.
+        batch: opts.batch ? { batchSize: 8, wait: 20 } : false,
+        retryCount: 4,
+        retryDelay: 400,
+      })),
+    ),
+  );
 }
 
 /**
@@ -70,19 +87,48 @@ export interface ChainContracts {
   SuffixTreasury?: Address;
   SuffixSenior?: Address;
   SuffixJunior?: Address;
+  /** OracleStake — tiered pooled stake. Stake USDC once, launch oracle feeds
+   *  from the UI (tier quota); OracleStake is the feed creator + bonded agent
+   *  of record, with each feed independently bonded. */
+  OracleStake?: Address;
+  /** NanoLedger — fully on-chain trustless nanopayment settlement. Value moves
+   *  as internal balance accounting (gas decoupled from amount), with
+   *  reserve-funded streams; USDC only at deposit/withdraw. */
+  NanoLedger?: Address;
+  /** MarketsV4 — binary prediction market settled entirely on NanoLedger:
+   *  trades move internal balances, the per-trade fee is one accrual write. */
+  MarketsV4nano?: Address;
+  /** Perennial — fund builders by betting on their progress. 50% of every
+   *  market fee is the income of the builder the market is about (BuilderFund),
+   *  taxed progressively per epoch into the SeasonPool. */
+  BuilderRegistry?: Address;
+  BuilderFund?: Address;
+  SeasonPool?: Address;
+  CaretakerRegistry?: Address;
+  MarketsPerennial?: Address;
 }
 
-export interface ChainEntry {
+/** What a wallet needs to know about a chain (switch/add, reads, explorer).
+ *  Every chain the app can point a wallet at is one of these; only chains with
+ *  the full oracle stack deployed are also a {@link ChainEntry}. */
+export interface WalletChain {
   id: number;
-  family: Family;
   name: string;             // "Arc Testnet"
   shortName: string;        // "arc"
   testnet: boolean;
+  /** Official RPC endpoints only — these are installed into users' wallets. */
   rpcUrls: readonly string[];
   explorer: { name: string; url: string };
+  /** Native gas currency. On Arc this is USDC with 18-decimal accounting. */
   nativeCurrency: { name: string; symbol: string; decimals: number };
-  contracts: ChainContracts;
+  /** The ERC-20 USDC interface (6 decimals on Arc). */
+  usdc: { address: Address; decimals: number };
   viemChain: Chain;
+}
+
+export interface ChainEntry extends WalletChain {
+  family: Family;
+  contracts: ChainContracts;
   /** Optional human label for the deployment (e.g. "v1 · 2026-05"). */
   label?: string;
 }
@@ -92,13 +138,18 @@ export interface ChainEntry {
 // ERC-20 interface at 0x3600…0000 with 6 decimals — that's what our
 // contracts use.
 
+/** Arc's ERC-20 USDC interface — same address on testnet and mainnet, 6
+ *  decimals on both (verified on-chain). Native gas USDC is 18 decimals. */
+export const ARC_USDC_ERC20 = "0x3600000000000000000000000000000000000000" as Address;
+
 const ARC_TESTNET_VIEM = defineChain({
   id: 5042002,
   name: "Arc Testnet",
   nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
   rpcUrls: {
-    default: { http: ["https://rpc.testnet.arc.network"] },
-    public: { http: ["https://rpc.testnet.arc.network"] },
+    // Circle's official testnet endpoint only.
+    default: { http: [ARC_TESTNET_RPC] },
+    public: { http: [ARC_TESTNET_RPC] },
   },
   blockExplorers: {
     default: { name: "ArcScan", url: "https://testnet.arcscan.app" },
@@ -112,9 +163,10 @@ export const ARC_TESTNET: ChainEntry = {
   name: "Arc Testnet",
   shortName: "arc",
   testnet: true,
-  rpcUrls: ["https://rpc.testnet.arc.network"],
+  rpcUrls: [ARC_TESTNET_RPC],
   explorer: { name: "ArcScan", url: "https://testnet.arcscan.app" },
   nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
+  usdc: { address: ARC_USDC_ERC20, decimals: 6 },
   contracts: {
     USDC: live.contracts.USDC as Address,
     EURC: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a" as Address,
@@ -170,9 +222,65 @@ export const ARC_TESTNET: ChainEntry = {
     SuffixTreasury: "0x0B146b14EEf4b4C0D16AEA9DADF461e714bf5Ce2" as Address,
     SuffixSenior: "0x4b3A8957BFd80fC54393CeF7fBdf1a96586fbeA1" as Address,
     SuffixJunior: "0xCa1e23c01bCF9fDf3AE1CA2d3b072cCE007fb814" as Address,
+    // OracleStake (deployed 2026-06-15). Stake USDC once, launch oracle feeds
+    // from the UI by tier; OracleStake is the bonded agent of record per feed.
+    OracleStake: (live.contracts as { OracleStake?: string })
+      .OracleStake as Address | undefined,
+    // NanoLedger (deployed 2026-06-16). Fully on-chain trustless nanopayment
+    // settlement: internal balances + reserve-funded streams; sub-cent flows.
+    NanoLedger: (live.contracts as { NanoLedger?: string })
+      .NanoLedger as Address | undefined,
+    // MarketsV4 (deployed 2026-06-16). Prediction market settled on NanoLedger;
+    // fee = one accrual write per trade, claimed from the ledger.
+    MarketsV4nano: (live.contracts as { MarketsV4?: string })
+      .MarketsV4 as Address | undefined,
+    // Perennial (deployed 2026-06-29). Builder funding via betting markets.
+    BuilderRegistry: (live.contracts as { BuilderRegistry?: string })
+      .BuilderRegistry as Address | undefined,
+    BuilderFund: (live.contracts as { BuilderFund?: string })
+      .BuilderFund as Address | undefined,
+    SeasonPool: (live.contracts as { SeasonPool?: string })
+      .SeasonPool as Address | undefined,
+    CaretakerRegistry: (live.contracts as { CaretakerRegistry?: string })
+      .CaretakerRegistry as Address | undefined,
+    MarketsPerennial: (live.contracts as { MarketsPerennial?: string })
+      .MarketsPerennial as Address | undefined,
   },
   viemChain: ARC_TESTNET_VIEM,
   label: "v2 · 2026-05",
+};
+
+// ─────────────────────── Arc Mainnet ───────────────────────
+// Chain facts mirror the bridge registry (cctp/domains.ts: chain 5042, CCTP
+// domain 26, explorer.arc.io). Wallet-level only: the oracle stack is not
+// deployed on mainnet, so this is deliberately NOT in `CHAINS` — pages that
+// drive contracts through `currentChain` keep reading testnet. Perennial picks
+// its network separately (see lib/perennial-network.ts).
+
+const ARC_MAINNET_VIEM = defineChain({
+  id: 5042,
+  name: "Arc",
+  nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
+  rpcUrls: {
+    default: { http: [ARC_MAINNET_RPC] },
+    public: { http: [ARC_MAINNET_RPC] },
+  },
+  blockExplorers: {
+    default: { name: "Arc Explorer", url: "https://explorer.arc.io" },
+  },
+  testnet: false,
+});
+
+export const ARC_MAINNET: WalletChain = {
+  id: 5042,
+  name: "Arc",
+  shortName: "arc",
+  testnet: false,
+  rpcUrls: [ARC_MAINNET_RPC],
+  explorer: { name: "Arc Explorer", url: "https://explorer.arc.io" },
+  nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
+  usdc: { address: ARC_USDC_ERC20, decimals: 6 },
+  viemChain: ARC_MAINNET_VIEM,
 };
 
 // ─────────────────────── HyperEVM (planned) ───────────────────────
@@ -202,6 +310,21 @@ export const CHAINS: Record<number, ChainEntry> = {
 export const DEFAULT_CHAIN_ID = ARC_TESTNET.id;
 export const DEFAULT_CHAIN = ARC_TESTNET;
 
+/** Every chain the app may ask a wallet to switch to / add. */
+export const WALLET_CHAINS: Record<number, WalletChain> = {
+  [ARC_TESTNET.id]: ARC_TESTNET,
+  [ARC_MAINNET.id]: ARC_MAINNET,
+};
+
+export function getWalletChain(id: number | undefined): WalletChain | undefined {
+  if (id === undefined) return undefined;
+  return WALLET_CHAINS[id];
+}
+
+// Perennial's network (testnet | mainnet) is chosen at build time in
+// lib/perennial-network.ts via NEXT_PUBLIC_PERENNIAL_NETWORK; it is not pinned
+// here any more.
+
 export function getChain(id: number | undefined): ChainEntry | undefined {
   if (id === undefined) return undefined;
   return CHAINS[id];
@@ -213,10 +336,10 @@ export function isSupportedChain(id: number | undefined): boolean {
 
 // ─────────────────────── Helpers ───────────────────────
 
-export function txUrl(chain: ChainEntry, hash: string): string {
+export function txUrl(chain: WalletChain, hash: string): string {
   return `${chain.explorer.url}/tx/${hash}`;
 }
 
-export function addrUrl(chain: ChainEntry, addr: string): string {
+export function addrUrl(chain: WalletChain, addr: string): string {
   return `${chain.explorer.url}/address/${addr}`;
 }

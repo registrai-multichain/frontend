@@ -1,0 +1,250 @@
+{
+ "results": [
+  {
+   "slug": "arctools",
+   "first_live": "2026-09-09",
+   "evidence": {
+    "url": "https://explorer.arc.io/tx/0x5e56f30126e7e1fe9cf5e20cd3e71d747c3fd84bf0b36ddcef3161383ce974c4",
+    "title": "Creation tx of ArcRewardsVault v2 (0x7d49…dabd), block 19984396",
+    "date": "2026-09-09"
+   },
+   "why": "Earliest of the entry's README-listed contracts: ArcRewardsVault v2 0x7d49f880c7bdae4fd44d52c3dbfb43534e83dabd created in block 19984396 at 2026-09-09T14:48:36Z (tx 0x5e56…74c4, deployer 0x408c…6fe8). explorer.arc.io/arcscan were behind a Cloudflare challenge, so block/timestamp/tx were read from rpc.mainnet.arc.io (chainId 5042; eth_getCode binary search + block timestamp + receipt). Next ones: ArcPad v3.1 2026-09-11, ArcAggregator v3 2026-09-13. Pre-dates public mainnet (private window); GitHub repo created 2026-09-10. Current 2026-10-10 value is the index date and should be replaced. Treasury 0xb35c…c0d has no code (EOA/Safe not deployed), skipped.",
+   "status": null,
+   "status_quote": null,
+   "status_source": null,
+   "category": null,
+   "category_why": "Current 'trading' is right. Site: \"The ultimate trading terminal for the Arc ecosystem. Aggregated launches, DEXs and liquidity in one place.\" It routes swaps via ArcAggregator rather than running its own AMM pools, so 'dexs' fits only as a secondary tag (aggregator)."
+  },
+  {
+   "slug": "aster",
+   "first_live": null,
+   "evidence": null,
+   "why": "No Arc mainnet date found: arc.io ecosystem page lists Aster under DEXs but does not say it is live on Arc; Aster docs do not mention Arc.",
+   "status": null,
+   "status_quote": null,
+   "status_source": null,
+   "category": null,
+   "category_why": "Current 'trading' is right. Aster docs: \"a privacy-focused decentralized exchange, offering perpetual markets on crypto, stocks and commodities, and more commonly known as a perp DEX.\" Perps venue → trading; arc.io files it under DEXs, so a 'dexs' tag is defensible. asterdex.com returned 403; docs.asterdex.com used."
+  },
+  {
+   "slug": "blackrock",
+   "first_live": null,
+   "evidence": null,
+   "why": "Founding validator (named in both Circle posts) and expected BUIDL issuer on Arc; no dated live-on-Arc source. Not changed: Circle's 2026-09-16 release describes a 'phased rollout' of the validator cohort, not that each validator is live. VALIDATOR: entry is category asset-managers with tags ['rwa'] — it lacks the 'validators' tag and should get it. Quote (2026-08-05): \"Alongside Circle, Arc’s founding validator cohort – which includes BlackRock, The Depository Trust & Clearing Corporation (DTCC), Galaxy, Global Payments, ICE, Mastercard, MoneyGram, SBI, Standard Chartered, Sumitomo Corporation, and Visa — represents a new model for onchain infrastructure\"",
+   "status": null,
+   "status_quote": null,
+   "status_source": null,
+   "category": null,
+   "category_why": null
+  },
+  {
+   "slug": "dtcc",
+   "first_live": null,
+   "evidence": null,
+   "why": "Founding validator named in both Circle posts (2026-08-05: 'The Depository Trust & Clearing Corporation (DTCC)'); no dated live-on-Arc source; phased validator rollout, so status left as announced. VALIDATOR: category validators — correct.",
+   "status": null,
+   "status_quote": null,
+   "status_source": null,
+   "category": null,
+   "category_why": null
+  },
+  {
+   "slug": "fluid",
+   "first_live": null,
+   "evidence": null,
+   "why": "No Arc mainnet date: arc.io ecosystem page only says \"Fluid makes lending and borrowing on DeFi easier, safer, and more efficient.\" with no live statement; Fluid's site does not mention Arc.",
+   "status": null,
+   "status_quote": null,
+   "status_source": null,
+   "category": null,
+   "category_why": "Current 'lending' is right. Fluid docs list a Lending Protocol (\"A super simple Lend and Earn protocol\"), Vault Protocol (\"An advanced and efficient borrowing protocol\"), Liquidity Layer and a DEX Protocol \"built on top of the Liquidity Layer\"; site headline \"The Liquidity Layer For All Finance\". Lending is primary; 'dexs' is a fair secondary tag."
+  },
+  {
+   "slug": "galaxy",
+   "first_live": null,
+   "evidence": null,
+   "why": "Founding validator (both Circle posts) and named among 'Leading DeFi protocols and capital allocators' (2026-08-05) and vault curators/USDC suppliers for Aave/Morpho on Arc (2026-09-16); neither post states a dated go-live for Galaxy specifically. Status 'deployed' not contradicted. VALIDATOR: already tagged 'validators' — correct.",
+   "status": null,
+   "status_quote": null,
+   "status_source": null,
+   "category": null,
+   "category_why": "Current 'market-makers' is acceptable. galaxy.com: \"Galaxy is a digital assets and AI infrastructure company\" with a Digital Assets division offering \"trading, lending, custody, and asset management\"; its Arc role per Circle is liquidity/validator, and the 'lending' tag is supported by Galaxy's Morpho vault curation on Arc (DefiLlama). No single better category."
+  },
+  {
+   "slug": "global-payments",
+   "first_live": null,
+   "evidence": null,
+   "why": "Founding validator: named 'Global Payments' in the 2026-08-05 post and 'Worldpay (now Global Payments)' in the 2026-09-16 release; also listed among 'Global payments firms' on Arc. No dated live-on-Arc source; phased validator rollout, status left as announced. VALIDATOR: category validators — correct.",
+   "status": null,
+   "status_quote": null,
+   "status_source": null,
+   "category": null,
+   "category_why": null
+  },
+  {
+   "slug": "kaleido",
+   "first_live": null,
+   "evidence": null,
+   "why": "Named in Circle's 2026-09-16 release: \"Ecosystem infrastructure and tooling: Alchemy, BCW, Blockdaemon, Chainlink, Figment, Kaleido, and Quicknode power the developer and infrastructure layer supporting builders on Arc.\" Not a dated go-live claim for Kaleido; kaleido.io does not mention Arc.",
+   "status": null,
+   "status_quote": null,
+   "status_source": null,
+   "category": null,
+   "category_why": "Current 'infrastructure' is right (it is not a lending product). kaleido.io: \"The institutional platform for tokenization, custody and digital assets\" / \"The all-in-one modular platform to power your digital asset architecture.\""
+  },
+  {
+   "slug": "kpk",
+   "first_live": "2026-09-16",
+   "evidence": {
+    "url": "https://docs.kpk.io/vaults/vaults/morpho/arc/wars-yield",
+    "title": "KPK docs: KPK wARS Yield on Arc",
+    "date": "2026-09-16"
+   },
+   "why": "KPK docs: \"Live since Arc mainnet on 16 September 2026\". (Vault 0xf094…0ba5 was created on mainnet earlier, 2026-09-14T17:13:29Z block 20853253 via RPC, during the private window; the project's own statement takes precedence.) Matches current value.",
+   "status": null,
+   "status_quote": null,
+   "status_source": null,
+   "category": null,
+   "category_why": "Current 'asset-managers' is right. kpk.io: \"Battle-tested onchain asset management\"; it curates Morpho vaults (KPK wARS Yield on Arc) — 'lending' fits only as a secondary tag."
+  },
+  {
+   "slug": "mercurifi",
+   "first_live": "2026-09-21",
+   "evidence": {
+    "url": "https://github.com/mercuri-finance/mercuri-launch-contracts",
+    "title": "mercuri-launch-contracts README: Arc Mainnet deployment v1.0.0",
+    "date": "2026-09-21"
+   },
+   "why": "README deployment record: Arc Mainnet (chain 5042) v1.0.0 deployed 21 September 2026 at block 22,060,881. RPC confirms LaunchFactory 0x8f5d…59eb code from block 22060930 (2026-09-21T20:01:30Z) and Timelock 0x94af…eb40 from 2026-09-21T20:01:15Z. Matches current value.",
+   "status": null,
+   "status_quote": null,
+   "status_source": null,
+   "category": null,
+   "category_why": "Current 'launchpads' is right. Site: Mercurifi is \"a token launchpad, a trading venue and a board of lending vaults on Arc.\" Launch is the lead product; Trade (Uniswap v4 pools, not its own AMM) supports a secondary 'dexs'/trading tag."
+  },
+  {
+   "slug": "solonpad",
+   "first_live": "2026-10-03",
+   "evidence": {
+    "url": "https://solonpad.fun/docs/changelog",
+    "title": "SolonPad changelog: V3, the stock-dividend launchpad",
+    "date": "2026-10-03"
+   },
+   "why": "Changelog 2026-10-03: \"V3 went live on Arc mainnet: every coin's trade fee buys real tokenized stock for its holders...\" (earliest entry). UNCERTAIN: the SOLON token 0xd366…d1a0 has code from block 21153877 (2026-09-16T12:00:13Z, created inside tx 0x1a43420b1594cd238093ef3775ccbfe109394a4302fdcc62274d2bc47bfa7da0 to factory 0x0000ffffbe8efe702c8703ae3477ff5de3d319c0, owner unknown), so an earlier SolonPad version or another pad may have launched it; changelog documents nothing before V3.",
+   "status": null,
+   "status_quote": null,
+   "status_source": null,
+   "category": null,
+   "category_why": "Current 'launchpads' is right. Docs: \"SolonPad is a token launch platform on Arc.\" SolonLend (Morpho vault, created 2026-10-08) supports the secondary 'lending' tag."
+  },
+  {
+   "slug": "sumitomo-corporation",
+   "first_live": null,
+   "evidence": null,
+   "why": "Founding validator named in both Circle posts ('Sumitomo Corporation'); no dated live-on-Arc source; phased validator rollout, status left as announced. VALIDATOR: category validators — correct.",
+   "status": null,
+   "status_quote": null,
+   "status_source": null,
+   "category": null,
+   "category_why": null
+  },
+  {
+   "slug": "symbiosis",
+   "first_live": null,
+   "evidence": null,
+   "why": "Symbiosis chains API lists {id 5042, name 'Arc', hasDepository false, providers ['kyber-swap']} but gives no date; no Symbiosis contract on Arc found in its docs (llms-full.txt has no Arc mention) and no Arc post on its blog. No dated source.",
+   "status": null,
+   "status_quote": null,
+   "status_source": null,
+   "category": null,
+   "category_why": "Current 'bridges' is right. symbiosis.finance: \"Swap & Bridge any token at the best rates\" / \"Symbiosis connects Bitcoin, Solana, Tron, and 50+ EVM networks into one cross-chain ecosystem.\" On Arc it routes via KyberSwap, so 'dexs' is a weak secondary tag."
+  }
+ ],
+ "missing_validators": [
+  {
+   "name": "Intercontinental Exchange (ICE)",
+   "summary": "Operator of global exchanges and clearing houses, including the New York Stock Exchange, and provider of market data and mortgage technology. Named by Circle as a member of Arc's founding validator cohort.",
+   "website": "https://www.ice.com",
+   "source": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+   "source_date": "2026-08-05",
+   "quote": "Alongside Circle, Arc’s founding validator cohort – which includes BlackRock, The Depository Trust & Clearing Corporation (DTCC), Galaxy, Global Payments, ICE, Mastercard, MoneyGram, SBI, Standard Chartered, Sumitomo Corporation, and Visa — represents a new model for onchain infrastructure",
+   "directory_note": "Not in this batch; directory already has slug intercontinental-exchange (category rwa, tag validators)."
+  },
+  {
+   "name": "Mastercard",
+   "summary": "Global card payments network. Named by Circle as an Arc founding validator and listed among global payments firms building stablecoin settlement on Arc.",
+   "website": "https://www.mastercard.com",
+   "source": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+   "source_date": "2026-08-05",
+   "quote": "Alongside Circle, Arc’s founding validator cohort – which includes BlackRock, The Depository Trust & Clearing Corporation (DTCC), Galaxy, Global Payments, ICE, Mastercard, MoneyGram, SBI, Standard Chartered, Sumitomo Corporation, and Visa — represents a new model for onchain infrastructure",
+   "directory_note": "Not in this batch; directory already has slug mastercard (category payments, tag validators)."
+  },
+  {
+   "name": "MoneyGram",
+   "summary": "Cross-border money transfer and payments company. Named by Circle as an Arc founding validator; its CEO said it joins the network as a validator.",
+   "website": "https://www.moneygram.com",
+   "source": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+   "source_date": "2026-08-05",
+   "quote": "Alongside Circle, Arc’s founding validator cohort – which includes BlackRock, The Depository Trust & Clearing Corporation (DTCC), Galaxy, Global Payments, ICE, Mastercard, MoneyGram, SBI, Standard Chartered, Sumitomo Corporation, and Visa — represents a new model for onchain infrastructure",
+   "directory_note": "Not in this batch; directory already has slug moneygram (category payments, tag validators)."
+  },
+  {
+   "name": "SBI Group",
+   "summary": "Japanese financial services group (SBI Holdings) whose SBI VC Trade distributes USDC in Japan. Named by Circle as an Arc founding validator; SBI says it will contribute to the network's operation and governance.",
+   "website": "https://www.sbigroup.co.jp/english/",
+   "source": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+   "source_date": "2026-09-16",
+   "quote": "Along with Circle, Arc will have a phased rollout from the founding validator cohort that includes BlackRock, The Depository Trust & Clearing Corporation (DTCC), Galaxy, ICE, Mastercard, MoneyGram, SBI Group, Standard Chartered, Sumitomo Corporation, Visa, and Worldpay (now Global Payments). … “With Arc, we will not simply be a user of the network: as a founding validator, we will contribute to its operation and governance.”",
+   "directory_note": "Missing as a validator: directory has sbi-holdings (category banks, no validators tag) and sbi-shinsei-trust (stablecoin-issuers). Either add 'validators' to sbi-holdings or add an 'SBI Group' entry. 2026-08-05 post names it 'SBI'."
+  },
+  {
+   "name": "Standard Chartered",
+   "summary": "International bank headquartered in London. Named by Circle as an Arc founding validator ('founding validator bank') and among banks with access to Arc's private mainnet.",
+   "website": "https://www.sc.com",
+   "source": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+   "source_date": "2026-08-05",
+   "quote": "Alongside Circle, Arc’s founding validator cohort – which includes BlackRock, The Depository Trust & Clearing Corporation (DTCC), Galaxy, Global Payments, ICE, Mastercard, MoneyGram, SBI, Standard Chartered, Sumitomo Corporation, and Visa — represents a new model for onchain infrastructure",
+   "directory_note": "Not in this batch; directory already has slug standard-chartered (category banks, tag validators)."
+  },
+  {
+   "name": "Visa",
+   "summary": "Global card payments network. Named by Circle as an Arc founding validator; Visa said it participates as a validator to help secure the network.",
+   "website": "https://www.visa.com",
+   "source": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+   "source_date": "2026-08-05",
+   "quote": "Alongside Circle, Arc’s founding validator cohort – which includes BlackRock, The Depository Trust & Clearing Corporation (DTCC), Galaxy, Global Payments, ICE, Mastercard, MoneyGram, SBI, Standard Chartered, Sumitomo Corporation, and Visa — represents a new model for onchain infrastructure",
+   "directory_note": "Not in this batch; directory already has slug visa (category payments, tag validators)."
+  }
+ ],
+ "founding_validators": {
+  "2026-08-05": {
+   "source": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+   "quote": "Alongside Circle, Arc’s founding validator cohort – which includes BlackRock, The Depository Trust & Clearing Corporation (DTCC), Galaxy, Global Payments, ICE, Mastercard, MoneyGram, SBI, Standard Chartered, Sumitomo Corporation, and Visa — represents a new model for onchain infrastructure"
+  },
+  "2026-09-16": {
+   "source": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+   "quote": "Along with Circle, Arc will have a phased rollout from the founding validator cohort that includes BlackRock, The Depository Trust & Clearing Corporation (DTCC), Galaxy, ICE, Mastercard, MoneyGram, SBI Group, Standard Chartered, Sumitomo Corporation, Visa, and Worldpay (now Global Payments)."
+  },
+  "names": [
+   "BlackRock",
+   "DTCC",
+   "Galaxy",
+   "Global Payments (Worldpay)",
+   "ICE",
+   "Mastercard",
+   "MoneyGram",
+   "SBI (Group)",
+   "Standard Chartered",
+   "Sumitomo Corporation",
+   "Visa"
+  ],
+  "in_batch": [
+   "blackrock",
+   "dtcc",
+   "galaxy",
+   "global-payments",
+   "sumitomo-corporation"
+  ],
+  "note": "Both posts say 'Alongside/Along with Circle' — Circle itself is also a validator but is the network operator. 2026-09-16 release describes a 'phased rollout' of the cohort, so no validator status was changed to live."
+ }
+}

@@ -1,0 +1,204 @@
+{
+  "reviewed": "2026-10-23",
+  "facts": [
+    {
+      "id": "mainnet",
+      "text": "Circle launched the public Arc mainnet on 16 September 2026, after a private mainnet phase.",
+      "source": "https://www.circle.com/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+      "date": "2026-09-16"
+    },
+    {
+      "id": "gas",
+      "text": "USDC is Arc's native gas token. The native gas balance uses 18 decimals; the USDC ERC-20 interface at 0x3600…0000 uses 6 decimals.",
+      "source": "https://docs.arc.io/arc/references/contract-addresses",
+      "date": "2026-09-16"
+    },
+    {
+      "id": "evm",
+      "text": "Arc is EVM-compatible and targets Ethereum's Osaka hard fork as its baseline, including EIP-7702.",
+      "source": "https://docs.arc.io/arc/references/evm-differences",
+      "date": "2026-09-16"
+    },
+    {
+      "id": "validators",
+      "text": "Along with Circle, Arc's founding validators are BlackRock, DTCC, Galaxy, ICE, Mastercard, MoneyGram, SBI, Standard Chartered, Sumitomo, Visa and Worldpay, joining in phases.",
+      "source": "https://www.circle.com/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+      "date": "2026-09-16"
+    },
+    {
+      "id": "consensus",
+      "text": "Arc's consensus uses Malachite, a Tendermint BFT implementation, with a permissioned proof-of-authority validator set.",
+      "source": "https://docs.arc.io/arc/concepts/consensus-layer",
+      "date": "2026-09-16"
+    },
+    {
+      "id": "pos",
+      "text": "Circle said Arc is exploring a future transition from proof of authority toward proof of stake in 2027.",
+      "source": "https://www.circle.com/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+      "date": "2026-09-16"
+    },
+    {
+      "id": "token",
+      "text": "Circle minted the full initial supply of 10 billion ARC tokens at genesis; it said this is not a commitment to publicly launch ARC, and fees remain payable in USDC.",
+      "source": "https://www.circle.com/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+      "date": "2026-09-16"
+    }
+  ],
+  "network": {
+    "rpc_url": "https://rpc.mainnet.arc.io",
+    "rpc_source": "https://docs.arc.io/arc/references/rpc-endpoints",
+    "explorer_url": "https://explorer.arc.io",
+    "explorer_source": "https://docs.arc.io/arc/references/rpc-endpoints"
+  },
+  "stablecoins": [
+    {
+      "symbol": "USDC",
+      "name": "USD Coin",
+      "issuer": "Circle",
+      "address": "0x3600000000000000000000000000000000000000",
+      "decimals": 6,
+      "source": "https://docs.arc.io/arc/references/contract-addresses"
+    },
+    {
+      "symbol": "EURC",
+      "name": "EURC",
+      "issuer": "Circle",
+      "address": "0xbef5f6d51cb62b58e6a8f77868681825c6fe21c1",
+      "decimals": 6,
+      "source": "https://docs.arc.io/arc/references/contract-addresses"
+    },
+    {
+      "symbol": "USYC",
+      "name": "US Yield Coin",
+      "issuer": "Circle International Bermuda Ltd.",
+      "address": "0x8a5d989bbb96929f689b0200f435f53da42bf490",
+      "decimals": 6,
+      "source": "https://docs.arc.io/arc/references/contract-addresses"
+    },
+    {
+      "symbol": "AUDD",
+      "name": "AUDD",
+      "issuer": "Novatti",
+      "address": "0xdec15d98d8c16d9ca2f8cc94ba4b88fe4f259393",
+      "decimals": 6,
+      "source": "https://developers.circle.com/stablefx/references/supported-currencies"
+    },
+    {
+      "symbol": "AUDF",
+      "name": "Forte AUD",
+      "issuer": "Forte Securities Australia",
+      "address": "0xd2a530170d71a9cfe1651fb468e2b98f7ed7456b",
+      "decimals": 6,
+      "source": "https://developers.circle.com/stablefx/references/supported-currencies"
+    },
+    {
+      "symbol": "BRLA",
+      "name": "BRLA Token",
+      "issuer": "Avenia",
+      "address": "0x75700e137c05b2beb2b3a436ccb551652e3d8b11",
+      "decimals": 18,
+      "source": "https://developers.circle.com/stablefx/references/supported-currencies"
+    },
+    {
+      "symbol": "CADD",
+      "name": "CAD Digital",
+      "issuer": "CAD Digital",
+      "address": "0x24bf8ae7b8e073d766a3509c25b45a6ad30e9046",
+      "decimals": 18,
+      "source": "https://developers.circle.com/stablefx/references/supported-currencies"
+    },
+    {
+      "symbol": "CHFAU",
+      "name": "AllUnity CHF",
+      "issuer": "AllUnity",
+      "address": "0xc6df1b92a6ae61a27059c41e541a91ce8dcb1605",
+      "decimals": 6,
+      "source": "https://developers.circle.com/stablefx/references/supported-currencies"
+    },
+    {
+      "symbol": "EURAU",
+      "name": "AllUnity EUR",
+      "issuer": "AllUnity",
+      "address": "0x4933a85b5b5466fbaf179f72d3de273c287ec2c2",
+      "decimals": 6,
+      "source": "https://developers.circle.com/stablefx/references/supported-currencies"
+    },
+    {
+      "symbol": "GBPA",
+      "name": "Agant GBP",
+      "issuer": "Agant",
+      "address": "0xbbe6aab0ed76e90aea0d1cd978ec231c8adcdf8b",
+      "decimals": 6,
+      "source": "https://developers.circle.com/stablefx/references/supported-currencies"
+    },
+    {
+      "symbol": "JPYC",
+      "name": "JPY Coin",
+      "issuer": "JPYC",
+      "address": "0xe7c3d8c9a439fede00d2600032d5db0be71c3c29",
+      "decimals": 18,
+      "source": "https://developers.circle.com/stablefx/references/supported-currencies"
+    },
+    {
+      "symbol": "KRW1",
+      "name": "KRW1",
+      "issuer": "BDACS",
+      "address": "0x303dbb88ba14626c7a927e983b73267c575315f7",
+      "decimals": 18,
+      "source": "https://developers.circle.com/stablefx/references/supported-currencies"
+    },
+    {
+      "symbol": "MXNB",
+      "name": "MXNB",
+      "issuer": "Bitso",
+      "address": "0xf197ffc28c23e0309b5559e7a166f2c6164c80aa",
+      "decimals": 6,
+      "source": "https://developers.circle.com/stablefx/references/supported-currencies"
+    },
+    {
+      "symbol": "QCAD",
+      "name": "QCAD",
+      "issuer": "Canada Stablecorp",
+      "address": "0xd70c2fa4232e054b373efaea98e4138511c2a309",
+      "decimals": 6,
+      "source": "https://developers.circle.com/stablefx/references/supported-currencies"
+    },
+    {
+      "symbol": "SEKAU",
+      "name": "AllUnity SEK",
+      "issuer": "AllUnity",
+      "address": "0xf8524b5ab17d5eca2f78abe8377ceffd323b1dc1",
+      "decimals": 6,
+      "source": "https://developers.circle.com/stablefx/references/supported-currencies"
+    },
+    {
+      "symbol": "TRYB",
+      "name": "TRYB",
+      "issuer": "Bilira",
+      "address": "0xfb0705023603dc86325b83d9ff6b0da7921fec17",
+      "decimals": 18,
+      "source": "https://developers.circle.com/stablefx/references/supported-currencies"
+    },
+    {
+      "symbol": "ZARU",
+      "name": "ZAR Universal",
+      "issuer": "Luno",
+      "address": "0xe205b4e7ac03e3f7b2060c3edf2171aa7126c0d5",
+      "decimals": 18,
+      "source": "https://developers.circle.com/stablefx/references/supported-currencies"
+    }
+  ],
+  "notes": [
+    "Facts mainnet, validators, pos and token come from Circle's press release dated 2026-09-16 (identical copy at https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet).",
+    "Facts gas, evm and consensus come from undated docs.arc.io pages; their date is the mainnet date (2026-09-16), the date of the fact they state, not a page publication date.",
+    "Validators: the 2026-09-16 release lists 11 institutions plus Circle and lists 'Worldpay (now Global Payments)'; the 2026-08-05 release (https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch) names 'Global Payments' and 'SBI' instead. The release does not give a count; 11 is our count of the list.",
+    "Consensus: no source names a year for proof-of-stake other than the press release ('toward Proof of Stake in 2027'); the consensus-layer docs say only 'potential transition from Proof-of-Authority to permissioned Proof-of-Stake'. The ARC whitepaper blog (2026-05-11) says ARC 'is intended to support the future transition' from PoA to PoS.",
+    "Stablecoin addresses: USDC, EURC and USYC from docs.arc.io contract-addresses (which states 6 decimals for each); the 14 others from Circle's StableFX supported-currencies page, which states symbol, currency, issuer and Arc mainnet address but not decimals or full name.",
+    "Every address was checked with eth_call on https://rpc.mainnet.arc.io on 2026-10-23: all 17 returned decimals() and name(). Decimals for the 14 StableFX tokens come from that RPC call. BRLA, CADD, JPYC, KRW1, TRYB and ZARU use 18 decimals, not 6.",
+    "Names are the on-chain name() values, except USDC, whose name() returns 'USDC'; 'USD Coin' is Circle's usual full name. EURC's name() is 'EURC'.",
+    "USYC is listed under 'Stablecoins' on docs.arc.io but is a yield-bearing token for shares of a tokenized money market fund, open only to eligible non-US institutions. Drop it if the page lists only fiat-pegged stablecoins.",
+    "Not included: wARS, wBRL, wCLP, wCOP, wMXN and wPEN are named in the 2026-09-16 release only as 'active or onboarding to StableFX'. No official page gives an Arc mainnet address for them, and none was found.",
+    "cirBTC (8 decimals) and WETH (18 decimals) are on the Arc contract-addresses page as wrapped assets, not stablecoins, so they are excluded.",
+    "Mainnet chain ID 5042 is stated on the rpc-endpoints page. The arc-chain.md 'Network details' table still shows testnet values (chain ID 5042002, block time ~0.48 s testnet)."
+  ]
+}

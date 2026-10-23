@@ -1,0 +1,106 @@
+/* The app's unified paper UI (app.registrai.cc): the approved proposals mockup's
+   system. Scoped to .paper-ui (PerennialShell) so the dashboard and the builders
+   site, which share .paper-type and the global tokens, keep their look. */
+.paper-ui {
+  --pu-page: #f4efe5; --pu-ink: #231f1a; --pu-accent: #8a5a1f; --pu-accent-hover: #6b4414;
+  --pu-rule: #e3dccd; --pu-edge: #d8d0bf; --pu-card: #fbf8f2; --pu-field: #fffdf9;
+  --pu-lede: #5f584e; --pu-label: #7a7266; --pu-muted: #6b645a; --pu-body: #4a443c;
+  --pu-pill-edge: #d9c3a3; --pu-up: #1f6b4a; --pu-down: #a3431f;
+  --pu-display: var(--font-newsreader), Georgia, serif;
+  --pu-sans: var(--font-sans), "Instrument Sans", system-ui, sans-serif;
+  background: var(--pu-page); color: var(--pu-ink); font-family: var(--pu-sans);
+}
+.paper-ui .pu-card { background: var(--pu-card); border: 1px solid var(--pu-rule); border-radius: 16px; padding: 22px; }
+.paper-ui .pu-card:hover { border-color: var(--pu-edge); }
+.paper-ui .pu-card[aria-current="true"], .paper-ui .pu-card.is-selected { border: 2px solid var(--pu-ink); padding: 21px; }
+.paper-ui .pu-h { font-family: var(--pu-display); font-weight: 400; letter-spacing: -0.02em; }
+.paper-ui .pu-pill { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border: 1px solid var(--pu-edge); border-radius: 999px; font-size: 12px; color: var(--pu-muted); }
+.paper-ui .pu-pill--accent { border-color: var(--pu-pill-edge); color: var(--pu-accent); }
+.paper-ui .pu-input { min-height: 44px; box-sizing: border-box; padding: 0 14px; border: 1px solid var(--pu-edge); border-radius: 10px; background: var(--pu-field); color: var(--pu-ink); }
+.paper-ui .pu-btn { min-height: 44px; padding: 0 18px; border-radius: 12px; font-weight: 600; }
+.paper-ui .pu-btn--primary { background: var(--pu-ink); color: var(--pu-page); border: 0; }
+.paper-ui .pu-btn--up { color: var(--pu-up); border: 1px solid color-mix(in srgb, var(--pu-up) 45%, transparent); background: color-mix(in srgb, var(--pu-up) 7%, var(--pu-card)); }
+.paper-ui .pu-btn--up[aria-pressed="true"], .paper-ui .pu-btn--up.is-active { background: var(--pu-up); color: #fff; }
+.paper-ui .pu-btn--down { color: var(--pu-down); border: 1px solid color-mix(in srgb, var(--pu-down) 45%, transparent); background: color-mix(in srgb, var(--pu-down) 7%, var(--pu-card)); }
+.paper-ui .pu-btn--down[aria-pressed="true"], .paper-ui .pu-btn--down.is-active { background: var(--pu-down); color: #fff; }
+
+/* ── states and variants the market pages need (Task 11a) ── */
+.paper-ui .pu-card--compact { padding: 14px 18px; }
+/* A card that is not a link or control keeps its border on hover, so it never reads as clickable. */
+.paper-ui .pu-card--static:hover { border-color: var(--pu-rule); }
+.paper-ui .pu-btn { cursor: pointer; transition: background-color .15s, color .15s, border-color .15s, opacity .15s; }
+.paper-ui .pu-btn:disabled { cursor: not-allowed; }
+.paper-ui .pu-btn--up:hover:not([aria-pressed="true"]):not(.is-active):not(:disabled) { background: color-mix(in srgb, var(--pu-up) 14%, var(--pu-card)); }
+.paper-ui .pu-btn--down:hover:not([aria-pressed="true"]):not(.is-active):not(:disabled) { background: color-mix(in srgb, var(--pu-down) 14%, var(--pu-card)); }
+.paper-ui .pu-btn--quiet { border: 1px solid var(--pu-edge); background: transparent; color: var(--pu-body); }
+.paper-ui .pu-btn--quiet:hover:not(:disabled) { border-color: var(--pu-ink); color: var(--pu-ink); }
+.paper-ui .pu-btn--quiet[aria-pressed="true"], .paper-ui .pu-btn--quiet.is-active { border-color: var(--pu-accent); color: var(--pu-accent); }
+.paper-ui .pu-input:focus, .paper-ui .pu-input:focus-within { border-color: var(--pu-ink); }
+
+/* A subtree that opts in (class pu-bridge) resolves the site's paper tokens, and so
+   every Tailwind colour utility built on them (bg-bg-elev, border-line, text-fg-mute,
+   text-up, ...), to the values above. The tokens themselves are untouched. */
+.paper-ui .pu-bridge {
+  --bg: var(--pu-page); --bg-elev: var(--pu-card); --fg: var(--pu-ink);
+  --fg-mute: var(--pu-body); --fg-dim: var(--pu-muted);
+  --accent: var(--pu-accent); --accent-deep: var(--pu-accent-hover);
+  --up: var(--pu-up); --down: var(--pu-down);
+  --line: var(--pu-rule); --line-strong: var(--pu-edge);
+}
+.paper-ui .pu-bridge .pa-lede { color: var(--pu-lede); }
+
+/* ── Perennial builder markets, wonder markets and the atlas (Task 11b) ── */
+/* A pa-pill that opts into pu-pill, and the builder cards' pills (BuilderCardView is
+   shared with the builders gallery, so it is reached only from here): the mockup's
+   outlined pill. Each tone keeps its meaning; the on-chain nomination stays solid. */
+.paper-ui .pa-pill.pu-pill,
+.paper-ui .bld-card .pa-pill { border: 1px solid var(--pu-edge); padding: 1px 8px; background: transparent; color: var(--pu-muted); font-size: 12px; font-weight: 500; }
+.paper-ui .pa-pill.pu-pill[data-tone="ok"],
+.paper-ui .bld-card .pa-pill[data-tone="ok"] { border-color: color-mix(in srgb, var(--pu-up) 40%, transparent); color: var(--pu-up); }
+.paper-ui .pa-pill.pu-pill[data-tone="down"],
+.paper-ui .bld-card .pa-pill[data-tone="down"] { border-color: color-mix(in srgb, var(--pu-down) 40%, transparent); color: var(--pu-down); }
+.paper-ui .pa-pill.pu-pill[data-tone="unclaimed"],
+.paper-ui .bld-card .pa-pill[data-tone="unclaimed"] { border-color: color-mix(in srgb, var(--unclaimed-fg) 35%, transparent); background: color-mix(in srgb, var(--unclaimed) 55%, transparent); color: var(--unclaimed-fg); }
+.paper-ui .bld-card .pa-pill[data-tone="onchain"] { border-color: var(--unclaimed-fg); background: var(--unclaimed-fg); color: var(--unclaimed); }
+/* On a builder card (grayscale kinds render at .82 opacity) the default and muted pills
+   use the body ink, which keeps 12 px text above AA; the tone rules below out-rank it. */
+.paper-ui .bld-card .pa-pill { color: var(--pu-body); }
+.paper-ui .wonder-label { border-color: var(--pu-edge); border-radius: 999px; color: var(--pu-muted); }
+
+/* Builder cards: the card's radius, padding and display face. Borders are left to the
+   kind rules (verified, onboarding, the dashed on-chain nomination, highlight). */
+.paper-ui .bld-card { border-radius: 16px; padding: 22px; }
+.paper-ui .bld-card .pa-h3,
+.paper-ui .bld-avatar span { font-family: var(--pu-display); letter-spacing: -0.02em; }
+.paper-ui .bld-avatar { clip-path: none; border-radius: 12px; }
+
+/* Dialogs (open a market, the trading balance) and notices. */
+.paper-ui .pa-dialog { border-color: var(--pu-rule); background: var(--pu-card); }
+/* Rounded only where it floats: below 640 px it is a full-screen sheet (paper.css). */
+@media (min-width: 640px) { .paper-ui .pa-dialog { border-radius: 16px; } }
+.paper-ui .pa-dialog .pa-h3 { font-family: var(--pu-display); letter-spacing: -0.02em; }
+.paper-ui .pu-bridge .pa-notice { border-radius: 12px; }
+
+/* The atlas: its panels and boards take the card radius; the page title the display face. */
+.paper-ui .pu-bridge .perennial-app-header h1 { font-family: var(--pu-display); letter-spacing: -0.02em; }
+.paper-ui .atlas-panel,
+.paper-ui .board,
+.paper-ui .atlas-unattributed,
+.paper-ui .atlas-globe-empty { overflow: hidden; border-radius: 16px; }
+/* ...so long addresses wrap instead of being cut at the rounded edge on a phone. */
+.paper-ui .atlas-panel,
+.paper-ui .board { overflow-wrap: anywhere; }
+.paper-ui .board-head h3 { font-family: var(--pu-display); font-size: 20px; font-weight: 400; letter-spacing: -0.01em; }
+
+/* An inline field inside a line of text (the ticket's slippage): the pu-input look
+   without the 44 px control height, at the w-16 its markup asks for (paper.css's
+   .pa-input width: 100% otherwise wins and breaks the line). */
+.paper-ui .pu-input.pu-input--inline { display: inline-block; width: 4rem; min-height: 0; padding: 2px 8px; border-radius: 8px; }
+
+/* paper.css zeroes .pa-grid's and .paper-type .bld-grid's margins, which also cancels
+   the mt-* the pages put on them (the grid then touches the tabs / the heading). Put
+   the intended spacing back inside the bridged pages; paper.css itself is protected. */
+.paper-ui .pu-bridge .pa-grid.mt-5 { margin-top: 1.25rem; }
+.paper-ui .pu-bridge .bld-grid.mt-6 { margin-top: 1.5rem; }
+.paper-ui .pu-bridge .bld-grid.mt-10 { margin-top: 2.5rem; }
+.paper-ui .pu-bridge .pa-stack > * + .pa-grid { margin-top: 12px; }

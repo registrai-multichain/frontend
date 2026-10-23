@@ -36,6 +36,21 @@ export default function MarketsPage() {
           onchain attestation, finalized after its dispute window.
         </p>
 
+        <p className="text-2xs text-fg-dim leading-relaxed max-w-[64ch] mb-8 border-l-2 border-line pl-4">
+          <span className="text-fg-mute">Legacy testnet markets.</span> The
+          markets on this page run the older Markets testnet contracts, which
+          charge 0.70% per trade (0.40% creator, 0.20% agent, 0.10% protocol).
+          Those contracts are not going to mainnet. The new market contracts
+          charge 1% per trade, split 30% creator, 20% bonded agent (held until
+          the market settles), 50% Registrai treasury on common markets (on
+          builder markets, the builder the market is about), and nothing at
+          settlement. Common markets on the new contracts settle on the{" "}
+          <Link href="/nanopay" className="underline decoration-fg-dim underline-offset-4 hover:text-accent">
+            nanopay ledger
+          </Link>
+          .
+        </p>
+
         <FaucetHint className="mb-6" />
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-line mb-12">
@@ -66,7 +81,7 @@ export default function MarketsPage() {
 
         <ProposalsPanel />
 
-        <div className="mt-12 border border-dashed border-line/60 p-6 text-[13px] text-fg-mute">
+        <div className="mt-12 border border-dashed border-line p-6 text-[13px] text-fg-mute">
           <span className="font-serif italic">{totalTrades} trades</span> across{" "}
           {markets.length} markets on Arc testnet. Trades happen permissionlessly
           on the <code className="text-fg">Markets</code> contract; resolution is

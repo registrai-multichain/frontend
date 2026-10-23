@@ -1,0 +1,59 @@
+/* ABI points pilot: ticket, positions, history, leaderboard. Uses the terminal tokens (terminal.css, scoped to .abi-t). */
+.abi-t .abi-pt-row-wrap { align-items: start; }
+@media (max-width: 1080px) { .abi-t .abi-pt-row-wrap .abi-pt-panel { order: -1; } }
+
+.abi-pt { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 12px; margin: 0; }
+.abi-pt-note { margin: 0; font-size: 12px; color: var(--abi-mute); }
+.abi-pt-err { margin: 0; font-size: 12px; color: var(--abi-down); }
+.abi-pt-row { display: flex; align-items: center; gap: 8px; }
+.abi-pt-kv { padding: 0; }
+
+.abi-pt-side { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.abi-pt-side button { padding: 7px 0; border-radius: 4px; border: 1px solid var(--abi-line2); font-weight: 600; color: var(--abi-mute); }
+.abi-pt-side button.long[aria-pressed="true"] { background: var(--abi-up); border-color: var(--abi-up); color: var(--abi-bg); }
+.abi-pt-side button.short[aria-pressed="true"] { background: var(--abi-down); border-color: var(--abi-down); color: var(--abi-bg); }
+
+.abi-pt-field { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--abi-mute); }
+.abi-pt-input { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--abi-line2); border-radius: 4px; padding: 3px 8px; background: var(--abi-raise); }
+.abi-pt-input:focus-within { border-color: var(--abi-accent); }
+.abi-pt-input input { width: 104px; background: transparent; border: 0; outline: none; color: var(--abi-fg); font-family: var(--abi-mono); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+.abi-pt-input .u { font-family: var(--abi-mono); font-size: 11px; color: var(--abi-faint); }
+.abi-t .abi-seg button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.abi-pt-disc { border-top: 1px solid var(--abi-line); padding-top: 8px; }
+.abi-pt-disc p { margin: 0; font-size: 11.5px; color: var(--abi-mute); line-height: 1.45; }
+
+.abi-t .abi-pt-primary { width: 100%; padding: 9px 12px; border-radius: 4px; background: var(--abi-accent); color: var(--abi-bg); font-weight: 600; }
+.abi-t .abi-pt-primary.long { background: var(--abi-up); }
+.abi-t .abi-pt-primary.short { background: var(--abi-down); }
+.abi-t .abi-pt-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+.abi-t .abi-pt-row .abi-pt-primary { width: auto; flex: 1; }
+.abi-t .abi-pt-link { font-family: var(--abi-mono); font-size: 11px; color: var(--abi-mute); text-decoration: underline; text-underline-offset: 2px; }
+.abi-t .abi-pt-link:hover { color: var(--abi-fg); }
+
+.abi-t .abi-pt-close { padding: 2px 8px; border: 1px solid var(--abi-line2); border-radius: 4px; font-family: var(--abi-mono); font-size: 11px; color: var(--abi-fg); }
+.abi-t .abi-pt-close:hover { border-color: var(--abi-fg); }
+.abi-t .abi-pt-close:disabled { opacity: 0.45; cursor: not-allowed; }
+.abi-t .abi-pt-empty { padding: 14px 12px; margin: 0; text-align: left; font-family: var(--abi-sans); }
+.abi-t tr.abi-pt-me td { background: var(--abi-accent-soft); }
+.abi-t .abi-seg button[role="tab"][aria-selected="true"] { background: var(--abi-raise); color: var(--abi-fg); }
+.abi-t .abi-pt-eco { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 18px; padding: 6px 12px 0; }
+.abi-t .abi-pt-eco .abi-pt-house { grid-column: 1 / -1; margin: 6px 0; }
+.abi-t .abi-pt-eco .abi-pt-foot { grid-column: 1 / -1; padding-left: 0; padding-right: 0; }
+.abi-t .abi-pt-foot { margin: 0; padding: 8px 12px 10px; font-size: 11.5px; color: var(--abi-mute); border-top: 1px solid var(--abi-line); }
+/* narrow phones (320–360 px): the tab strip, the leverage row and the margin field wrap instead of widening the page */
+.abi-t .abi-seg[role="tablist"], .abi-t .abi-pt .abi-seg { flex-wrap: wrap; }
+.abi-t .abi-pt-field { flex-wrap: wrap; }
+.abi-t .abi-pt-panel, .abi-t .abi-pt-row-wrap > .abi-panel { min-width: 0; max-width: 100%; }
+/* the 18+ and Terms confirmation before sign-in */
+.abi-pt-agree { display: flex; align-items: flex-start; gap: 6px; font-size: 12px; line-height: 1.4; color: var(--abi-mute); margin-bottom: 8px; }
+.abi-pt-agree input { margin-top: 2px; }
+.abi-pt-agree a { color: var(--abi-fg); text-decoration: underline; }
+/* the market the Funding and Economy tabs show (the index tab's) */
+.abi-t .abi-pt-mkt { font-family: var(--abi-mono); font-size: 11px; color: var(--abi-mute); padding: 1px 6px; border: 1px solid var(--abi-line2); border-radius: 4px; }
+/* the REGI lock box under the ticket (plan 2026-10-13 R6) */
+.abi-t .abi-pt-lock { border-top: 1px solid var(--abi-line); }
+.abi-t .abi-pt-h3 { margin: 0; font-size: 12px; font-weight: 600; color: var(--abi-fg); }
+.abi-t .abi-pt-lock .abi-pt-input input { width: 140px; }
+.abi-t .abi-pt-lock-acts { flex-wrap: wrap; }
+.abi-pt-warn { margin: 0; font-size: 12px; color: var(--abi-down); }

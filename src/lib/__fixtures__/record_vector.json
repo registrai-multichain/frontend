@@ -1,0 +1,35 @@
+{
+ "input": {
+  "day": "2026-10-06",
+  "facts": {
+   "domain:b.xyz": {
+    "facts": [
+     {
+      "id": "f1",
+      "text": "Ä",
+      "evidence": [
+       "0xab"
+      ]
+     }
+    ],
+    "source": "domain:b.xyz"
+   },
+   "domain:a.xyz": {
+    "source": "domain:a.xyz",
+    "facts": []
+   }
+  },
+  "track": [
+   {
+    "id": "z",
+    "n": 2
+   },
+   {
+    "id": "a",
+    "n": 1
+   }
+  ]
+ },
+ "canonical": "{\"day\":\"2026-10-06\",\"facts\":{\"domain:a.xyz\":{\"facts\":[],\"source\":\"domain:a.xyz\"},\"domain:b.xyz\":{\"facts\":[{\"evidence\":[\"0xab\"],\"id\":\"f1\",\"text\":\"Ä\"}],\"source\":\"domain:b.xyz\"}},\"track\":[{\"id\":\"z\",\"n\":2},{\"id\":\"a\",\"n\":1}]}",
+ "sha256": "959651c0f861b7e52d5c8e0d8c711236001859446c0fe320f5b2184c97032b57"
+}

@@ -37,7 +37,7 @@ export function FeaturedCreators() {
       </div>
 
       {external.length === 0 ? (
-        <div className="border border-dashed border-line/60 p-6 sm:p-8">
+        <div className="border border-dashed border-line p-6 sm:p-8">
           <p className="font-serif italic text-fg-mute text-[15px] leading-snug max-w-[56ch] mb-4">
             No external creators yet — be the first.
           </p>
@@ -45,7 +45,9 @@ export function FeaturedCreators() {
             The first three feeds are ours, the first markets were seeded by
             us. Anyone with five USDC and an opinion can create a market
             against any of these feeds and earn{" "}
-            <span className="text-accent">40 bps of every trade forever</span>.
+            <span className="text-accent">40 bps of every trade</span> on it
+            (legacy testnet markets; the new contracts pay creators 30% of a 1%
+            trading fee instead).
             Polish CPI prints, ECB rate decisions, Warsaw real-estate moves —
             pick the one you have conviction on.
           </p>

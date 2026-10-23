@@ -114,10 +114,10 @@ export function SuffixTradePanel({ pool }: { pool: SuffixPool }) {
   const busy = status === "approving" || status === "submitting";
 
   return (
-    <div className="border border-line/60 bg-bg-elev/20 p-5 mb-px">
+    <div className="border border-line bg-bg-elev p-5 mb-px">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-serif text-[18px]">{`Trade $${sym}`}</h3>
-        <div className="inline-flex border border-line/60 text-2xs" role="group" aria-label="buy / sell">
+        <div className="inline-flex border border-line text-2xs" role="group" aria-label="buy / sell">
           {(["buy", "sell"] as Mode[]).map((m) => (
             <button key={m} type="button" aria-pressed={mode === m} onClick={() => setMode(m)}
               className={`px-3 py-1 ${mode === m ? "bg-accent/90 text-bg" : "text-fg-dim hover:text-fg"}`}>{m}</button>
@@ -127,14 +127,14 @@ export function SuffixTradePanel({ pool }: { pool: SuffixPool }) {
 
       <div className="flex gap-4 text-[13px] mb-3">
         <span>spot <span className="text-accent">{spot ? px(spot) : "—"}</span></span>
-        <span>floor <span className="text-emerald-400">{floor ? px(floor) : "—"}</span></span>
+        <span>floor <span className="text-up">{floor ? px(floor) : "—"}</span></span>
       </div>
 
       <input
         value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal"
         aria-label={mode === "buy" ? "USDC to spend" : `$${sym} to sell`}
         placeholder={mode === "buy" ? "USDC in" : `$${sym} in`}
-        className="w-full bg-bg-elev/40 border border-line/60 px-3 py-2 text-[15px] outline-none focus:border-accent/60"
+        className="w-full bg-bg border border-line px-3 py-2 text-[15px] outline-none focus:border-accent/60"
       />
       <div className="caption text-2xs text-fg-dim mt-1">
         {mode === "buy" ? `wallet: ${fmt(usdcBal)} USDC` : `wallet: ${fmt(aiBal)} $${sym}`} · 0.30% fee → floor
@@ -149,7 +149,7 @@ export function SuffixTradePanel({ pool }: { pool: SuffixPool }) {
       </button>
 
       {/* floor backstop */}
-      <div className="mt-3 border-t border-line/30 pt-3">
+      <div className="mt-3 border-t border-line pt-3">
         <div className="caption text-2xs text-fg-dim mb-1">
           floor backstop — sell ${sym} to the treasury at {floor ? px(floor) : "—"} (cash-backed). Use
           when the pool dips below the floor.
@@ -165,8 +165,8 @@ export function SuffixTradePanel({ pool }: { pool: SuffixPool }) {
         <div className="mt-2 text-2xs" aria-live="polite">
           {status === "approving" && <span className="text-fg-dim">approving…</span>}
           {status === "submitting" && <span className="text-fg-dim">submitting…</span>}
-          {status === "success" && <span className="text-emerald-400">done. {txHash && <a className="underline" href={txUrl(txHash)} target="_blank" rel="noreferrer">tx</a>}</span>}
-          {status === "error" && <span className="text-red-400">{error}</span>}
+          {status === "success" && <span className="text-up">done. {txHash && <a className="underline" href={txUrl(txHash)} target="_blank" rel="noreferrer">tx</a>}</span>}
+          {status === "error" && <span className="text-down">{error}</span>}
         </div>
       )}
     </div>

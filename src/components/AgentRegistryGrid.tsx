@@ -193,7 +193,7 @@ export function AgentRegistryGrid() {
 
   if (loading && rows.length === 0) {
     return (
-      <div className="border border-dashed border-line/60 p-8 text-center">
+      <div className="border border-dashed border-line p-8 text-center">
         <p className="caption text-fg-dim">loading agents…</p>
       </div>
     );
@@ -306,7 +306,7 @@ function AgentCard({ row }: { row: Row }) {
         </Cell>
       </div>
 
-      <div className="text-2xs mt-1 pt-3 border-t border-line/60 flex items-center justify-between">
+      <div className="text-2xs mt-1 pt-3 border-t border-line flex items-center justify-between">
         <span className="text-fg-dim">feed</span>
         <a
           href={`/feed/${row.feedId}/`}

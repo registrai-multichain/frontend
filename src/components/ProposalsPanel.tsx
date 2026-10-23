@@ -80,7 +80,7 @@ function ProposalCard({ p, feedSymbol }: { p: Proposal; feedSymbol: string }) {
   const deployHref = `/markets/create/?threshold=${p.threshold}&comparator=${cmpIdx}&days=${p.expiryDays}`;
 
   return (
-    <div className="border border-line bg-bg-elev/30 p-5 flex flex-col">
+    <div className="border border-line bg-bg-elev p-5 flex flex-col">
       <div className="flex items-baseline justify-between mb-3">
         <span className="caption text-fg-dim">{feedSymbol}</span>
         <span className="text-2xs text-fg-dim">{p.expiryDays}d</span>

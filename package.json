@@ -6,25 +6,51 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "deploy": "next build && wrangler pages deploy out --project-name=registrai-web --branch=main"
+    "lint": "eslint .",
+    "test": "vitest run",
+    "sync": "tsx scripts/sync.ts",
+    "deploy": "python3 scripts/render-badges.py && next build && tsx scripts/write-public-redirects.ts && wrangler pages deploy out --project-name=registrai-web --branch=main",
+    "deploy:testnet": "python3 scripts/render-badges.py && next build && rm -f out/_redirects && wrangler pages deploy out --project-name=registrai-testnet --branch=main",
+    "deploy:builders": "python3 scripts/render-badges.py && next build && bash scripts/build-builders-site.sh && bash scripts/deploy-builders-site.sh",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p builders-site",
+    "deploy:app": "bash scripts/build-app-site.sh && wrangler pages deploy dist-app --project-name=registrai-app --branch=main",
+    "deploy:dashboard": "NEXT_PUBLIC_PERENNIAL_NETWORK=mainnet next build && bash scripts/build-dashboard-site.sh && cd dashboard-site && wrangler pages deploy ../dist-dashboard --project-name=registrai-dashboard --branch=main"
   },
   "dependencies": {
-    "next": "14.2.35",
-    "react": "^18",
-    "react-dom": "^18",
-    "viem": "^2.48.11"
+    "@circle-fin/adapter-solana-kit": "^1.6.3",
+    "@circle-fin/adapter-viem-v2": "^1.18.0",
+    "@circle-fin/bridge-kit": "^1.15.1",
+    "@circle-fin/x402-batching": "^3.5.0",
+    "@solana/kit": "^5.5.1",
+    "@solana/web3.js": "^1.98.4",
+    "@x402/core": "^2.28.0",
+    "@x402/evm": "^2.28.0",
+    "d3-geo": "^3.1.1",
+    "next": "^16.2.10",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "swr": "^2.4.2",
+    "viem": "^2.55.4"
   },
   "devDependencies": {
+    "@openzeppelin/merkle-tree": "^1.0.8",
+    "@types/d3-geo": "^3.1.1",
     "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.35",
-    "postcss": "^8",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@types/topojson-client": "^3.1.5",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.10",
+    "postcss": "^8.5.21",
     "tailwindcss": "^3.4.1",
+    "topojson-client": "^3.1.0",
     "tsx": "^4.21.0",
     "typescript": "^5",
+    "vitest": "^2.1.0",
+    "world-atlas": "^2.0.2",
     "wrangler": "^4.90.1"
+  },
+  "overrides": {
+    "postcss": "$postcss"
   }
 }

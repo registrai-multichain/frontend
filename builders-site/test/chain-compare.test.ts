@@ -1,0 +1,175 @@
+import { describe, expect, test, vi } from "vitest";
+
+const hex = (n: number) => `0x${n.toString(16)}`;
+type Opts = { solanaDown?: boolean; pricesDown?: boolean; stablesDown?: boolean };
+/** Arc: 10,000 blocks over 5,100 s (0.51 s), gas price 20e9; Ethereum: 10,000 blocks over 120,000 s (12 s), gas price 1e9;
+ *  Solana: 150 slots per 60 s (0.4 s); ETH $2,400, SOL $100; USDC on Arc/Ethereum/Solana 8e8/4e10/9e9. */
+function fakeFetch(o: Opts = {}) {
+  return vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    const u = String(url);
+    if (u.includes("//coins.llama.fi")) { if (o.pricesDown) throw new Error("timeout"); return new Response(JSON.stringify({ coins: { "coingecko:ethereum": { price: 2400 }, "coingecko:solana": { price: 100 } } })); }
+    if (u.includes("stablecoins.llama.fi")) { if (o.stablesDown) throw new Error("timeout");
+      return new Response(JSON.stringify({ peggedAssets: [{ id: "1", symbol: "USDT", chainCirculating: { Ethereum: { current: { peggedUSD: 1 } } } },
+        { id: "2", name: "USD Coin", symbol: "USDC", chainCirculating: { Arc: { current: { peggedUSD: 8e8 } }, Ethereum: { current: { peggedUSD: 4e10 } }, Solana: { current: { peggedUSD: 9e9 } } } }] })); }
+    const body = JSON.parse(String(init?.body)) as { id: number; method: string; params: unknown[] };
+    const res = (r: unknown) => new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: r }));
+    if (u.includes("solana")) { if (o.solanaDown) return new Response("rate limited", { status: 429 }); return res([{ numSlots: 150, samplePeriodSecs: 60 }, { numSlots: 150, samplePeriodSecs: 60 }]); }
+    const eth = u.includes("ethereum");
+    if (body.method === "eth_gasPrice") return res(hex(eth ? 1e9 : 20e9));
+    if (body.method === "eth_getBlockByNumber") {
+      const head = eth ? 20_000_000 : 27_000_000, span = eth ? 120_000 : 5_100;
+      return body.params[0] === "latest" ? res({ number: hex(head), timestamp: hex(1_800_000_000) }) : res({ number: body.params[0], timestamp: hex(1_800_000_000 - span) });
+    }
+    return new Response("{}", { status: 400 });
+  });
+}
+const env = { INVITES: { get: async () => null } } as never;
+
+describe("Arc vs Ethereum vs Solana collector (spec 2026-10-23-replace-competitor-citations §3)", () => {
+  test("block times, fees in USD by formula, USDC per chain", async () => {
+    const { collectCompare } = await import("../lib/chain-compare");
+    const c = await collectCompare(env, fakeFetch() as never, Date.parse("2026-10-23T18:00:00Z"));
+    expect(c.arc.block_time_s).toBeCloseTo(0.51, 3);
+    expect(c.ethereum.block_time_s).toBeCloseTo(12, 3);
+    expect(c.solana.block_time_s).toBeCloseTo(0.4, 3);
+    // review I1: like-for-like ERC-20 USDC transfers; Arc's native transfer and Ethereum's new-holder case in the notes
+    expect(c.arc.fee_usd).toBeCloseTo(0.00098, 8);            // 20e9 × 49,000 / 1e18 USDC (ERC-20 transfer)
+    expect(c.arc.fee_native_usd).toBeCloseTo(0.00042, 8);     // 20e9 × 21,000 / 1e18 USDC (native transfer)
+    expect(c.ethereum.fee_usd).toBeCloseTo(0.108, 6);         // 1e9 × 45,000 / 1e18 ETH × $2,400 (to an existing holder)
+    expect(c.ethereum.fee_new_holder_usd).toBeCloseTo(0.156, 6); // 65,000 gas to a new holder
+    expect(c.solana.fee_usd).toBeCloseTo(0.0005, 8);          // 5,000 lamports = 5e-6 SOL × $100
+    expect([c.arc.usdc_supply, c.ethereum.usdc_supply, c.solana.usdc_supply]).toEqual([8e8, 4e10, 9e9]);
+    expect(c.errors).toEqual([]);
+  });
+  test("one source down drops only its figures", async () => {
+    const { collectCompare } = await import("../lib/chain-compare");
+    const s = await collectCompare(env, fakeFetch({ solanaDown: true }) as never);
+    expect(s.solana.block_time_s).toBeNull();
+    expect(s.ethereum.block_time_s).toBeCloseTo(12, 3);
+    expect(s.errors.join()).toMatch(/solana/);
+    const p = await collectCompare(env, fakeFetch({ pricesDown: true }) as never);
+    expect(p.ethereum.fee_usd).toBeNull();
+    expect(p.solana.fee_usd).toBeNull();
+    expect(p.arc.fee_usd).toBeCloseTo(0.00098, 8);           // USDC needs no price
+    const q = await collectCompare(env, fakeFetch({ stablesDown: true }) as never);
+    expect(q.arc.usdc_supply).toBeNull();
+  });
+  test("usdcByChain reads only the USDC entry from the large list", async () => {
+    const { usdcByChain } = await import("../lib/chain-compare");
+    const text = JSON.stringify({ peggedAssets: [{ symbol: "USDT", chainCirculating: { Arc: { current: { peggedUSD: 5 } } } }, { symbol: "USDC", chainCirculating: { Arc: { current: { peggedUSD: 7 } }, Solana: { current: { peggedUSD: 9 } } } }] });
+    expect(usdcByChain(text)).toEqual({ Arc: 7, Solana: 9 });
+    expect(usdcByChain("{}")).toEqual({});
+  });
+});
+
+describe("Arc vs Ethereum vs Solana page", () => {
+  test("title, five measures, formulas behind i notes, sources; missing figures say Not available; null renders static rows", async () => {
+    const { collectCompare } = await import("../lib/chain-compare");
+    const { renderCompare } = await import("../lib/arc-question-pages");
+    const c = await collectCompare(env, fakeFetch() as never, Date.parse("2026-10-23T18:00:00Z"));
+    const h = renderCompare(c);
+    expect(h).toContain("<title>Arc vs Ethereum vs Solana for stablecoin payments · Registrai</title>");
+    expect(h).toContain("<h1>Arc vs Ethereum vs Solana for stablecoin payments</h1>");
+    for (const m of ["Fee currency", "Block time", "Finality", "Fee for a USDC transfer (estimate)", "USDC in circulation"]) expect(h, m).toContain(`<th>${m}</th>`);
+    expect(h).toContain("$0.108");
+    expect(h).toMatch(/<details><summary>i<\/summary>[^<]*49,000 gas[^<]*21,000 gas/);
+    expect(h).toMatch(/<details><summary>i<\/summary>[^<]*45,000 gas[^<]*65,000 gas/);
+    expect(h).toContain("token account");
+    expect(h).not.toContain("exclude priority fees and");   // review: the EVM gas price includes the suggested tip
+    expect(h).toContain("https://ethereum.org/en/roadmap/single-slot-finality/");
+    const s = await collectCompare(env, fakeFetch({ solanaDown: true }) as never);
+    expect(renderCompare(s)).toContain("Not available right now");
+    const none = renderCompare(null);
+    expect(none).toContain("<th>Fee currency</th>");
+    expect(none).toContain("Not available right now");
+    expect(none).not.toMatch(/undefined|NaN/);
+  });
+});
+
+describe("route, cache, sitemap, llms", () => {
+  test("served under /arc/ for an hour; a failing collector still renders; listed in sitemap and both llms.txt", async () => {
+    vi.doMock("../lib/chain-compare", async (orig) => ({ ...(await orig<typeof import("../lib/chain-compare")>()), collectCompare: async () => { throw new Error("down"); } }));
+    vi.resetModules();
+    const { onRequest } = await import("../functions/arc/[[path]]");
+    const r = await onRequest({ request: new Request("https://builder.registrai.cc/arc/arc-vs-ethereum-vs-solana/"), env: { INVITES: { get: async () => null } }, params: { path: ["arc-vs-ethereum-vs-solana"] }, waitUntil: () => undefined } as never);
+    expect(r.status).toBe(200);
+    expect(await r.text()).toContain("<h1>Arc vs Ethereum vs Solana for stablecoin payments</h1>");
+    const { ARC_QUESTION_TTL } = await import("../lib/arc-routes");
+    expect(ARC_QUESTION_TTL["arc-vs-ethereum-vs-solana"]).toBe(3600);
+    const fs = await import("node:fs");
+    const { QUESTION_PAGES } = await import("../lib/arc-question-pages");   // the sitemap is built from QUESTION_PAGES
+    expect(QUESTION_PAGES.map((q) => q.path)).toContain("/arc/arc-vs-ethereum-vs-solana/");
+    for (const f of ["../functions/llms.txt.ts", "../../public/llms.txt", "../lib/llms-full.ts"])
+      expect(fs.readFileSync(new URL(f, import.meta.url), "utf8"), f).toContain("arc-vs-ethereum-vs-solana");
+    vi.doUnmock("../lib/chain-compare");
+    vi.resetModules();
+  });
+});
+
+describe("review fixes", () => {
+  test("I3: a prices answer without coins doesn't throw; errors mark the page degraded (cached 10 min, header set)", async () => {
+    const { collectCompare } = await import("../lib/chain-compare");
+    const f = vi.fn(async (url: string | URL | Request, init?: RequestInit) => String(url).includes("//coins.llama.fi") ? new Response("{}") : fakeFetch()(url, init));
+    const c = await collectCompare(env, f as never);
+    expect(c.ethereum.fee_usd).toBeNull();
+    expect(c.arc.block_time_s).not.toBeNull();
+    const { compareTtl, DEGRADED_HEADER } = await import("../lib/arc-routes");
+    expect(compareTtl(new Response("x", { headers: { [DEGRADED_HEADER]: "1" } }))).toBe(600);
+    expect(compareTtl(new Response("x"))).toBe(3600);
+  });
+  test("Minor 8 (re-graded): the USDC cut-out refuses when chainCirculating belongs to the next asset", async () => {
+    const { usdcByChain } = await import("../lib/chain-compare");
+    const text = '{"peggedAssets":[{"symbol":"USDC","id":"2"},{"symbol":"EURC","chainCirculating":{"Arc":{"current":{"peggedUSD":5}}}}]}';
+    expect(usdcByChain(text)).toEqual({});
+  });
+});
+
+describe("ops: which source failed", () => {
+  test("a degraded build names its failed sources in a response header (never in the page)", async () => {
+    vi.doMock("../lib/chain-compare", async (orig) => ({ ...(await orig<typeof import("../lib/chain-compare")>()), collectCompare: async () => ({ ...(await (await orig<typeof import("../lib/chain-compare")>()).collectCompare(env, fakeFetch({ solanaDown: true }) as never)) }) }));
+    vi.resetModules();
+    const { arcQuestionPage } = await import("../lib/arc-routes");
+    const r = await arcQuestionPage(env, { cache: null }, "https://builder.registrai.cc", "arc-vs-ethereum-vs-solana");
+    expect(r.headers.get("x-registrai-errors")).toMatch(/solana slot time: .*HTTP 429/);
+    expect(await r.text()).not.toContain("HTTP 429");
+    vi.doUnmock("../lib/chain-compare");
+    vi.resetModules();
+  });
+});
+
+
+describe("Solana RPC fallback (Solana's public RPC answers 403 to Cloudflare)", () => {
+  test("the slot time comes from the second endpoint when the first refuses", async () => {
+    const { collectCompare, SOL_RPCS } = await import("../lib/chain-compare");
+    expect(SOL_RPCS[0]).toBe("https://solana-rpc.publicnode.com");
+    const base = fakeFetch();
+    const f = vi.fn(async (url: string | URL | Request, init?: RequestInit) => (String(url) === SOL_RPCS[0] ? new Response("forbidden", { status: 403 }) : base(url, init)));
+    const c = await collectCompare(env, f as never);
+    expect(c.errors).toEqual([]);
+    expect(c.solana.block_time_s).toBeCloseTo(0.4, 3);
+  });
+});
+
+describe("Ethereum RPC fallback", () => {
+  test("block time and gas price come from the second endpoint when the first fails", async () => {
+    const { collectCompare, ETH_RPCS } = await import("../lib/chain-compare");
+    expect(ETH_RPCS).toEqual(["https://ethereum-rpc.publicnode.com", "https://eth.drpc.org"]);
+    const base = fakeFetch();
+    const f = vi.fn(async (url: string | URL | Request, init?: RequestInit) => (String(url) === ETH_RPCS[0] ? new Response("busy", { status: 429 }) : base(String(url).includes("drpc") ? "https://ethereum.example/" : url, init)));
+    const c = await collectCompare(env, f as never);
+    expect(c.ethereum.block_time_s).toBeCloseTo(12, 3);
+    expect(c.ethereum.fee_usd).toBeCloseTo(0.108, 6);
+  });
+});
+
+describe("Solana endpoints, all failing", () => {
+  test("three endpoints; the error names each one's failure", async () => {
+    const { collectCompare, SOL_RPCS } = await import("../lib/chain-compare");
+    expect(SOL_RPCS).toEqual(["https://solana-rpc.publicnode.com", "https://api.mainnet.solana.com", "https://api.mainnet-beta.solana.com"]);
+    const base = fakeFetch();
+    const f = vi.fn(async (url: string | URL | Request, init?: RequestInit) => (SOL_RPCS.includes(String(url)) ? new Response("no", { status: String(url).includes("publicnode") ? 429 : 403 }) : base(url, init)));
+    const c = await collectCompare(env, f as never);
+    expect(c.solana.block_time_s).toBeNull();
+    expect(c.errors.join()).toMatch(/solana slot time: solana-rpc\.publicnode\.com HTTP 429; api\.mainnet\.solana\.com HTTP 403; api\.mainnet-beta\.solana\.com HTTP 403/);
+  });
+});

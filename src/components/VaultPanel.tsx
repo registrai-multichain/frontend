@@ -146,7 +146,7 @@ export function VaultPanel() {
       </div>
 
       {/* Form */}
-      <div className="border border-line p-5 min-w-[280px] bg-bg-elev/40">
+      <div className="border border-line p-5 min-w-[280px] bg-bg">
         <div className="flex items-center gap-px bg-line mb-4">
           <button
             onClick={() => setMode("deposit")}

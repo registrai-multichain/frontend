@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "claim": {
+    "builder": "0xb7ecf980a4732b75e57e2ec80903dee3964f2573",
+    "source": "domain:registrai.cc",
+    "deployers": [
+      "0xa86b6f0c7428eef62898705958810d96b680ac24"
+    ],
+    "country": "PL",
+    "chain": 5042,
+    "issued": "2026-09-25"
+  },
+  "signatures": {
+    "builder": "0xe0faf7e1a007f0ce1a7e5583ecb9fa6b0618239b0b9a8730cb10acd66410cce74448b3bf6d169edc0212c1ab787d0f701177bd8cb4c0ac5b2b5ec3f2330cf5441b",
+    "deployers": {
+      "0xa86b6f0c7428eef62898705958810d96b680ac24": "0xb606520d766008567ac62982bc44f79a780543b466fa6bc8b8ef0b953d439e75785e8bd13c7ffd297f52c5caa048f054f3cfe0c0fbaabf915c693a63085471861c"
+    }
+  }
+}

@@ -36,7 +36,7 @@ export default function DomainsPage() {
 
         <FaucetHint className="mb-6" />
 
-        <div className="mb-6 border border-amber-500/30 bg-amber-500/5 p-3 text-2xs text-amber-300/80 leading-relaxed">
+        <div className="mb-6 border border-accent/30 bg-accent/5 p-3 text-2xs text-accent/80 leading-relaxed">
           <b>Testnet · not financial advice · not an offer.</b> $ai is a testnet token with a
           cash buyback-floor policy (not a redemption right or profit promise). The junior tranche
           <span className="text-fg-mute"> $aiLP is a security and is NOT offered or tradeable here.</span>{" "}
@@ -62,7 +62,7 @@ export default function DomainsPage() {
           />
         </div>
 
-        <div className="mt-12 border border-dashed border-line/60 p-6 text-[13px] text-fg-mute">
+        <div className="mt-12 border border-dashed border-line p-6 text-[13px] text-fg-mute">
           <span className="font-serif italic">Status.</span> Research, testnet only. The economic core
           is built and tested (cash floor, anti-LUNA waterfall, protocol-owned revenue engine, froth
           harvest, competitive Dutch-auction MM, cap + timelock-governable admin). Still ahead before

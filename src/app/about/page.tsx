@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { Shell } from "@/components/Shell";
+import { REGI_CONTRACT, REGI_EXPLORER_URL } from "@/lib/regi";
 
 export default function AboutPage() {
   return (
@@ -18,9 +20,14 @@ export default function AboutPage() {
             attesting to what, hold the bonds, and resolve disputes.
           </p>
           <p>
-            There is no admin key, no pause switch, no fee toggle, no
-            governance, no token. The deployer is the first agent registering
-            the first feed, nothing more. Whatever ships is what runs.
+            Fees are fixed in code: there is no fee toggle, and no
+            token-weighted governance over oracle truth. Governance of the
+            market allowlist (which dispute resolvers, and on Perennial which
+            agents, are approved) and of builder onboarding is a governor role
+            held by a multisig once deployed. $REGI exists as a
+            bootstrapping instrument for the wider Registrai network on Arc; the
+            oracle&apos;s bonds, disputes, and settlements remain denominated in
+            USDC. Whatever ships is what runs.
           </p>
           <p>
             The model is optimistic. Anyone can post an attestation if they
@@ -70,10 +77,15 @@ export default function AboutPage() {
             slashing surface has one of each.
           </p>
           <p>
-            <strong className="text-fg">USDC, not protocol token.</strong>{" "}
-            Bonds in USDC are denominated in the same units consumers price
-            risk in. A token would add launch theatre and dilute the trust
-            signal. No $REGI, ever.
+            <strong className="text-fg">USDC for truth. $REGI for bootstrapping.</strong>{" "}
+            Bonds, market collateral, and builder payouts stay in USDC—the
+            units consumers already use to price risk. $REGI coordinates early
+            attention, liquidity, and network growth; it does not decide which
+            attestation is true or replace the protocol&apos;s economic security.
+            The official contract is{" "}
+            <a href={REGI_EXPLORER_URL} target="_blank" rel="noreferrer" className="text-accent underline decoration-accent/40 underline-offset-4">
+              {REGI_CONTRACT}
+            </a>.
           </p>
           <p>
             <strong className="text-fg">Per-feed resolver, not global.</strong>{" "}
@@ -82,14 +94,28 @@ export default function AboutPage() {
             chose.
           </p>
           <p>
-            <strong className="text-fg">Oracle free, markets earn.</strong> The
+            <strong className="text-fg">Oracle free, trades pay 1%.</strong> The
             registry layer charges nothing — reading a feed, registering an
-            agent, posting a bond is free forever. The markets layer takes a
-            0.70% trading fee, split <span className="text-up">0.40% to the
-            creator</span>, <span className="text-up">0.20% to the agent</span>,
-            and <span className="text-fg-mute">0.10% to the protocol</span>.
-            Every layer is paid by real economic activity, not by token
-            speculation.
+            agent, posting a bond is free. Markets take a 1% trading fee on
+            every buy and sell, and nothing at settlement, split{" "}
+            <span className="text-up">30% to the market creator</span>,{" "}
+            <span className="text-up">20% to the bonded agent</span> (held
+            until the market settles), and{" "}
+            <span className="text-commons">50% to the builder the market is about</span>{" "}
+            (on common markets, that 50% goes to the Registrai treasury).
+            A builder&apos;s share is credited as its income per epoch; after
+            the epoch, the claim pays a progressive tax into the season pool,
+            1% of the rest to Registrai (which pays for the caretaker that
+            monitors milestones), and the net to the builder. The season pool
+            rewards building progress that traders confirmed. If a market
+            can&apos;t be settled, it voids: every trader gets their net cost
+            back (what they put in after fees, minus what they took out), and
+            the agent&apos;s held 20% goes to whoever successfully challenged
+            its answer (otherwise to the season pool on builder markets, the
+            treasury on common markets). See the{" "}
+            <Link href="/perennial/economy" className="underline decoration-fg-dim underline-offset-4 hover:text-accent">builder economy</Link>.
+            Core protocol accounting remains tied to
+            real USDC activity, not to the price of $REGI.
           </p>
         </Prose>
 

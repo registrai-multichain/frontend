@@ -10,6 +10,108 @@ interface Entry {
 
 const ENTRIES: Entry[] = [
   {
+    date: "2026-09-24",
+    title: "Builder income replaces the commons · progressive tax · season pool",
+    body: (
+      <>
+        <p>
+          The 50% leg of every builder-market fee now goes to{" "}
+          <strong>the builder the market is about</strong>, credited as that
+          builder&apos;s income for the current epoch in a new BuilderFund. The
+          split is unchanged: <strong>30% market creator · 20% bonded agent
+          (held until settlement) · 50% the builder</strong>.
+        </p>
+        <h3>Why</h3>
+        <p>
+          The commons split that 50% across every verified builder by
+          &ldquo;progress weight&rdquo; (releases, tags, deployments). Weight
+          was cheap and builder-controlled: thirty tags a month out-weighed
+          three real releases and took most of the fees the other builder&apos;s
+          markets earned. The builder whose markets create value now captures it.
+        </p>
+        <h3>Progressive tax, season pool</h3>
+        <p>
+          Once an epoch ends (30 days on mainnet), anyone can claim a
+          builder&apos;s income for it. The claim pays a marginal tax by the
+          epoch&apos;s schedule into the season pool, 1% of the rest to
+          Registrai (it pays for the caretaker), and the net to the
+          builder&apos;s payout address. The launch schedule is 0% up to
+          $1,000 per epoch, 10% to $10,000, 20% to $50,000 and 30% above, so
+          $60,000 pays $11,900. A new schedule takes effect two epochs after the
+          Safe sets it, within on-chain bounds (no rate above 40%).
+        </p>
+        <p>
+          The season pool also receives the agent escrow of voided markets
+          nobody successfully challenged, and income swept from deactivated
+          builders. Each season the Safe publishes a merkle root of rewards,
+          computed by a public script from chain data (milestone markets that
+          resolved YES with at least $500 of other people&apos;s volume), capped
+          at 20% of the season per builder. Details and a calculator on the{" "}
+          <Link href="/perennial/economy">builder economy</Link> page.
+        </p>
+        <p>
+          ProgressPool and ProgressArbiter (bonded progress proposals) are
+          retired; milestone feeds and markets stay. Testnet shows the markets
+          without the income parts until the new contracts are deployed there.
+        </p>
+      </>
+    ),
+  },
+  {
+    date: "2026-09-24",
+    title: "New fee & settlement model · 1% on every trade, nothing at settlement",
+    body: (
+      <>
+        <p>
+          One fee model for every market we run from here on:{" "}
+          <strong>a 1% trading fee on every buy and sell</strong>, split{" "}
+          <strong>30% market creator · 20% bonded agent · 50% builder commons</strong>.
+          The creator and commons legs are paid as each trade happens; the
+          agent&apos;s 20% is held until the market settles.{" "}
+          <strong>Nothing is charged at settlement.</strong> The numbers are
+          constants in the contracts, not a governance knob.
+        </p>
+        <h3>Two kinds of market, one split</h3>
+        <p>
+          Perennial builder markets are settled by the protocol&apos;s bonded
+          milestone agent (the caretaker operator), and their 50% goes to the
+          builder commons. Common markets use the same 1% and the same split,
+          except the 50% goes to the Registrai treasury. Common markets are
+          open to any bonded agent paired with an approved, independent
+          dispute resolver: when an agent settles a market correctly, the 20%
+          held for it is released to it.
+        </p>
+        <h3>Voids and challengers</h3>
+        <p>
+          If a market can&apos;t be settled, it voids: every trader gets their
+          net cost back (what they put in after fees, minus what they took
+          out). The agent&apos;s held 20% goes to whoever successfully
+          challenged its answer (dispute ruled Invalid) inside the settlement
+          window; otherwise it goes to the commons, or the treasury on common
+          markets.
+        </p>
+        <h3>Registrai&apos;s own take from the commons</h3>
+        <p>
+          Registrai takes 1% of each builder payout from the commons. It pays
+          for the caretaker that monitors builders&apos; milestones. This
+          replaces the earlier idea of Registrai drawing from the commons under
+          a per-epoch cap, which was never built.
+        </p>
+        <p>
+          (Superseded the same day for builder markets: the 50% leg pays the
+          builder the market is about instead of the commons, and an
+          unchallenged void&apos;s escrow goes to the season pool. See the entry
+          above.) This is the model the contracts are being updated to; markets already
+          on testnet keep the terms they were created with until the redeploy.
+          The older Markets testnet contracts (0.70% per trade, a different
+          split) are legacy and are not going to mainnet. None of these market
+          contracts are on mainnet yet, and nothing here is a promise of
+          returns.
+        </p>
+      </>
+    ),
+  },
+  {
     date: "2026-06-10",
     title: "Suffix pools live · $ai, $xyz, $fun · memecoins with a floor",
     body: (
@@ -1270,7 +1372,7 @@ export default function DevlogPage() {
           ))}
         </div>
 
-        <div className="mt-20 border border-dashed border-line/60 p-6 text-[13px] text-fg-mute">
+        <div className="mt-20 border border-dashed border-line p-6 text-[13px] text-fg-mute">
           <span className="font-serif italic">Subscribed?</span> Watch the{" "}
           <a
             href="https://github.com/registrai-multichain/contracts"

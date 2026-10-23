@@ -1,0 +1,16 @@
+[
+  {
+    "slug": "binance",
+    "field": "summary",
+    "set": { "summary": "Centralized crypto exchange. Arc's mainnet launch post (2026-09-16) lists Binance among the exchanges that are live on Arc. A third-party relay reports Binance opened USDC deposits on Arc the same day." },
+    "change": "Summary updated: Arc's launch post lists Binance among exchanges live on Arc",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet"
+  },
+  {
+    "slug": "dfns",
+    "field": "summary",
+    "set": { "summary": "Wallet-as-a-service and key management platform for banks, fintechs and businesses. Listed as an Arc ecosystem partner; its documentation lists Arc in the Mainnet column of supported networks." },
+    "change": "Summary updated: its docs now list Arc mainnet, not only testnet",
+    "source": "https://docs.dfns.co/networks"
+  }
+]

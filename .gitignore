@@ -16,6 +16,9 @@
 # production
 /build
 
+# badge art, rendered on deploy by scripts/render-badges.py
+/public/badge/
+
 # misc
 .DS_Store
 *.pem
@@ -34,3 +37,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# standalone builders site (scripts/build-builders-site.sh)
+/dist-builders/
+/dist-app/
+/dist-dashboard/

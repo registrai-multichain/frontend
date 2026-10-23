@@ -1,0 +1,331 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import live from "@/lib/live-data.json";
+import { Globe } from "@/components/Globe";
+import { SeasonBoards } from "@/components/SeasonBoards";
+import { MilestoneDisclosure, VerifiedBadge } from "@/components/VerifiedBadge";
+import {
+  atlasView,
+  aggregateByCountry,
+  impliedYes,
+  marketsForBuilders,
+  MIN_BUILDERS_PER_CELL,
+  UNATTRIBUTED,
+} from "@/lib/atlas";
+import type { BuilderAggregate, PerennialMarket } from "@/lib/atlas";
+import { milestoneMetric, snapshotBuilders, verificationFor } from "@/lib/builder-verification";
+import { sourceLabel } from "@/lib/verified-builders";
+import type { Season, SeasonProgress } from "@/lib/seasons";
+
+type SeasonBoardData = { traders: Array<[string, string]>; builders: Array<[string, number]> };
+
+type RawBuilder = {
+  builderId: number;
+  address: string;
+  lifetimeProgress: number;
+  volume: string;
+  /** From the builder's signed claim (verified builders only). */
+  country?: string | null;
+};
+
+const usdc = (base: bigint | number) => (Number(base) / 1e6).toFixed(2);
+
+export function Atlas() {
+  const [selected, setSelected] = useState<string | null>(null);
+  // Second level of the drill-down: country -> builder -> that builder's markets.
+  const [openBuilder, setOpenBuilder] = useState<number | null>(null);
+
+  const seasons = (live as unknown as { seasons?: Season[] }).seasons ?? [];
+  // Through `unknown`: TypeScript infers string[][] from the JSON literal and
+  // will not narrow an array to a tuple on its own.
+  const boards =
+    (live as unknown as { seasonBoards?: Record<string, SeasonBoardData> }).seasonBoards ?? {};
+  // Default to the season still running — that is the one people are competing in.
+  const [seasonId, setSeasonId] = useState<number | null>(
+    seasons.length ? seasons[seasons.length - 1].id : null,
+  );
+  const season = seasons.find((s) => s.id === seasonId) ?? null;
+
+  // The sync writes verified builders only, each with its claim's country.
+  const builders = ((live as { builders?: RawBuilder[] }).builders ?? []).map(
+    (b): BuilderAggregate => ({
+      builderId: b.builderId,
+      address: b.address,
+      lifetimeProgress: b.lifetimeProgress,
+      volume: BigInt(b.volume),
+      country: b.country && /^[A-Z]{2}$/.test(b.country) ? b.country : null,
+    }),
+  );
+  const snap = snapshotBuilders();
+  const verification = (b: BuilderAggregate) => verificationFor(snap, { builderId: b.builderId, owner: b.address });
+  const milestoneFeed = (id: number) => snap.find((r) => r.builderId === id)?.milestoneFeedId?.toLowerCase();
+
+  const markets = (live as { perennialMarkets?: PerennialMarket[] }).perennialMarkets ?? [];
+
+  const syncedAt = Math.floor(
+    new Date((live as { syncedAt?: string }).syncedAt ?? 0).getTime() / 1000,
+  );
+
+  const board = season ? boards[String(season.id)] : undefined;
+  // Progress is keyed by builder ADDRESS on chain; the boards want ids and
+  // countries, which only the registry join can supply.
+  const byAddress = new Map(builders.map((b) => [b.address.toLowerCase(), b]));
+  const seasonProgress: SeasonProgress[] = (board?.builders ?? []).flatMap(([addr, prog]) => {
+    const b = byAddress.get(addr.toLowerCase());
+    return b ? [{ builderId: b.builderId, address: b.address, country: b.country, progress: prog }] : [];
+  });
+  const traderPnl = new Map((board?.traders ?? []).map(([addr, v]) => [addr, BigInt(v)]));
+  const cells = aggregateByCountry(builders);
+  const mapped = cells.filter((c) => c.code !== UNATTRIBUTED);
+  const unattributed = cells.find((c) => c.code === UNATTRIBUTED);
+
+  // Density scales against the busiest MAPPED country. Including the
+  // unattributed bucket would let it flatten every real country to the floor.
+  const max = mapped.reduce((m, c) => Math.max(m, c.builders), 0);
+
+  const totalBuilders = cells.reduce((s, c) => s + c.builders, 0);
+  const totalProgress = cells.reduce((s, c) => s + c.progress, 0);
+  const totalVolume = cells.reduce((s, c) => s + c.volume, 0n);
+  const view = atlasView(totalBuilders, seasonProgress.length);
+  const fmtDate = (t: number) => new Date(t * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+
+  const inCell = selected
+    ? builders.filter((b) => {
+        const shown = mapped.some((c) => c.code === b.country);
+        return selected === UNATTRIBUTED ? !shown : b.country === selected;
+      })
+    : [];
+  const cellMarkets = marketsForBuilders(
+    markets,
+    inCell.map((b) => b.builderId),
+  );
+  const cellLabel = selected === UNATTRIBUTED ? "unattributed" : selected;
+
+  return (
+    <section className="atlas-root">
+      <dl className="atlas-stats">
+        <Stat label="Builders" value={String(totalBuilders)} />
+        <Stat label="Progress" value={String(totalProgress)} />
+        <Stat label="Volume" value={`${usdc(totalVolume)} USDC`} />
+      </dl>
+
+      {/* One grid: the globe alone at full width, or docked small to the left
+          with the country's detail beside it. The globe stays live either way —
+          it is also the way back out. */}
+      <div className="atlas-stage" data-docked={selected ? "true" : undefined}>
+        <div className="atlas-stage-globe">
+          <Globe
+            cells={mapped}
+            selected={selected}
+            onSelect={(c) => {
+              setSelected(c);
+              setOpenBuilder(null);
+            }}
+            max={max}
+          />
+          {view.emptyGlobe && !selected && (
+            <div className="atlas-globe-empty">
+              <p className="pa-h3 pu-h">The atlas fills in as builders verify</p>
+              <p className="pa-muted pa-small mt-1">
+                Each verified builder lights up their country
+                {season ? `. ${season.label} runs ${fmtDate(season.startedAt)} – ${fmtDate(season.endsAt)}` : ""}.
+              </p>
+              <Link className="pa-btn pu-btn pu-btn--primary mt-3" href="/verify">Verify your project</Link>
+            </div>
+          )}
+        </div>
+        {selected && (
+          <div className="atlas-panel">
+            {/* Breadcrumb doubles as the control: the country step is a button
+                once you are a level deeper, so back is where you looked. */}
+            <div className="atlas-panel-head">
+              <span className="atlas-crumbs">
+                {openBuilder === null ? (
+                  <span className="caption">
+                    {cellLabel} · {inCell.length} builder{inCell.length === 1 ? "" : "s"}
+                  </span>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="atlas-crumb"
+                      onClick={() => setOpenBuilder(null)}
+                    >
+                      ← {cellLabel}
+                    </button>
+                    <span className="caption">builder #{openBuilder}</span>
+                  </>
+                )}
+              </span>
+              <button
+                type="button"
+                className="atlas-close"
+                onClick={() => {
+                  setSelected(null);
+                  setOpenBuilder(null);
+                }}
+              >
+                close ×
+              </button>
+            </div>
+
+            {inCell.length === 0 && (
+              <div className="atlas-builder text-[13px] text-fg-dim">No builders in this cell.</div>
+            )}
+
+            {openBuilder === null
+              ? inCell.map((b) => {
+                  const n = marketsForBuilders(cellMarkets, [b.builderId]).length;
+                  return (
+                    <button
+                      key={b.builderId}
+                      type="button"
+                      className="atlas-builder-row"
+                      onClick={() => setOpenBuilder(b.builderId)}
+                    >
+                      <span className="atlas-builder-id">
+                        builder #{b.builderId} <VerifiedBadge verification={verification(b)} link={false} />
+                      </span>
+                      <span className="atlas-builder-addr tnum">
+                        {verification(b) ? sourceLabel(verification(b)!.source) : b.address}
+                      </span>
+                      <span className="atlas-builder-stats tnum">
+                        <b>{b.lifetimeProgress}</b> progress · {usdc(b.volume)} USDC
+                      </span>
+                      <span className="atlas-builder-go tnum">
+                        {n} market{n === 1 ? "" : "s"} →
+                      </span>
+                    </button>
+                  );
+                })
+              : (() => {
+                  const b = inCell.find((x) => x.builderId === openBuilder);
+                  if (!b) return null;
+                  const mine = marketsForBuilders(cellMarkets, [b.builderId]);
+                  const v = verification(b);
+                  const feed = milestoneFeed(b.builderId);
+                  const hasMilestone = mine.some((m) => feed && m.feedId?.toLowerCase() === feed);
+                  return (
+                    <div className="atlas-builder">
+                      <div className="flex items-baseline justify-between gap-4 flex-wrap">
+                        <span className="text-[13px] text-fg-dim tnum flex items-center gap-2 flex-wrap">
+                          {v && <span className="text-fg">{sourceLabel(v.source)}</span>}
+                          <VerifiedBadge verification={v} />
+                          {b.address}
+                        </span>
+                        <span className="text-[13px] text-fg-dim tnum">
+                          {b.lifetimeProgress} progress · {usdc(b.volume)} USDC volume
+                        </span>
+                      </div>
+
+                      {mine.length === 0 ? (
+                        <div className="text-[13px] text-fg-dim mt-3">No markets yet.</div>
+                      ) : (
+                        <ul className="atlas-markets">
+                          {mine.map((m) => {
+                            const p = impliedYes(BigInt(m.yesReserve), BigInt(m.noReserve));
+                            return (
+                              <li key={m.marketId}>
+                                <span className="tnum text-fg-mute">
+                                  {feed && m.feedId?.toLowerCase() === feed ? "milestone · " : ""}
+                                  {m.marketId.slice(0, 14)}…
+                                </span>
+                                <span className="atlas-odds" style={{ ["--p" as string]: p }}>
+                                  <i />
+                                </span>
+                                <span className="tnum">{(p * 100).toFixed(0)}%</span>
+                                <span
+                                  className={m.phase === "trading" ? "text-commons" : "text-fg-dim"}
+                                >
+                                  {m.phase === "resolved"
+                                    ? `settled ${m.yesWon ? "yes" : "no"}`
+                                    : m.phase === "voided"
+                                      ? "voided · net cost refunded"
+                                      : "trading"}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                      {hasMilestone && (
+                        <p className="mt-3">
+                          <MilestoneDisclosure metric={milestoneMetric(v?.source)} />
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+          </div>
+        )}
+      </div>
+
+      {season && (
+        <>
+          {seasons.length > 1 && (
+            <nav className="season-picker" aria-label="Season">
+              {seasons.map((x) => (
+                <button
+                  key={x.id}
+                  type="button"
+                  data-active={x.id === season.id ? "true" : undefined}
+                  onClick={() => setSeasonId(x.id)}
+                >
+                  {x.label}
+                </button>
+              ))}
+            </nav>
+          )}
+          <SeasonBoards
+            season={season}
+            progress={seasonProgress}
+            traderPnl={traderPnl}
+            syncedAt={syncedAt}
+            showBoards={view.showBoards}
+          />
+        </>
+      )}
+
+      {/* Builders with no declared country, plus everyone folded in by the
+          small-n floor. They have no geography by definition, so they sit
+          beside the globe rather than on it. */}
+      {unattributed && (
+        <button
+          type="button"
+          className="atlas-unattributed"
+          data-selected={selected === UNATTRIBUTED ? "true" : undefined}
+          aria-pressed={selected === UNATTRIBUTED}
+          onClick={() => {
+            setSelected(selected === UNATTRIBUTED ? null : UNATTRIBUTED);
+            setOpenBuilder(null);
+          }}
+        >
+          <span className="atlas-unattributed-label">unattributed</span>
+          <span className="tnum">{unattributed.builders}</span>
+          <span className="atlas-unattributed-note">
+            no declared country, or below the {MIN_BUILDERS_PER_CELL}-builder floor
+          </span>
+        </button>
+      )}
+
+      <p className="atlas-note">
+        Only verified builders are shown. Country comes from each builder&rsquo;s signed claim:
+        self-declared and never checked, it decides which cell a builder sits in and nothing
+        else. Progress and volume are read from chain. Countries with fewer than{" "}
+        {MIN_BUILDERS_PER_CELL} builders are grouped as unattributed, so the map never narrows
+        down to one person.
+      </p>
+    </section>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="atlas-stat">
+      <dt className="caption text-fg-dim">{label}</dt>
+      <dd className="tnum pu-h">{value}</dd>
+    </div>
+  );
+}

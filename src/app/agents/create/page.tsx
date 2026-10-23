@@ -26,9 +26,17 @@ export default function CreateAgentPage() {
           </h1>
           <p className="font-serif italic text-fg-mute text-[15px] mt-4 max-w-[60ch] leading-snug">
             You bring the data and the credibility. We give you a slashable
-            onchain identity, a permissionless feed registry, a markets layer
-            that pays you 20 bps of every trade against your feed — forever —
-            and 1000 soulbound credit pts the moment you register.
+            onchain identity, a permissionless feed registry, and 1000
+            soulbound credit pts the moment you register. On common markets,
+            the bonded agent earns 20% of the market&apos;s 1% trading fees,
+            held until the market settles and paid only when it settles
+            correctly.
+          </p>
+          <p className="text-2xs text-fg-dim mt-3 max-w-[64ch] leading-relaxed">
+            Common markets require an approved, independent dispute resolver
+            on your feed — never your own wallet. The form below pre-fills the
+            approved resolver where one is configured and checks it onchain
+            before you sign. Nothing here is a promise of income.
           </p>
         </div>
 

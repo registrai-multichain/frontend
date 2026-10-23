@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { postMarketDescription } from "@/lib/hooks/useMarketDescription";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { decodeEventLog, maxUint256, parseUnits, type Address, type Hex } from "viem";
 import { useWallet } from "./WalletProvider";
 import { CREATABLE_FEEDS, type CreatableFeed } from "@/lib/demo";
@@ -314,7 +315,7 @@ export function CreateMarketForm() {
           hint="Pick the data feed this market will resolve against. Verifiable feeds use an onchain rule contract for aggregation. Or paste any feedId you just created on /agents/create."
         >
           {handoffFromAgentCreate && (
-            <div className="mb-3 border border-accent/40 bg-bg-elev/40 p-3 text-2xs leading-relaxed">
+            <div className="mb-3 border border-accent/40 bg-bg p-3 text-2xs leading-relaxed">
               <span className="text-accent caption mr-2">✓ using your fresh feed</span>
               <span className="text-fg-mute tnum break-all">
                 {handoffFromAgentCreate.slice(0, 10)}…{handoffFromAgentCreate.slice(-8)}
@@ -346,8 +347,8 @@ export function CreateMarketForm() {
                   }}
                   className={`w-full text-left p-3 transition-colors border ${
                     active
-                      ? "bg-bg-elev/60 border-accent"
-                      : "bg-bg-elev/20 border-line hover:border-line-strong"
+                      ? "bg-bg-elev border-accent"
+                      : "bg-bg-elev border-line hover:border-line-strong"
                   }`}
                 >
                   <div className="flex items-baseline justify-between gap-2 flex-wrap">
@@ -382,8 +383,8 @@ export function CreateMarketForm() {
               }}
               className={`w-full text-left p-3 transition-colors border ${
                 customFeedMode
-                  ? "bg-bg-elev/60 border-accent"
-                  : "bg-bg-elev/20 border-line border-dashed hover:border-line-strong"
+                  ? "bg-bg-elev border-accent"
+                  : "bg-bg-elev border-line border-dashed hover:border-line-strong"
               }`}
             >
               <div className="flex items-baseline justify-between gap-2 flex-wrap">
@@ -396,7 +397,7 @@ export function CreateMarketForm() {
               </p>
             </button>
             {customFeedMode && (
-              <div className="space-y-3 p-3 border border-line bg-bg-elev/30">
+              <div className="space-y-3 p-3 border border-line bg-bg-elev">
                 <input
                   type="text"
                   value={customFeedId}
@@ -587,7 +588,7 @@ export function CreateMarketForm() {
 
       {/* Right rail — preview + submit */}
       <aside className="space-y-6">
-        <div className="border border-accent/30 bg-bg-elev/30 p-5">
+        <div className="border border-accent/30 bg-bg-elev p-5">
           <div className="caption text-accent mb-3">market preview</div>
           <p className="font-serif text-[17px] leading-snug mb-4">{summary}</p>
           <div className="space-y-2 text-2xs text-fg-mute">
@@ -632,13 +633,13 @@ export function CreateMarketForm() {
         )}
 
         {error && (
-          <div className="border border-down/40 bg-bg-elev/30 p-4 text-2xs text-down leading-relaxed">
+          <div className="border border-down/40 bg-bg-elev p-4 text-2xs text-down leading-relaxed">
             {error.length > 200 ? `${error.slice(0, 200)}…` : error}
           </div>
         )}
 
         {status === "success" && (
-          <div className="border border-accent/50 bg-bg-elev/40 p-4 space-y-2">
+          <div className="border border-accent/50 bg-bg p-4 space-y-2">
             <div className="caption text-accent">market created ✓ · +200 pts</div>
             <p className="text-2xs text-fg-mute leading-relaxed">
               Onchain credits added to your wallet. Soulbound — earned, not
@@ -646,25 +647,25 @@ export function CreateMarketForm() {
             </p>
             <div className="flex gap-3 flex-wrap pt-1">
               {createdMarketId && (
-                <a
+                <Link
                   href={`/markets/view/?id=${createdMarketId}`}
                   className="text-2xs text-accent hover:underline"
                 >
                   view your market →
-                </a>
+                </Link>
               )}
-              <a
+              <Link
                 href="/profile/"
                 className="text-2xs text-accent hover:underline"
               >
                 view your credits →
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/markets/"
                 className="text-2xs text-fg-dim hover:text-accent transition-colors"
               >
                 all markets →
-              </a>
+              </Link>
             </div>
           </div>
         )}

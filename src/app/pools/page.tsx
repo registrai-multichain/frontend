@@ -32,11 +32,11 @@ export default function PoolsPage() {
             <Link
               key={p.symbol}
               href={`/pool/${p.symbol}`}
-              className="bg-bg p-6 hover:bg-bg-elev/30 transition-colors group"
+              className="bg-bg p-6 hover:bg-bg-elev transition-colors group"
             >
               <div className="flex items-baseline justify-between mb-3">
                 <span className="font-serif text-[28px]">${p.symbol}</span>
-                <span className={`caption text-2xs ${p.live ? "text-emerald-400" : "text-fg-dim"}`}>
+                <span className={`caption text-2xs ${p.live ? "text-up" : "text-fg-dim"}`}>
                   {p.live ? "live" : "soon"}
                 </span>
               </div>
@@ -49,7 +49,7 @@ export default function PoolsPage() {
           ))}
         </div>
 
-        <div className="mt-12 border border-dashed border-line/60 p-6 text-[13px] text-fg-mute max-w-[70ch]">
+        <div className="mt-12 border border-dashed border-line p-6 text-[13px] text-fg-mute max-w-[70ch]">
           <span className="font-serif italic">How they relate.</span> All suffix pools are consumers
           of Registrai oracle infrastructure — Registrai itself stays neutral. Each suffix is a
           separate deployment (own treasury, tokens, pool). Testnet only; nothing here is an offer.

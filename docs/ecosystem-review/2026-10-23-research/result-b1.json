@@ -1,0 +1,260 @@
+[
+ {
+  "slug": "alchemy",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.alchemy.com/blog/arc-mainnet-is-live-on-alchemy",
+   "title": "Alchemy blog: Arc mainnet is live on Alchemy",
+   "date": "2026-09-16"
+  },
+  "why": "Alchemy blog post dated 2026-09-16 (datePublished 2026-09-16) says its full developer platform is live for Arc builders on day one (RPC, WebSockets, Data APIs, Wallet APIs).",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "arclotls",
+  "first_live": "2026-09-17",
+  "evidence": {
+   "url": "https://explorer.arc.io/block/21330221",
+   "title": "Arc mainnet block 21330221: ArcLotls ProductionRenderer created",
+   "date": "2026-09-17"
+  },
+  "why": "Earliest of the ArcLotls contracts listed in its docs: ProductionRenderer 0x8fd79cbb321247cddc4f91844496cc723c032faf first has code at block 21330221 (2026-09-17 12:49 UTC; likely creation tx 0x1b7a5bd7dea1bcce11da1346601f412ac2f05ef5e384ad649d8ace451706e514). LOTL token 13:07, NFT contract 0xe3af... 14:00 the same day. Found via Arc mainnet RPC (explorer.arc.io behind a Cloudflare challenge). No dated announcement found.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "argus",
+  "first_live": "2026-09-02",
+  "evidence": {
+   "url": "https://explorer.arc.io/block/18819901",
+   "title": "Arc mainnet block 18819901: ARGUS token created",
+   "date": "2026-09-02"
+  },
+  "why": "PRE-LAUNCH, use with care: earliest contract in the entry, ARGUS token 0xece5ca8bf9220718e5727754026757512212cb3c, first has code at block 18819901 (2026-09-02 18:32 UTC; tx 0x0a1bf7818c3003f4d8975b764626fb8e732857e3679c86a186d5e85f2464581c mints its supply); launch portals followed 2026-09-07 to 2026-09-12. All of this is in Arc private pre-launch window, before the 2026-09-16 public launch, so it is a deploy date, not a public go-live date. Found via Arc mainnet RPC (explorer behind a Cloudflare challenge). No dated Argus announcement found.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "backpack",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc, the economic OS for the internet (mainnet launch)",
+   "date": "2026-09-16"
+  },
+  "why": "Arc's mainnet launch post (2026-09-16) names Backpack among wallets that connect Arc's markets to users 'from day one'. No Backpack-dated post found (its blog did not load).",
+  "status": "live",
+  "status_quote": "Digital wallets and consumer apps such as Alcove, Backpack, Binance Wallet, Bitget Wallet, Bron, ... connect Arc's markets to hundred of millions of existing users from day one.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "bankr",
+  "first_live": null,
+  "evidence": null,
+  "why": "Bankr docs list Arc as a supported chain (Bankr Launch v3 on Arc) but give no date; Circle's 2026-09-16 press release lists Bankr only under 'already live on or exploring Arc's private mainnet', which does not state a live date. Web search budget was exhausted, so no X post was checked.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "beefy",
+  "first_live": "2026-09-22",
+  "evidence": {
+   "url": "https://explorer.arc.io/block/22167963",
+   "title": "Arc mainnet block 22167963: Beefy USDC-EURC vault created",
+   "date": "2026-09-22"
+  },
+  "why": "Beefy's Arc vault config lists 0x104e6823bab0be3fe9b48c5fb0f0413301d935a4 (USDC-EURC CLM vault); its code first appears at block 22167963 (2026-09-22 11:06 UTC), reward pool 0x8f6e... 2 s later. Found via Arc mainnet RPC (explorer behind a Cloudflare challenge). COOL-USDC vault came later (2026-10-13).",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "blockdaemon",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.blockdaemon.com/blog/announcing-blockdaemon-as-a-day-1-launch-partner-for-arc",
+   "title": "Blockdaemon blog: Announcing Blockdaemon as a Day 1 Launch Partner for Arc",
+   "date": "2026-09-16"
+  },
+  "why": "Post (schema datePublished 2026-09-16; on-page byline reads September 15, 2026) says Blockdaemon is a Day 1 Launch Partner for Arc and 'Our node and data infrastructure is live on Arc'. Day 1 = mainnet launch 2026-09-16.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "blockscout",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.blog.blockscout.com/news-exploring-arc/",
+   "title": "Blockscout blog: Exploring Arc",
+   "date": "2026-09-16"
+  },
+  "why": "Blockscout's post says 'Arc mainnet is live, and Blockscout is its official block explorer, powering the chain from day one' (day one = mainnet launch 2026-09-16). Note: the post itself is dated 2026-09-22; Arc's 2026-09-16 launch blog also names Blockscout among Arc's infrastructure providers.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "bonker",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://explorer.arc.io/tx/0x3f220617dc0db19eaa717e47c284451ca1e70d7fd21ce76d45374651a464b112",
+   "title": "Arc mainnet tx: Bonker FeeLocker contract creation",
+   "date": "2026-09-16"
+  },
+  "why": "Earliest of the Arc contracts on bonker.wtf/docs/contracts: FeeLocker 0xa6b95c1d3168fcb07738b45803a89b28873963d5 created directly in this tx at block 21167881 (2026-09-16 13:58 UTC) by 0x6097dd26...; factory, hooks, MEV module follow within seconds. Found via Arc mainnet RPC (explorer behind a Cloudflare challenge).",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "bron",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc, the economic OS for the internet (mainnet launch)",
+   "date": "2026-09-16"
+  },
+  "why": "Arc's mainnet launch post (2026-09-16) names Bron among wallets that connect Arc's markets to users 'from day one'. bron.org lists Arc among networks but gives no date.",
+  "status": "live",
+  "status_quote": "Digital wallets and consumer apps such as Alcove, Backpack, Binance Wallet, Bitget Wallet, Bron, ... connect Arc's markets to hundred of millions of existing users from day one.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "circle-gateway",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://developers.circle.com/release-notes/gateway-2026",
+   "title": "Circle Gateway release notes 2026",
+   "date": "2026-09-16"
+  },
+  "why": "Release note dated 2026.09.16: 'Added Arc mainnet as a supported blockchain for Gateway.' (GatewayWallet/Minter bytecode already existed from 2026-05-26 in the private pre-launch window.)",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "crossmint",
+  "first_live": null,
+  "evidence": null,
+  "why": "Crossmint docs list Arc (mainnet 'arc') without a date; Crossmint changelog/blog show no Arc entry; Arc's launch blog names Crossmint only as embedded-wallet infrastructure, not as live at launch.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "drpc",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://drpc.org/blog/arc-mainnet-announcement/",
+   "title": "dRPC blog: Arc Mainnet RPC Is Live: Supported By dRPC From Day One",
+   "date": "2026-09-16"
+  },
+  "why": "Published September 16, 2026: 'dRPC supports Arc Mainnet from day one and gives developers instant RPC access'.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "edgex",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://pro.edgex.exchange/en-US/news/article/edgex-arc-genesis-campaign",
+   "title": "edgeX x Arc Genesis Is Live",
+   "date": "2026-09-16"
+  },
+  "why": "Article says 'edgeX is live on Arc with more than 150 perpetual pairs already listed', 'Campaign materials are current as of September 16, 2026' and the campaign runs from September 16, 2026. Page publish date shows 2026-09-17.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "faze",
+  "first_live": "2026-09-13",
+  "evidence": {
+   "url": "https://explorer.arc.io/block/20565995",
+   "title": "Arc mainnet block 20565995: FAZE bonding curve created",
+   "date": "2026-09-13"
+  },
+  "why": "PRE-LAUNCH, use with care: FAZE contracts listed in its app deployment config (arc-mainnet) first have code at block 20565995-20566002 (2026-09-13 00:40 UTC): bonding curve 0x6a62919c... (likely creation tx 0x0f5d06994e7ddc479692a53fee6e624530b17d5bfec0fb423125ba1bf3dd23cf), hook 0x47e7936a..., migrator 0x7c8de424.... This is in the private pre-launch window, before the 2026-09-16 public launch; faze.fun says its terminal is live from day one but gives no date. Found via Arc mainnet RPC (explorer behind a Cloudflare challenge).",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "figment",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.figment.io/insights/figment-offers-managed-validator-services-on-arc-at-mainnet-launch/",
+   "title": "Figment: Figment offers Managed Validator Services on Arc at mainnet launch",
+   "date": "2026-09-16"
+  },
+  "why": "Post titled as offering Managed Validator Services on Arc 'at mainnet launch' (mainnet launch = 2026-09-16; Circle's 2026-09-16 release names Figment in Arc's infrastructure layer). Could not re-read the page today: figment.io returns a Cloudflare challenge; the 2026-09-16 date comes from the entry's earlier evidence and the title.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "goldsky",
+  "first_live": null,
+  "evidence": null,
+  "why": "Goldsky's Arc post (2026-09-04) covers testnet only ('support planned for the upcoming Arc mainnet launch'); docs show Arc Mainnet supported but undated; changelog has no Arc mainnet entry. Arc's 2026-09-16 launch blog lists Goldsky among tool providers without saying live at launch.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "juno",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc, the economic OS for the internet (mainnet launch)",
+   "date": "2026-09-16"
+  },
+  "why": "Arc's mainnet launch post (2026-09-16): 'Fiat stablecoins: Arc supports USDC, EURC, ... MXNB ...'. MXNB token 0xf197ffc28c23e0309b5559e7a166f2c6164c80aa bytecode exists from block 6545751 (2026-06-22, private pre-launch window), so it was on mainnet by public launch. No Juno/Bitso-dated post found.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ }
+]

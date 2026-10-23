@@ -35,14 +35,14 @@ export default function VaultPage() {
           <Card title="how trades route"
             body="Only the registered operator (currently us) can submit trades through the vault. Every buy, sell, and addLiquidity call emits an event onchain and is verifiable on ArcScan. Operator rotation is owner-gated; the operator cannot withdraw user funds, only route them into Markets contract calls." />
           <Card title="how revenue accrues"
-            body="The vault pays the standard 70 bps trading fee on every buy. For markets where the operator is also the agent and creator, those fees flow back to the same wallet — fee-neutral. Net PnL = winning shares redeemed at $1 each + LP residuals at resolution, minus losing positions." />
+            body="The vault trades legacy testnet markets (older Markets contracts, not going to mainnet), so it pays that contract's 70 bps trading fee on every buy. For markets where the operator is also the agent and creator, those fees flow back to the same wallet — fee-neutral. Net PnL = winning shares redeemed at $1 each + LP residuals at resolution, minus losing positions." />
         </div>
 
         {/* Forward hint — v0.5 cirBTC × USDC lending pool with atomic
             bet integration. Two-sided market: cirBTC suppliers earn yield,
             bettors borrow USDC against cirBTC to lever into Registrai
             markets in one transaction. */}
-        <div className="mt-12 border border-accent/40 bg-bg-elev/40 p-6">
+        <div className="mt-12 border border-accent/40 bg-bg p-6">
           <div className="flex items-baseline gap-3 mb-3 flex-wrap">
             <span className="caption text-accent">coming · v0.5</span>
             <span className="caption text-fg-dim text-[10px]">
@@ -71,7 +71,7 @@ export default function VaultPage() {
           </p>
         </div>
 
-        <div className="mt-8 border border-dashed border-line/60 p-6 text-[13px] text-fg-mute">
+        <div className="mt-8 border border-dashed border-line p-6 text-[13px] text-fg-mute">
           <span className="font-serif italic">v1 vault, conservative NAV.</span>{" "}
           Performance fees, mark-to-market NAV, and a fully permissionless
           operator role (anyone bonds + competes for the slot) are on the

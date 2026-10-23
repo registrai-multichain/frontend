@@ -1,0 +1,330 @@
+{
+  "version": 1,
+  "attribution": "Registrai, builder.registrai.cc, CC BY 4.0",
+  "index": "aii",
+  "data_until": "2026-10-14T21:00:00Z",
+  "members": [
+    {
+      "id": "integration:uniswap",
+      "name": "Uniswap",
+      "kind": "integration",
+      "verified": false,
+      "points": 10946968.629364468,
+      "share": 31.78,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 246192.22,
+        "payments": 142977,
+        "usdc": 6985289.21
+      }
+    },
+    {
+      "id": "integration:relay",
+      "name": "Relay",
+      "kind": "integration",
+      "verified": false,
+      "points": 1904634.0673784371,
+      "share": 13.26,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 25366.94,
+        "payments": 4752,
+        "usdc": 508027.74
+      }
+    },
+    {
+      "id": "integration:okx-dex",
+      "name": "OKX DEX",
+      "kind": "integration",
+      "verified": false,
+      "points": 1337591.9444289196,
+      "share": 11.11,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 35600.36,
+        "payments": 7852,
+        "usdc": 269850.06
+      }
+    },
+    {
+      "id": "integration:0x",
+      "name": "0x",
+      "kind": "integration",
+      "verified": false,
+      "points": 634545.5617455036,
+      "share": 7.65,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 11530.68,
+        "payments": 2012,
+        "usdc": 342498.63
+      }
+    },
+    {
+      "id": "integration:kyberswap",
+      "name": "KyberSwap",
+      "kind": "integration",
+      "verified": false,
+      "points": 581958.2482147674,
+      "share": 7.33,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 24664.23,
+        "payments": 4150,
+        "usdc": 641240.04
+      }
+    },
+    {
+      "id": "integration:li-fi",
+      "name": "LI.FI",
+      "kind": "integration",
+      "verified": false,
+      "points": 226495.86668407806,
+      "share": 4.57,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 9672.44,
+        "payments": 1960,
+        "usdc": 248886.19
+      }
+    },
+    {
+      "id": "integration:across",
+      "name": "Across",
+      "kind": "integration",
+      "verified": false,
+      "points": 112754.55884873483,
+      "share": 3.23,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 2343.62,
+        "payments": 336,
+        "usdc": 71471.92
+      }
+    },
+    {
+      "id": "integration:synthra",
+      "name": "Synthra",
+      "kind": "integration",
+      "verified": false,
+      "points": 81494.32954323823,
+      "share": 2.74,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 414.58,
+        "payments": 99,
+        "usdc": 4969.67
+      }
+    },
+    {
+      "id": "integration:aerodrome",
+      "name": "Aerodrome",
+      "kind": "integration",
+      "verified": false,
+      "points": 76065.31246440153,
+      "share": 2.65,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 4719.13,
+        "payments": 665,
+        "usdc": 317675.13
+      }
+    },
+    {
+      "id": "integration:dyor-swap",
+      "name": "DYOR Swap",
+      "kind": "integration",
+      "verified": false,
+      "points": 69379.45082662911,
+      "share": 2.53,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 139.3,
+        "payments": 107,
+        "usdc": 1428.88
+      }
+    },
+    {
+      "id": "integration:metamask",
+      "name": "MetaMask",
+      "kind": "integration",
+      "verified": false,
+      "points": 40404.15079126482,
+      "share": 1.93,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 1135.64,
+        "payments": 193,
+        "usdc": 24447.67
+      }
+    },
+    {
+      "id": "integration:opensea",
+      "name": "OpenSea (Seaport)",
+      "kind": "integration",
+      "verified": false,
+      "points": 36015.75494582685,
+      "share": 1.82,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 34.02,
+        "payments": 32,
+        "usdc": 88.39
+      }
+    },
+    {
+      "id": "integration:aave",
+      "name": "Aave",
+      "kind": "integration",
+      "verified": false,
+      "points": 35733.10753902084,
+      "share": 1.82,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 1231.9,
+        "payments": 89,
+        "usdc": 73744.65
+      }
+    },
+    {
+      "id": "integration:morpho",
+      "name": "Morpho",
+      "kind": "integration",
+      "verified": false,
+      "points": 31032.800026301484,
+      "share": 1.69,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 3354.96,
+        "payments": 308,
+        "usdc": 137653.9
+      }
+    },
+    {
+      "id": "integration:1inch",
+      "name": "1inch",
+      "kind": "integration",
+      "verified": false,
+      "points": 29268.643271306344,
+      "share": 1.64,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 457.62,
+        "payments": 116,
+        "usdc": 20223.76
+      }
+    },
+    {
+      "id": "integration:bungee",
+      "name": "Bungee (Socket)",
+      "kind": "integration",
+      "verified": false,
+      "points": 27147.05067388354,
+      "share": 1.58,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 714.6,
+        "payments": 111,
+        "usdc": 27568.79
+      }
+    },
+    {
+      "id": "integration:rango",
+      "name": "Rango",
+      "kind": "integration",
+      "verified": false,
+      "points": 10048.373205861126,
+      "share": 0.96,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 309.25,
+        "payments": 38,
+        "usdc": 12748.01
+      }
+    },
+    {
+      "id": "integration:steakhouse-financial",
+      "name": "Steakhouse Financial",
+      "kind": "integration",
+      "verified": false,
+      "points": 6503.549782003202,
+      "share": 0.77,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 233.09,
+        "payments": 36,
+        "usdc": 6283.37
+      }
+    },
+    {
+      "id": "integration:rhino-fi",
+      "name": "rhino.fi",
+      "kind": "integration",
+      "verified": false,
+      "points": 4538.0217565499015,
+      "share": 0.65,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 420.74,
+        "payments": 61,
+        "usdc": 14806.03
+      }
+    },
+    {
+      "id": "integration:layerzero",
+      "name": "LayerZero",
+      "kind": "integration",
+      "verified": false,
+      "points": 341.5272862694094,
+      "share": 0.18,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 20.19,
+        "payments": 48,
+        "usdc": 16.46
+      }
+    },
+    {
+      "id": "integration:chainlink",
+      "name": "Chainlink",
+      "kind": "integration",
+      "verified": false,
+      "points": 56.6577713055946,
+      "share": 0.07,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 0.77,
+        "payments": 2,
+        "usdc": 0.61
+      }
+    },
+    {
+      "id": "integration:mysphere",
+      "name": "MySphere",
+      "kind": "integration",
+      "verified": false,
+      "points": 7.501233332634236,
+      "share": 0.03,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 0,
+        "payments": 0,
+        "usdc": 0
+      }
+    },
+    {
+      "id": "integration:blockrun",
+      "name": "BlockRun",
+      "kind": "integration",
+      "verified": false,
+      "points": 0.8518974005321864,
+      "share": 0.01,
+      "first_hour": "2026-10-10T23:00:00Z",
+      "last_24h": {
+        "points_earned": 0.03,
+        "payments": 3,
+        "usdc": 0.02
+      }
+    }
+  ]
+}
