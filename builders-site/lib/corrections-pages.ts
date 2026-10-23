@@ -23,7 +23,7 @@ ${rows}
 </tbody></table></div>` : "<p>No corrections yet.</p>"}`;
   const ld = { "@context": "https://schema.org", "@type": "ItemList", name: "Arc ecosystem directory corrections", url: `${SITE}/ecosystem/corrections/`,
     itemListElement: all.slice(0, 100).map((c, i) => ({ "@type": "ListItem", position: i + 1, name: `${c.date} ${c.slug}: ${c.change}` })) };
-  return page({ title: "Corrections · Arc ecosystem · Registrai", canonical: `${SITE}/ecosystem/corrections/`, description: "Every correction to the Arc ecosystem directory, with its date and source.", body, ld });
+  return page({ markdown: true, title: "Corrections · Arc ecosystem · Registrai", canonical: `${SITE}/ecosystem/corrections/`, description: "Every correction to the Arc ecosystem directory, with its date and source.", body, ld });
 }
 
 export function renderRemoved(c: CorrectionEntry): string {

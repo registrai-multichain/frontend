@@ -35,7 +35,7 @@ export const QUESTION_PAGES = [
 ] as const;
 
 function shell(path: string, title: string, first: string, body: string, items: string[]): string {
-  return page({ title: `${title} · Registrai`, canonical: `${SITE}${path}`, description: first,
+  return page({ markdown: true, title: `${title} · Registrai`, canonical: `${SITE}${path}`, description: first,
     body: `<h1>${esc(title)}</h1>\n<p>${esc(first)}</p>\n${body}\n<p class="muted"><a href="/arc/">Arc in numbers</a> · <a href="/ecosystem/">Arc ecosystem</a></p>`, ld: itemList(path, title, items) });
 }
 

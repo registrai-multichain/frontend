@@ -1,4 +1,5 @@
 import type { PagesFunction } from "../../lib/env";
+import { withMarkdown } from "../../lib/markdown-route";
 import { CORRECTIONS, ECOSYSTEM } from "../../../src/lib/arc-ecosystem-data";
 import { categoryOf, parseStatus } from "../../../src/lib/arc-ecosystem";
 import { renderCategory, renderDirectory, renderEcosystemNotFound, renderEntity } from "../../lib/ecosystem-pages";
@@ -16,7 +17,7 @@ const html = (body: string, status = 200, head = false) =>
 const memo = new Map<string, string>();
 const once = (key: string, render: () => string) => { let h = memo.get(key); if (h === undefined) { h = render(); memo.set(key, h); } return h; };
 
-export const onRequest: PagesFunction = async (ctx) => {
+const htmlPages: PagesFunction = async (ctx) => {
   const req = ctx.request, url = new URL(req.url), m = req.method.toUpperCase();
   if (m !== "GET" && m !== "HEAD") return new Response("Only GET is supported.", { status: 405, headers: { allow: "GET" } });
   if (!url.pathname.endsWith("/")) return Response.redirect(`${url.origin}${url.pathname}/${url.search}`, 301);
@@ -48,3 +49,6 @@ export const onRequest: PagesFunction = async (ctx) => {
   const res = await edgeCachedGet(new Request(url.toString()), deps, async () => html(renderEntity(await loadEntityView(ctx.env, deps, e, url.origin))), 300, `entity:${e.slug}:${correctionsOpen(ctx.env) ? "c" : "m"}`);
   return head ? new Response(null, { status: res.status, headers: res.headers }) : res;
 };
+
+/** …/index.md: the Markdown copy of the same page (spec 2026-10-23-machine-readable-copies-design.md). */
+export const onRequest: PagesFunction = withMarkdown(htmlPages);

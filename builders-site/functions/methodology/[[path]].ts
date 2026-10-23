@@ -1,4 +1,5 @@
 import type { PagesFunction } from "../../lib/env";
+import { withMarkdown } from "../../lib/markdown-route";
 import { readArcDaily } from "../../lib/arc-daily";
 import { share7d } from "../../lib/arc-share";
 import { indexFile } from "../../lib/data-api";
@@ -10,7 +11,7 @@ import { renderMethodology } from "../../lib/methodology-page";
 const html = (body: string, status = 200, head = false) =>
   new Response(head ? null : body, { status, headers: { "content-type": "text/html; charset=utf-8", "x-content-type-options": "nosniff", "cache-control": status === 200 ? "public, max-age=600" : "no-store" } });
 
-export const onRequest: PagesFunction = async (ctx) => {
+const htmlPages: PagesFunction = async (ctx) => {
   const req = ctx.request, url = new URL(req.url), m = req.method.toUpperCase();
   if (m !== "GET" && m !== "HEAD") return new Response("Only GET is supported.", { status: 405, headers: { allow: "GET" } });
   if (!url.pathname.endsWith("/")) return Response.redirect(`${url.origin}${url.pathname}/${url.search}`, 301);
@@ -25,3 +26,6 @@ export const onRequest: PagesFunction = async (ctx) => {
   }, 600, "methodology");
   return head ? new Response(null, { status: res.status, headers: res.headers }) : res;
 };
+
+/** …/index.md: the Markdown copy of the same page (spec 2026-10-23-machine-readable-copies-design.md). */
+export const onRequest: PagesFunction = withMarkdown(htmlPages);

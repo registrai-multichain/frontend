@@ -72,5 +72,5 @@ ${glossary}\n${sources}\n${share}\n${limits}\n${changelog}`;
   const ld = { "@context": "https://schema.org", "@graph": [
     { "@type": "DefinedTermSet", name: "Registrai Arc data glossary", url, hasDefinedTerm: TERMS.map((t) => ({ "@type": "DefinedTerm", name: t.name, description: t.text(p), url: `${url}#${t.id}` })) },
     { "@type": "Article", headline: "Methodology", url, dateModified: METHODOLOGY_DATE, version: METHODOLOGY_VERSION } ] };
-  return page({ title: "Methodology · Registrai", canonical: url, description: "How Registrai defines and measures the Arc figures on this site: glossary, sources, the attributed share, limits and changelog.", body, ld });
+  return page({ markdown: true, title: "Methodology · Registrai", canonical: url, description: "How Registrai defines and measures the Arc figures on this site: glossary, sources, the attributed share, limits and changelog.", body, ld });
 }

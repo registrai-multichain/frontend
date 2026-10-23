@@ -44,10 +44,11 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}details{display:inl
 footer{margin-top:36px;padding-top:12px;border-top:1px solid #d9cfb8;font-size:13px;color:#5c5345}nav a{margin-right:14px}svg{max-width:100%;height:auto;background:#fffdf7;border:1px solid #d9cfb8}
 .wrap{overflow-x:auto}`;
 
-export function page(o: { title: string; canonical: string; description: string; body: string; ld?: unknown; noindex?: boolean }): string {
+export function page(o: { title: string; canonical: string; description: string; body: string; ld?: unknown; noindex?: boolean; markdown?: boolean }): string {
+  const mdLink = o.markdown ? `<link rel="alternate" type="text/markdown" href="${esc(new URL(o.canonical).pathname)}index.md">` : "";
   const ld = o.ld ? `<script type="application/ld+json">${JSON.stringify(o.ld).replace(/</g, "\\u003c")}</script>` : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(o.title)}</title><meta name="description" content="${esc(o.description)}"><link rel="canonical" href="${esc(o.canonical)}">${o.noindex ? '<meta name="robots" content="noindex">' : ""}
+<title>${esc(o.title)}</title><meta name="description" content="${esc(o.description)}"><link rel="canonical" href="${esc(o.canonical)}">${mdLink}${o.noindex ? '<meta name="robots" content="noindex">' : ""}
 <meta property="og:type" content="website"><meta property="og:site_name" content="Registrai"><meta property="og:title" content="${esc(o.title)}"><meta property="og:description" content="${esc(o.description)}"><meta property="og:url" content="${esc(o.canonical)}"><meta name="twitter:card" content="summary">
 <style>${STYLE}</style>${ld}</head><body><main>
 <nav class="muted"><a href="/ecosystem/">Arc ecosystem</a><a href="/arc/">Arc in numbers</a><a href="/builders/">Registrai builders</a><a href="/apps/">Apps on Arc</a><a href="/builders-index/">Indices</a><a href="${API_DOCS_URL}">Data API</a></nav>

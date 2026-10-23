@@ -81,6 +81,6 @@ ${hist}
     dateModified: n.generated_at, temporalCoverage: `${oldest}/${n.generated_at}`, isAccessibleForFree: true,
     variableMeasured: ["USDC supply", "EURC supply", "stablecoin volume (estimate)", "projects", "index closes"],
     distribution: [{ "@type": "DataDownload", encodingFormat: "application/json", contentUrl: `${SITE}/api/v1/arc` }, { "@type": "DataDownload", encodingFormat: "application/json", contentUrl: `${SITE}/api/v1/arc/daily` }] };
-  return page({ title: "Arc in numbers · Registrai", canonical: `${SITE}/arc/`,
+  return page({ markdown: true, title: "Arc in numbers · Registrai", canonical: `${SITE}/arc/`,
     description: `Arc blockchain in numbers: ${amt(n.stablecoins.usdc_supply, "USDC")} on Arc, ${N0.format(e.projects)} projects, estimated stablecoin volume and index closes, with sources.`, body, ld });
 }

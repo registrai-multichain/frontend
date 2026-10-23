@@ -1,4 +1,5 @@
 import type { PagesFunction } from "../../lib/env";
+import { withMarkdown } from "../../lib/markdown-route";
 import { collectArcNumbers } from "../../lib/arc-numbers";
 import { readArcDaily } from "../../lib/arc-daily";
 import { renderArc } from "../../lib/arc-pages";
@@ -20,7 +21,7 @@ const QUESTIONS: Record<string, (env: Parameters<Load>[0], deps: Parameters<Load
   "get-usdc": async () => renderGetUsdc(),
 };
 
-export const onRequest: PagesFunction = async (ctx) => {
+const htmlPages: PagesFunction = async (ctx) => {
   const req = ctx.request, url = new URL(req.url), m = req.method.toUpperCase();
   if (m !== "GET" && m !== "HEAD") return new Response("Only GET is supported.", { status: 405, headers: { allow: "GET" } });
   if (!url.pathname.endsWith("/")) return Response.redirect(`${url.origin}${url.pathname}/${url.search}`, 301);
@@ -39,3 +40,6 @@ export const onRequest: PagesFunction = async (ctx) => {
   }, 600, "arc");
   return asHead(res);
 };
+
+/** …/index.md: the Markdown copy of the same page (spec 2026-10-23-machine-readable-copies-design.md). */
+export const onRequest: PagesFunction = withMarkdown(htmlPages);
