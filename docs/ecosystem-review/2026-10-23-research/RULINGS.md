@@ -1,0 +1,18 @@
+Ruling: run T4, T5 code (steps 1-4), T6 before T1 step 4/T2/T3 — T1 data, T2, T3 wait on the chain-facts research; the order changes nothing in interfaces — cost if wrong: none
+Task 6: Ruling: category nouns from an explicit plural map (e.g. lending → 'lending protocols') instead of the plan's lower-cased name rule — the rule gave '4 lending listed' — cost if wrong: copy tweak
+Task 1: Ruling: USYC left out of the stablecoin list — yield-bearing money-market-fund token, not a stablecoin, though docs.arc.io lists it under Stablecoins — cost if wrong: one row
+Task 1: Ruling: 16 stablecoins with sourced Arc addresses (docs.arc.io + Circle StableFX page); wARS/wBRL/wCLP/wCOP/wMXN/wPEN omitted (no official Arc address) — cost if wrong: missing rows
+Task 1: Ruling: undated docs.arc.io facts (gas, evm, consensus) carry 2026-09-16 (mainnet date) as their date — docs pages have no date — cost if wrong: date label
+Task 2: Ruling: new ArcNumbers fields are optional in the type (snapshots before 2026-10-23 lack them); the collector always sets them — cost if wrong: none (readers use ?? null)
+Task 5: Ruling: a launch date from Circle/arc.io posts only when the sentence or section says live / from day one / at launch ("Live and liquid markets from launch", exchanges "are live on Arc", wallets "from day one"); provider-list-only mentions (LayerZero, Bungee, Chainlink, QuickNode, Pimlico, Turnkey, ZeroDev, Tenderly, o1.exchange) get no date — "platform at genesis" lists don't say live — cost if wrong: ~9 missing dates
+Task 5: Ruling: contracts deployed before the public launch (private mainnet window) give no launch date (ArcTools, Kairo, Foci, Lagoon, SushiSwap, Lunya); contract-creation dates on/after 2026-09-16 count — the page says "Live on Arc mainnet since" meaning public mainnet — cost if wrong: dates missing for pre-launch projects
+Task 5: Ruling: SolonPad 2026-10-03 ("V3 went live") not used — an earlier version may have launched first — cost if wrong: one missing date
+Task 5: Ruling: no category moves — the audit read DEX/lending tags as categories; every flagged project's primary category matches its own site — cost if wrong: two weak tags (ArcTools, Symbiosis in DEXs) stay
+Task 5: Ruling: SBI Group validator = sbi-holdings (its chairman is quoted as the founding validator) gets the validators tag, with BlackRock; no new entity — cost if wrong: tag on the wrong SBI entity
+Task 5: Ruling: Blockradar and DFNS → live on their own docs listing Arc mainnet (evidence type mainnet-support), no date — cost if wrong: two statuses
+Task 5: Ruling: Across evidence carries 2026-09-16 (its 2026-09-21 post states live since launch day; title notes it) — cost if wrong: date label on one source
+Task 5: Ruling: Argus (09-02) and FAZE (09-13) pre-launch deploys and Juno (MXNB 'supported', not 'at launch') get no date — same rules — cost if wrong: 3 missing dates
+Task 5: Ruling: new evidence type arc-official-live (arc.io/circle.com page stating a project is live) counts as mainnet evidence — the existing validator required project-run evidence, the approved spec makes official 'live on Arc' posts sufficient — cost if wrong: 16 exchanges/wallets shown live on Arc's word
+Task 5: Ruling: evidence that sets a launch date carries that launch date (older entries' source dates are the day we read them) — cost if wrong: date label on 6 sources
+Final: Ruling: Bybit/KuCoin keep 09-17 from their own posts though arc.io lists them live on 09-16 — the brief prefers the project's own source — cost if wrong: one day on two entries
+Final: Ruling: /arc/new/ "Went live" now shows none this week — expected after removing index first-seen dates — cost if wrong: an empty section until new launches are dated

@@ -1,0 +1,397 @@
+[
+ {
+  "slug": "kpk",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://docs.kpk.io/vaults/vaults/morpho/arc/wars-yield",
+   "title": "KPK docs: wARS Yield vault on Arc",
+   "date": "2026-09-16"
+  },
+  "why": "KPK's own docs: 'The vault went live alongside Arc's public mainnet on 16 September 2026. No markets are enabled yet' (docs page itself undated; the statement gives the date). Status left as is.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "mercurifi",
+  "first_live": "2026-09-21",
+  "evidence": {
+   "url": "https://github.com/mercuri-finance/mercuri-launch-contracts",
+   "title": "Mercurifi Launch contracts README (deployment record)",
+   "date": "2026-09-21"
+  },
+  "why": "Project README: contracts 'as deployed to mainnet on 21 September 2026'; 'Arc mainnet, chain 5042, version 1.0.0, block 22,060,881'. Explorer API was behind a Cloudflare challenge, so the creation tx was not checked.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "uniswap",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://blog.uniswap.org/uniswap-is-live-on-arc",
+   "title": "Uniswap blog: Uniswap is Live on Arc",
+   "date": "2026-09-16"
+  },
+  "why": "Uniswap blog post dated September 16, 2026: 'Uniswap v2, v3, v4 and UniswapX are live on Arc' ... 'Starting today, anyone can swap ... on Arc'.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "binance",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+   "date": "2026-09-16"
+  },
+  "why": "Arc mainnet launch blog (dated September 16, 2026) names Binance among exchanges that 'are live on Arc'. (The Circle press release names Binance among exchanges giving 'access into Arc'.)",
+  "status": "live",
+  "status_quote": "The world's leading digital asset exchanges are live on Arc, including Binance, Bitrue, Bitso, Bitvavo, Bybit, Coins.ph, Gate, Kraken, KuCoin, LBank, MEXC, Mobee, OKX, OSL, Paribu, PDAX, SwissBorg, Tokocrypto, Upbit, and Wenia.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "binance-wallet",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+   "date": "2026-09-16"
+  },
+  "why": "Arc mainnet launch blog (dated September 16, 2026) names Binance Wallet among wallets that connect Arc's markets to users 'from day one'. Circle's press release (September 16, 2026) also lists it under 'Digital wallets: ... from day one'.",
+  "status": "live",
+  "status_quote": "For digital wallets and consumer apps such as Alcove, Backpack, Binance Wallet, Bitget Wallet, Bron, DCent, ether.fi, Gate Web3, imToken, KuCoin Web3, Ledger, MetaMask, OKX Wallet, Para, Phantom, Rabby, Rainbow, SafePal, Superfluid, Tangem, Trust Wallet, WalletConnect, and Zerion connect Arc's markets to hundred of millions of existing users from day one.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "bitget-wallet",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+   "date": "2026-09-16"
+  },
+  "why": "Arc mainnet launch blog (dated September 16, 2026) names Bitget Wallet among wallets that connect Arc's markets to users 'from day one'. Circle's press release (September 16, 2026) also lists it under 'Digital wallets: ... from day one'.",
+  "status": "live",
+  "status_quote": "For digital wallets and consumer apps such as Alcove, Backpack, Binance Wallet, Bitget Wallet, Bron, DCent, ether.fi, Gate Web3, imToken, KuCoin Web3, Ledger, MetaMask, OKX Wallet, Para, Phantom, Rabby, Rainbow, SafePal, Superfluid, Tangem, Trust Wallet, WalletConnect, and Zerion connect Arc's markets to hundred of millions of existing users from day one.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "bitrue",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+   "date": "2026-09-16"
+  },
+  "why": "Arc mainnet launch blog (dated September 16, 2026) names Bitrue among exchanges that 'are live on Arc'.",
+  "status": "live",
+  "status_quote": "The world's leading digital asset exchanges are live on Arc, including Binance, Bitrue, Bitso, Bitvavo, Bybit, Coins.ph, Gate, Kraken, KuCoin, LBank, MEXC, Mobee, OKX, OSL, Paribu, PDAX, SwissBorg, Tokocrypto, Upbit, and Wenia.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "bitso",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+   "date": "2026-09-16"
+  },
+  "why": "Arc mainnet launch blog (dated September 16, 2026) names Bitso among exchanges that 'are live on Arc'.",
+  "status": "live",
+  "status_quote": "The world's leading digital asset exchanges are live on Arc, including Binance, Bitrue, Bitso, Bitvavo, Bybit, Coins.ph, Gate, Kraken, KuCoin, LBank, MEXC, Mobee, OKX, OSL, Paribu, PDAX, SwissBorg, Tokocrypto, Upbit, and Wenia.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "bitvavo",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+   "date": "2026-09-16"
+  },
+  "why": "Arc mainnet launch blog (dated September 16, 2026) names Bitvavo among exchanges that 'are live on Arc'.",
+  "status": "live",
+  "status_quote": "The world's leading digital asset exchanges are live on Arc, including Binance, Bitrue, Bitso, Bitvavo, Bybit, Coins.ph, Gate, Kraken, KuCoin, LBank, MEXC, Mobee, OKX, OSL, Paribu, PDAX, SwissBorg, Tokocrypto, Upbit, and Wenia.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "blockradar",
+  "first_live": null,
+  "evidence": null,
+  "why": "Not named in the arc.io mainnet blog or Circle press release. Blockradar's own docs (Supported Blockchains, undated) list Arc with mainnet support; no dated source for the start.",
+  "status": "live",
+  "status_quote": "We support the following blockchain networks on both mainnet and testnet: ... | Arc | ✅ | ✅ (Testnet) |",
+  "status_source": "https://docs.blockradar.co/en/use-cases/integrations",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "coinbase",
+  "first_live": null,
+  "evidence": null,
+  "why": "Arc blog (2026-09-16): 'Coinbase and others will be live on Arc soon.' Coming soon, so status stays. (Circle press release lists Coinbase among exchanges 'live on or exploring' the private mainnet, which is ambiguous.)",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "coincheck",
+  "first_live": null,
+  "evidence": null,
+  "why": "Not named in the Arc mainnet blog or Circle mainnet press release; arc.io ecosystem page only shows category 'CEXs'. No status change.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "dcent",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+   "date": "2026-09-16"
+  },
+  "why": "Arc mainnet launch blog (dated September 16, 2026) names DCent among wallets that connect Arc's markets to users 'from day one'.",
+  "status": "live",
+  "status_quote": "For digital wallets and consumer apps such as Alcove, Backpack, Binance Wallet, Bitget Wallet, Bron, DCent, ether.fi, Gate Web3, imToken, KuCoin Web3, Ledger, MetaMask, OKX Wallet, Para, Phantom, Rabby, Rainbow, SafePal, Superfluid, Tangem, Trust Wallet, WalletConnect, and Zerion connect Arc's markets to hundred of millions of existing users from day one.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "dfns",
+  "first_live": null,
+  "evidence": null,
+  "why": "Arc mainnet blog lists DFNS among custody providers that 'provide institutional custody infrastructure' (no 'live'/'day one' wording for it). DFNS docs (undated) now list Arc in the Mainnet column, Tier 1; no dated source for the start.",
+  "status": "live",
+  "status_quote": "Supported Networks table, columns 'Mainnet | Testnet | Tier': '| Arc | ArcTestnet | 1 | N/A | 10 |'",
+  "status_source": "https://docs.dfns.co/networks",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "exodus",
+  "first_live": null,
+  "evidence": null,
+  "why": "Not named in the Arc mainnet blog or Circle mainnet press release (only the 2025-10-28 testnet release). No status change.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "hashkey",
+  "first_live": null,
+  "evidence": null,
+  "why": "Not named in the Arc mainnet blog or Circle mainnet press release; arc.io ecosystem page only shows 'CEXs'. No status change.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "hecto-innovation",
+  "first_live": null,
+  "evidence": null,
+  "why": "Not named in the Arc mainnet blog or press release; no arc.io ecosystem page (hecto-innovation returns Not Found). No status change.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "imtoken",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+   "date": "2026-09-16"
+  },
+  "why": "Arc mainnet launch blog (dated September 16, 2026) names imToken among wallets that connect Arc's markets to users 'from day one'.",
+  "status": "live",
+  "status_quote": "For digital wallets and consumer apps such as Alcove, Backpack, Binance Wallet, Bitget Wallet, Bron, DCent, ether.fi, Gate Web3, imToken, KuCoin Web3, Ledger, MetaMask, OKX Wallet, Para, Phantom, Rabby, Rainbow, SafePal, Superfluid, Tangem, Trust Wallet, WalletConnect, and Zerion connect Arc's markets to hundred of millions of existing users from day one.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "lbank",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+   "date": "2026-09-16"
+  },
+  "why": "Arc mainnet launch blog (dated September 16, 2026) names LBank among exchanges that 'are live on Arc'.",
+  "status": "live",
+  "status_quote": "The world's leading digital asset exchanges are live on Arc, including Binance, Bitrue, Bitso, Bitvavo, Bybit, Coins.ph, Gate, Kraken, KuCoin, LBank, MEXC, Mobee, OKX, OSL, Paribu, PDAX, SwissBorg, Tokocrypto, Upbit, and Wenia.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "ledger",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+   "date": "2026-09-16"
+  },
+  "why": "Arc mainnet launch blog (dated September 16, 2026) names Ledger among wallets that connect Arc's markets to users 'from day one'. Circle's press release (September 16, 2026) also lists it under 'Digital wallets: ... from day one'.",
+  "status": "live",
+  "status_quote": "For digital wallets and consumer apps such as Alcove, Backpack, Binance Wallet, Bitget Wallet, Bron, DCent, ether.fi, Gate Web3, imToken, KuCoin Web3, Ledger, MetaMask, OKX Wallet, Para, Phantom, Rabby, Rainbow, SafePal, Superfluid, Tangem, Trust Wallet, WalletConnect, and Zerion connect Arc's markets to hundred of millions of existing users from day one.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "mexc",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+   "date": "2026-09-16"
+  },
+  "why": "Arc mainnet launch blog (dated September 16, 2026) names MEXC among exchanges that 'are live on Arc'.",
+  "status": "live",
+  "status_quote": "The world's leading digital asset exchanges are live on Arc, including Binance, Bitrue, Bitso, Bitvavo, Bybit, Coins.ph, Gate, Kraken, KuCoin, LBank, MEXC, Mobee, OKX, OSL, Paribu, PDAX, SwissBorg, Tokocrypto, Upbit, and Wenia.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "osl",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+   "date": "2026-09-16"
+  },
+  "why": "Arc mainnet launch blog (dated September 16, 2026) names OSL among exchanges that 'are live on Arc'. Consistent with a KuCoin news relay: OSL USDC on Arc 'effective September 17 (UTC+8)', i.e. 16:00 UTC on 2026-09-16.",
+  "status": "live",
+  "status_quote": "The world's leading digital asset exchanges are live on Arc, including Binance, Bitrue, Bitso, Bitvavo, Bybit, Coins.ph, Gate, Kraken, KuCoin, LBank, MEXC, Mobee, OKX, OSL, Paribu, PDAX, SwissBorg, Tokocrypto, Upbit, and Wenia.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "privy",
+  "first_live": null,
+  "evidence": null,
+  "why": "Not named in the Arc mainnet blog or press release; Privy's full docs (llms-full.txt) contain no Arc mention. No status change.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "rainbow",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+   "date": "2026-09-16"
+  },
+  "why": "Arc mainnet launch blog (dated September 16, 2026) names Rainbow among wallets that connect Arc's markets to users 'from day one'. Circle's press release (September 16, 2026) also lists it under 'Digital wallets: ... from day one'.",
+  "status": "live",
+  "status_quote": "For digital wallets and consumer apps such as Alcove, Backpack, Binance Wallet, Bitget Wallet, Bron, DCent, ether.fi, Gate Web3, imToken, KuCoin Web3, Ledger, MetaMask, OKX Wallet, Para, Phantom, Rabby, Rainbow, SafePal, Superfluid, Tangem, Trust Wallet, WalletConnect, and Zerion connect Arc's markets to hundred of millions of existing users from day one.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "robinhood",
+  "first_live": null,
+  "evidence": null,
+  "why": "Neither Arc post says Robinhood is live: blog lists it among names that 'expand access across spot trading, structured products, perpetuals, NFTs, and crosschain execution'; press release lists it under onchain trading protocols. Only a third-party report (Startup Fortune, 2026-09-16) says users can deposit/withdraw USDC on Arc, with no Robinhood source cited. Left unchanged.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "trust-wallet",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+   "date": "2026-09-16"
+  },
+  "why": "Arc mainnet launch blog (dated September 16, 2026) names Trust Wallet among wallets that connect Arc's markets to users 'from day one'. Circle's press release (September 16, 2026) also lists it under 'Digital wallets: ... from day one'.",
+  "status": "live",
+  "status_quote": "For digital wallets and consumer apps such as Alcove, Backpack, Binance Wallet, Bitget Wallet, Bron, DCent, ether.fi, Gate Web3, imToken, KuCoin Web3, Ledger, MetaMask, OKX Wallet, Para, Phantom, Rabby, Rainbow, SafePal, Superfluid, Tangem, Trust Wallet, WalletConnect, and Zerion connect Arc's markets to hundred of millions of existing users from day one.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "upbit",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+   "date": "2026-09-16"
+  },
+  "why": "Arc mainnet launch blog (dated September 16, 2026) names Upbit among exchanges that 'are live on Arc'.",
+  "status": "live",
+  "status_quote": "The world's leading digital asset exchanges are live on Arc, including Binance, Bitrue, Bitso, Bitvavo, Bybit, Coins.ph, Gate, Kraken, KuCoin, LBank, MEXC, Mobee, OKX, OSL, Paribu, PDAX, SwissBorg, Tokocrypto, Upbit, and Wenia.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "vultisig",
+  "first_live": null,
+  "evidence": null,
+  "why": "Not named in the Arc mainnet blog or press release; Vultisig docs (llms-full.txt) contain no Arc mention. No status change.",
+  "status": null,
+  "status_quote": null,
+  "status_source": null,
+  "category": null,
+  "category_why": null
+ },
+ {
+  "slug": "wenia",
+  "first_live": "2026-09-16",
+  "evidence": {
+   "url": "https://www.arc.io/blog/arc-economic-os-internet",
+   "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+   "date": "2026-09-16"
+  },
+  "why": "Arc mainnet launch blog (dated September 16, 2026) names Wenia among exchanges that 'are live on Arc'.",
+  "status": "live",
+  "status_quote": "The world's leading digital asset exchanges are live on Arc, including Binance, Bitrue, Bitso, Bitvavo, Bybit, Coins.ph, Gate, Kraken, KuCoin, LBank, MEXC, Mobee, OKX, OSL, Paribu, PDAX, SwissBorg, Tokocrypto, Upbit, and Wenia.",
+  "status_source": "https://www.arc.io/blog/arc-economic-os-internet",
+  "category": null,
+  "category_why": null
+ }
+]
