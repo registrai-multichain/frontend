@@ -56,7 +56,8 @@ export function usdcByChain(text: string): Record<string, number> {
   const at = text.indexOf('"symbol":"USDC"');
   const key = at < 0 ? -1 : text.indexOf('"chainCirculating":', at);
   if (key < 0) return {};
-  let i = text.indexOf("{", key), depth = 0, end = -1;
+  const i = text.indexOf("{", key);
+  let depth = 0, end = -1;
   for (let k = i; k < text.length; k++) {
     if (text[k] === "{") depth++;
     else if (text[k] === "}" && --depth === 0) { end = k; break; }
