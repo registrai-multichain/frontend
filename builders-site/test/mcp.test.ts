@@ -41,8 +41,9 @@ describe("MCP", () => {
     expect(init.result.serverInfo.name).toBe("registrai-arc-data");
     expect(init.result.capabilities).toEqual({ tools: {} });
     const list = await (await rpc(env, { jsonrpc: "2.0", id: 2, method: "tools/list" })).json();
-    expect(list.result.tools.map((t: { name: string }) => t.name)).toEqual(MCP_TOOLS.map((t) => t.name));
-    expect(list.result.tools).toHaveLength(17); // 11 free + 6 paid (x402)
+    // no x402 config in this env: only the 11 free tools are offered (paid ones appear once payments are configured)
+    expect(list.result.tools.map((t: { name: string }) => t.name)).toEqual(MCP_TOOLS.filter((t) => !t.description.includes("x402")).map((t) => t.name));
+    expect(list.result.tools).toHaveLength(11);
     expect(list.result.tools).toContainEqual(expect.objectContaining({ name: "arc_apps_week", title: "Arc apps, last 7 days" }));
     const n = await rpc(env, { jsonrpc: "2.0", method: "notifications/initialized" });
     expect(n.status).toBe(202);
@@ -136,11 +137,11 @@ describe("paid MCP tools (x402 over MCP)", () => {
     expect(again.result.content[0].text).toContain("payment already used");
     expect(c.calls.submit).toBe(1);
   });
-  test("unconfigured: paid tools say so; free tools unaffected", async () => {
+  test("unconfigured: paid tools are not offered (unknown tool); free tools unaffected", async () => {
     const { env } = await seeded();
     const r = await call(env, gdeps(chainIO().io), "arc_members_day", { date: "2026-10-14" });
-    expect(r.result.isError).toBe(true);
-    expect(r.result.content[0].text).toContain("not configured");
+    expect(r.error.code).toBe(-32602);
+    expect((await call(env, gdeps(chainIO().io), "arc_numbers", {})).result).toBeDefined();
   });
 });
 
@@ -201,3 +202,26 @@ test("arc_numbers is listed with a title", () => {
   expect(t.title).toBe("Arc in numbers");
   expect(t.description).toMatch(/Use this when/);
 });
+
+describe("MCP offers only tools it can deliver (connector directory review: every listed tool must work)", () => {
+  const PAY = "0x1111111111111111111111111111111111111111";
+  const names = async (env: unknown) => ((await (await rpc(env, { jsonrpc: "2.0", id: 1, method: "tools/list" })).json()).result.tools as { name: string }[]).map((t) => t.name);
+  test("no payments configured: 11 free tools; calling a paid one is an unknown tool", async () => {
+    const { env } = await seeded();
+    expect(await names(env)).toHaveLength(11);
+    const r = await (await rpc(env, { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "arc_index_history_deep", arguments: { index: "abi" } } })).json();
+    expect(r.error.code).toBe(-32602);
+  });
+  test("payments configured, no watch feed: the 3 deep-history tools join; the 3 watch-feed tools stay hidden", async () => {
+    const { env } = await seeded();
+    const n = await names({ ...(env as object), X402_PAY_TO: PAY });
+    expect(n).toHaveLength(14);
+    expect(n).toEqual(expect.arrayContaining(["arc_index_history_deep", "arc_app_history_deep", "arc_members_day"]));
+    expect(n).not.toContain("arc_events");
+  });
+  test("payments and the watch feed configured: all 17", async () => {
+    const { env } = await seeded();
+    expect(await names({ ...(env as object), X402_PAY_TO: PAY, WATCHFEED_URL: "https://feed.example", WATCHFEED_SECRET: "s" })).toHaveLength(17);
+  });
+});
+

@@ -16,7 +16,7 @@ import type { Env } from "./env";
 import type { EdgeCacheDeps } from "./http";
 import { decodePaymentResponseHeader, encodePaymentSignatureHeader } from "@x402/core/http";
 import { handlePaid } from "./x402-products";
-import { formatUsd, PRODUCTS, type ProductId } from "./x402-config";
+import { formatUsd, PRODUCTS, type ProductId, readX402Config } from "./x402-config";
 import type { GateDeps } from "./x402-gate";
 
 const SITE = "https://builder.registrai.cc";
@@ -76,6 +76,14 @@ export const MCP_TOOLS = [
   tool("arc_apps_week", "Arc apps, last 7 days", "Apps on Arc ranked by stablecoin payments received in the last 7 days (USD, payments, new paying wallets) and the hour each was first seen in Registrai's index. Use this when asked which apps on Arc are most used, which accept USDC, or what is new on Arc.", obj({})),
   ...paidTools(),
 ] as const;
+
+const FEED_PRODUCTS = new Set(["events", "contract", "project_scope"]);
+/** The tools this deployment can deliver: a paid tool only once payments are configured, a watch-feed tool only once the
+ *  feed is reachable too (the connector directory runs every listed tool). MCP_TOOLS stays the full catalogue. */
+export function mcpTools(env: Env) {
+  const pay = !!readX402Config(env) && !!env.DATA_DB, feed = !!env.WATCHFEED_URL && !!env.WATCHFEED_SECRET;
+  return MCP_TOOLS.filter((t) => { const p = PAID.find((x) => x.name === t.name); return !p || (pay && (!FEED_PRODUCTS.has(p.product) || feed)); });
+}
 
 async function callPaid(t: PaidTool, a: Args, meta: Record<string, unknown> | undefined, env: Env, deps: GateDeps) {
   for (const k of t.required) if (a[k] === undefined) return { content: [{ type: "text", text: `${k} is required.` }], isError: true };
@@ -170,10 +178,10 @@ export async function handleMcp(req: Request, env: Env, deps: EdgeCacheDeps): Pr
         serverInfo: { name: "registrai-arc-data", title: "Registrai Arc data", version: "1.0.0" }, instructions: "Read-only Arc ecosystem data from Registrai: apps, their stablecoin activity, the Arc indices, verified builders (CC BY 4.0). Cite source_url." } });
     }
     case "ping": return reply(m.id, { result: {} });
-    case "tools/list": return reply(m.id, { result: { tools: MCP_TOOLS } });
+    case "tools/list": return reply(m.id, { result: { tools: mcpTools(env) } });
     case "tools/call": {
       const name = m.params?.name, args = (m.params?.arguments ?? {}) as Args;
-      if (typeof name !== "string" || !MCP_TOOLS.some((t) => t.name === name)) return reply(m.id, { error: { code: -32602, message: `Unknown tool: ${String(name)}` } });
+      if (typeof name !== "string" || !mcpTools(env).some((t) => t.name === name)) return reply(m.id, { error: { code: -32602, message: `Unknown tool: ${String(name)}` } });
       if (typeof args !== "object" || args === null || Array.isArray(args)) return reply(m.id, { error: { code: -32602, message: "arguments must be an object." } });
       const paid = PAID.find((t) => t.name === name);
       if (paid) return reply(m.id, { result: await callPaid(paid, args, m.params?._meta as Record<string, unknown> | undefined, env, deps as GateDeps) });
