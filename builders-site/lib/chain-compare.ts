@@ -9,8 +9,9 @@ import type { Env } from "./env";
 
 type Fetcher = typeof fetch;
 const ARC_RPCS = ["https://rpc.blockdaemon.mainnet.arc.io", "https://rpc.mainnet.arc.io"];
-export const ETH_RPC = "https://ethereum-rpc.publicnode.com";
-export const SOL_RPC = "https://api.mainnet-beta.solana.com";
+export const ETH_RPCS = ["https://ethereum-rpc.publicnode.com", "https://eth.drpc.org"];
+/** Solana's own public RPC answers 403 to Cloudflare's egress, so publicnode first (checked 2026-10-23). */
+export const SOL_RPCS = ["https://solana-rpc.publicnode.com", "https://api.mainnet-beta.solana.com"];
 const PRICES = "https://coins.llama.fi/prices/current/coingecko:ethereum,coingecko:solana";
 const STABLES = "https://stablecoins.llama.fi/stablecoins?includePrices=false";
 const TIMEOUT_MS = 8000, SPAN = 10_000;
@@ -48,7 +49,7 @@ const gasPrice = async (fetcher: Fetcher, url: string) => Number(BigInt((await r
 
 /** Seconds per slot from Solana's recent performance samples. */
 async function solanaSlotTime(fetcher: Fetcher): Promise<number> {
-  const s = (await rpc(fetcher, SOL_RPC, "getRecentPerformanceSamples", [5])) as { numSlots: number; samplePeriodSecs: number }[];
+  const s = (await firstOk(SOL_RPCS, (u) => rpc(fetcher, u, "getRecentPerformanceSamples", [5]))) as { numSlots: number; samplePeriodSecs: number }[];
   const slots = s.reduce((a, x) => a + x.numSlots, 0), secs = s.reduce((a, x) => a + x.samplePeriodSecs, 0);
   if (!slots) throw new Error("no samples");
   return secs / slots;
@@ -84,8 +85,8 @@ export async function collectCompare(env: Env, fetcher: Fetcher = fetch, now = D
   const [arcBt, arcGas, ethBt, ethGas, solBt, prices, usdc, aei] = await Promise.all([
     caught("arc block time", firstOk(ARC_RPCS, (u) => evmBlockTime(fetcher, u))),
     caught("arc gas price", firstOk(ARC_RPCS, (u) => gasPrice(fetcher, u))),
-    caught("ethereum block time", evmBlockTime(fetcher, ETH_RPC)),
-    caught("ethereum gas price", gasPrice(fetcher, ETH_RPC)),
+    caught("ethereum block time", firstOk(ETH_RPCS, (u) => evmBlockTime(fetcher, u))),
+    caught("ethereum gas price", firstOk(ETH_RPCS, (u) => gasPrice(fetcher, u))),
     caught("solana slot time", solanaSlotTime(fetcher)),
     caught("defillama prices", json(PRICES).then((r) => r.json() as Promise<{ coins: Record<string, { price?: number }> }>)),
     caught("defillama stablecoins", json(STABLES).then((r) => r.text()).then(usdcByChain)),

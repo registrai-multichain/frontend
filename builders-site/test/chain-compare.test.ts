@@ -135,3 +135,26 @@ describe("ops: which source failed", () => {
   });
 });
 
+
+describe("Solana RPC fallback (Solana's public RPC answers 403 to Cloudflare)", () => {
+  test("the slot time comes from the second endpoint when the first refuses", async () => {
+    const { collectCompare, SOL_RPCS } = await import("../lib/chain-compare");
+    expect(SOL_RPCS[0]).toBe("https://solana-rpc.publicnode.com");
+    const base = fakeFetch();
+    const f = vi.fn(async (url: string | URL | Request, init?: RequestInit) => (String(url) === SOL_RPCS[0] ? new Response("forbidden", { status: 403 }) : base(url, init)));
+    const c = await collectCompare(env, f as never);
+    expect(c.solana.block_time_s).toBeCloseTo(0.4, 3);
+  });
+});
+
+describe("Ethereum RPC fallback", () => {
+  test("block time and gas price come from the second endpoint when the first fails", async () => {
+    const { collectCompare, ETH_RPCS } = await import("../lib/chain-compare");
+    expect(ETH_RPCS).toEqual(["https://ethereum-rpc.publicnode.com", "https://eth.drpc.org"]);
+    const base = fakeFetch();
+    const f = vi.fn(async (url: string | URL | Request, init?: RequestInit) => (String(url) === ETH_RPCS[0] ? new Response("busy", { status: 429 }) : base(String(url).includes("drpc") ? "https://ethereum.example/" : url, init)));
+    const c = await collectCompare(env, f as never);
+    expect(c.ethereum.block_time_s).toBeCloseTo(12, 3);
+    expect(c.ethereum.fee_usd).toBeCloseTo(0.108, 6);
+  });
+});
