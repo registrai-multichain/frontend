@@ -62,3 +62,19 @@ describe("attribution (machine-readable copies review I2/I4)", () => {
     expect(OPENAPI.info.description).not.toContain("Data: Registrai");
   });
 });
+
+describe("Arc fields added 2026-10-23", () => {
+  type S = { properties?: Record<string, S>; required?: string[]; items?: S; type?: unknown };
+  const sc = OPENAPI.components.schemas as unknown as Record<string, S>;
+  it("live Arc numbers require them; token address/supply and transactions are nullable; daily snapshots don't require them", () => {
+    const now = sc.ArcNow.properties!;
+    expect(now.stablecoins.required).toContain("tokens");
+    expect(now.stablecoins.properties!.tokens.items!.properties!.address.type).toEqual(["string", "null"]);
+    expect(now.stablecoins.properties!.tokens.items!.properties!.supply.type).toEqual(["number", "null"]);
+    expect(now.activity_24h.properties!.transactions_est.type).toEqual(["number", "null"]);
+    const day = sc.ArcDaily.properties!.days.items!.properties!;
+    expect(day.activity_24h.required).not.toContain("transactions_est");
+    expect(day.stablecoins.required).not.toContain("tokens");
+    expect(day.network.required).not.toContain("rpc_url");
+  });
+});

@@ -8,7 +8,9 @@
   "mainnet_since": "2026-09-16",
   "block_height": 26976520,
   "block_time_s": 0.5069,
-  "as_of": "2026-10-20T17:30:00.000Z"
+  "as_of": "2026-10-20T17:30:00.000Z",
+  "rpc_url": "https://rpc.mainnet.arc.io",
+  "explorer_url": "https://explorer.arc.io"
  },
  "stablecoins": {
   "usdc_supply": 758938840.36,
@@ -16,7 +18,11 @@
   "as_of": "2026-10-20T17:30:00.000Z",
   "all_stablecoins_usd": 742300000,
   "tvl_usd": 528831654,
-  "defillama_date": "2026-10-20"
+  "defillama_date": "2026-10-20",
+  "tokens": [
+    { "symbol": "USDC", "issuer": "Circle", "address": "0x3600000000000000000000000000000000000000", "supply": 758938840.361892 },
+    { "symbol": "XYZ", "issuer": "Example", "address": null, "supply": null }
+  ]
  },
  "activity_24h": {
   "data_until": "2026-10-20T17:00:00Z",
@@ -25,7 +31,9 @@
   "usdc_transfers_est": 458700,
   "app_payments": 123945,
   "app_usd": 12810996.76,
-  "attributed_share_pct": 2.97
+  "attributed_share_pct": 2.97,
+  "transactions_est": 342000,
+  "tx_sample": { "blocks": 240, "from_block": 26807800, "to_block": 26976520 }
  },
  "ecosystem": {
   "projects": 258,

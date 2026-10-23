@@ -4,7 +4,8 @@
  */
 import { categoryHref, type CategoryId } from "../../src/lib/arc-ecosystem";
 import { day, esc, page, when } from "./apps-pages";
-import type { ArcNumbers } from "./arc-numbers";
+import { EURC_ARC, USDC_ARC, type ArcNumbers } from "./arc-numbers";
+import { CHAIN_FACTS } from "../../src/lib/arc-chain-facts";
 import { share7d, shareText } from "./arc-share";
 import { QUESTION_PAGES } from "./arc-question-pages";
 
@@ -23,6 +24,35 @@ const at = (s: string) => { const d = new Date(s); return `${d.getUTCDate()} ${M
 const LLAMA_NOTE = "DefiLlama counts the circulating supply of every stablecoin on Arc (all pegs, in USD); it can differ from the token contracts' totalSupply shown above.";
 const METHOD = "Stablecoin transfers on Arc in the last 24 h, estimated from sampled hours by the Arc Ecosystem Index; tracked apps = transfers into contracts the index attributes to an app.";
 
+const link = (href: string, text: string) => `<a href="${esc(href)}" rel="noreferrer">${esc(text)}</a>`;
+const dayOf = (d: string) => day(`${d}T00:00:00Z`);
+
+/** Sourced facts, then the live figures as sentences; a missing figure drops its sentence (spec 2026-10-23-ai-search-gaps §1). */
+function factsHtml(n: ArcNumbers): string {
+  const a = n.activity_24h, s = n.stablecoins;
+  const live = [
+    s.usdc_supply !== null && s.as_of ? `Arc held ${esc(N0.format(s.usdc_supply))} USDC on ${esc(at(s.as_of))}. (Arc RPC)` : "",
+    s.tvl_usd !== null && s.defillama_date ? `TVL on Arc was ${esc(usd(s.tvl_usd))} on ${esc(dayOf(s.defillama_date))}. (DefiLlama)` : "",
+    a.transactions_est != null && a.tx_sample ? `About ${esc(N0.format(a.transactions_est))} transactions in the last 24 h, estimated from ${a.tx_sample.blocks} sampled blocks. (Arc RPC) <details><summary>i</summary> Blocks ${N0.format(a.tx_sample.from_block)} to ${N0.format(a.tx_sample.to_block)}, evenly spaced; the mean count per sampled block times the blocks in 24 h, rounded to the nearest 1,000.</details>` : "",
+    a.app_usd !== null ? `Apps tracked by Registrai received ${esc(usd(a.app_usd))} in stablecoin payments in the last 24 h. (Arc Ecosystem Index)` : "",
+  ].filter(Boolean);
+  return `<h2>Facts</h2>
+<ul>${CHAIN_FACTS.facts.map((f) => `<li>${esc(f.text)} (${link(f.source, "source")}, ${esc(dayOf(f.date))})</li>`).join("")}${live.map((x) => `<li>${x}</li>`).join("")}</ul>`;
+}
+
+/** Every listed stablecoin with its contract and on-chain supply; older snapshots fall back to USDC and EURC. */
+function tokensHtml(n: ArcNumbers, rpcAt: string): string {
+  const explorer = n.network.explorer_url ?? CHAIN_FACTS.network.explorer_url;
+  const src = new Map(CHAIN_FACTS.stablecoins.map((t) => [t.symbol, t.source]));
+  const tokens = n.stablecoins.tokens ?? [
+    { symbol: "USDC", issuer: "Circle", address: USDC_ARC, supply: n.stablecoins.usdc_supply },
+    { symbol: "EURC", issuer: "Circle", address: EURC_ARC, supply: n.stablecoins.eurc_supply },
+  ];
+  return `<div class="wrap"><table><thead><tr><th>Token</th><th>Issuer</th><th>Contract</th><th class="n">Supply on Arc</th><th>Source</th></tr></thead><tbody>
+${tokens.map((t) => `<tr><td>${esc(t.symbol)}</td><td>${esc(t.issuer)}</td><td>${t.address ? `<a href="${esc(`${explorer}/address/${t.address}`)}" rel="noreferrer"><code>${esc(t.address)}</code></a>` : "Address not published"}</td><td class="n">${t.address ? esc(t.supply === null ? NA : N0.format(t.supply)) : "–"}</td><td class="muted">${src.get(t.symbol) ? link(src.get(t.symbol)!, "address") : ""}${t.address ? ` · ${esc(rpcAt)}` : ""}</td></tr>`).join("\n")}
+</tbody></table></div>`;
+}
+
 export function renderArc(n: ArcNumbers, history: ArcNumbers[]): string {
   const rpcAt = n.network.as_of ? `Arc RPC, ${at(n.network.as_of)}` : "Arc RPC";
   const llamaAt = n.stablecoins.defillama_date ? `Source: DefiLlama, ${day(`${n.stablecoins.defillama_date}T00:00:00Z`)}` : "Source: DefiLlama";
@@ -31,12 +61,13 @@ export function renderArc(n: ArcNumbers, history: ArcNumbers[]): string {
   const idx = (k: "abi" | "aii" | "aei") => `${k.toUpperCase()} ${e.index_members[k] === null ? "–" : N0.format(e.index_members[k]!)}`;
   const close = (k: "abi" | "aii" | "aei") => `${k.toUpperCase()} ${e.index_close[k] === null ? "–" : N2.format(e.index_close[k]!)}`;
   const hist = history.length
-    ? `<div class="wrap"><table><thead><tr><th>Snapshot</th><th class="n">USDC supply</th><th class="n">All stablecoins</th><th class="n">TVL</th><th class="n">USDC moved, 24 h (est.)</th><th class="n">Attributed to apps, 24 h</th></tr></thead><tbody>
-${history.map((h) => `<tr><td>${esc(at(h.generated_at))}</td><td class="n">${esc(amt(h.stablecoins.usdc_supply, "USDC"))}</td><td class="n">${esc(usd(h.stablecoins.all_stablecoins_usd))}</td><td class="n">${esc(usd(h.stablecoins.tvl_usd))}</td><td class="n">${esc(usd(h.activity_24h.usdc_moved_usd_est))}</td><td class="n">${h.activity_24h.attributed_share_pct === null ? NA : `${N2.format(h.activity_24h.attributed_share_pct)}%`}</td></tr>`).join("\n")}
+    ? `<div class="wrap"><table><thead><tr><th>Snapshot</th><th class="n">USDC supply</th><th class="n">All stablecoins</th><th class="n">TVL</th><th class="n">USDC moved, 24 h (est.)</th><th class="n">Attributed to apps, 24 h</th><th class="n">Transactions, 24 h (est.)</th></tr></thead><tbody>
+${history.map((h) => `<tr><td>${esc(at(h.generated_at))}</td><td class="n">${esc(amt(h.stablecoins.usdc_supply, "USDC"))}</td><td class="n">${esc(usd(h.stablecoins.all_stablecoins_usd))}</td><td class="n">${esc(usd(h.stablecoins.tvl_usd))}</td><td class="n">${esc(usd(h.activity_24h.usdc_moved_usd_est))}</td><td class="n">${h.activity_24h.attributed_share_pct === null ? NA : `${N2.format(h.activity_24h.attributed_share_pct)}%`}</td><td class="n">${h.activity_24h.transactions_est == null ? "–" : esc(N0.format(h.activity_24h.transactions_est))}</td></tr>`).join("\n")}
 </tbody></table></div>`
     : "<p>Daily snapshots start at the next 00:00 UTC close.</p>";
   const body = `<h1>Arc in numbers</h1>
 <p class="muted">Arc is the layer-1 blockchain built by Circle. Generated ${esc(at(n.generated_at))}; each figure gives its source and date.</p>
+${factsHtml(n)}
 <h2>Network</h2>
 <table><tbody>
 ${row("Chain ID", String(n.network.chain_id), "Arc docs")}
@@ -44,11 +75,12 @@ ${row("Gas token", n.network.gas_token, "Arc docs")}
 ${row("Mainnet since", day(`${n.network.mainnet_since}T00:00:00Z`), "Circle press release")}
 ${row("Block height", int(n.network.block_height), rpcAt)}
 ${row("Average block time", n.network.block_time_s === null ? NA : `${n.network.block_time_s.toFixed(2)} s`, "last 10,000 blocks")}
+${row("RPC", n.network.rpc_url ?? CHAIN_FACTS.network.rpc_url, "Arc docs")}
+${row("Explorer", n.network.explorer_url ?? CHAIN_FACTS.network.explorer_url, "Arc docs")}
 </tbody></table>
 <h2>Stablecoins on Arc</h2>
+${tokensHtml(n, rpcAt)}
 <table><tbody>
-${row("USDC supply", amt(n.stablecoins.usdc_supply, "USDC"), rpcAt)}
-${row("EURC supply", amt(n.stablecoins.eurc_supply, "EURC"), rpcAt)}
 ${row("All stablecoins, circulating (USD value)", usd(n.stablecoins.all_stablecoins_usd), llamaAt)}
 ${row("TVL", usd(n.stablecoins.tvl_usd), llamaAt)}
 </tbody></table>
@@ -59,6 +91,7 @@ ${row("TVL", usd(n.stablecoins.tvl_usd), llamaAt)}
 ${row("USDC moved on Arc (estimate)", usd(a.usdc_moved_usd_est))}
 ${row("EURC moved on Arc, in USD (estimate)", usd(a.eurc_moved_usd_est))}
 ${row("USDC transfers (estimate)", int(a.usdc_transfers_est))}
+${row("Transactions (estimate)", int(a.transactions_est ?? null), "Arc RPC, sampled blocks")}
 ${row("Payments to tracked apps", int(a.app_payments))}
 ${row("USDC to tracked apps", usd(a.app_usd))}
 ${rowHtml("Share attributed to apps", `${esc(shareText(share))} <a href="/methodology/#attributed-share">Method</a>`)}

@@ -46,11 +46,20 @@ function ecosystemSchema(): Schema {
   return s;
 }
 
-/** Arc in numbers: a figure whose source is down is null. */
+/** Arc in numbers: a figure whose source is down is null; a token without a published address has address and supply null. */
 function arcSchema(s: Schema): Schema {
   let out = s;
   for (const sec of ["network", "stablecoins", "activity_24h"]) out = nullable(out, [sec, "*"]);
+  const tokens = out.properties?.stablecoins?.properties?.tokens;
+  if (tokens?.items?.properties) for (const k of ["address", "supply"]) tokens.items.properties[k] = { type: [tokens.items.properties[k].type, "null"] as unknown as string };
   return nullable(nullable(nullable(out, ["ecosystem", "index_members", "*"]), ["ecosystem", "index_close", "*"]), ["ecosystem", "data_until"]);
+}
+
+function dailyItem(): Schema {
+  const s = arcSchema(schemaOf(Object.fromEntries(Object.entries(arcNow).filter(([k]) => k !== "attribution"))));
+  const drop = (sec: string, keys: string[]) => { const x = s.properties?.[sec]; if (x?.required) x.required = x.required.filter((k) => !keys.includes(k)); };
+  drop("network", ["rpc_url", "explorer_url"]); drop("stablecoins", ["tokens"]); drop("activity_24h", ["transactions_est", "tx_sample"]);
+  return s;
 }
 
 const membersNew = { version: 1, attribution: ATTRIBUTION, index: "aii", since: "2026-10-14T19:00:00Z", data_until: "2026-10-14T21:00:00Z", members: members.members };
@@ -122,7 +131,8 @@ export const OPENAPI = {
       ArcNumbers: arcSchema(schemaOf(arcNow)),
       ArcNow: nullable(arcSchema(schemaOf(arcNowFull)), ["attributed_share_7d"]),
       // day items are the stored snapshots, which carry no attribution of their own
-      ArcDaily: { type: "object", properties: { version: { type: "number" }, attribution: { type: "string" }, days: { type: "array", items: arcSchema(schemaOf(Object.fromEntries(Object.entries(arcNow).filter(([k]) => k !== "attribution")))) } }, required: ["version", "attribution", "days"] },
+      // day items are the stored snapshots: no attribution of their own, and snapshots before 2026-10-23 lack the newer fields
+      ArcDaily: { type: "object", properties: { version: { type: "number" }, attribution: { type: "string" }, days: { type: "array", items: dailyItem() } }, required: ["version", "attribution", "days"] },
       Error: { type: "object", properties: { error: { type: "string" } }, required: ["error"] },
       PaymentRequired: { type: "object", description: PAID_NOTE, properties: { x402Version: { type: "number" }, error: { type: "string" }, resource: { type: "object" }, accepts: { type: "array", items: { type: "object" } } }, required: ["x402Version", "accepts"] },
     },
