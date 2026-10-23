@@ -8,6 +8,7 @@ import { renderCorrectionForm, renderCorrectionsLog, renderRemoved } from "../..
 import { correctionsOpen } from "../../lib/corrections";
 import { ERROR_TEXT, type ErrorCode } from "../../lib/corrections-codes";
 import { edgeCachedGet } from "../../lib/http";
+import { loadArcWeek } from "../../lib/arc-week";
 
 /** GET /ecosystem/, /ecosystem/<category>/, /ecosystem/<slug>/ (spec 2026-10-19-arc-ecosystem-directory-design.md). */
 const html = (body: string, status = 200, head = false) =>
@@ -40,7 +41,11 @@ const htmlPages: PagesFunction = async (ctx) => {
   if (parts.length !== 1) return html(renderEcosystemNotFound(), 404, head);
   if (parts[0] === "corrections") return html(once("corrections", () => renderCorrectionsLog(CORRECTIONS.all, new Map(all.map((e) => [e.slug, e.name])))), 200, head);
   const cat = categoryOf(parts[0]);
-  if (cat) return html(once(`cat:${cat.id}`, () => renderCategory(cat, all)), 200, head);
+  if (cat) {
+    // the 7-day app data names the most used projects; it changes hourly, so the memo is keyed by its hour
+    const week = await loadArcWeek(ctx.env, deps).catch(() => null);
+    return html(once(`cat:${cat.id}:${week?.until_hour ?? "-"}`, () => renderCategory(cat, all, week)), 200, head);
+  }
   const e = ECOSYSTEM.bySlug.get(parts[0]);
   if (!e) {
     const gone = CORRECTIONS.removed.get(parts[0]);

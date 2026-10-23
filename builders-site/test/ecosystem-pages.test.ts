@@ -18,7 +18,7 @@ const ld = (h: string) => JSON.parse(h.match(/<script type="application\/ld\+jso
 describe("entity page", () => {
   test("name, status, category link, summary, links, status evidence, sources, review date, correction links", () => {
     const h = renderEntity({ entity: ent(), app: null, facts: null });
-    expect(h).toContain("<title>Archery on Arc · Registrai</title>");
+    expect(h).toContain("<title>Archery on Arc, Circle&#39;s blockchain · Registrai</title>");
     expect(h).toContain('<link rel="canonical" href="https://builder.registrai.cc/ecosystem/archery/">');
     expect(h).toContain("<h1>Archery</h1>");
     expect(h).toContain("Live on mainnet");
@@ -60,7 +60,7 @@ describe("directory and category pages", () => {
     ent({ slug: "uniswap", name: "Uniswap", category: "dexs", index_ids: ["integration:uniswap"] })];
   test("directory: counts by status, every category with a count, a table sorted by name, status filter links", () => {
     const h = renderDirectory(all, null);
-    expect(h).toContain("<title>Arc ecosystem · Registrai</title>");
+    expect(h).toContain("<title>Arc ecosystem: projects on Circle&#39;s blockchain · Registrai</title>");
     expect(h).toContain("3 projects · 2 live on mainnet · 0 deployed · 1 announced");
     expect(h).toContain('<a href="/ecosystem/dexs/">DEXs on Arc</a> (1)');
     expect(h.indexOf(">Aave<")).toBeLessThan(h.indexOf(">Archery<"));

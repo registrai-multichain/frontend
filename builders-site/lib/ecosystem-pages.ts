@@ -8,6 +8,7 @@ import { evidenceHref } from "../../src/lib/facts";
 import { activityHtml, contractList, esc, page, when } from "./apps-pages";
 import { factsHtml, type Ready } from "./project-ssr";
 import type { AppDetail } from "./apps-data";
+import type { ArcWeek } from "./arc-week";
 
 export const ECO_SITE = "https://builder.registrai.cc";
 export type EntityView = { entity: ArcEntity; app: AppDetail | null; facts: Ready | null; correctionsOpen?: boolean };
@@ -76,10 +77,35 @@ ${correctionsLine(e.slug)}
   if (v.app) graph.push({ "@type": "Dataset", name: `${e.name} hourly activity on Arc`, url, description: `Hourly stablecoin payments, paying wallets, volume and index points for ${e.name} on Arc mainnet, from Registrai.`,
     license: LICENSE, creator: CREATOR, isAccessibleForFree: true, dateModified: v.app.data_until,
     distribution: [{ "@type": "DataDownload", encodingFormat: "application/json", contentUrl: `${ECO_SITE}/api/v1/members/${encodeURIComponent(v.app.id)}/hourly?index=aei` }] });
-  return page({ markdown: true, title: `${e.name} on Arc · Registrai`, canonical: url, description: e.summary, body, ld: { "@context": "https://schema.org", "@graph": graph } });
+  return page({ markdown: true, title: `${e.name} ${ON_ARC} · Registrai`, canonical: url, description: e.summary, body, ld: { "@context": "https://schema.org", "@graph": graph } });
 }
 
 const inCategory = (c: Category, e: ArcEntity) => e.category === c.id || (e.tags ?? []).includes(c.id);
+
+/** The plural noun of each category for the one-line answer ("25 DEXs listed on Arc …"). */
+const NOUN: Record<string, string> = {
+  payments: "payment apps", wallets: "wallets", exchanges: "exchanges", banks: "banks", "stablecoin-issuers": "stablecoin issuers",
+  infrastructure: "infrastructure providers", "developer-tools": "developer tools", dexs: "DEXs", lending: "lending protocols", trading: "trading platforms",
+  "market-makers": "market makers", custody: "custodians", rwa: "tokenization and RWA projects", bridges: "bridges and cross-chain protocols",
+  "ai-agents": "AI agent projects", ramps: "on/off-ramps", consumer: "games and consumer apps", launchpads: "launchpads", validators: "validators", "asset-managers": "asset managers",
+};
+const ON_ARC = "on Arc, Circle's blockchain";
+const counts = (l: ArcEntity[]) => ({ live: l.filter((e) => e.status === "live").length, deployed: l.filter((e) => e.status === "deployed").length, announced: l.filter((e) => e.status === "announced").length });
+const joinAnd = (l: string[]) => (l.length < 2 ? l.join("") : `${l.slice(0, -1).join(", ")} and ${l[l.length - 1]}`);
+
+/** The category page's answer (spec 2026-10-23-ai-search-gaps §3): the counts, then up to 3 most used projects of the category over 7 days. */
+export function categoryAnswer(cat: Category, all: ArcEntity[], week: ArcWeek | null): string {
+  const l = all.filter((e) => inCategory(cat, e)), n = counts(l);
+  const first = `${l.length} ${l.length === 1 ? "project" : NOUN[cat.id] ?? cat.name} listed ${ON_ARC}: ${n.live} live on mainnet, ${n.deployed} deployed, ${n.announced} announced.`;
+  const seen = new Set<string>(), top: ArcEntity[] = [];
+  for (const a of [...(week?.apps ?? [])].filter((x) => x.usd > 0).sort((x, y) => y.usd - x.usd)) {
+    const e = l.find((x) => x.index_ids?.includes(a.id));
+    if (e && !seen.has(e.slug)) { seen.add(e.slug); top.push(e); }
+    if (top.length === 3) break;
+  }
+  const second = top.length ? ` Most used over the last 7 days, by stablecoin payments received: ${joinAnd(top.map((e) => `<a href="${entityHref(e.slug)}">${esc(e.name)}</a>`))}.` : "";
+  return `${esc(first)}${second}`;
+}
 function table(l: ArcEntity[]): string {
   if (!l.length) return "<p>No projects in this category yet.</p>";
   return `<div class="wrap"><table><thead><tr><th>Project</th><th>Category</th><th>Status</th><th>Live since</th></tr></thead><tbody>
@@ -94,6 +120,7 @@ export function renderDirectory(all: ArcEntity[], status: EntityStatus | null): 
   const filters = [`<a href="/ecosystem/">All</a>`, ...(["live", "deployed", "announced"] as const).map((s) => `<a href="/ecosystem/?status=${s}">${esc(STATUS_LABEL[s])}</a>`)].join(" · ");
   const cats = CATEGORIES.map((c) => `<li><a href="${categoryHref(c.id)}">${esc(c.label)}</a> (${all.filter((e) => inCategory(c, e)).length})</li>`).join("");
   const body = `<h1>Arc ecosystem</h1>
+<p>Registrai's Arc ecosystem directory lists ${all.length} projects on Circle's Arc blockchain with their status and evidence: ${n("live")} live on mainnet, ${n("deployed")} deployed, ${n("announced")} announced.</p>
 <p class="muted">${all.length} projects · ${n("live")} live on mainnet · ${n("deployed")} deployed · ${n("announced")} announced. Last reviewed ${esc(latest(all))}.
 <details><summary>i</summary> Every project with a public Arc link: contracts on Arc mainnet, a live integration, or an official announcement. Each status links to its evidence on the project page.</details></p>
 <h2>By category</h2><ul>${cats}</ul>
@@ -102,17 +129,19 @@ ${table(shown)}
 <p class="muted">The same data as JSON: <a href="/api/v1/ecosystem">/api/v1/ecosystem</a>. Chain-level figures: <a href="/arc/">Arc in numbers</a>.</p>`;
   const ld = { "@context": "https://schema.org", "@type": "DataCatalog", name: "Arc ecosystem", url: `${ECO_SITE}/ecosystem/`, dateModified: latest(all), license: LICENSE, creator: CREATOR,
     mainEntity: { "@type": "ItemList", numberOfItems: all.length, itemListElement: sortByName(all).map((e, k) => ({ "@type": "ListItem", position: k + 1, name: e.name, url: `${ECO_SITE}${entityHref(e.slug)}` })) } };
-  return page({ markdown: true, title: "Arc ecosystem · Registrai", canonical: `${ECO_SITE}/ecosystem/`, description: `Every project on Arc with its category and status: ${n("live")} live on mainnet, ${n("deployed")} deployed, ${n("announced")} announced.`, body, ld });
+  return page({ markdown: true, title: "Arc ecosystem: projects on Circle's blockchain · Registrai", canonical: `${ECO_SITE}/ecosystem/`, description: `Every project on Arc, the blockchain by Circle, with its category and status: ${n("live")} live on mainnet, ${n("deployed")} deployed, ${n("announced")} announced.`, body, ld });
 }
 
-export function renderCategory(cat: Category, all: ArcEntity[]): string {
-  const l = all.filter((e) => inCategory(cat, e));
+export function renderCategory(cat: Category, all: ArcEntity[], week: ArcWeek | null = null): string {
+  const l = all.filter((e) => inCategory(cat, e)), n = counts(l);
   const body = `<h1>${esc(cat.label)}</h1>
-<p class="muted">${l.length} projects. <a href="/ecosystem/">All categories</a></p>
+<p>${categoryAnswer(cat, all, week)}</p>
+<p class="muted"><a href="/ecosystem/">All categories</a></p>
 ${table(l)}`;
   const ld = { "@context": "https://schema.org", "@type": "ItemList", name: cat.label, url: `${ECO_SITE}${categoryHref(cat.id)}`, numberOfItems: l.length,
     itemListElement: sortByName(l).map((e, k) => ({ "@type": "ListItem", position: k + 1, name: e.name, url: `${ECO_SITE}${entityHref(e.slug)}` })) };
-  return page({ markdown: true, title: `${cat.label} · Registrai`, canonical: `${ECO_SITE}${categoryHref(cat.id)}`, description: `${cat.label}: ${l.length} projects with their status and sources.`, body, ld, noindex: l.length === 0 });
+  return page({ markdown: true, title: `${cat.label}, Circle's blockchain · Registrai`, canonical: `${ECO_SITE}${categoryHref(cat.id)}`,
+    description: `${cat.label}, the blockchain by Circle: ${l.length} listed, ${n.live} live on mainnet, with status and sources.`, body, ld, noindex: l.length === 0 });
 }
 
 export const renderEcosystemNotFound = () =>
