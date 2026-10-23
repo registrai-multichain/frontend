@@ -102,6 +102,7 @@ describe("route, cache, sitemap, llms", () => {
     for (const f of ["../functions/llms.txt.ts", "../../public/llms.txt", "../lib/llms-full.ts"])
       expect(fs.readFileSync(new URL(f, import.meta.url), "utf8"), f).toContain("arc-vs-ethereum-vs-solana");
     vi.doUnmock("../lib/chain-compare");
+    vi.resetModules();
   });
 });
 
@@ -129,9 +130,10 @@ describe("ops: which source failed", () => {
     vi.resetModules();
     const { arcQuestionPage } = await import("../lib/arc-routes");
     const r = await arcQuestionPage(env, { cache: null }, "https://builder.registrai.cc", "arc-vs-ethereum-vs-solana");
-    expect(r.headers.get("x-registrai-errors")).toMatch(/solana slot time: HTTP 429/);
+    expect(r.headers.get("x-registrai-errors")).toMatch(/solana slot time: .*HTTP 429/);
     expect(await r.text()).not.toContain("HTTP 429");
     vi.doUnmock("../lib/chain-compare");
+    vi.resetModules();
   });
 });
 
@@ -143,6 +145,7 @@ describe("Solana RPC fallback (Solana's public RPC answers 403 to Cloudflare)", 
     const base = fakeFetch();
     const f = vi.fn(async (url: string | URL | Request, init?: RequestInit) => (String(url) === SOL_RPCS[0] ? new Response("forbidden", { status: 403 }) : base(url, init)));
     const c = await collectCompare(env, f as never);
+    expect(c.errors).toEqual([]);
     expect(c.solana.block_time_s).toBeCloseTo(0.4, 3);
   });
 });
@@ -156,5 +159,17 @@ describe("Ethereum RPC fallback", () => {
     const c = await collectCompare(env, f as never);
     expect(c.ethereum.block_time_s).toBeCloseTo(12, 3);
     expect(c.ethereum.fee_usd).toBeCloseTo(0.108, 6);
+  });
+});
+
+describe("Solana endpoints, all failing", () => {
+  test("three endpoints; the error names each one's failure", async () => {
+    const { collectCompare, SOL_RPCS } = await import("../lib/chain-compare");
+    expect(SOL_RPCS).toEqual(["https://solana-rpc.publicnode.com", "https://api.mainnet.solana.com", "https://api.mainnet-beta.solana.com"]);
+    const base = fakeFetch();
+    const f = vi.fn(async (url: string | URL | Request, init?: RequestInit) => (SOL_RPCS.includes(String(url)) ? new Response("no", { status: String(url).includes("publicnode") ? 429 : 403 }) : base(url, init)));
+    const c = await collectCompare(env, f as never);
+    expect(c.solana.block_time_s).toBeNull();
+    expect(c.errors.join()).toMatch(/solana slot time: solana-rpc\.publicnode\.com HTTP 429; api\.mainnet\.solana\.com HTTP 403; api\.mainnet-beta\.solana\.com HTTP 403/);
   });
 });

@@ -11,7 +11,7 @@ type Fetcher = typeof fetch;
 const ARC_RPCS = ["https://rpc.blockdaemon.mainnet.arc.io", "https://rpc.mainnet.arc.io"];
 export const ETH_RPCS = ["https://ethereum-rpc.publicnode.com", "https://eth.drpc.org"];
 /** Solana's own public RPC answers 403 to Cloudflare's egress, so publicnode first (checked 2026-10-23). */
-export const SOL_RPCS = ["https://solana-rpc.publicnode.com", "https://api.mainnet-beta.solana.com"];
+export const SOL_RPCS = ["https://solana-rpc.publicnode.com", "https://api.mainnet.solana.com", "https://api.mainnet-beta.solana.com"];
 const PRICES = "https://coins.llama.fi/prices/current/coingecko:ethereum,coingecko:solana";
 const STABLES = "https://stablecoins.llama.fi/stablecoins?includePrices=false";
 const TIMEOUT_MS = 8000, SPAN = 10_000;
@@ -32,10 +32,11 @@ async function rpc(fetcher: Fetcher, url: string, method: string, params: unknow
   if (j.result === undefined || j.result === null) throw new Error(j.error?.message ?? "empty result");
   return j.result;
 }
+/** The first endpoint that answers; when none does, one error naming each endpoint's failure (shown in x-registrai-errors). */
 const firstOk = async <T>(urls: string[], f: (u: string) => Promise<T>): Promise<T> => {
-  let last: unknown;
-  for (const u of urls) { try { return await f(u); } catch (e) { last = e; } }
-  throw last instanceof Error ? last : new Error(String(last));
+  const fails: string[] = [];
+  for (const u of urls) { try { return await f(u); } catch (e) { fails.push(`${new URL(u).host} ${e instanceof Error ? e.message : String(e)}`); } }
+  throw new Error(fails.join("; "));
 };
 
 /** Seconds per block over the last 10,000 blocks of an EVM chain. */
