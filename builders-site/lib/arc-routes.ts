@@ -29,7 +29,11 @@ export const compareTtl = (r: Response) => (r.headers.has(DEGRADED_HEADER) ? 600
 async function comparePage(env: Env): Promise<Response> {
   const c = await collectCompare(env).catch(() => null);
   const res = arcHtml(renderCompare(c));
-  if (!c || c.errors.length) res.headers.set(DEGRADED_HEADER, "1");
+  if (!c || c.errors.length) {
+    res.headers.set(DEGRADED_HEADER, "1");
+    // for the owner: which source failed (printable ASCII only, short; never shown on the page)
+    res.headers.set("x-registrai-errors", (c ? c.errors.join("; ") : "collector failed").replace(/[^\x20-\x7e]/g, "?").slice(0, 400));
+  }
   return res;
 }
 /** Edge-cache seconds per question page (default 10 min); the chain comparison reads 3 RPCs and DefiLlama, so an hour. */

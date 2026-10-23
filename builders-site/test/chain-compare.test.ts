@@ -123,3 +123,15 @@ describe("review fixes", () => {
   });
 });
 
+describe("ops: which source failed", () => {
+  test("a degraded build names its failed sources in a response header (never in the page)", async () => {
+    vi.doMock("../lib/chain-compare", async (orig) => ({ ...(await orig<typeof import("../lib/chain-compare")>()), collectCompare: async () => ({ ...(await (await orig<typeof import("../lib/chain-compare")>()).collectCompare(env, fakeFetch({ solanaDown: true }) as never)) }) }));
+    vi.resetModules();
+    const { arcQuestionPage } = await import("../lib/arc-routes");
+    const r = await arcQuestionPage(env, { cache: null }, "https://builder.registrai.cc", "arc-vs-ethereum-vs-solana");
+    expect(r.headers.get("x-registrai-errors")).toMatch(/solana slot time: HTTP 429/);
+    expect(await r.text()).not.toContain("HTTP 429");
+    vi.doUnmock("../lib/chain-compare");
+  });
+});
+
