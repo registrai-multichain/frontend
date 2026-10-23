@@ -4,6 +4,7 @@
  * goes through esc(); JSON-LD escapes "<".
  */
 import { idToPath, type AppDetail, type AppList, type AppRow } from "./apps-data";
+import { ATTRIBUTION } from "./attribution";
 import { shareText, type Share7d } from "./arc-share";
 import { evidenceHref } from "../../src/lib/facts";
 import { appHref } from "./app-href";
@@ -51,7 +52,7 @@ export function page(o: { title: string; canonical: string; description: string;
 <style>${STYLE}</style>${ld}</head><body><main>
 <nav class="muted"><a href="/ecosystem/">Arc ecosystem</a><a href="/arc/">Arc in numbers</a><a href="/builders/">Registrai builders</a><a href="/apps/">Apps on Arc</a><a href="/builders-index/">Indices</a><a href="${API_DOCS_URL}">Data API</a></nav>
 ${o.body}
-<footer>Data: Registrai, CC BY 4.0 · <a href="/how-we-publish/">How we publish</a> · <a href="${METHOD_URL}">Method</a> · <a href="${API_DOCS_URL}">Data API</a> · Independent. Not affiliated with Circle or Arc.</footer>
+<footer>Data: ${esc(ATTRIBUTION)} · <a href="/how-we-publish/">How we publish</a> · <a href="${METHOD_URL}">Method</a> · <a href="${API_DOCS_URL}">Data API</a> · Independent. Not affiliated with Circle or Arc.</footer>
 </main></body></html>`;
 }
 

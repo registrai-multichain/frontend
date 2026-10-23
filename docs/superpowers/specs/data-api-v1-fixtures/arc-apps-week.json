@@ -1,2 +1,2 @@
-{ "version": 1, "until": "2026-10-22T16:00:00Z", "window_hours": 168, "apps": [
+{ "version": 1, "attribution": "Registrai, builder.registrai.cc, CC BY 4.0", "until": "2026-10-22T16:00:00Z", "window_hours": 168, "apps": [
   { "id": "domain:archery.wtf", "name": "Archery", "category": "dexs", "usd": 150, "payments": 3, "new_payers": 2, "url": "https://builder.registrai.cc/ecosystem/archery/", "first_hour": "2026-10-06T00:00:00Z" } ] }

@@ -4,6 +4,7 @@
  * edge-cached 60 s with a cache variant built from VALIDATED params only.
  */
 import { ABI_INDICES, sha256Hex, type AbiData } from "../../src/lib/builders-index";
+import { ATTRIBUTION } from "./attribution";
 import { hourOf, isoHour, INDEX_IDS, type IndexId } from "./data-api-rows";
 import { verifiedIds } from "./data-api-verified";
 import type { D1Database, Env } from "./env";
@@ -28,7 +29,7 @@ export function etagMatches(header: string | null, etag: string): boolean {
 
 /** A v1 JSON response: version first, sha256 etag, 304 when if-none-match matches. */
 export async function v1Json(req: Request, body: Record<string, unknown>, maxAge = V1_CACHE_S): Promise<Response> {
-  const text = JSON.stringify({ version: 1, ...body });
+  const text = JSON.stringify({ version: 1, attribution: ATTRIBUTION, ...body });
   const etag = `"${await sha256Hex(text)}"`;
   if (etagMatches(req.headers.get("if-none-match"), etag)) return new Response(null, { status: 304, headers: { ...HEADERS, etag } });
   return new Response(text, { status: 200, headers: { ...HEADERS, etag, "cache-control": `public, max-age=${maxAge}` } });

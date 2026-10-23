@@ -52,6 +52,7 @@ describe("MCP", () => {
     const { env } = await seeded();
     const apps = await (await rpc(env, { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "arc_apps", arguments: {} } })).json();
     expect(apps.result.structuredContent.source_url).toBe("https://builder.registrai.cc/apps/");
+    expect(apps.result.structuredContent.attribution).toBe("Registrai, builder.registrai.cc, CC BY 4.0");
     expect(apps.result.structuredContent.rows.length).toBeGreaterThan(0);
     const one = await (await rpc(env, { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "arc_app", arguments: { id: "domain:archery.wtf" } } })).json();
     expect(one.result.structuredContent.source_url).toBe("https://builder.registrai.cc/apps/domain/archery.wtf/");

@@ -4,6 +4,7 @@
  * agent can cite. API-backed tools call the v1 handlers in-process, so tool output and API output cannot differ.
  */
 import { appHref } from "./app-href";
+import { ATTRIBUTION } from "./attribution";
 import { loadApp, loadAppList, type AppRow } from "./apps-data";
 import { handleEcosystem } from "./data-api-ecosystem";
 import { handleArc } from "./data-api-arc";
@@ -133,14 +134,14 @@ async function callTool(name: string, a: Args, env: Env, deps: EdgeCacheDeps): P
       if (!l) return { ok: false, error: "The data is not available right now. Retry later." };
       const key: Record<string, (r: AppRow) => number> = { payments: (r) => r.last_24h.payments, usdc: (r) => r.last_24h.usdc, points: (r) => r.points, first_seen: (r) => Date.parse(r.first_hour) };
       const rows = [...l.rows].sort((x, y) => key[sort](y) - key[sort](x) || (x.id < y.id ? -1 : 1)).map((r) => ({ ...r, source_url: `${SITE}${appHref(r.id)}` }));
-      return { ok: true, data: { version: 1, data_until: l.data_until, sort, totals: l.totals, rows, source_url: `${SITE}/apps/` } };
+      return { ok: true, data: { version: 1, attribution: ATTRIBUTION, data_until: l.data_until, sort, totals: l.totals, rows, source_url: `${SITE}/apps/` } };
     }
     case "arc_app": {
       const id = str(a, "id", true)!;
       const app = await loadApp(env, deps, id);
       if (app === null) return { ok: false, error: "The data is not available right now. Retry later." };
       if (app === "unknown") return { ok: false, error: `No app with id ${id} in the Arc indices. Use arc_apps for the list.` };
-      return { ok: true, data: { version: 1, ...app, source_url: `${SITE}${appHref(id)}` } };
+      return { ok: true, data: { version: 1, attribution: ATTRIBUTION, ...app, source_url: `${SITE}${appHref(id)}` } };
     }
     case "arc_numbers": return viaApi(`${API}/arc`, (q) => handleArc(q, env, d, []));
     case "arc_apps_week": return viaApi(`${API}/arc/apps-week`, (q) => handleArc(q, env, d, ["apps-week"]));
