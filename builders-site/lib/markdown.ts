@@ -14,7 +14,7 @@ const decode = (s: string) => s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+|#39);/gi, (m,
   if (k.startsWith("#")) return String.fromCodePoint(parseInt(k.slice(1), 10));
   return m;
 });
-const escapeMd = (s: string) => s.replace(/([\\`*_[\]|])/g, "\\$1");
+export const escapeMd = (s: string) => s.replace(/([\\`*_[\]|])/g, "\\$1");
 const absolute = (href: string) => (href.startsWith("/") ? `${SITE}${href}` : href);
 const attr = (attrs: string, name: string) => decode(attrs.match(new RegExp(`${name}="([^"]*)"`, "i"))?.[1] ?? "");
 
