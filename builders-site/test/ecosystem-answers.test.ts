@@ -65,6 +65,17 @@ describe("/ecosystem/ answers 'is there an Arc directory' (spec 2026-10-23-repla
   });
 });
 
+describe("review I2: one set of status definitions", () => {
+  test("/ecosystem/ and /methodology/ use the same wording, including official Arc posts for live", async () => {
+    const { STATUS_RULES } = await import("../../src/lib/arc-ecosystem");
+    const { renderDirectory } = await import("../lib/ecosystem-pages");
+    const { renderMethodology } = await import("../lib/methodology-page");
+    const d = renderDirectory(ALL, null, null), m = renderMethodology({ params: null, share: null as never, until: null });
+    for (const k of ["live", "deployed", "announced"] as const) { const t = STATUS_RULES[k].replace(/'/g, "&#39;"); expect(d, k).toContain(t); expect(m, k).toContain(t); }
+    expect(STATUS_RULES.live).toMatch(/official Arc or Circle post/);
+  });
+});
+
 vi.mock("../lib/arc-week", async (orig) => ({ ...(await orig<typeof import("../lib/arc-week")>()), loadArcWeek: async () => { throw new Error("kv down"); } }));
 describe("category route", () => {
   test("the week loader failing still serves the category page with its count sentence", async () => {

@@ -7,7 +7,7 @@
 import { STATUS_LABEL, categoryOf, entityHref, sortByName } from "../../src/lib/arc-ecosystem";
 import { ECOSYSTEM } from "../../src/lib/arc-ecosystem-data";
 import { readArcDaily } from "./arc-daily";
-import { arcPage, arcQuestionPage } from "./arc-routes";
+import { DEGRADED_HEADER, arcPage, arcQuestionPage } from "./arc-routes";
 import { share7d } from "./arc-share";
 import { ATTRIBUTION } from "./attribution";
 import { indexFile } from "./data-api";
@@ -43,6 +43,7 @@ export async function buildLlmsFullDoc(env: Env, deps: EdgeCacheDeps, now = Date
     try {
       const r = await get();
       if (r.status !== 200) throw new Error(String(r.status));
+      if (r.headers.has(DEGRADED_HEADER)) degraded = true;   // built while one of its sources was down
       parts.push(htmlToMarkdown(await r.text(), `${SITE}${path}`));
     } catch { fallback(title); }
   };

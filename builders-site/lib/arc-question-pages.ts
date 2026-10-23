@@ -4,7 +4,7 @@ import { ECOSYSTEM } from "../../src/lib/arc-ecosystem-data";
 import { esc, page } from "./apps-pages";
 import { WINDOW_H, type ArcWeek, type WeekApp } from "./arc-week";
 import { CHAIN_FACTS } from "../../src/lib/arc-chain-facts";
-import { ARC_TRANSFER_GAS, ETH_TRANSFER_GAS, SOL_BASE_FEE_LAMPORTS, type Compare } from "./chain-compare";
+import { ARC_ERC20_GAS, ARC_NATIVE_GAS, ETH_NEW_HOLDER_GAS, ETH_TRANSFER_GAS, SOL_BASE_FEE_LAMPORTS, type Compare } from "./chain-compare";
 
 const SITE = "https://builder.registrai.cc";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -115,9 +115,9 @@ export function renderCompare(c: Compare | null): string {
     ["Finality", `${esc(fact("finality-arc")?.text ?? "")} ${src("finality-arc")}`, `${esc(fact("finality-ethereum")?.text ?? "")} ${src("finality-ethereum")}`,
       `${esc(fact("finality-solana")?.text ?? "")} ${src("finality-solana")}`, "Chain documentation"],
     ["Fee for a USDC transfer (estimate)",
-      esc(fee(c?.arc.fee_usd)) + note(`Gas price ${g?.arc == null ? "n/a" : `${g.arc.toFixed(2)} gwei`} × ${ARC_TRANSFER_GAS.toLocaleString("en-US")} gas for a native USDC transfer, paid in USDC.`),
-      esc(fee(c?.ethereum.fee_usd)) + note(`Gas price ${g?.ethereum == null ? "n/a" : `${g.ethereum.toFixed(2)} gwei`} × ${ETH_TRANSFER_GAS.toLocaleString("en-US")} gas for an ERC-20 USDC transfer × ETH price ${p?.eth == null ? "n/a" : `$${p.eth.toFixed(0)}`}.`),
-      esc(fee(c?.solana.fee_usd)) + note(`Base fee ${SOL_BASE_FEE_LAMPORTS.toLocaleString("en-US")} lamports per signature × SOL price ${p?.sol == null ? "n/a" : `$${p.sol.toFixed(2)}`}; priority fees not included.`),
+      esc(fee(c?.arc.fee_usd)) + note(`Gas price ${g?.arc == null ? "n/a" : `${g.arc.toFixed(2)} gwei`} × ${ARC_ERC20_GAS.toLocaleString("en-US")} gas for an ERC-20 transfer through the USDC contract, paid in USDC. A native USDC transfer uses ${ARC_NATIVE_GAS.toLocaleString("en-US")} gas (${fee(c?.arc.fee_native_usd)}).`),
+      esc(fee(c?.ethereum.fee_usd)) + note(`Gas price ${g?.ethereum == null ? "n/a" : `${g.ethereum.toFixed(2)} gwei`} × ${ETH_TRANSFER_GAS.toLocaleString("en-US")} gas for a USDC transfer to an address that already holds USDC × ETH price ${p?.eth == null ? "n/a" : `$${Math.round(p.eth).toLocaleString("en-US")}`}. To a new holder: ${ETH_NEW_HOLDER_GAS.toLocaleString("en-US")} gas (${fee(c?.ethereum.fee_new_holder_usd)}).`),
+      esc(fee(c?.solana.fee_usd)) + note(`Base fee ${SOL_BASE_FEE_LAMPORTS.toLocaleString("en-US")} lamports per signature × SOL price ${p?.sol == null ? "n/a" : `$${p.sol.toFixed(2)}`}; no priority fee, and no token account creation for a recipient without one.`),
       "RPC gas prices; prices from DefiLlama"],
     ["USDC in circulation", esc(big(c?.arc.usdc_supply)), esc(big(c?.ethereum.usdc_supply)), esc(big(c?.solana.usdc_supply)), `DefiLlama stablecoins by chain${c ? `, ${esc(c.usdc_date)}` : ""}`],
     ["Apps measured receiving USDC, 24 h", c?.arc.apps_paying == null ? NA_CELL : String(c.arc.apps_paying), "Not measured by Registrai", "Not measured by Registrai", "Arc Ecosystem Index (Registrai)"],
@@ -132,7 +132,7 @@ export function renderCompare(c: Compare | null): string {
   const body = `<div class="wrap"><table><thead><tr><th>Measure</th><th>Arc</th><th>Ethereum</th><th>Solana</th><th>Source</th></tr></thead><tbody>
 ${rows.map((r) => `<tr><th>${esc(r[0])}</th><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td class="muted">${r[4]}</td></tr>`).join("\n")}
 </tbody></table></div>
-<p class="muted">${c ? `Measured ${esc(atHour(c.generated_at))}. ` : ""}Fees are estimates for one transfer at the current gas price; they exclude priority fees and the payment's own amount. <a href="/arc/">Arc in numbers</a></p>`;
+<p class="muted">${c ? `Measured ${esc(atHour(c.generated_at))}. ` : ""}Fees are estimates for one USDC transfer, excluding the amount sent: Arc and Ethereum at the RPC's current gas price (base fee plus suggested tip), Solana at the base fee only. <a href="/arc/">Arc in numbers</a></p>`;
   return page({ markdown: true, title: `${title} · Registrai`, canonical: `${SITE}${path}`, description: first,
     body: `<h1>${esc(title)}</h1>\n<p>${esc(first)}</p>\n${body}\n<p class="muted"><a href="/arc/">Arc in numbers</a> · <a href="/ecosystem/">Arc ecosystem</a></p>`,
     ld: { "@context": "https://schema.org", "@type": "Dataset", name: title, url: `${SITE}${path}`, description: first, license: "https://creativecommons.org/licenses/by/4.0/",

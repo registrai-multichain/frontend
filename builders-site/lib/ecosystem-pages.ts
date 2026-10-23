@@ -2,7 +2,7 @@
  * Server-rendered Arc ecosystem pages (spec 2026-10-19-arc-ecosystem-directory-design.md): one page per project, the
  * directory and the category pages. Pure: data in, HTML out; every value goes through esc(); JSON-LD escapes "<" (page()).
  */
-import { CATEGORIES, STATUS_LABEL, categoryHref, categoryOf, entityHref, sortByName, whatItDoes, type ArcEntity, type Category, type EntityStatus } from "../../src/lib/arc-ecosystem";
+import { CATEGORIES, STATUS_LABEL, STATUS_RULES, categoryHref, categoryOf, entityHref, sortByName, whatItDoes, type ArcEntity, type Category, type EntityStatus } from "../../src/lib/arc-ecosystem";
 import { CORRECTIONS } from "../../src/lib/arc-ecosystem-data";
 import { evidenceHref } from "../../src/lib/facts";
 import { activityHtml, contractList, esc, page, when } from "./apps-pages";
@@ -142,7 +142,7 @@ export function renderDirectory(all: ArcEntity[], status: EntityStatus | null, w
 <h2>What counts as on Arc</h2>
 <p>Every project with a public Arc link: contracts on Arc mainnet, a live integration, or an official announcement. Each status links to its evidence on the project page.</p>
 <h2>How a status is decided</h2>
-<ul><li><b>Live on mainnet</b>: contracts or measured activity on Arc mainnet, the project's own documentation listing Arc mainnet, or an official Arc post saying it is live.</li><li><b>Deployed</b>: contracts on Arc mainnet without evidence of live use.</li><li><b>Announced</b>: an official announcement only.</li></ul>
+<ul>${(["live", "deployed", "announced"] as const).map((k) => `<li>${esc(STATUS_RULES[k])}</li>`).join("")}</ul>
 <p>Launch dates come only from a source dated that day. <a href="/methodology/">Method</a></p>
 ${top.length ? `<h2>Measured activity</h2>
 <p>${measured} of these projects are measured in Registrai's hourly index; the most used over the last 7 days, by stablecoin payments received, are ${joinAnd(top.map((e) => `<a href="${entityHref(e.slug)}">${esc(e.name)}</a>`))}. <a href="/arc/most-used-apps/">Full ranking</a></p>` : ""}

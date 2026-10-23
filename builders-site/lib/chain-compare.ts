@@ -14,11 +14,14 @@ export const SOL_RPC = "https://api.mainnet-beta.solana.com";
 const PRICES = "https://coins.llama.fi/prices/current/coingecko:ethereum,coingecko:solana";
 const STABLES = "https://stablecoins.llama.fi/stablecoins?includePrices=false";
 const TIMEOUT_MS = 8000, SPAN = 10_000;
-/** Gas for a transfer: a native USDC transfer on Arc (21,000), an ERC-20 USDC transfer on Ethereum (65,000). */
-export const ARC_TRANSFER_GAS = 21_000, ETH_TRANSFER_GAS = 65_000, SOL_BASE_FEE_LAMPORTS = 5_000;
+/** Gas for a USDC transfer, compared like for like (review I1): an ERC-20 transfer through Arc's USDC contract (49,097 gas
+ *  by eth_estimateGas, 2026-10-23) and Ethereum's USDC to an existing holder (45,288); Arc's native transfer (21,000) and
+ *  Ethereum's new-holder case (65,000) are shown in the notes. */
+export const ARC_ERC20_GAS = 49_000, ARC_NATIVE_GAS = 21_000, ETH_TRANSFER_GAS = 45_000, ETH_NEW_HOLDER_GAS = 65_000, SOL_BASE_FEE_LAMPORTS = 5_000;
 
 export type ChainFigures = { block_time_s: number | null; fee_usd: number | null; usdc_supply: number | null };
-export type Compare = { generated_at: string; arc: ChainFigures & { apps_paying: number | null }; ethereum: ChainFigures; solana: ChainFigures;
+export type Compare = { generated_at: string; arc: ChainFigures & { apps_paying: number | null; fee_native_usd: number | null };
+  ethereum: ChainFigures & { fee_new_holder_usd: number | null }; solana: ChainFigures;
   prices: { eth: number | null; sol: number | null }; gas_price_gwei: { arc: number | null; ethereum: number | null }; usdc_date: string; errors: string[] };
 
 async function rpc(fetcher: Fetcher, url: string, method: string, params: unknown[]): Promise<unknown> {
@@ -55,7 +58,8 @@ async function solanaSlotTime(fetcher: Fetcher): Promise<number> {
 export function usdcByChain(text: string): Record<string, number> {
   const at = text.indexOf('"symbol":"USDC"');
   const key = at < 0 ? -1 : text.indexOf('"chainCirculating":', at);
-  if (key < 0) return {};
+  const next = at < 0 ? -1 : text.indexOf('"symbol":', at + 1);
+  if (key < 0 || (next >= 0 && key > next)) return {};   // chainCirculating must belong to the USDC entry, not the next asset
   const i = text.indexOf("{", key);
   let depth = 0, end = -1;
   for (let k = i; k < text.length; k++) {
@@ -87,13 +91,14 @@ export async function collectCompare(env: Env, fetcher: Fetcher = fetch, now = D
     caught("defillama stablecoins", json(STABLES).then((r) => r.text()).then(usdcByChain)),
     indexFile(env, "aei").catch(() => null),
   ]);
-  const eth = prices?.coins["coingecko:ethereum"]?.price ?? null, sol = prices?.coins["coingecko:solana"]?.price ?? null;
+  const eth = prices?.coins?.["coingecko:ethereum"]?.price ?? null, sol = prices?.coins?.["coingecko:solana"]?.price ?? null;
   const projects = (aei as (AbiData & { projects?: { pay_24h?: number }[] }) | null)?.projects;
   return {
     generated_at: new Date(now).toISOString(),
-    arc: { block_time_s: arcBt, fee_usd: arcGas === null ? null : (arcGas * ARC_TRANSFER_GAS) / 1e18, usdc_supply: usdc?.Arc ?? null,
+    arc: { block_time_s: arcBt, fee_usd: arcGas === null ? null : (arcGas * ARC_ERC20_GAS) / 1e18, fee_native_usd: arcGas === null ? null : (arcGas * ARC_NATIVE_GAS) / 1e18, usdc_supply: usdc?.Arc ?? null,
       apps_paying: projects ? projects.filter((p) => (p.pay_24h ?? 0) > 0).length : null },
-    ethereum: { block_time_s: ethBt, fee_usd: ethGas === null || eth === null ? null : ((ethGas * ETH_TRANSFER_GAS) / 1e18) * eth, usdc_supply: usdc?.Ethereum ?? null },
+    ethereum: { block_time_s: ethBt, fee_usd: ethGas === null || eth === null ? null : ((ethGas * ETH_TRANSFER_GAS) / 1e18) * eth,
+      fee_new_holder_usd: ethGas === null || eth === null ? null : ((ethGas * ETH_NEW_HOLDER_GAS) / 1e18) * eth, usdc_supply: usdc?.Ethereum ?? null },
     solana: { block_time_s: solBt, fee_usd: sol === null ? null : (SOL_BASE_FEE_LAMPORTS / 1e9) * sol, usdc_supply: usdc?.Solana ?? null },
     prices: { eth, sol }, gas_price_gwei: { arc: arcGas === null ? null : arcGas / 1e9, ethereum: ethGas === null ? null : ethGas / 1e9 },
     usdc_date: new Date(now).toISOString().slice(0, 10), errors,

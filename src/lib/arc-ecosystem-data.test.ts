@@ -26,5 +26,9 @@ describe("the published directory file", () => {
   test("no live entry's summary starts with 'Announced' (spec 2026-10-23-replace-competitor-citations §2)", () => {
     expect(ECOSYSTEM.entities.filter((e) => e.status === "live" && /^Announced/.test(e.summary)).map((e) => e.slug)).toEqual([]);
   });
+  test("review I4: every live entry's 'what it does' line says what it does, not where it was announced", async () => {
+    const { whatItDoes } = await import("./arc-ecosystem");
+    expect(ECOSYSTEM.entities.filter((e) => e.status === "live" && /^(Named|Listed|Announced)\b/.test(whatItDoes(e))).map((e) => e.slug)).toEqual([]);
+  });
 });
 

@@ -67,5 +67,17 @@ describe("/llms-full.txt", () => {
     expect(collect.mock.calls[0][3]).toHaveProperty("aei");
     expect(d.degraded).toBe(true);
   });
+  test("review I3: a question page built while a source was down marks the whole file degraded", async () => {
+    collect.mockReset();
+    const store = new Map<string, Response>([
+      ["https://builder.registrai.cc/arc/?v=arc", new Response("<main><h1>Arc in numbers</h1><p>A</p></main>")],
+      ["https://builder.registrai.cc/arc/arc-vs-ethereum-vs-solana/?v=arc-q%3Aarc-vs-ethereum-vs-solana", new Response("<main><h1>Compare</h1><p>B</p></main>", { headers: { "x-registrai-degraded": "1" } })],
+    ]);
+    const cache = { match: async (k: Request) => store.get(k.url)?.clone(), put: async () => undefined } as unknown as Cache;
+    const { buildLlmsFullDoc } = await import("../lib/llms-full");
+    const d = await buildLlmsFullDoc({ INVITES: { get: async () => null } } as never, { cache }, Date.parse("2026-10-23T12:00:00Z"));
+    expect(d.text).toContain("# Compare");
+    expect(d.degraded).toBe(true);
+  });
 });
 

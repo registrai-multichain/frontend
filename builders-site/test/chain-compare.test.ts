@@ -32,8 +32,11 @@ describe("Arc vs Ethereum vs Solana collector (spec 2026-10-23-replace-competito
     expect(c.arc.block_time_s).toBeCloseTo(0.51, 3);
     expect(c.ethereum.block_time_s).toBeCloseTo(12, 3);
     expect(c.solana.block_time_s).toBeCloseTo(0.4, 3);
-    expect(c.arc.fee_usd).toBeCloseTo(0.00042, 8);            // 20e9 × 21,000 / 1e18 USDC
-    expect(c.ethereum.fee_usd).toBeCloseTo(0.156, 6);         // 1e9 × 65,000 / 1e18 ETH × $2,400
+    // review I1: like-for-like ERC-20 USDC transfers; Arc's native transfer and Ethereum's new-holder case in the notes
+    expect(c.arc.fee_usd).toBeCloseTo(0.00098, 8);            // 20e9 × 49,000 / 1e18 USDC (ERC-20 transfer)
+    expect(c.arc.fee_native_usd).toBeCloseTo(0.00042, 8);     // 20e9 × 21,000 / 1e18 USDC (native transfer)
+    expect(c.ethereum.fee_usd).toBeCloseTo(0.108, 6);         // 1e9 × 45,000 / 1e18 ETH × $2,400 (to an existing holder)
+    expect(c.ethereum.fee_new_holder_usd).toBeCloseTo(0.156, 6); // 65,000 gas to a new holder
     expect(c.solana.fee_usd).toBeCloseTo(0.0005, 8);          // 5,000 lamports = 5e-6 SOL × $100
     expect([c.arc.usdc_supply, c.ethereum.usdc_supply, c.solana.usdc_supply]).toEqual([8e8, 4e10, 9e9]);
     expect(c.errors).toEqual([]);
@@ -47,7 +50,7 @@ describe("Arc vs Ethereum vs Solana collector (spec 2026-10-23-replace-competito
     const p = await collectCompare(env, fakeFetch({ pricesDown: true }) as never);
     expect(p.ethereum.fee_usd).toBeNull();
     expect(p.solana.fee_usd).toBeNull();
-    expect(p.arc.fee_usd).toBeCloseTo(0.00042, 8);           // USDC needs no price
+    expect(p.arc.fee_usd).toBeCloseTo(0.00098, 8);           // USDC needs no price
     const q = await collectCompare(env, fakeFetch({ stablesDown: true }) as never);
     expect(q.arc.usdc_supply).toBeNull();
   });
@@ -68,8 +71,11 @@ describe("Arc vs Ethereum vs Solana page", () => {
     expect(h).toContain("<title>Arc vs Ethereum vs Solana for stablecoin payments · Registrai</title>");
     expect(h).toContain("<h1>Arc vs Ethereum vs Solana for stablecoin payments</h1>");
     for (const m of ["Fee currency", "Block time", "Finality", "Fee for a USDC transfer (estimate)", "USDC in circulation"]) expect(h, m).toContain(`<th>${m}</th>`);
-    expect(h).toContain("$0.156");
-    expect(h).toMatch(/<details><summary>i<\/summary>[^<]*65,000 gas/);
+    expect(h).toContain("$0.108");
+    expect(h).toMatch(/<details><summary>i<\/summary>[^<]*49,000 gas[^<]*21,000 gas/);
+    expect(h).toMatch(/<details><summary>i<\/summary>[^<]*45,000 gas[^<]*65,000 gas/);
+    expect(h).toContain("token account");
+    expect(h).not.toContain("exclude priority fees and");   // review: the EVM gas price includes the suggested tip
     expect(h).toContain("https://ethereum.org/en/roadmap/single-slot-finality/");
     const s = await collectCompare(env, fakeFetch({ solanaDown: true }) as never);
     expect(renderCompare(s)).toContain("Not available right now");
@@ -98,3 +104,22 @@ describe("route, cache, sitemap, llms", () => {
     vi.doUnmock("../lib/chain-compare");
   });
 });
+
+describe("review fixes", () => {
+  test("I3: a prices answer without coins doesn't throw; errors mark the page degraded (cached 10 min, header set)", async () => {
+    const { collectCompare } = await import("../lib/chain-compare");
+    const f = vi.fn(async (url: string | URL | Request, init?: RequestInit) => String(url).includes("//coins.llama.fi") ? new Response("{}") : fakeFetch()(url, init));
+    const c = await collectCompare(env, f as never);
+    expect(c.ethereum.fee_usd).toBeNull();
+    expect(c.arc.block_time_s).not.toBeNull();
+    const { compareTtl, DEGRADED_HEADER } = await import("../lib/arc-routes");
+    expect(compareTtl(new Response("x", { headers: { [DEGRADED_HEADER]: "1" } }))).toBe(600);
+    expect(compareTtl(new Response("x"))).toBe(3600);
+  });
+  test("Minor 8 (re-graded): the USDC cut-out refuses when chainCirculating belongs to the next asset", async () => {
+    const { usdcByChain } = await import("../lib/chain-compare");
+    const text = '{"peggedAssets":[{"symbol":"USDC","id":"2"},{"symbol":"EURC","chainCirculating":{"Arc":{"current":{"peggedUSD":5}}}}]}';
+    expect(usdcByChain(text)).toEqual({});
+  });
+});
+

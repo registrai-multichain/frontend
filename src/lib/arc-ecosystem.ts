@@ -50,12 +50,21 @@ export type ArcEntity = {
 };
 export const SUMMARY_MAX = 280;
 
+/** What each status means: one wording for /ecosystem/ and /methodology/ (review I2, spec 2026-10-23-replace-competitor-citations §1). */
+export const STATUS_RULES = {
+  live: "Live: running on Arc mainnet, shown by mainnet evidence (contracts on Arc mainnet, an index id, an explorer link, the project's own mainnet support page, or an official Arc or Circle post saying it is live).",
+  deployed: "Deployed: built on Arc but not yet open for use on mainnet, per its own docs or contracts.",
+  announced: "Announced: an announcement only, with no deployment we can show.",
+} as const;
+
 /** The summary's first sentence, at most 140 characters, for "What it does on Arc" (spec 2026-10-23-replace-competitor-citations §2).
  *  A sentence ends at ". " before a capital letter, never after an abbreviation like "e.g." or "i.e.". */
 export function whatItDoes(e: Pick<ArcEntity, "summary">): string {
   const s = e.summary.trim();
-  const m = /^(.+?(?<!\b(?:e\.g|i\.e|etc|vs|approx))\.)\s+(?=[A-Z])/.exec(s);
-  const first = m ? m[1] : s;
+  const split = (t: string) => { const m = /^(.+?(?<!\b(?:e\.g|i\.e|etc|vs|approx))\.)\s+(?=[A-Z])/.exec(t); return m ? [m[1], t.slice(m[0].length)] : [t, ""]; };
+  let [first, rest] = split(s);
+  // a lead like "Named among wallets in Circle's announcement." says where it was announced, not what it does: use the next sentence
+  if (rest && /^(Named|Listed|Announced)\b/.test(first)) first = split(rest)[0];
   return first.length <= 140 ? first : `${first.slice(0, 140).replace(/\s+\S*$/, "")}…`;
 }
 

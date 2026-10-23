@@ -114,3 +114,10 @@ describe("whatItDoes (spec 2026-10-23-replace-competitor-citations §2)", () => 
   });
 });
 
+describe("whatItDoes review I4", () => {
+  test("a leading 'Named/Listed/Announced … announcement' sentence is skipped for the product sentence", () => {
+    expect(whatItDoes({ summary: "Named among digital wallets in Circle's 2026-09-16 Arc mainnet announcement. Self-custody multi-chain wallet app for crypto." })).toBe("Self-custody multi-chain wallet app for crypto.");
+    expect(whatItDoes({ summary: "Named among exchanges in Circle's announcement." })).toBe("Named among exchanges in Circle's announcement.");   // nothing better to show
+  });
+});
+

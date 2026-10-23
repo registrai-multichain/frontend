@@ -1,5 +1,6 @@
 /** /methodology/ (spec docs/superpowers/specs/2026-10-22-methodology-page-design.md): definitions, sources, the attributed
  *  share, limits and changelog. Parameter values come from the AEI file's published params at render time. */
+import { STATUS_RULES } from "../../src/lib/arc-ecosystem";
 import { esc, page } from "./apps-pages";
 import { shareText, type Share7d } from "./arc-share";
 
@@ -34,7 +35,7 @@ const TERMS: Term[] = [
     return `Activity points that decay${hl !== null ? ` with a half-life of ${N.format(hl)} days` : ""}${dh !== null ? ` (about ${N.format(dh)}% an hour)` : ""}. Each payment earns log2(1 + c) + c / ${per !== null ? money(per) : "a fixed USD unit"}, where c is the USD it counts for${cap !== null ? ` (up to ${money(cap)} per wallet, per app, per hour)` : " under the per-wallet hourly cap"}, plus ${np !== null ? N.format(np) : "a bonus"} for a new paying wallet.`; } },
   { id: "data-until", name: "Closed hour, data until", text: () => "Figures cover hours that have ended; \"data until\" is the end of the last closed hour (UTC)." },
   { id: "window", name: "7-day window", text: () => "The 168 closed hours ending at \"data until\"." },
-  { id: "statuses", name: "Directory statuses", text: () => "Live: running on Arc mainnet, shown by mainnet evidence (contracts on Arc mainnet, an index id, an explorer link or the project's own mainnet support page). Deployed: built on Arc but not yet open for use on mainnet, per its own docs or contracts. Announced: an announcement only, with no deployment we can show." },
+  { id: "statuses", name: "Directory statuses", text: () => `${STATUS_RULES.live} ${STATUS_RULES.deployed} ${STATUS_RULES.announced}` },
   { id: "attributed-share-term", name: "Attributed share", text: () => SHARE_DEF },
 ];
 export const GLOSSARY_IDS = TERMS.map((t) => t.id);

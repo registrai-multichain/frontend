@@ -17,14 +17,24 @@ export const arcHtml = (body: string, status = 200, head = false) =>
   new Response(head ? null : body, { status, headers: { "content-type": "text/html; charset=utf-8", "x-content-type-options": "nosniff", "cache-control": status === 200 ? "public, max-age=600" : "no-store" } });
 
 export const ARC_QUESTIONS: Record<string, (env: Env, deps: EdgeCacheDeps) => Promise<string>> = {
+  "arc-vs-ethereum-vs-solana": async (env) => renderCompare(await collectCompare(env).catch(() => null)),
   "most-used-apps": async (env, deps) => renderMostUsed(await loadArcWeek(env, deps)),
   "apps-that-accept-usdc": async (env, deps) => renderAcceptsUsdc(await loadArcWeek(env, deps)),
   "new": async (env, deps) => renderNew(await loadArcWeek(env, deps), new Date().toISOString().slice(0, 10)),
   "get-usdc": async () => renderGetUsdc(),
-  "arc-vs-ethereum-vs-solana": async (env) => renderCompare(await collectCompare(env).catch(() => null)),
 };
+/** A page built while a source was down: cached 10 min, and /llms-full.txt marks its own build degraded (review I3). */
+export const DEGRADED_HEADER = "x-registrai-degraded";
+export const compareTtl = (r: Response) => (r.headers.has(DEGRADED_HEADER) ? 600 : 3600);
+async function comparePage(env: Env): Promise<Response> {
+  const c = await collectCompare(env).catch(() => null);
+  const res = arcHtml(renderCompare(c));
+  if (!c || c.errors.length) res.headers.set(DEGRADED_HEADER, "1");
+  return res;
+}
 /** Edge-cache seconds per question page (default 10 min); the chain comparison reads 3 RPCs and DefiLlama, so an hour. */
 export const ARC_QUESTION_TTL: Record<string, number> = { "arc-vs-ethereum-vs-solana": 3600 };
+const COMPARE = "arc-vs-ethereum-vs-solana";
 
 /** /arc/ (Arc in numbers), edge-cached 10 min. */
 export const arcPage = (env: Env, deps: EdgeCacheDeps, origin: string, opts: CollectOpts = {}, fetcher: typeof fetch = fetch) =>
@@ -35,4 +45,6 @@ export const arcPage = (env: Env, deps: EdgeCacheDeps, origin: string, opts: Col
 
 /** One question page, edge-cached 10 min. */
 export const arcQuestionPage = (env: Env, deps: EdgeCacheDeps, origin: string, q: string) =>
-  edgeCachedGet(new Request(`${origin}/arc/${q}/`), deps, async () => arcHtml(await ARC_QUESTIONS[q](env, deps)), ARC_QUESTION_TTL[q] ?? 600, `arc-q:${q}`);
+  q === COMPARE
+    ? edgeCachedGet(new Request(`${origin}/arc/${q}/`), deps, () => comparePage(env), compareTtl, `arc-q:${q}`)
+    : edgeCachedGet(new Request(`${origin}/arc/${q}/`), deps, async () => arcHtml(await ARC_QUESTIONS[q](env, deps)), ARC_QUESTION_TTL[q] ?? 600, `arc-q:${q}`);
