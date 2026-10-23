@@ -64,7 +64,7 @@ export const PANEL_PROMPTS: PanelPrompt[] = [
   { id: "b04", group: "brand", text: "What does the Registrai Data API offer?" },
 ];
 
-export type Parsed = { text: string; urls: string[]; searched: string[] };
+export type Parsed = { text: string; urls: string[]; searched: string[]; queries: string[] };
 type J = Record<string, unknown>;
 const arr = (v: unknown): J[] => (Array.isArray(v) ? (v.filter((x) => x && typeof x === "object") as J[]) : []);
 const str = (v: unknown) => (typeof v === "string" ? v : "");
@@ -75,27 +75,33 @@ export function parseAnswer(engine: Engine, body: unknown): Parsed {
   const b = (body && typeof body === "object" ? body : {}) as J;
   if (engine === "openai") {
     const parts = arr(b.output).filter((o) => o.type === "message").flatMap((o) => arr(o.content)).filter((c) => c.type === "output_text");
-    return { text: parts.map((c) => str(c.text)).join(""), urls: uniq(parts.flatMap((c) => arr(c.annotations)).filter((a) => a.type === "url_citation").map((a) => str(a.url))), searched: [] };
+    const queries = uniq(arr(b.output).filter((o) => o.type === "web_search_call").flatMap((o) => {
+      const a = (o.action ?? {}) as J;
+      return [str(a.query), ...(Array.isArray(a.queries) ? a.queries.map(str) : [])];
+    }));
+    return { text: parts.map((c) => str(c.text)).join(""), urls: uniq(parts.flatMap((c) => arr(c.annotations)).filter((a) => a.type === "url_citation").map((a) => str(a.url))), searched: [], queries };
   }
   if (engine === "anthropic") {
     const blocks = arr(b.content);
     const text = blocks.filter((c) => c.type === "text");
     return { text: text.map((c) => str(c.text)).join(""), urls: uniq(text.flatMap((c) => arr(c.citations)).map((c) => str(c.url))),
-      searched: uniq(blocks.filter((c) => c.type === "web_search_tool_result").flatMap((c) => arr(c.content)).map((r) => str(r.url))) };
+      searched: uniq(blocks.filter((c) => c.type === "web_search_tool_result").flatMap((c) => arr(c.content)).map((r) => str(r.url))),
+      queries: uniq(blocks.filter((c) => c.type === "server_tool_use").map((c) => str(((c.input ?? {}) as J).query))) };
   }
   if (engine === "perplexity") {
     const msg = (arr(b.choices)[0]?.message ?? {}) as J;
-    return { text: str(msg.content), urls: uniq((Array.isArray(b.citations) ? b.citations : []).map(str)), searched: uniq(arr(b.search_results).map((r) => str(r.url))) };
+    return { text: str(msg.content), urls: uniq((Array.isArray(b.citations) ? b.citations : []).map(str)), searched: uniq(arr(b.search_results).map((r) => str(r.url))), queries: [] };
   }
   // gemini: grounding URIs are Google redirects; the chunk title is the source's domain
   const cand = arr(b.candidates)[0] ?? {};
   const parts = arr((cand.content as J | undefined)?.parts);
-  const chunks = arr((cand.groundingMetadata as J | undefined)?.groundingChunks).map((c) => (c.web ?? {}) as J);
+  const meta = (cand.groundingMetadata ?? {}) as J;
+  const chunks = arr(meta.groundingChunks).map((c) => (c.web ?? {}) as J);
   const urls = chunks.map((w) => {
     const t = str(w.title).trim().toLowerCase();
     return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(t) ? `https://${t}/` : str(w.uri);
   });
-  return { text: parts.map((p) => str(p.text)).join(""), urls: uniq(urls), searched: [] };
+  return { text: parts.map((p) => str(p.text)).join(""), urls: uniq(urls), searched: [], queries: uniq((Array.isArray(meta.webSearchQueries) ? meta.webSearchQueries : []).map(str)) };
 }
 
 export function domainOf(u: string): string | null {
@@ -103,18 +109,29 @@ export function domainOf(u: string): string | null {
 }
 const isRegistrai = (d: string) => d === "registrai.cc" || d.endsWith(".registrai.cc");
 
+// Claude reads "Registrai" as the Lithuanian word for registers: that sentence is not about us
+const NOT_US = /lithuania|registr[uų] centr/i;
+// a sentence that offers Registrai as a source to use, or quotes it as one
+const RECOMMENDS = /\b(see|check|use|visit|try|recommend\w*|refer to|look at|consult|according to|reports?|tracks?|lists?|shows?|publishes)\b/i;
+const sentences = (t: string) => t.split(/(?<=[.!?])\s+|\n+/).filter((x) => /registrai/i.test(x) && !NOT_US.test(x));
+
+/** cited: a Registrai URL among the sources. mentioned: the name in the text (not the Lithuanian word). recommended: a
+ *  sentence that points the reader to Registrai, or quotes it, or gives its domain. */
 export function scoreRecord(p: Parsed) {
   const cited_domains = uniq(p.urls.map(domainOf).filter((d): d is string => d !== null));
-  return { registrai_cited: cited_domains.some(isRegistrai), registrai_mentioned: /registrai/i.test(p.text), cited_domains };
+  const ours = sentences(p.text);
+  return { registrai_cited: cited_domains.some(isRegistrai), registrai_mentioned: ours.length > 0,
+    registrai_recommended: ours.some((x) => /registrai\.cc/i.test(x) || RECOMMENDS.test(x)), cited_domains };
 }
 
 export type PanelRecord = { engine: string; model: string; prompt_id: string; group: PanelGroup; run: number; at: string; answer: string;
-  urls: string[]; searched: string[]; cited_domains: string[]; registrai_cited: boolean; registrai_mentioned: boolean; error?: string };
+  urls: string[]; searched: string[]; cited_domains: string[]; registrai_cited: boolean; registrai_mentioned: boolean;
+  registrai_recommended?: boolean; queries?: string[]; error?: string };
 
 const pct = (n: number, d: number) => (d ? Math.round((1000 * n) / d) / 10 : 0);
 
 export function summarize(records: PanelRecord[]) {
-  const engines: Record<string, { runs: number; errors: number; cited_pct: number; mentioned_pct: number; by_group: Record<string, { runs: number; cited_pct: number }> }> = {};
+  const engines: Record<string, { runs: number; errors: number; cited_pct: number; mentioned_pct: number; recommended_pct: number; by_group: Record<string, { runs: number; cited_pct: number }> }> = {};
   for (const e of uniq(records.map((r) => r.engine))) {
     const all = records.filter((r) => r.engine === e), ok = all.filter((r) => !r.error);
     const by_group: Record<string, { runs: number; cited_pct: number }> = {};
@@ -123,10 +140,84 @@ export function summarize(records: PanelRecord[]) {
       by_group[g] = { runs: gr.length, cited_pct: pct(gr.filter((r) => r.registrai_cited).length, gr.length) };
     }
     engines[e] = { runs: ok.length, errors: all.length - ok.length, cited_pct: pct(ok.filter((r) => r.registrai_cited).length, ok.length),
-      mentioned_pct: pct(ok.filter((r) => r.registrai_mentioned).length, ok.length), by_group };
+      mentioned_pct: pct(ok.filter((r) => r.registrai_mentioned).length, ok.length), recommended_pct: pct(ok.filter((r) => r.registrai_recommended).length, ok.length), by_group };
   }
   const count = new Map<string, number>();
   for (const r of records) if (!r.error) for (const d of r.cited_domains) count.set(d, (count.get(d) ?? 0) + 1);
   const top_domains = [...count].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 25).map(([domain, answers]) => ({ domain, answers }));
   return { engines, top_domains };
+}
+
+const GROUPS: PanelGroup[] = ["chain", "ecosystem", "data", "entity", "developer", "brand"];
+const ok = (records: PanelRecord[]) => records.filter((r) => !r.error);
+const top = <T,>(m: Map<T, number>, n: number) => [...m].sort((a, b) => b[1] - a[1] || (String(a[0]) < String(b[0]) ? -1 : 1)).slice(0, n);
+
+/** Per topic: Registrai's cited/mentioned/recommended share, the domains cited most, and the gap to the leader. */
+export function topicGaps(records: PanelRecord[]) {
+  return GROUPS.map((group) => {
+    const g = ok(records).filter((r) => r.group === group);
+    const count = new Map<string, number>();
+    for (const r of g) for (const d of uniq(r.cited_domains)) if (!isRegistrai(d)) count.set(d, (count.get(d) ?? 0) + 1);
+    const leaders = top(count, 5).map(([domain, n]) => ({ domain, pct: pct(n, g.length) }));
+    const cited_pct = pct(g.filter((r) => r.registrai_cited).length, g.length);
+    return { group, answers: g.length, cited_pct, mentioned_pct: pct(g.filter((r) => r.registrai_mentioned).length, g.length),
+      recommended_pct: pct(g.filter((r) => r.registrai_recommended).length, g.length), leaders, gap: Math.round(10 * ((leaders[0]?.pct ?? 0) - cited_pct)) / 10 };
+  }).filter((x) => x.answers > 0);
+}
+
+export function normalizeUrl(u: string): string | null {
+  try {
+    const x = new URL(u);
+    const path = x.pathname.replace(/\/+$/, "");
+    return `${x.protocol}//${x.hostname.toLowerCase().replace(/^www\./, "")}${path}`;
+  } catch { return null; }
+}
+
+/** Per topic: the pages cited most, each counted once per answer. */
+export function winningPages(records: PanelRecord[], n = 10): Record<string, { url: string; answers: number }[]> {
+  const out: Record<string, { url: string; answers: number }[]> = {};
+  for (const group of GROUPS) {
+    const count = new Map<string, number>();
+    for (const r of ok(records).filter((x) => x.group === group))
+      for (const u of uniq(r.urls.map(normalizeUrl).filter((x): x is string => x !== null))) count.set(u, (count.get(u) ?? 0) + 1);
+    if (count.size) out[group] = top(count, n).map(([url, answers]) => ({ url, answers }));
+  }
+  return out;
+}
+
+/** Per topic: the searches the engines ran underneath the prompts (runs recorded before 2026-10-23 have none). */
+export function topQueries(records: PanelRecord[], n = 10): Record<string, { query: string; answers: number }[]> {
+  const out: Record<string, { query: string; answers: number }[]> = {};
+  for (const group of GROUPS) {
+    const count = new Map<string, number>();
+    for (const r of ok(records).filter((x) => x.group === group)) for (const q of uniq((r.queries ?? []).map((x) => x.trim().toLowerCase()))) count.set(q, (count.get(q) ?? 0) + 1);
+    if (count.size) out[group] = top(count, n).map(([query, answers]) => ({ query, answers }));
+  }
+  return out;
+}
+
+const cell = (s: string) => s.replace(/\|/g, "\\|");
+
+/** The summary Markdown for one run (or for older runs re-scored with --from). */
+export function renderSummary(records: PanelRecord[], day: string, models: Record<string, string>, prompts: PanelPrompt[] = PANEL_PROMPTS): string {
+  const s = summarize(records);
+  const engines = Object.keys(models);
+  const runs = Math.max(1, ...records.map((r) => r.run));
+  const gaps = topicGaps(records), pages = winningPages(records), queries = topQueries(records);
+  return [`# Citation panel ${day}`, "",
+    `${prompts.length} questions × ${runs} run(s). Cited = a registrai.cc URL among the answer's sources. Mentioned = the name in the answer text (not the Lithuanian word). Recommended = a sentence pointing to Registrai or quoting it as a source.`, "",
+    "| Engine | Model | Answers | Errors | Cited | Mentioned | Recommended |", "|---|---|---|---|---|---|---|",
+    ...engines.map((e) => { const x = s.engines[e]; return `| ${e} | ${models[e]} | ${x?.runs ?? 0} | ${x?.errors ?? 0} | ${x?.cited_pct ?? 0}% | ${x?.mentioned_pct ?? 0}% | ${x?.recommended_pct ?? 0}% |`; }),
+    "", "## Cited by question group", "", `| Group | ${engines.join(" | ")} |`, `|---|${engines.map(() => "---").join("|")}|`,
+    ...GROUPS.map((g) => `| ${g} | ${engines.map((e) => { const x = s.engines[e]?.by_group[g]; return x ? `${x.cited_pct}% (${x.runs})` : "–"; }).join(" | ")} |`),
+    "", "## Topic gaps", "", "All engines. Leader = the domain cited in the most answers of the topic; gap = its share minus Registrai's cited share.", "",
+    "| Topic | Answers | Registrai cited | Mentioned | Recommended | Leaders | Gap |", "|---|---|---|---|---|---|---|",
+    ...gaps.map((g) => `| ${g.group} | ${g.answers} | ${g.cited_pct}% | ${g.mentioned_pct}% | ${g.recommended_pct}% | ${g.leaders.map((l) => `${l.domain} ${l.pct}%`).join(", ")} | ${g.gap} pts |`),
+    "", "## Pages that win each topic", "",
+    ...Object.entries(pages).flatMap(([g, l]) => [`### ${g}`, "", ...l.map((p) => `- ${p.url} (${p.answers})`), ""]),
+    "## Searches underneath the prompts", "",
+    ...(Object.keys(queries).length ? Object.entries(queries).flatMap(([g, l]) => [`### ${g}`, "", ...l.map((q) => `- ${cell(q.query)} (${q.answers})`), ""]) : ["Not recorded in these runs.", ""]),
+    "## Most cited sites", "", "| Site | Answers citing it |", "|---|---|", ...s.top_domains.map((d) => `| ${d.domain} | ${d.answers} |`),
+    "", "## Per question: engines that cited Registrai", "",
+    ...prompts.map((p) => { const by = engines.filter((e) => records.some((r) => r.engine === e && r.prompt_id === p.id && r.registrai_cited)); return `- ${p.id} ${p.text} — ${by.length ? by.join(", ") : "none"}`; }), ""].join("\n");
 }

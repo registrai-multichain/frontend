@@ -4,14 +4,16 @@
  * without a key is skipped.
  *
  *   OPENAI_API_KEY=… ANTHROPIC_API_KEY=… PERPLEXITY_API_KEY=… GEMINI_API_KEY=… npx tsx scripts/citation-panel.ts
- *   options: --runs 3 (repeat each question) --engines openai,anthropic --limit 5 (first N questions) --out docs/citation-panel
+ *   options: --runs 3 (repeat each question; default 3) --engines openai,anthropic --limit 5 (first N questions) --out docs/citation-panel
+ *   re-score saved runs without any API call: npx tsx scripts/citation-panel.ts --from docs/citation-panel/2026-10-19-runs.jsonl
  *   models: OPENAI_MODEL, ANTHROPIC_MODEL, PERPLEXITY_MODEL, GEMINI_MODEL override the defaults below.
  *
- * Writes <out>/<date>-runs.jsonl (one line per answer) and <out>/<date>-summary.md.
+ * Writes <out>/<date>-runs.jsonl (one line per answer, with the searches each engine ran) and <out>/<date>-summary.md
+ * (per engine; topic gaps; the pages that win each topic; the searches underneath the prompts).
  */
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { PANEL_PROMPTS, parseAnswer, scoreRecord, summarize, type Engine, type PanelRecord } from "../src/lib/citation-panel";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, resolve } from "node:path";
+import { PANEL_PROMPTS, parseAnswer, renderSummary, scoreRecord, summarize, type Engine, type PanelRecord } from "../src/lib/citation-panel";
 
 const arg = (name: string, fallback?: string) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -56,8 +58,21 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/** Re-score saved runs with the current scoring (mentioned/recommended) and write <name>-rescored-summary.md beside them. */
+function rescore(file: string) {
+  const records = readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as PanelRecord)
+    .map((r) => (r.error ? r : { ...r, ...scoreRecord({ text: r.answer, urls: r.urls, searched: r.searched, queries: r.queries ?? [] }) }));
+  const models = Object.fromEntries(records.map((r) => [r.engine, r.model]));
+  const day = basename(file).slice(0, 10);
+  const out = resolve(file, "..", `${basename(file, ".jsonl")}-rescored-summary.md`);
+  writeFileSync(out, renderSummary(records, day, models));
+  console.log(`re-scored ${records.length} answers → ${out}`);
+}
+
 async function main() {
-  const runs = Number(arg("runs", "1")), limit = Number(arg("limit", String(PANEL_PROMPTS.length)));
+  const from = arg("from");
+  if (from) return rescore(resolve(from));
+  const runs = Number(arg("runs", "3")), limit = Number(arg("limit", String(PANEL_PROMPTS.length)));
   const wanted = (arg("engines", "openai,anthropic,perplexity,gemini") ?? "").split(",") as Engine[];
   const out = resolve(arg("out", "docs/citation-panel")!);
   mkdirSync(out, { recursive: true });
@@ -79,9 +94,9 @@ async function main() {
       let rec: PanelRecord;
       try {
         const parsed = parseAnswer(engine, await withRetry(() => call.request(p.text)));
-        rec = { ...base, answer: parsed.text.slice(0, 4000), urls: parsed.urls, searched: parsed.searched, ...scoreRecord(parsed) };
+          rec = { ...base, answer: parsed.text.slice(0, 4000), urls: parsed.urls, searched: parsed.searched, queries: parsed.queries, ...scoreRecord(parsed) };
       } catch (err) {
-        rec = { ...base, answer: "", urls: [], searched: [], cited_domains: [], registrai_cited: false, registrai_mentioned: false, error: String(err instanceof Error ? err.message : err).slice(0, 300) };
+        rec = { ...base, answer: "", urls: [], searched: [], cited_domains: [], registrai_cited: false, registrai_mentioned: false, registrai_recommended: false, queries: [], error: String(err instanceof Error ? err.message : err).slice(0, 300) };
       }
       records.push(rec);
       appendFileSync(jsonl, `${JSON.stringify(rec)}\n`);
@@ -90,15 +105,7 @@ async function main() {
   }));
 
   const s = summarize(records);
-  const lines = [`# Citation panel ${day}`, "", `${prompts.length} questions × ${runs} run(s). Cited = a registrai.cc URL among the answer's sources. Mentioned = the name in the answer text.`, "",
-    "| Engine | Model | Answers | Errors | Cited | Mentioned |", "|---|---|---|---|---|---|",
-    ...active.map(([e, c]) => { const x = s.engines[e]; return `| ${e} | ${c.model} | ${x?.runs ?? 0} | ${x?.errors ?? 0} | ${x?.cited_pct ?? 0}% | ${x?.mentioned_pct ?? 0}% |`; }),
-    "", "## Cited by question group", "", `| Group | ${active.map(([e]) => e).join(" | ")} |`, `|---|${active.map(() => "---").join("|")}|`,
-    ...["chain", "ecosystem", "data", "entity", "developer", "brand"].map((g) => `| ${g} | ${active.map(([e]) => { const x = s.engines[e]?.by_group[g]; return x ? `${x.cited_pct}% (${x.runs})` : "–"; }).join(" | ")} |`),
-    "", "## Most cited sites", "", "| Site | Answers citing it |", "|---|---|", ...s.top_domains.map((d) => `| ${d.domain} | ${d.answers} |`),
-    "", "## Per question: engines that cited Registrai", "",
-    ...prompts.map((p) => { const by = active.map(([e]) => e).filter((e) => records.some((r) => r.engine === e && r.prompt_id === p.id && r.registrai_cited)); return `- ${p.id} ${p.text} — ${by.length ? by.join(", ") : "none"}`; }), ""];
-  writeFileSync(resolve(out, `${day}-summary.md`), lines.join("\n"));
+  writeFileSync(resolve(out, `${day}-summary.md`), renderSummary(records, day, Object.fromEntries(active.map(([e, c]) => [e, c.model])), prompts));
   console.log(`\nsummary: ${resolve(out, `${day}-summary.md`)}`);
   for (const [e] of active) console.log(`${e}: cited in ${s.engines[e]?.cited_pct ?? 0}% of ${s.engines[e]?.runs ?? 0} answers`);
 }

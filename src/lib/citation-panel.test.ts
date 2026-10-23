@@ -37,7 +37,7 @@ describe("citation panel: parsing each engine's answer", () => {
     expect(r.urls).toEqual(["https://builder.registrai.cc/"]);
   });
   test("an unexpected shape gives empty results, not a throw", () => {
-    expect(parseAnswer("openai", { nope: 1 })).toEqual({ text: "", urls: [], searched: [] });
+    expect(parseAnswer("openai", { nope: 1 })).toEqual({ text: "", urls: [], searched: [], queries: [] });
   });
 });
 
@@ -47,8 +47,8 @@ describe("citation panel: scoring", () => {
     expect(domainOf("not a url")).toBeNull();
   });
   test("cited = a Registrai URL among the answer's citations; mentioned = the name in the text", () => {
-    expect(scoreRecord({ text: "See Registrai's index.", urls: ["https://builder.registrai.cc/apps/"], searched: [] })).toEqual({ registrai_cited: true, registrai_mentioned: true, cited_domains: ["builder.registrai.cc"] });
-    expect(scoreRecord({ text: "Arc is a chain.", urls: ["https://notregistrai.cc.evil.com/"], searched: ["https://registrai.cc/"] }).registrai_cited).toBe(false);
+    expect(scoreRecord({ text: "See Registrai's index.", urls: ["https://builder.registrai.cc/apps/"], searched: [], queries: [] })).toEqual({ registrai_cited: true, registrai_mentioned: true, registrai_recommended: true, cited_domains: ["builder.registrai.cc"] });
+    expect(scoreRecord({ text: "Arc is a chain.", urls: ["https://notregistrai.cc.evil.com/"], searched: ["https://registrai.cc/"], queries: [] }).registrai_cited).toBe(false);
   });
   test("summary: per-engine rates over successful runs, by group, and the most cited domains", () => {
     const rec = (engine: string, id: string, cited: boolean, domains: string[], error?: string): PanelRecord =>
@@ -57,5 +57,53 @@ describe("citation panel: scoring", () => {
     expect(s.engines.openai).toMatchObject({ runs: 2, errors: 1, cited_pct: 50, mentioned_pct: 50 });
     expect(s.engines.openai.by_group.chain).toEqual({ runs: 2, cited_pct: 50 });
     expect(s.top_domains[0]).toEqual({ domain: "arc.io", answers: 3 });
+  });
+});
+
+describe("citation panel: audit gaps (2026-10-23)", () => {
+  test("parseAnswer records the search queries each engine ran underneath the prompt", async () => {
+    const { parseAnswer } = await import("./citation-panel");
+    expect(parseAnswer("openai", { output: [{ type: "web_search_call", action: { type: "search", query: "arc blockchain apps" } }, { type: "web_search_call", action: { type: "search", queries: ["arc dapps list", "arc blockchain apps"] } }] }).queries)
+      .toEqual(["arc blockchain apps", "arc dapps list"]);
+    expect(parseAnswer("anthropic", { content: [{ type: "server_tool_use", name: "web_search", input: { query: "Arc ecosystem directory" } }, { type: "text", text: "x" }] }).queries).toEqual(["Arc ecosystem directory"]);
+    expect(parseAnswer("gemini", { candidates: [{ groundingMetadata: { webSearchQueries: ["usdc on arc"] } }] }).queries).toEqual(["usdc on arc"]);
+    expect(parseAnswer("perplexity", {}).queries).toEqual([]);
+  });
+  test("mentioned excludes the Lithuanian word; recommended = Registrai or its domain offered as a source to use", async () => {
+    const { scoreRecord } = await import("./citation-panel");
+    const s = (text: string) => scoreRecord({ text, urls: [], searched: [], queries: [] });
+    expect(s("\"Registrai\" is the Lithuanian word for registers.")).toMatchObject({ registrai_mentioned: false, registrai_recommended: false });
+    expect(s("Registrai is a company. Arc has apps.")).toMatchObject({ registrai_mentioned: true, registrai_recommended: false });
+    expect(s("For a full list, see Registrai's Arc ecosystem directory.")).toMatchObject({ registrai_mentioned: true, registrai_recommended: true });
+    expect(s("According to Registrai, Arc has 258 projects.")).toMatchObject({ registrai_recommended: true });
+    expect(s("Data: builder.registrai.cc/arc/")).toMatchObject({ registrai_mentioned: true, registrai_recommended: true });
+  });
+  test("topic gaps: per group, Registrai's cited/mentioned/recommended share against the domains that win the topic", async () => {
+    const { topicGaps } = await import("./citation-panel");
+    const r = (group: "chain" | "ecosystem", domains: string[], cited = false, mentioned = false, recommended = false, error?: string): PanelRecord =>
+      ({ engine: "openai", model: "m", prompt_id: "x", group, run: 1, at: "t", answer: "", urls: [], searched: [], cited_domains: domains, registrai_cited: cited, registrai_mentioned: mentioned, registrai_recommended: recommended, ...(error ? { error } : {}) });
+    const g = topicGaps([r("ecosystem", ["arc.io", "kucoin.com"]), r("ecosystem", ["arc.io", "builder.registrai.cc"], true, true, true), r("ecosystem", ["arc.io"]), r("ecosystem", [], false, false, false, "429"), r("chain", ["circle.com"])]);
+    const eco = g.find((x) => x.group === "ecosystem")!;
+    expect(eco).toMatchObject({ answers: 3, cited_pct: 33.3, mentioned_pct: 33.3, recommended_pct: 33.3 });
+    expect(eco.leaders[0]).toEqual({ domain: "arc.io", pct: 100 });
+    expect(eco.leaders.map((l) => l.domain)).not.toContain("builder.registrai.cc");
+    expect(eco.gap).toBe(66.7);   // the leader's share minus Registrai's cited share
+  });
+  test("winning pages: per group, the cited URLs normalized (no query, hash, www or trailing slash) and counted once per answer", async () => {
+    const { winningPages } = await import("./citation-panel");
+    const r = (urls: string[]): PanelRecord => ({ engine: "openai", model: "m", prompt_id: "x", group: "ecosystem", run: 1, at: "t", answer: "", urls, searched: [], cited_domains: [], registrai_cited: false, registrai_mentioned: false });
+    const w = winningPages([r(["https://www.arc.io/ecosystem?utm_source=openai", "https://arc.io/ecosystem/#apps"]), r(["https://arc.io/ecosystem/"]), r(["https://kucoin.com/a"])]);
+    expect(w.ecosystem[0]).toEqual({ url: "https://arc.io/ecosystem", answers: 2 });
+    expect(w.ecosystem).toHaveLength(2);
+  });
+  test("renderSummary has the topic gap, winning pages and search query sections, and old runs without queries still render", async () => {
+    const { renderSummary } = await import("./citation-panel");
+    const rec: PanelRecord = { engine: "anthropic", model: "m", prompt_id: "e01", group: "ecosystem", run: 1, at: "t", answer: "See Registrai.", urls: ["https://arc.io/ecosystem"], searched: [], cited_domains: ["arc.io"], registrai_cited: false, registrai_mentioned: true, registrai_recommended: true, queries: ["arc apps"] };
+    const old = { ...rec, queries: undefined, registrai_recommended: undefined } as unknown as PanelRecord;
+    const md = renderSummary([rec, old], "2026-10-24", { anthropic: "claude" });
+    for (const h of ["## Topic gaps", "## Pages that win each topic", "## Searches underneath the prompts", "| anthropic | claude |"]) expect(md).toContain(h);
+    expect(md).toContain("https://arc.io/ecosystem");
+    expect(md).toContain("arc apps");
+    expect(md).not.toContain("undefined");
   });
 });
