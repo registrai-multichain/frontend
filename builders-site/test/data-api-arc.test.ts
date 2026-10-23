@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { DATA_MIGRATIONS } from "../lib/data-api-ingest";
 import { MemoryD1 } from "./memory-d1";
-import arcFixture from "../../docs/superpowers/specs/data-api-v1-fixtures/arc.json";
+import arcFixture from "../../docs/superpowers/specs/data-api-v1-fixtures/arc-now.json";
 import dailyFixture from "../../docs/superpowers/specs/data-api-v1-fixtures/arc-daily.json";
 
 const get = async (path: string, env: Record<string, unknown>) => {
