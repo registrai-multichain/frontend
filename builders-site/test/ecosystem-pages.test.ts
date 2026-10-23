@@ -60,12 +60,12 @@ describe("directory and category pages", () => {
     ent({ slug: "uniswap", name: "Uniswap", category: "dexs", index_ids: ["integration:uniswap"] })];
   test("directory: counts by status, every category with a count, a table sorted by name, status filter links", () => {
     const h = renderDirectory(all, null);
-    expect(h).toContain("<title>Arc ecosystem: projects on Circle&#39;s blockchain · Registrai</title>");
-    expect(h).toContain("3 projects · 2 live on mainnet · 0 deployed · 1 announced");
+    expect(h).toContain("<title>Every project building on Arc, Circle&#39;s blockchain · Registrai</title>");
+    expect(h).toContain("3 projects on Circle's Arc blockchain with their status and evidence: 2 live on mainnet, 0 deployed, 1 announced");
     expect(h).toContain('<a href="/ecosystem/dexs/">DEXs on Arc</a> (1)');
     expect(h.indexOf(">Aave<")).toBeLessThan(h.indexOf(">Archery<"));
     expect(h).toContain('href="/ecosystem/?status=announced"');
-    expect(ld(h)["@type"]).toBe("DataCatalog");
+    expect(ld(h)["@graph"].map((x: { "@type": string }) => x["@type"])).toEqual(["DataCatalog", "FAQPage"]);
   });
   test("directory filtered by status lists only that status", () => {
     const h = renderDirectory(all, "announced");

@@ -29,7 +29,11 @@ const htmlPages: PagesFunction = async (ctx) => {
   const all = ECOSYSTEM.entities;
   if (parts.length === 0) {
     const status = parseStatus(url.searchParams.get("status"));
-    return html(once(`dir:${status ?? ""}`, () => renderDirectory(all, status)), 200, head);
+    // like category pages: the 7-day data names the most used apps; one copy per status filter, replaced when its hour changes
+    const week = await loadArcWeek(ctx.env, deps).catch(() => null);
+    const hour = week?.until_hour ?? -1, key = `dir:${status ?? ""}`, hit = catMemo.get(key);
+    if (hit?.hour !== hour) catMemo.set(key, { hour, html: renderDirectory(all, status, week) });
+    return html(catMemo.get(key)!.html, 200, head);
   }
   if (parts.length === 2 && parts[1] === "correct") {
     const target = ECOSYSTEM.bySlug.get(parts[0]);

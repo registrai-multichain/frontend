@@ -20,7 +20,7 @@ const call = async (path: string, method = "GET", env: Record<string, unknown> =
 describe("/ecosystem route", () => {
   test("directory, filtered directory, category, entity, 404s", async () => {
     loadApp.mockResolvedValue("unknown");
-    expect(await (await call("/ecosystem/")).text()).toContain("<h1>Arc ecosystem</h1>");
+    expect(await (await call("/ecosystem/")).text()).toContain("<h1>Every project building on Arc</h1>");
     const evil = await (await call("/ecosystem/?status=evil")).text();
     expect(evil).toContain(">Aave<"); expect(evil).toContain(">Archery<");
     expect(await (await call("/ecosystem/lending/")).text()).toContain("<h1>Lending on Arc</h1>");

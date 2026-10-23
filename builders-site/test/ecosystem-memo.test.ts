@@ -43,3 +43,22 @@ describe("review I4: category pages keep one rendered copy per category, replace
     vi.doUnmock("../lib/arc-week");
   });
 });
+
+describe("the directory gets the 7-day data and keeps one copy per status filter, replaced when the hour changes", () => {
+  test("same hour → reused; new hour → re-rendered with the week passed in", async () => {
+    const hour = { v: 1 };
+    vi.doMock("../lib/arc-week", async (orig) => ({ ...(await orig<typeof import("../lib/arc-week")>()), loadArcWeek: async () => ({ until_hour: hour.v, until: "x", apps: [] }) }));
+    vi.resetModules();
+    const { onRequest } = await import("../functions/ecosystem/[[path]]");
+    const pages = await import("../lib/ecosystem-pages");
+    const spy = vi.spyOn(pages, "renderDirectory");
+    const get = () => onRequest({ request: new Request("https://builder.registrai.cc/ecosystem/"), env: {}, params: { path: [] }, waitUntil: () => undefined } as never);
+    const n0 = spy.mock.calls.length;
+    await get(); await get();
+    expect(spy.mock.calls.length - n0).toBe(1);
+    expect(spy.mock.calls.at(-1)![2]).toMatchObject({ until_hour: 1 });
+    hour.v = 2; await get();
+    expect(spy.mock.calls.length - n0).toBe(2);
+    vi.doUnmock("../lib/arc-week");
+  });
+});

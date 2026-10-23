@@ -29,7 +29,7 @@ describe("category answers", () => {
     expect(c).toMatch(/<meta name="description" content="DEXs on Arc, the blockchain by Circle: 3 listed, 2 live on mainnet/);
     const d = renderDirectory(ALL, null);
     expect(d).toContain("Registrai's Arc ecosystem directory lists 4 projects on Circle's Arc blockchain with their status and evidence: 3 live on mainnet, 0 deployed, 1 announced.");
-    expect(d).toContain("<title>Arc ecosystem: projects on Circle&#39;s blockchain · Registrai</title>");
+    expect(d).toContain("<title>Every project building on Arc, Circle&#39;s blockchain · Registrai</title>");
     expect(renderEntity({ entity: ALL[0], app: null, facts: null })).toContain("<title>A on Arc, Circle&#39;s blockchain · Registrai</title>");
   });
 });
@@ -42,6 +42,26 @@ describe("what each project does on Arc", () => {
     expect(c).not.toContain("<th>Category</th>");
     expect(c).toContain("a summary.");
     expect(renderDirectory(ALL, null)).toContain("<th>What it does on Arc</th>");
+  });
+});
+
+describe("/ecosystem/ answers 'is there an Arc directory' (spec 2026-10-23-replace-competitor-citations §1)", () => {
+  test("question title, three sections, four FAQs mirrored in FAQPage JSON-LD; no week → three, no activity section", async () => {
+    const { renderDirectory, directoryFaq } = await import("../lib/ecosystem-pages");
+    const wk = week([{ id: "domain:b.io", usd: 9 }]);
+    const h = renderDirectory(ALL, null, wk);
+    expect(h).toContain("<title>Every project building on Arc, Circle&#39;s blockchain · Registrai</title>");
+    expect(h).toContain("<h1>Every project building on Arc</h1>");
+    for (const s of ["What counts as on Arc", "How a status is decided", "Measured activity", "Questions"]) expect(h, s).toContain(`<h2>${s}</h2>`);
+    const faq = directoryFaq(ALL, wk);
+    expect(faq.map((f) => f.q)).toEqual(["How many projects are building on Arc?", "Which apps on Arc are used the most?", "Is the data free to use?", "How do I add or correct a project?"]);
+    expect(faq[1].a).toContain("B");
+    const ld = JSON.parse(h.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)![1]);
+    const faqLd = (ld["@graph"] ?? [ld]).find((x: { "@type": string }) => x["@type"] === "FAQPage");
+    expect(faqLd.mainEntity.map((m: { acceptedAnswer: { text: string } }) => m.acceptedAnswer.text)).toEqual(faq.map((f) => f.a));
+    expect(directoryFaq(ALL, null)).toHaveLength(3);
+    expect(renderDirectory(ALL, null, null)).not.toContain("<h2>Measured activity</h2>");
+    expect(h).not.toContain('<p class="muted">4 projects ·');   // the repeated muted count line is gone
   });
 });
 
