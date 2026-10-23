@@ -23,7 +23,7 @@ describe("transaction sample", () => {
     expect((await sampleTransactions(batchFetch(() => (n++ % 10 === 0 ? new Error("rate limit exceeded") : "0x1")) as never, 1_000_000, 0.5))?.blocks).toBe(216);
     n = 0;
     expect(await sampleTransactions(batchFetch(() => (n++ % 4 === 0 ? new Error("rate limit exceeded") : "0x1")) as never, 1_000_000, 0.5)).toBeNull();
-    const down = vi.fn(async (_url: string) => { throw new Error("down"); });
+    const down = vi.fn<(url: string) => Promise<Response>>(async () => { throw new Error("down"); });
     expect(await sampleTransactions(down as never, 1_000_000, 0.5)).toBeNull();
     expect(down.mock.calls.every((c) => String(c[0]).includes("blockdaemon"))).toBe(true);
   });
