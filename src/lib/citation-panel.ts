@@ -120,18 +120,20 @@ const sentences = (t: string) => t.split(/(?<=[.!?])\s+|\n+/).filter((x) => /reg
 export function scoreRecord(p: Parsed) {
   const cited_domains = uniq(p.urls.map(domainOf).filter((d): d is string => d !== null));
   const ours = sentences(p.text);
-  return { registrai_cited: cited_domains.some(isRegistrai), registrai_mentioned: ours.length > 0,
+  const retrieved = p.searched.map(domainOf).some((d) => d !== null && isRegistrai(d));
+  return { registrai_cited: cited_domains.some(isRegistrai), registrai_retrieved: retrieved, registrai_mentioned: ours.length > 0,
     registrai_recommended: ours.some((x) => /registrai\.cc/i.test(x) || RECOMMENDS.test(x)), cited_domains };
 }
 
 export type PanelRecord = { engine: string; model: string; prompt_id: string; group: PanelGroup; run: number; at: string; answer: string;
   urls: string[]; searched: string[]; cited_domains: string[]; registrai_cited: boolean; registrai_mentioned: boolean;
-  registrai_recommended?: boolean; queries?: string[]; error?: string };
+  registrai_recommended?: boolean; registrai_retrieved?: boolean; queries?: string[]; error?: string };
 
 const pct = (n: number, d: number) => (d ? Math.round((1000 * n) / d) / 10 : 0);
 
 export function summarize(records: PanelRecord[]) {
-  const engines: Record<string, { runs: number; errors: number; cited_pct: number; mentioned_pct: number; recommended_pct: number; by_group: Record<string, { runs: number; cited_pct: number }> }> = {};
+  const engines: Record<string, { runs: number; errors: number; cited_pct: number; mentioned_pct: number; recommended_pct: number;
+    retrieved_pct: number | null; retrieved_not_cited: number; by_group: Record<string, { runs: number; cited_pct: number }> }> = {};
   for (const e of uniq(records.map((r) => r.engine))) {
     const all = records.filter((r) => r.engine === e), ok = all.filter((r) => !r.error);
     const by_group: Record<string, { runs: number; cited_pct: number }> = {};
@@ -140,7 +142,10 @@ export function summarize(records: PanelRecord[]) {
       by_group[g] = { runs: gr.length, cited_pct: pct(gr.filter((r) => r.registrai_cited).length, gr.length) };
     }
     engines[e] = { runs: ok.length, errors: all.length - ok.length, cited_pct: pct(ok.filter((r) => r.registrai_cited).length, ok.length),
-      mentioned_pct: pct(ok.filter((r) => r.registrai_mentioned).length, ok.length), recommended_pct: pct(ok.filter((r) => r.registrai_recommended).length, ok.length), by_group };
+      mentioned_pct: pct(ok.filter((r) => r.registrai_mentioned).length, ok.length), recommended_pct: pct(ok.filter((r) => r.registrai_recommended).length, ok.length),
+      // only engines whose API returns the search results (Claude, Perplexity) can show what was found but not cited
+      retrieved_pct: ok.some((r) => r.searched.length) ? pct(ok.filter((r) => r.registrai_retrieved).length, ok.length) : null,
+      retrieved_not_cited: ok.filter((r) => r.registrai_retrieved && !r.registrai_cited).length, by_group };
   }
   const count = new Map<string, number>();
   for (const r of records) if (!r.error) for (const d of r.cited_domains) count.set(d, (count.get(d) ?? 0) + 1);
@@ -206,8 +211,10 @@ export function renderSummary(records: PanelRecord[], day: string, models: Recor
   const gaps = topicGaps(records), pages = winningPages(records), queries = topQueries(records);
   return [`# Citation panel ${day}`, "",
     `${prompts.length} questions × ${runs} run(s). Cited = a registrai.cc URL among the answer's sources. Mentioned = the name in the answer text (not the Lithuanian word). Recommended = a sentence pointing to Registrai or quoting it as a source.`, "",
-    "| Engine | Model | Answers | Errors | Cited | Mentioned | Recommended |", "|---|---|---|---|---|---|---|",
-    ...engines.map((e) => { const x = s.engines[e]; return `| ${e} | ${models[e]} | ${x?.runs ?? 0} | ${x?.errors ?? 0} | ${x?.cited_pct ?? 0}% | ${x?.mentioned_pct ?? 0}% | ${x?.recommended_pct ?? 0}% |`; }),
+    "In search results = a registrai.cc URL among the pages the engine's search returned (only engines whose API reports them).", "",
+    "| Engine | Model | Answers | Errors | In search results | Cited | Mentioned | Recommended |", "|---|---|---|---|---|---|---|---|",
+    ...engines.map((e) => { const x = s.engines[e]; return `| ${e} | ${models[e]} | ${x?.runs ?? 0} | ${x?.errors ?? 0} | ${x?.retrieved_pct == null ? "–" : `${x.retrieved_pct}%`} | ${x?.cited_pct ?? 0}% | ${x?.mentioned_pct ?? 0}% | ${x?.recommended_pct ?? 0}% |`; }),
+    "", `Retrieved but not cited: ${engines.filter((e) => s.engines[e]?.retrieved_pct != null).map((e) => `${e} ${s.engines[e]!.retrieved_not_cited}`).join(", ") || "–"}`,
     "", "## Cited by question group", "", `| Group | ${engines.join(" | ")} |`, `|---|${engines.map(() => "---").join("|")}|`,
     ...GROUPS.map((g) => `| ${g} | ${engines.map((e) => { const x = s.engines[e]?.by_group[g]; return x ? `${x.cited_pct}% (${x.runs})` : "–"; }).join(" | ")} |`),
     "", "## Topic gaps", "", "All engines. Leader = the domain cited in the most answers of the topic; gap = its share minus Registrai's cited share.", "",

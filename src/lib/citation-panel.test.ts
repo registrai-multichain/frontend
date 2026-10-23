@@ -47,7 +47,7 @@ describe("citation panel: scoring", () => {
     expect(domainOf("not a url")).toBeNull();
   });
   test("cited = a Registrai URL among the answer's citations; mentioned = the name in the text", () => {
-    expect(scoreRecord({ text: "See Registrai's index.", urls: ["https://builder.registrai.cc/apps/"], searched: [], queries: [] })).toEqual({ registrai_cited: true, registrai_mentioned: true, registrai_recommended: true, cited_domains: ["builder.registrai.cc"] });
+    expect(scoreRecord({ text: "See Registrai's index.", urls: ["https://builder.registrai.cc/apps/"], searched: [], queries: [] })).toEqual({ registrai_cited: true, registrai_retrieved: false, registrai_mentioned: true, registrai_recommended: true, cited_domains: ["builder.registrai.cc"] });
     expect(scoreRecord({ text: "Arc is a chain.", urls: ["https://notregistrai.cc.evil.com/"], searched: ["https://registrai.cc/"], queries: [] }).registrai_cited).toBe(false);
   });
   test("summary: per-engine rates over successful runs, by group, and the most cited domains", () => {
@@ -105,5 +105,27 @@ describe("citation panel: audit gaps (2026-10-23)", () => {
     expect(md).toContain("https://arc.io/ecosystem");
     expect(md).toContain("arc apps");
     expect(md).not.toContain("undefined");
+  });
+});
+
+describe("citation panel: retrieval (Claude focus, 2026-10-23)", () => {
+  test("scoreRecord: retrieved = a Registrai URL among the search results, cited or not", async () => {
+    const { scoreRecord } = await import("./citation-panel");
+    expect(scoreRecord({ text: "x", urls: [], searched: ["https://builder.registrai.cc/arc/"], queries: [] }).registrai_retrieved).toBe(true);
+    expect(scoreRecord({ text: "x", urls: [], searched: ["https://x.io/"], queries: [] }).registrai_retrieved).toBe(false);
+  });
+  test("summary: per engine, retrieved share and 'retrieved but not cited'; engines that don't report search results show –", async () => {
+    const { renderSummary } = await import("./citation-panel");
+    const r = (engine: string, retrieved: boolean, cited: boolean, searched: string[]): PanelRecord => ({ engine, model: "m", prompt_id: "e01", group: "ecosystem", run: 1, at: "t", answer: "",
+      urls: [], searched, cited_domains: [], registrai_cited: cited, registrai_mentioned: false, registrai_recommended: false, registrai_retrieved: retrieved, queries: [] });
+    const md = renderSummary([r("anthropic", true, false, ["https://builder.registrai.cc/"]), r("anthropic", false, false, ["https://x.io/"]), r("openai", false, false, [])], "2026-10-24", { anthropic: "claude", openai: "gpt" });
+    expect(md).toContain("| Engine | Model | Answers | Errors | In search results | Cited | Mentioned | Recommended |");
+    expect(md).toMatch(/\| anthropic \| claude \| 2 \| 0 \| 50% \|/);
+    expect(md).toMatch(/\| openai \| gpt \| 1 \| 0 \| – \|/);
+    expect(md).toContain("Retrieved but not cited: anthropic 1");
+  });
+  test("re-scoring old runs recomputes retrieval from their saved search results", async () => {
+    const { scoreRecord } = await import("./citation-panel");
+    expect(scoreRecord({ text: "", urls: [], searched: ["https://www.registrai.cc/"], queries: [] }).registrai_retrieved).toBe(true);
   });
 });

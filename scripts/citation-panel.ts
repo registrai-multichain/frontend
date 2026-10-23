@@ -96,7 +96,7 @@ async function main() {
         const parsed = parseAnswer(engine, await withRetry(() => call.request(p.text)));
           rec = { ...base, answer: parsed.text.slice(0, 4000), urls: parsed.urls, searched: parsed.searched, queries: parsed.queries, ...scoreRecord(parsed) };
       } catch (err) {
-        rec = { ...base, answer: "", urls: [], searched: [], cited_domains: [], registrai_cited: false, registrai_mentioned: false, registrai_recommended: false, queries: [], error: String(err instanceof Error ? err.message : err).slice(0, 300) };
+        rec = { ...base, answer: "", urls: [], searched: [], cited_domains: [], registrai_cited: false, registrai_retrieved: false, registrai_mentioned: false, registrai_recommended: false, queries: [], error: String(err instanceof Error ? err.message : err).slice(0, 300) };
       }
       records.push(rec);
       appendFileSync(jsonl, `${JSON.stringify(rec)}\n`);

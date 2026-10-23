@@ -2,11 +2,15 @@
 
 45 questions × 3 run(s). Cited = a registrai.cc URL among the answer's sources. Mentioned = the name in the answer text (not the Lithuanian word). Recommended = a sentence pointing to Registrai or quoting it as a source.
 
-| Engine | Model | Answers | Errors | Cited | Mentioned | Recommended |
-|---|---|---|---|---|---|---|
-| gemini | gemini-2.5-flash | 135 | 0 | 0.7% | 6.7% | 3.7% |
-| anthropic | claude-sonnet-5-5 | 135 | 0 | 0% | 9.6% | 3.7% |
-| openai | gpt-5 | 135 | 0 | 8.1% | 9.6% | 8.1% |
+In search results = a registrai.cc URL among the pages the engine's search returned (only engines whose API reports them).
+
+| Engine | Model | Answers | Errors | In search results | Cited | Mentioned | Recommended |
+|---|---|---|---|---|---|---|---|
+| gemini | gemini-2.5-flash | 135 | 0 | – | 0.7% | 6.7% | 3.7% |
+| anthropic | claude-sonnet-5-5 | 135 | 0 | 0% | 0% | 9.6% | 3.7% |
+| openai | gpt-5 | 135 | 0 | – | 8.1% | 9.6% | 8.1% |
+
+Retrieved but not cited: anthropic 0
 
 ## Cited by question group
 
