@@ -34,7 +34,7 @@ function factsHtml(n: ArcNumbers): string {
     s.usdc_supply !== null && s.as_of ? `Arc held ${esc(N0.format(s.usdc_supply))} USDC on ${esc(at(s.as_of))}. (Arc RPC)` : "",
     s.tvl_usd !== null && s.defillama_date ? `TVL on Arc was ${esc(usd(s.tvl_usd))} on ${esc(dayOf(s.defillama_date))}. (DefiLlama)` : "",
     a.transactions_est != null && a.tx_sample ? `About ${esc(N0.format(a.transactions_est))} transactions in the last 24 h, estimated from ${a.tx_sample.blocks} sampled blocks. (Arc RPC) <details><summary>i</summary> Blocks ${N0.format(a.tx_sample.from_block)} to ${N0.format(a.tx_sample.to_block)}, evenly spaced; the mean count per sampled block times the blocks in 24 h, rounded to the nearest 1,000.</details>` : "",
-    a.app_usd !== null ? `Apps tracked by Registrai received ${esc(usd(a.app_usd))} in stablecoin payments in the last 24 h. (Arc Ecosystem Index)` : "",
+    a.app_usd !== null ? `Apps tracked by Registrai received ${esc(usd(a.app_usd))} in USDC payments in the last 24 h. (Arc Ecosystem Index)` : "",
   ].filter(Boolean);
   return `<h2>Facts</h2>
 <ul>${CHAIN_FACTS.facts.map((f) => `<li>${esc(f.text)} (${link(f.source, "source")}, ${esc(dayOf(f.date))})</li>`).join("")}${live.map((x) => `<li>${x}</li>`).join("")}</ul>`;

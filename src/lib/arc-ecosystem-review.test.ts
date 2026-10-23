@@ -51,5 +51,9 @@ describe("applyReview", () => {
     const r = applyReview(e, C, [dated], "2026-10-23");
     expect(r.entities[0].status_evidence.filter((s) => s.url === "https://www.arc.io/blog/launch")).toEqual([{ url: "https://www.arc.io/blog/launch", title: "Arc launch post", date: "2026-09-16" }]);
   });
+  test("review I3: the item's evidence title replaces a stale one (e.g. 'testnet' docs now cited for mainnet)", () => {
+    const e = E(); e[0].status_evidence.push({ url: "https://www.arc.io/blog/launch", title: "Arc testnet docs", date: "2026-10-20" });
+    const r = applyReview(e, C, [dated], "2026-10-23");
+    expect(r.entities[0].status_evidence.find((s) => s.url === "https://www.arc.io/blog/launch")?.title).toBe("Arc launch post");
+  });
 });
-

@@ -28,4 +28,10 @@ describe("chain facts", () => {
     expect(f.facts.map((x) => x.id)).toEqual(expect.arrayContaining(["mainnet", "gas", "evm", "validators", "token"]));
     for (const s of ["USDC", "EURC"]) expect(f.stablecoins.find((t) => t.symbol === s)?.address).toMatch(/^0x[0-9a-f]{40}$/);
   });
+  test("review: the ARC token fact follows Circle's wording (a genesis mint that week, not the chain's genesis)", () => {
+    const t = (raw as { facts: { id: string; text: string }[] }).facts.find((f) => f.id === "token")!.text;
+    expect(t).toContain("genesis mint");
+    expect(t).not.toMatch(/at genesis/);
+  });
 });
+

@@ -16,6 +16,7 @@ const html = (body: string, status = 200, head = false) =>
 
 /** The directory and category pages depend only on the bundled data: rendered once per isolate (free plan: 10 ms CPU). */
 const memo = new Map<string, string>();
+const catMemo = new Map<string, { hour: number; html: string }>();
 const once = (key: string, render: () => string) => { let h = memo.get(key); if (h === undefined) { h = render(); memo.set(key, h); } return h; };
 
 const htmlPages: PagesFunction = async (ctx) => {
@@ -42,9 +43,11 @@ const htmlPages: PagesFunction = async (ctx) => {
   if (parts[0] === "corrections") return html(once("corrections", () => renderCorrectionsLog(CORRECTIONS.all, new Map(all.map((e) => [e.slug, e.name])))), 200, head);
   const cat = categoryOf(parts[0]);
   if (cat) {
-    // the 7-day app data names the most used projects; it changes hourly, so the memo is keyed by its hour
+    // the 7-day app data names the most used projects; it changes hourly: one copy per category, replaced when its hour changes
     const week = await loadArcWeek(ctx.env, deps).catch(() => null);
-    return html(once(`cat:${cat.id}:${week?.until_hour ?? "-"}`, () => renderCategory(cat, all, week)), 200, head);
+    const hour = week?.until_hour ?? -1, hit = catMemo.get(cat.id);
+    if (hit?.hour !== hour) catMemo.set(cat.id, { hour, html: renderCategory(cat, all, week) });
+    return html(catMemo.get(cat.id)!.html, 200, head);
   }
   const e = ECOSYSTEM.bySlug.get(parts[0]);
   if (!e) {

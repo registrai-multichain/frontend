@@ -193,8 +193,8 @@
     "date": "2026-10-23",
     "slug": "li-fi",
     "field": "dates",
-    "change": "Live since 2026-09-16, per Circle launches Arc mainnet (press release)",
-    "source": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+    "change": "Live since 2026-09-16, per Arc mainnet launch post: Live and liquid markets from launch",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
     "from": "review"
   },
   {
@@ -202,8 +202,8 @@
     "date": "2026-10-23",
     "slug": "lift",
     "field": "dates",
-    "change": "Live since 2026-09-16, per Lift Launch Factory V4 on Arc explorer (creation block 21077993)",
-    "source": "https://explorer.arc.io/address/0x1ca37b3c40e89aad48b5ad3352269c2293cfd3da",
+    "change": "Launch date 2026-10-11 removed: it was the day Registrai first saw the app; no source states the launch date",
+    "source": "https://lift.fun/",
     "from": "review"
   },
   {
@@ -283,8 +283,8 @@
     "date": "2026-10-23",
     "slug": "relay",
     "field": "dates",
-    "change": "Live since 2026-09-16, per Arc: economic OS for the internet (mainnet launch post)",
-    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "change": "Launch date 2026-10-10 removed: it was the day Registrai first saw the app; no source states the launch date",
+    "source": "https://relay.link",
     "from": "review"
   },
   {
@@ -337,8 +337,8 @@
     "date": "2026-10-23",
     "slug": "unitflow-finance",
     "field": "dates",
-    "change": "Live since 2026-09-16, per UnitFlowV3Factory on Arc explorer (creation block 21068735)",
-    "source": "https://explorer.arc.io/address/0x5bfbceb73d39f722b1cb83fd2f11736b28c1be6d",
+    "change": "Launch date 2026-10-10 removed: it was the day Registrai first saw the app; no source states the launch date",
+    "source": "https://unitflow.finance/",
     "from": "review"
   },
   {
@@ -461,16 +461,16 @@
   {
     "id": 52,
     "date": "2026-10-23",
-    "slug": "phantom",
+    "slug": "o1-exchange",
     "field": "dates",
-    "change": "Live since 2026-09-16, per Arc blog: Arc mainnet, the economic OS for the internet",
+    "change": "Live since 2026-09-16, per Arc mainnet launch post: Live and liquid markets from launch",
     "source": "https://www.arc.io/blog/arc-economic-os-internet",
     "from": "review"
   },
   {
     "id": 53,
     "date": "2026-10-23",
-    "slug": "rabby",
+    "slug": "phantom",
     "field": "dates",
     "change": "Live since 2026-09-16, per Arc blog: Arc mainnet, the economic OS for the internet",
     "source": "https://www.arc.io/blog/arc-economic-os-internet",
@@ -479,19 +479,19 @@
   {
     "id": 54,
     "date": "2026-10-23",
-    "slug": "topaz-cl",
+    "slug": "rabby",
     "field": "dates",
-    "change": "Live since 2026-09-16, per Topaz pool factory creation tx on Arc",
-    "source": "https://explorer.arc.io/tx/0xdd46b2815a91c5de3b56af97c7e2bf5188aa6d2cc8ab1adaf756dbf2eb00e452",
+    "change": "Live since 2026-09-16, per Arc blog: Arc mainnet, the economic OS for the internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
     "from": "review"
   },
   {
     "id": 55,
     "date": "2026-10-23",
-    "slug": "kpk",
+    "slug": "topaz-cl",
     "field": "dates",
-    "change": "Source added for the launch date 2026-09-16: KPK docs: KPK wARS Yield on Arc",
-    "source": "https://docs.kpk.io/vaults/vaults/morpho/arc/wars-yield",
+    "change": "Live since 2026-09-16, per Topaz pool factory creation tx on Arc",
+    "source": "https://explorer.arc.io/tx/0xdd46b2815a91c5de3b56af97c7e2bf5188aa6d2cc8ab1adaf756dbf2eb00e452",
     "from": "review"
   },
   {
@@ -677,6 +677,33 @@
   {
     "id": 76,
     "date": "2026-10-23",
+    "slug": "coins-ph",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc mainnet launch post (exchanges live on Arc; wallets and apps from day one)",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 77,
+    "date": "2026-10-23",
+    "slug": "ether-fi",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc mainnet launch post (exchanges live on Arc; wallets and apps from day one)",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 78,
+    "date": "2026-10-23",
+    "slug": "kpk",
+    "field": "status",
+    "change": "Deployed → Live on mainnet, since 2026-09-16, per its docs",
+    "source": "https://docs.kpk.io/vaults/vaults/morpho/arc/wars-yield",
+    "from": "review"
+  },
+  {
+    "id": 79,
+    "date": "2026-10-23",
     "slug": "blackrock",
     "field": "category",
     "change": "Also listed under Validators: named in Circle’s founding validator cohort",
@@ -684,7 +711,7 @@
     "from": "review"
   },
   {
-    "id": 77,
+    "id": 80,
     "date": "2026-10-23",
     "slug": "sbi-holdings",
     "field": "category",

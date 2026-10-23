@@ -19,5 +19,9 @@ describe("the published directory file", () => {
     const unbacked = ECOSYSTEM.entities.filter((e) => e.first_live && ![...e.status_evidence, ...e.sources].some((s) => s.date === e.first_live)).map((e) => `${e.slug} ${e.first_live}`);
     expect(unbacked).toEqual([]);
   });
+  test("review: only live entries show a launch date; arc.io's 'live on Arc' / 'from day one' entries are live", () => {
+    expect(ECOSYSTEM.entities.filter((e) => e.first_live && e.status !== "live").map((e) => `${e.slug} ${e.status}`)).toEqual([]);
+    for (const slug of ["coins-ph", "ether-fi"]) expect(ECOSYSTEM.bySlug.get(slug)?.status, slug).toBe("live");
+  });
 });
 

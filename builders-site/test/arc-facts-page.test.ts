@@ -24,7 +24,7 @@ describe("/arc/ answers in sentences (spec 2026-10-23-ai-search-gaps §1)", () =
     expect(h).toContain("Arc held 819,428,662 USDC on 23 Oct 2026, 13:03 UTC.");
     expect(h).toContain("TVL on Arc was $634,731,218 on 23 Oct 2026.");
     expect(h).toContain("About 342,000 transactions in the last 24 h, estimated from 240 sampled blocks.");
-    expect(h).toContain("Apps tracked by Registrai received $28,499,285 in stablecoin payments in the last 24 h.");
+    expect(h).toContain("Apps tracked by Registrai received $28,499,285 in USDC payments in the last 24 h.");
   });
   test("a missing figure drops its sentence; its table row says Not available", async () => {
     const { renderArc } = await import("../lib/arc-pages");

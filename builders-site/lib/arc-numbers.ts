@@ -116,14 +116,25 @@ export async function tokenSupplies(fetcher: Fetcher, tokens: { address: string 
   const idx = tokens.map((t, i) => (t.address ? i : -1)).filter((i) => i >= 0);
   const calls = idx.map((i) => ({ method: "eth_call", params: [{ to: tokens[i].address, data: "0x18160ddd" }, "latest"] }));
   let best: (unknown | null)[] | null = null, last: unknown = null;
-  for (const url of RPCS) {
-    try { best = await rpcBatch(fetcher, url, calls); } catch (e) { last = e; continue; }
-    if (best.some((x) => x !== null)) break;
+  for (const url of RPCS) {   // each endpoint fills only what the previous one left missing
+    const missing = best ? best.map((x, k) => (x === null ? k : -1)).filter((k) => k >= 0) : calls.map((_, k) => k);
+    if (!missing.length) break;
+    try {
+      const got = await rpcBatch(fetcher, url, missing.map((k) => calls[k]));
+      best ??= calls.map(() => null);
+      missing.forEach((k, j) => { if (got[j] !== null) best![k] = got[j]; });
+    } catch (e) { last = e; }
   }
   if (!best) throw new Error(`no RPC answered: ${last instanceof Error ? last.message : String(last)}`.slice(0, 120));
   const out: (number | null)[] = tokens.map(() => null);
   idx.forEach((i, k) => { const v = best![k]; if (typeof v === "string" && /^0x[0-9a-f]+$/i.test(v)) out[i] = Number(BigInt(v)) / 10 ** tokens[i].decimals; });
   return out;
+}
+
+/** One error line naming the listed tokens (with an address) whose supply could not be read; null when none failed. */
+export function supplyErrors(tokens: { symbol: string; address: string | null }[], supplies: (number | null)[]): string | null {
+  const failed = tokens.filter((t, i) => t.address && supplies[i] === null).map((t) => t.symbol);
+  return failed.length ? `rpc token supplies: ${failed.join(", ")} failed` : null;
 }
 
 const lastClose = (d: AbiData) => (d.candles?.length ? (d.candles[d.candles.length - 1][4] as number) : null);
@@ -152,6 +163,8 @@ export async function collectArcNumbers(env: Env, fetcher: Fetcher = fetch, now 
     caught("rpc token supplies", tokenSupplies(fetcher, CHAIN_FACTS.stablecoins)),
     head && blockTime ? caught("rpc tx sample", sampleTransactions(fetcher, head.number, blockTime).then((s) => s ?? Promise.reject(new Error("too few samples")))) : Promise.resolve(null),
   ]);
+  const supplyErr = supplies ? supplyErrors(CHAIN_FACTS.stablecoins, supplies) : null;
+  if (supplyErr) errors.push(supplyErr);
   const c = { block_height: head?.number ?? null, block_time_s: blockTime,
     usdc_supply: usdcSupply, eurc_supply: eurcSupply, as_of: head || usdcSupply !== null ? iso(now) : null };
   const l = { tvl_usd: tvl?.tvl_usd ?? null, all_stablecoins_usd: stables?.all_stablecoins_usd ?? null, defillama_date: tvl?.date ?? stables?.date ?? null };

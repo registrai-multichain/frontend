@@ -23,7 +23,7 @@ export function applyReview(entities: ArcEntity[], corrections: CorrectionEntry[
     if (it.evidence) {
       const have = e.status_evidence.find((s) => s.url === it.evidence!.url);
       // the date on evidence that sets a launch date is the launch date it states (older entries carry the day we read them)
-      if (have) { have.title ??= it.evidence.title; have.date = typeof fl === "string" ? fl : have.date ?? it.evidence.date; have.type ??= it.evidence.type; }
+      if (have) { if (it.evidence.title) have.title = it.evidence.title; have.date = typeof fl === "string" ? fl : have.date ?? it.evidence.date; have.type ??= it.evidence.type; }
       else e.status_evidence.push({ ...it.evidence });
     }
     if (fl === null) delete e.first_live; else if (fl !== undefined) e.first_live = fl;

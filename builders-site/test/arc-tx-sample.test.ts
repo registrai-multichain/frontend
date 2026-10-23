@@ -33,4 +33,12 @@ describe("transaction sample", () => {
     const s = await tokenSupplies(f as never, [{ address: "0x0000000000000000000000000000000000000001", decimals: 6 }, { address: "0x0000000000000000000000000000000000000002", decimals: 6 }, { address: null, decimals: 6 }]);
     expect(s).toEqual([1, null, null]);
   });
+  test("review I5: token supplies retry the missing items on the public RPC; the collector names tokens that still fail", async () => {
+    const { tokenSupplies } = await import("../lib/arc-numbers");
+    const f = batchFetch((c, url) => ((c.params[0] as { to: string }).to.endsWith("2") && url.includes("blockdaemon") ? new Error("rate limit exceeded") : "0xf4240"));
+    expect(await tokenSupplies(f as never, [{ address: "0x0000000000000000000000000000000000000001", decimals: 6 }, { address: "0x0000000000000000000000000000000000000002", decimals: 6 }])).toEqual([1, 1]);
+    const { supplyErrors } = await import("../lib/arc-numbers");
+    expect(supplyErrors([{ symbol: "USDC", address: "0x1" }, { symbol: "JPYC", address: "0x2" }, { symbol: "XYZ", address: null }], [1, null, null])).toBe("rpc token supplies: JPYC failed");
+    expect(supplyErrors([{ symbol: "USDC", address: "0x1" }], [1])).toBeNull();
+  });
 });
