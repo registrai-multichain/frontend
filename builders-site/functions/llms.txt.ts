@@ -7,6 +7,7 @@ export const LLMS_TXT = `# Registrai
 
 ## Data
 - [Arc in numbers](https://builder.registrai.cc/arc/): USDC and EURC supply on Arc, stablecoins and TVL, estimated 24 h volume, projects and a dated timeline; JSON at https://builder.registrai.cc/api/v1/arc
+- [Methodology](https://builder.registrai.cc/methodology/): definitions of every figure (payments, paying wallets, received USD, index points, the 7-day window, directory statuses), sources, the attributed share and known limits
 - [Most-used apps on Arc, last 7 days](https://builder.registrai.cc/arc/most-used-apps/): apps ranked by stablecoin payments received (USD), payments and new paying wallets; JSON at https://builder.registrai.cc/api/v1/arc/apps-week
 - [Apps that accept USDC on Arc](https://builder.registrai.cc/arc/apps-that-accept-usdc/): apps measured receiving payments in the last 7 days, and payment apps listed but not measured
 - [New on Arc this week](https://builder.registrai.cc/arc/new/): projects that went live and apps that started receiving payments in the last 7 days

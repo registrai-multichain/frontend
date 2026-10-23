@@ -18,7 +18,7 @@ const catName = (id: string | null) => (id ? categoryOf(id)?.name ?? id : "–")
 const appLink = (a: WeekApp) => `<a href="${esc(a.href)}">${esc(a.name)}</a>`;
 const entLink = (e: ArcEntity) => `<a href="${entityHref(e.slug)}">${esc(e.name)}</a>`;
 const evidence = (e: ArcEntity) => (e.status_evidence[0] ? `<a href="${esc(e.status_evidence[0].url)}" rel="noreferrer">Evidence</a>` : "–");
-const source = (w: ArcWeek) => `<p class="muted">Source: Arc Ecosystem Index (Registrai), hourly, 7 days to ${esc(atHour(w.until))}. <details><summary>i</summary> ${esc(METHOD)}</details></p>`;
+const source = (w: ArcWeek) => `<p class="muted">Source: Arc Ecosystem Index (Registrai), hourly, 7 days to ${esc(atHour(w.until))}. <details><summary>i</summary> ${esc(METHOD)} <a href="/methodology/#received-usd">Method</a></details></p>`;
 const table = (head: string[], rows: string[][]) => `<div class="wrap"><table><thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>
 ${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("\n")}
 </tbody></table></div>`;

@@ -22,7 +22,7 @@ export const SITE = "https://builder.registrai.cc";
 const FACTS_SITEMAP_MAX_AGE_MS = 24 * 3600e3;
 /** Pages whose content follows the hourly data: their lastmod is the data's last closed hour. /verify/ is noindex, so it is not listed. */
 const DATA = ["/builders-index/", "/apps/", "/track-record/"];
-const STATIC = ["/builders/", "/data-api/", "/how-we-publish/", "/guide/", "/terms/", "/privacy/"];
+const STATIC = ["/builders/", "/data-api/", "/how-we-publish/", "/methodology/", "/guide/", "/terms/", "/privacy/"];
 
 type FactPage = { path: string; lastmod?: string };
 

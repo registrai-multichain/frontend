@@ -9,7 +9,7 @@ import { evidenceHref } from "../../src/lib/facts";
 import { appHref } from "./app-href";
 
 const SITE = "https://builder.registrai.cc";
-const METHOD_URL = "/builders-index/";
+const METHOD_URL = "/methodology/";
 const API_DOCS_URL = "/data-api/";
 const LICENSE = "https://creativecommons.org/licenses/by/4.0/";
 const CREATOR = { "@type": "Organization", name: "Registrai", url: "https://registrai.cc/" };
@@ -49,7 +49,7 @@ export function page(o: { title: string; canonical: string; description: string;
 <title>${esc(o.title)}</title><meta name="description" content="${esc(o.description)}"><link rel="canonical" href="${esc(o.canonical)}">${o.noindex ? '<meta name="robots" content="noindex">' : ""}
 <meta property="og:type" content="website"><meta property="og:site_name" content="Registrai"><meta property="og:title" content="${esc(o.title)}"><meta property="og:description" content="${esc(o.description)}"><meta property="og:url" content="${esc(o.canonical)}"><meta name="twitter:card" content="summary">
 <style>${STYLE}</style>${ld}</head><body><main>
-<nav class="muted"><a href="/ecosystem/">Arc ecosystem</a><a href="/arc/">Arc in numbers</a><a href="/builders/">Registrai builders</a><a href="/apps/">Apps on Arc</a><a href="${METHOD_URL}">Indices</a><a href="${API_DOCS_URL}">Data API</a></nav>
+<nav class="muted"><a href="/ecosystem/">Arc ecosystem</a><a href="/arc/">Arc in numbers</a><a href="/builders/">Registrai builders</a><a href="/apps/">Apps on Arc</a><a href="/builders-index/">Indices</a><a href="${API_DOCS_URL}">Data API</a></nav>
 ${o.body}
 <footer>Data: Registrai, CC BY 4.0 · <a href="/how-we-publish/">How we publish</a> · <a href="${METHOD_URL}">Method</a> · <a href="${API_DOCS_URL}">Data API</a> · Independent. Not affiliated with Circle or Arc.</footer>
 </main></body></html>`;
