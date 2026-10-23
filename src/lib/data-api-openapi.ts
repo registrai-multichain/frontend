@@ -10,6 +10,7 @@ import verified from "../../docs/superpowers/specs/data-api-v1-fixtures/verified
 import ecosystem from "../../docs/superpowers/specs/data-api-v1-fixtures/ecosystem.json";
 import ecosystemEntity from "../../docs/superpowers/specs/data-api-v1-fixtures/ecosystem-entity.json";
 import arcNow from "../../docs/superpowers/specs/data-api-v1-fixtures/arc.json";
+import arcNowFull from "../../docs/superpowers/specs/data-api-v1-fixtures/arc-now.json";
 import arcDaily from "../../docs/superpowers/specs/data-api-v1-fixtures/arc-daily.json";
 import arcAppsWeek from "../../docs/superpowers/specs/data-api-v1-fixtures/arc-apps-week.json";
 import ecosystemCorrections from "../../docs/superpowers/specs/data-api-v1-fixtures/ecosystem-corrections.json";
@@ -98,7 +99,7 @@ export const OPENAPI = {
     "/ecosystem": op("listEcosystem", "Every project in the Arc ecosystem directory", "Ecosystem", [
       { name: "category", in: "query", required: false, schema: { type: "string" } }, { name: "status", in: "query", required: false, schema: { type: "string", enum: ["live", "deployed", "announced"] } },
       { name: "q", in: "query", required: false, description: "Name or alias contains (case-insensitive).", schema: { type: "string" } }]),
-    "/arc": op("getArcNumbers", "Arc in numbers now, each figure with its source and date", "ArcNumbers"),
+    "/arc": op("getArcNumbers", "Arc in numbers now, each figure with its source and date", "ArcNow"),
     "/arc/daily": op("listArcDaily", "Daily snapshots of Arc in numbers, newest first", "ArcDaily", [{ name: "days", in: "query", required: false, description: "1-365, default 30", schema: { type: "integer" } }]),
     "/arc/apps-week": op("listArcAppsWeek", "Apps on Arc over the last 7 days", "ArcAppsWeek"),
     "/ecosystem/corrections": op("listEcosystemCorrections", "Every correction to the Arc ecosystem directory, newest first", "EcosystemCorrections"),
@@ -118,6 +119,7 @@ export const OPENAPI = {
       EcosystemCorrections: (() => { const s = schemaOf(ecosystemCorrections); const it = s.properties!.corrections.items!; it.required = (it.required ?? []).filter((k) => k !== "source"); return s; })(),
       EcosystemEntity: schemaOf(ecosystemEntity),
       ArcNumbers: arcSchema(schemaOf(arcNow)),
+      ArcNow: nullable(arcSchema(schemaOf(arcNowFull)), ["attributed_share_7d"]),
       ArcDaily: { type: "object", properties: { version: { type: "number" }, days: { type: "array", items: arcSchema(schemaOf(arcNow)) } }, required: ["version", "days"] },
       Error: { type: "object", properties: { error: { type: "string" } }, required: ["error"] },
       PaymentRequired: { type: "object", description: PAID_NOTE, properties: { x402Version: { type: "number" }, error: { type: "string" }, resource: { type: "object" }, accepts: { type: "array", items: { type: "object" } } }, required: ["x402Version", "accepts"] },

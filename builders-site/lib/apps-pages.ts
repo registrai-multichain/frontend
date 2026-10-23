@@ -4,6 +4,7 @@
  * goes through esc(); JSON-LD escapes "<".
  */
 import { idToPath, type AppDetail, type AppList, type AppRow } from "./apps-data";
+import { shareText, type Share7d } from "./arc-share";
 import { evidenceHref } from "../../src/lib/facts";
 import { appHref } from "./app-href";
 
@@ -54,14 +55,14 @@ ${o.body}
 </main></body></html>`;
 }
 
-export function renderAppList(l: AppList, sort: Sort): string {
+export function renderAppList(l: AppList, sort: Sort, share: Share7d | null = null): string {
   const rows = sorted(l.rows, sort);
   const others = (Object.keys(SORTS) as Sort[]).filter((s) => s !== sort).map((s) => `<a href="/apps/?sort=${s}">${esc(SORTS[s].label)}</a>`).join(" · ");
-  const share = l.totals.arc_usdc_24h_est > 0 ? ` That is about ${num((100 * l.totals.usdc_24h) / l.totals.arc_usdc_24h_est)}% of the estimated ${usd(l.totals.arc_usdc_24h_est)} USDC moved on Arc in the same 24 h; the rest is not attributed to an app yet.` : "";
+  const shareSentence = share ? ` About ${shareText(share).replace(/^([\d.]+%) over /, "$1 of the estimated USDC moved on Arc over ")} went to these apps. ` : " ";
   const body = `<h1>Apps on Arc</h1>
 <p class="muted">Data until ${esc(when(l.data_until))}. Updated hourly from Arc mainnet.</p>
 <p>${num(l.totals.apps)} apps · ${num(l.totals.payments_24h)} USDC payments · ${usd(l.totals.usdc_24h)} USDC to these apps in the last 24 h
-<details><summary>i</summary> Payments into the apps' own contracts, counted by the Arc Ecosystem Index method (per-wallet caps and minimums apply).${esc(share)}</details></p>
+<details><summary>i</summary> Payments into the apps' own contracts, counted by the Arc Ecosystem Index method (per-wallet caps and minimums apply).${esc(shareSentence)}<a href="/methodology/#attributed-share">Method</a></details></p>
 <p class="muted">Sorted by ${esc(SORTS[sort].label)}. Sort by ${others}.</p>
 <div class="wrap"><table><thead><tr><th>App</th><th>Kind</th><th>Verified</th><th class="n">24 h payments</th><th class="n">24 h USD</th><th class="n">Index share</th><th>First seen</th></tr></thead><tbody>
 ${rows.map((r) => `<tr><td><a href="${esc(appHref(r.id))}">${esc(r.name)}</a></td><td>${esc(KIND_LABEL[r.kind])}</td><td>${r.verified ? "✓" : "–"}</td><td class="n">${num(r.last_24h.payments)}</td><td class="n">${esc(usd(r.last_24h.usdc))}</td><td class="n">${num(r.share)}%</td><td>${esc(day(r.first_hour))}</td></tr>`).join("\n")}

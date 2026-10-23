@@ -26,3 +26,22 @@ describe("share7d", () => {
     expect(shareText(null)).toBe("Not available right now");
   });
 });
+
+describe("API", () => {
+  test("/api/v1/arc carries attributed_share_7d from the daily table (null without DATA_DB)", async () => {
+    const { resolve } = await import("node:path");
+    const { DATA_MIGRATIONS } = await import("../lib/data-api-ingest");
+    const { MemoryD1 } = await import("./memory-d1");
+    const { MemoryKV } = await import("./memory-kv");
+    const { storeArcDaily } = await import("../lib/arc-daily");
+    const { handleArc } = await import("../lib/data-api-arc");
+    const db = new MemoryD1(DATA_MIGRATIONS.map((f) => resolve(__dirname, "../migrations-data", f)));
+    await storeArcDaily(db as never, "2026-10-22", snap("2026-10-22", 5, 100));
+    const offline = (async () => { throw new Error("offline"); }) as never;
+    const req = new Request("https://builder.registrai.cc/api/v1/arc");
+    const withDb = await (await handleArc(req, { INVITES: new MemoryKV(), DATA_DB: db } as never, { cache: null }, [], offline)).json() as { attributed_share_7d: unknown };
+    expect(withDb.attributed_share_7d).toMatchObject({ window_days: 1, pct: 5 });
+    const noDb = await (await handleArc(req, { INVITES: new MemoryKV() } as never, { cache: null }, [], offline)).json() as { attributed_share_7d: unknown };
+    expect(noDb.attributed_share_7d).toBeNull();
+  });
+});

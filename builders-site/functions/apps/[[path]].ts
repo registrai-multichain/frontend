@@ -2,6 +2,8 @@ import type { PagesFunction } from "../../lib/env";
 import { loadApp, loadAppList, pathToId } from "../../lib/apps-data";
 import { parseSort, renderApp, renderAppList, renderNotFound, renderUnavailable } from "../../lib/apps-pages";
 import { edgeCachedGet } from "../../lib/http";
+import { readArcDaily } from "../../lib/arc-daily";
+import { share7d } from "../../lib/arc-share";
 import { ECOSYSTEM } from "../../../src/lib/arc-ecosystem-data";
 import { entityHref } from "../../../src/lib/arc-ecosystem";
 
@@ -18,8 +20,8 @@ export const onRequest: PagesFunction = async (ctx) => {
   if (parts.length === 0) {
     const sort = parseSort(url.searchParams.get("sort"));
     return edgeCachedGet(req, deps, async () => {
-      const l = await loadAppList(ctx.env, deps);
-      return l ? html(renderAppList(l, sort)) : html(renderUnavailable(), 503);
+      const [l, days] = await Promise.all([loadAppList(ctx.env, deps), ctx.env.DATA_DB ? readArcDaily(ctx.env.DATA_DB, 7).catch(() => []) : Promise.resolve([])]);
+      return l ? html(renderAppList(l, sort, share7d(days))) : html(renderUnavailable(), 503);
     }, 300, `list:${sort}`);
   }
   const id = pathToId(parts);

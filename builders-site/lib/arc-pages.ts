@@ -5,6 +5,7 @@
 import { categoryHref, type CategoryId } from "../../src/lib/arc-ecosystem";
 import { day, esc, page, when } from "./apps-pages";
 import type { ArcNumbers } from "./arc-numbers";
+import { share7d, shareText } from "./arc-share";
 import { QUESTION_PAGES } from "./arc-question-pages";
 
 const SITE = "https://builder.registrai.cc";
@@ -14,6 +15,8 @@ const usd = (x: number | null) => (x === null ? NA : `$${N0.format(x)}`);
 const amt = (x: number | null, unit: string) => (x === null ? NA : `${N0.format(x)} ${unit}`);
 const int = (x: number | null) => (x === null ? NA : N0.format(x));
 const row = (label: string, value: string, source = "") => `<tr><th>${esc(label)}</th><td class="n">${esc(value)}</td><td class="muted">${esc(source)}</td></tr>`;
+/** A row whose value is trusted HTML (built from escaped parts), e.g. a figure with a link. */
+const rowHtml = (label: string, html: string, source = "") => `<tr><th>${esc(label)}</th><td class="n">${html}</td><td class="muted">${esc(source)}</td></tr>`;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** Live reads to the minute (when() rounds to the index hour). */
 const at = (s: string) => { const d = new Date(s); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`; };
@@ -24,10 +27,11 @@ export function renderArc(n: ArcNumbers, history: ArcNumbers[]): string {
   const rpcAt = n.network.as_of ? `Arc RPC, ${at(n.network.as_of)}` : "Arc RPC";
   const llamaAt = n.stablecoins.defillama_date ? `Source: DefiLlama, ${day(`${n.stablecoins.defillama_date}T00:00:00Z`)}` : "Source: DefiLlama";
   const a = n.activity_24h, e = n.ecosystem;
+  const share = share7d(history);
   const idx = (k: "abi" | "aii" | "aei") => `${k.toUpperCase()} ${e.index_members[k] === null ? "–" : N0.format(e.index_members[k]!)}`;
   const close = (k: "abi" | "aii" | "aei") => `${k.toUpperCase()} ${e.index_close[k] === null ? "–" : N2.format(e.index_close[k]!)}`;
   const hist = history.length
-    ? `<div class="wrap"><table><thead><tr><th>Snapshot</th><th class="n">USDC supply</th><th class="n">All stablecoins</th><th class="n">TVL</th><th class="n">USDC moved, 24 h (est.)</th><th class="n">Attributed to apps</th></tr></thead><tbody>
+    ? `<div class="wrap"><table><thead><tr><th>Snapshot</th><th class="n">USDC supply</th><th class="n">All stablecoins</th><th class="n">TVL</th><th class="n">USDC moved, 24 h (est.)</th><th class="n">Attributed to apps, 24 h</th></tr></thead><tbody>
 ${history.map((h) => `<tr><td>${esc(at(h.generated_at))}</td><td class="n">${esc(amt(h.stablecoins.usdc_supply, "USDC"))}</td><td class="n">${esc(usd(h.stablecoins.all_stablecoins_usd))}</td><td class="n">${esc(usd(h.stablecoins.tvl_usd))}</td><td class="n">${esc(usd(h.activity_24h.usdc_moved_usd_est))}</td><td class="n">${h.activity_24h.attributed_share_pct === null ? NA : `${N2.format(h.activity_24h.attributed_share_pct)}%`}</td></tr>`).join("\n")}
 </tbody></table></div>`
     : "<p>Daily snapshots start at the next 00:00 UTC close.</p>";
@@ -57,7 +61,7 @@ ${row("EURC moved on Arc, in USD (estimate)", usd(a.eurc_moved_usd_est))}
 ${row("USDC transfers (estimate)", int(a.usdc_transfers_est))}
 ${row("Payments to tracked apps", int(a.app_payments))}
 ${row("USDC to tracked apps", usd(a.app_usd))}
-${row("Share attributed to apps", a.attributed_share_pct === null ? NA : `${N2.format(a.attributed_share_pct)}%`)}
+${rowHtml("Share attributed to apps", `${esc(shareText(share))} <a href="/methodology/#attributed-share">Method</a>`)}
 </tbody></table>
 <h2>Ecosystem</h2>
 <p><a href="/ecosystem/">${N0.format(e.projects)} projects</a> in the Arc ecosystem directory: ${N0.format(e.live)} live on mainnet, ${N0.format(e.deployed)} deployed, ${N0.format(e.announced)} announced.</p>

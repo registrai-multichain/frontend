@@ -3,13 +3,17 @@
 import { collectArcNumbers } from "./arc-numbers";
 import { clampDays, readArcDaily } from "./arc-daily";
 import { loadArcWeek, WINDOW_H } from "./arc-week";
+import { share7d } from "./arc-share";
 import { isoHour } from "./data-api-rows";
 import { cached, v1Error, v1Json } from "./data-api";
 import type { Env } from "./env";
 import type { EdgeCacheDeps } from "./http";
 
-export function handleArc(req: Request, env: Env, deps: EdgeCacheDeps, parts: string[]): Promise<Response> {
-  if (parts.length === 0) return cached(req, deps, "arc", async () => v1Json(req, { ...(await collectArcNumbers(env)) }, 600), 600);
+export function handleArc(req: Request, env: Env, deps: EdgeCacheDeps, parts: string[], fetcher: typeof fetch = fetch): Promise<Response> {
+  if (parts.length === 0) return cached(req, deps, "arc", async () => {
+    const [n, days] = await Promise.all([collectArcNumbers(env, fetcher), env.DATA_DB ? readArcDaily(env.DATA_DB, 7).catch(() => []) : Promise.resolve([])]);
+    return v1Json(req, { ...n, attributed_share_7d: share7d(days) }, 600);
+  }, 600);
   if (parts.length === 1 && parts[0] === "daily") {
     if (!env.DATA_DB) return Promise.resolve(v1Error(503, "The history is not available right now. Retry later."));
     const days = clampDays(new URL(req.url).searchParams.get("days"));

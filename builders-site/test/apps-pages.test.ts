@@ -103,3 +103,13 @@ describe("sections reused by the ecosystem pages", () => {
     expect(renderApp(a)).toContain(s);
   });
 });
+
+test("the note's share is labelled with its window, and the old unlabelled 24 h sentence is gone", async () => {
+  const { renderAppList } = await import("../lib/apps-pages");
+  const s = { window_days: 7, until: "2026-10-28T00:00:00Z", pct: 5.01, daily_min: 1, daily_max: 34, complete: true };
+  const h = renderAppList(list(), "payments", s);
+  expect(h).toContain("About 5.01% of the estimated USDC moved on Arc over 7 days to 28 Oct 2026 (daily 1.00–34.00%) went to these apps.");
+  expect(h).toContain('href="/methodology/#attributed-share"');
+  expect(h).not.toContain("in the same 24 h");
+  expect(renderAppList(list(), "payments")).not.toMatch(/\d% of the estimated/);
+});

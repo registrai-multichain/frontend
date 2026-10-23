@@ -24,7 +24,6 @@ describe("Arc in numbers page", () => {
     expect(h).toContain("0.51 s");
     expect(h).toContain("758,938,840 USDC");
     expect(h).toMatch(/\$742,300,000[^<]*<\/td><td[^>]*>Source: DefiLlama, 20 Oct 2026/);
-    expect(h).toContain("2.97%");
     expect(h).toContain("Data until 20 Oct 2026, 17:00 UTC");
     expect(h).toMatch(/<details><summary>i<\/summary>[^<]*estimated/);
     expect(h).toContain('<a href="/ecosystem/">258 projects</a>');
@@ -81,4 +80,15 @@ describe("review fixes (page)", () => {
     expect(h).toContain("All stablecoins, circulating (USD value)");
     expect(h).toMatch(/<details><summary>i<\/summary>[^<]*circulating supply[^<]*totalSupply/);
   });
+});
+
+test("share row: labelled window from the snapshots; the 24 h history column is labelled 24 h", async () => {
+  const { renderArc } = await import("../lib/arc-pages");
+  const hist = ["2026-10-22", "2026-10-21", "2026-10-20"].map((d) => full({ generated_at: `${d}T00:02:00.000Z`, activity_24h: { ...full().activity_24h, data_until: `${d}T00:00:00Z` } }));
+  const h = renderArc(full(), hist);
+  expect(h).toContain("Share attributed to apps");
+  expect(h).toContain("2.97% over last 3 days to 22 Oct 2026 (daily 2.97–2.97%)");
+  expect(h).toContain('href="/methodology/#attributed-share"');
+  expect(h).toContain("<th class=\"n\">Attributed to apps, 24 h</th>");
+  expect(renderArc(full(), [])).toMatch(/Share attributed to apps<\/th><td[^>]*>Not available right now/);
 });
