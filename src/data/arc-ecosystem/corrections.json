@@ -1,1 +1,695 @@
-[]
+[
+  {
+    "id": 1,
+    "date": "2026-10-23",
+    "slug": "0x",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Arc Mainnet Is Live: The Economic OS for the Internet (arc.io blog)",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 2,
+    "date": "2026-10-23",
+    "slug": "1inch",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Arc Mainnet Is Live: The Economic OS for the Internet (arc.io blog)",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 3,
+    "date": "2026-10-23",
+    "slug": "aave",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Arc Mainnet Is Live: The Economic OS for the Internet (arc.io blog)",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 4,
+    "date": "2026-10-23",
+    "slug": "across",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Arc on Across (Across blog, published 2026-09-21)",
+    "source": "https://across.to/blog/arc-on-across",
+    "from": "review"
+  },
+  {
+    "id": 5,
+    "date": "2026-10-23",
+    "slug": "aerodrome",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Aero Lite is Live on Arc",
+    "source": "https://aero.xyz/articles/aero-lite-is-live-on-arc/",
+    "from": "review"
+  },
+  {
+    "id": 6,
+    "date": "2026-10-23",
+    "slug": "arcade",
+    "field": "dates",
+    "change": "Live since 2026-09-22, per Arcade Prize Vault creation tx (block 22254988)",
+    "source": "https://explorer.arc.io/tx/0x8fef06d497f86647eaa9c8344b32f3a374af7c143bd10fe780e4375660e2b5c4",
+    "from": "review"
+  },
+  {
+    "id": 7,
+    "date": "2026-10-23",
+    "slug": "archery",
+    "field": "dates",
+    "change": "Live since 2026-09-24, per Archery token creation tx (block 22447642)",
+    "source": "https://explorer.arc.io/tx/0xc008eb2a8d6c1022418ab613cc282c2853703ead20a69db214e855c00afdb64e",
+    "from": "review"
+  },
+  {
+    "id": 8,
+    "date": "2026-10-23",
+    "slug": "arcland",
+    "field": "dates",
+    "change": "Launch date 2026-10-10 removed: it was the day Registrai first saw the app; no source states the launch date",
+    "source": "https://arcland.app/",
+    "from": "review"
+  },
+  {
+    "id": 9,
+    "date": "2026-10-23",
+    "slug": "arclight",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Arclight Builder V3 creation tx (block 21212015)",
+    "source": "https://explorer.arc.io/tx/0x388ab3c8d28bfab2a6d9eda95f0b5c1f2f1179558f3e3c5c6ae04f3d98f61cc9",
+    "from": "review"
+  },
+  {
+    "id": 10,
+    "date": "2026-10-23",
+    "slug": "arcstocks",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per ASTOCK token creation tx (block 21237418)",
+    "source": "https://explorer.arc.io/tx/0xb511f1a3461d08d6861b1b024ce3a12d0f1d28305f368f761c4b5faeb915f54b",
+    "from": "review"
+  },
+  {
+    "id": 11,
+    "date": "2026-10-23",
+    "slug": "arctide",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Arctide AMM factory creation tx (block 21106786)",
+    "source": "https://explorer.arc.io/tx/0x5ac4546f51b634bf999193036839d7fa651c34694b3f474a77e10f464e66f896",
+    "from": "review"
+  },
+  {
+    "id": 12,
+    "date": "2026-10-23",
+    "slug": "arctools",
+    "field": "dates",
+    "change": "Launch date 2026-10-10 removed: it was the day Registrai first saw the app; no source states the launch date",
+    "source": "https://arctools.fun/",
+    "from": "review"
+  },
+  {
+    "id": 13,
+    "date": "2026-10-23",
+    "slug": "blockrun",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per blockrun-llm v1.17.0: Arc",
+    "source": "https://github.com/BlockRunAI/blockrun-llm/releases/tag/v1.17.0",
+    "from": "review"
+  },
+  {
+    "id": 14,
+    "date": "2026-10-23",
+    "slug": "bungee",
+    "field": "dates",
+    "change": "Launch date 2026-10-11 removed: it was the day Registrai first saw the app; no source states the launch date",
+    "source": "https://bungee.exchange",
+    "from": "review"
+  },
+  {
+    "id": 15,
+    "date": "2026-10-23",
+    "slug": "chainlink",
+    "field": "dates",
+    "change": "Launch date 2026-10-10 removed: it was the day Registrai first saw the app; no source states the launch date",
+    "source": "https://chain.link",
+    "from": "review"
+  },
+  {
+    "id": 16,
+    "date": "2026-10-23",
+    "slug": "flipt-fun",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per flipt feeConfig creation tx (block 21078750)",
+    "source": "https://explorer.arc.io/tx/0x0cbdcb9ee9e35a4283c9602cfab43da2f8790ce862ccf786f93aaa101880f177",
+    "from": "review"
+  },
+  {
+    "id": 17,
+    "date": "2026-10-23",
+    "slug": "foci",
+    "field": "dates",
+    "change": "Launch date 2026-10-10 removed: it was the day Registrai first saw the app; no source states the launch date",
+    "source": "https://foci.family/",
+    "from": "review"
+  },
+  {
+    "id": 18,
+    "date": "2026-10-23",
+    "slug": "hashfly",
+    "field": "dates",
+    "change": "Live since 2026-09-23, per HashFly royalty vault creation tx (block 22424635)",
+    "source": "https://explorer.arc.io/tx/0xaa8106581a7ec7f498b23ba90860120a80cda569dc1513ac8a69ba17d8d112b8",
+    "from": "review"
+  },
+  {
+    "id": 19,
+    "date": "2026-10-23",
+    "slug": "kairo",
+    "field": "dates",
+    "change": "Launch date 2026-10-10 removed: it was the day Registrai first saw the app; no source states the launch date",
+    "source": "https://kairo.market/",
+    "from": "review"
+  },
+  {
+    "id": 20,
+    "date": "2026-10-23",
+    "slug": "kyberswap",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Arc: economic OS for the internet (mainnet launch post)",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 21,
+    "date": "2026-10-23",
+    "slug": "layerzero",
+    "field": "dates",
+    "change": "Launch date 2026-10-10 removed: it was the day Registrai first saw the app; no source states the launch date",
+    "source": "https://layerzero.network/",
+    "from": "review"
+  },
+  {
+    "id": 22,
+    "date": "2026-10-23",
+    "slug": "li-fi",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Circle launches Arc mainnet (press release)",
+    "source": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+    "from": "review"
+  },
+  {
+    "id": 23,
+    "date": "2026-10-23",
+    "slug": "lift",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Lift Launch Factory V4 on Arc explorer (creation block 21077993)",
+    "source": "https://explorer.arc.io/address/0x1ca37b3c40e89aad48b5ad3352269c2293cfd3da",
+    "from": "review"
+  },
+  {
+    "id": 24,
+    "date": "2026-10-23",
+    "slug": "metamask",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Circle launches Arc mainnet (press release)",
+    "source": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+    "from": "review"
+  },
+  {
+    "id": 25,
+    "date": "2026-10-23",
+    "slug": "moonpay",
+    "field": "dates",
+    "change": "Launch date 2026-10-10 removed: it was the day Registrai first saw the app; no source states the launch date",
+    "source": "https://moonpay.com/",
+    "from": "review"
+  },
+  {
+    "id": 26,
+    "date": "2026-10-23",
+    "slug": "morpho",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Morpho blog: Morpho is live on Arc as its credit infrastructure",
+    "source": "https://morpho.org/blog/morpho-is-live-on-arc-as-its-credit-infrastructure",
+    "from": "review"
+  },
+  {
+    "id": 27,
+    "date": "2026-10-23",
+    "slug": "murmur",
+    "field": "dates",
+    "change": "Live since 2026-09-17, per MURMUR token on Arc explorer (creation block 21309521)",
+    "source": "https://explorer.arc.io/address/0x8faae5592b9acc27a79fca745c6b872adf514a5d",
+    "from": "review"
+  },
+  {
+    "id": 28,
+    "date": "2026-10-23",
+    "slug": "okx-wallet",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Circle launches Arc mainnet (press release)",
+    "source": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+    "from": "review"
+  },
+  {
+    "id": 29,
+    "date": "2026-10-23",
+    "slug": "opensea",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Arc: economic OS for the internet (mainnet launch post)",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 30,
+    "date": "2026-10-23",
+    "slug": "peach",
+    "field": "dates",
+    "change": "Launch date 2026-10-10 removed: it was the day Registrai first saw the app; no source states the launch date",
+    "source": "https://peach.ag/",
+    "from": "review"
+  },
+  {
+    "id": 31,
+    "date": "2026-10-23",
+    "slug": "rango",
+    "field": "dates",
+    "change": "Launch date 2026-10-11 removed: it was the day Registrai first saw the app; no source states the launch date",
+    "source": "https://rango.exchange",
+    "from": "review"
+  },
+  {
+    "id": 32,
+    "date": "2026-10-23",
+    "slug": "relay",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Arc: economic OS for the internet (mainnet launch post)",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 33,
+    "date": "2026-10-23",
+    "slug": "rhino-fi",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Arc: economic OS for the internet (mainnet launch post)",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 34,
+    "date": "2026-10-23",
+    "slug": "steakhouse-financial",
+    "field": "dates",
+    "change": "Live since 2026-09-22, per Steakhouse DeFi Markets Update: Steakhouse Goes Live on Arc",
+    "source": "https://kitchen.steakhouse.financial/p/defi-markets-update-2026-09-22",
+    "from": "review"
+  },
+  {
+    "id": 35,
+    "date": "2026-10-23",
+    "slug": "synthra",
+    "field": "dates",
+    "change": "Launch date 2026-10-11 removed: it was the day Registrai first saw the app; no source states the launch date",
+    "source": "https://app.synthra.org/",
+    "from": "review"
+  },
+  {
+    "id": 36,
+    "date": "2026-10-23",
+    "slug": "tolly",
+    "field": "dates",
+    "change": "Launch date 2026-10-10 removed: it was the day Registrai first saw the app; no source states the launch date",
+    "source": "https://tollylabs.com/",
+    "from": "review"
+  },
+  {
+    "id": 37,
+    "date": "2026-10-23",
+    "slug": "ubi-fun",
+    "field": "dates",
+    "change": "Launch date 2026-10-10 removed: it was the day Registrai first saw the app; no source states the launch date",
+    "source": "https://ubi.fun/",
+    "from": "review"
+  },
+  {
+    "id": 38,
+    "date": "2026-10-23",
+    "slug": "unitflow-finance",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per UnitFlowV3Factory on Arc explorer (creation block 21068735)",
+    "source": "https://explorer.arc.io/address/0x5bfbceb73d39f722b1cb83fd2f11736b28c1be6d",
+    "from": "review"
+  },
+  {
+    "id": 39,
+    "date": "2026-10-23",
+    "slug": "alchemy",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Alchemy blog: Arc mainnet is live on Alchemy",
+    "source": "https://www.alchemy.com/blog/arc-mainnet-is-live-on-alchemy",
+    "from": "review"
+  },
+  {
+    "id": 40,
+    "date": "2026-10-23",
+    "slug": "arclotls",
+    "field": "dates",
+    "change": "Live since 2026-09-17, per Arc mainnet block 21330221: ArcLotls ProductionRenderer created",
+    "source": "https://explorer.arc.io/block/21330221",
+    "from": "review"
+  },
+  {
+    "id": 41,
+    "date": "2026-10-23",
+    "slug": "backpack",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Arc blog: Arc, the economic OS for the internet (mainnet launch)",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 42,
+    "date": "2026-10-23",
+    "slug": "beefy",
+    "field": "dates",
+    "change": "Live since 2026-09-22, per Arc mainnet block 22167963: Beefy USDC-EURC vault created",
+    "source": "https://explorer.arc.io/block/22167963",
+    "from": "review"
+  },
+  {
+    "id": 43,
+    "date": "2026-10-23",
+    "slug": "blockdaemon",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Blockdaemon blog: Announcing Blockdaemon as a Day 1 Launch Partner for Arc",
+    "source": "https://www.blockdaemon.com/blog/announcing-blockdaemon-as-a-day-1-launch-partner-for-arc",
+    "from": "review"
+  },
+  {
+    "id": 44,
+    "date": "2026-10-23",
+    "slug": "blockscout",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Blockscout blog: Exploring Arc",
+    "source": "https://www.blog.blockscout.com/news-exploring-arc/",
+    "from": "review"
+  },
+  {
+    "id": 45,
+    "date": "2026-10-23",
+    "slug": "bonker",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Arc mainnet tx: Bonker FeeLocker contract creation",
+    "source": "https://explorer.arc.io/tx/0x3f220617dc0db19eaa717e47c284451ca1e70d7fd21ce76d45374651a464b112",
+    "from": "review"
+  },
+  {
+    "id": 46,
+    "date": "2026-10-23",
+    "slug": "bron",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Arc blog: Arc, the economic OS for the internet (mainnet launch)",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 47,
+    "date": "2026-10-23",
+    "slug": "circle-gateway",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Circle Gateway release notes 2026",
+    "source": "https://developers.circle.com/release-notes/gateway-2026",
+    "from": "review"
+  },
+  {
+    "id": 48,
+    "date": "2026-10-23",
+    "slug": "drpc",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per dRPC blog: Arc Mainnet RPC Is Live: Supported By dRPC From Day One",
+    "source": "https://drpc.org/blog/arc-mainnet-announcement/",
+    "from": "review"
+  },
+  {
+    "id": 49,
+    "date": "2026-10-23",
+    "slug": "edgex",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per edgeX x Arc Genesis Is Live",
+    "source": "https://pro.edgex.exchange/en-US/news/article/edgex-arc-genesis-campaign",
+    "from": "review"
+  },
+  {
+    "id": 50,
+    "date": "2026-10-23",
+    "slug": "figment",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Figment: Figment offers Managed Validator Services on Arc at mainnet launch",
+    "source": "https://www.figment.io/insights/figment-offers-managed-validator-services-on-arc-at-mainnet-launch/",
+    "from": "review"
+  },
+  {
+    "id": 51,
+    "date": "2026-10-23",
+    "slug": "kaleido-defi",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Kaleido swap pool factory creation tx on Arc",
+    "source": "https://explorer.arc.io/tx/0x3c3c8b8282dfb2794c0dbaf750535be7071f28e588e951d5d2747d4b6bb72e40",
+    "from": "review"
+  },
+  {
+    "id": 52,
+    "date": "2026-10-23",
+    "slug": "phantom",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Arc blog: Arc mainnet, the economic OS for the internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 53,
+    "date": "2026-10-23",
+    "slug": "rabby",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Arc blog: Arc mainnet, the economic OS for the internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 54,
+    "date": "2026-10-23",
+    "slug": "topaz-cl",
+    "field": "dates",
+    "change": "Live since 2026-09-16, per Topaz pool factory creation tx on Arc",
+    "source": "https://explorer.arc.io/tx/0xdd46b2815a91c5de3b56af97c7e2bf5188aa6d2cc8ab1adaf756dbf2eb00e452",
+    "from": "review"
+  },
+  {
+    "id": 55,
+    "date": "2026-10-23",
+    "slug": "kpk",
+    "field": "dates",
+    "change": "Source added for the launch date 2026-09-16: KPK docs: KPK wARS Yield on Arc",
+    "source": "https://docs.kpk.io/vaults/vaults/morpho/arc/wars-yield",
+    "from": "review"
+  },
+  {
+    "id": 56,
+    "date": "2026-10-23",
+    "slug": "mercurifi",
+    "field": "dates",
+    "change": "Source added for the launch date 2026-09-21: mercuri-launch-contracts README: Arc Mainnet deployment v1.0.0",
+    "source": "https://github.com/mercuri-finance/mercuri-launch-contracts",
+    "from": "review"
+  },
+  {
+    "id": 57,
+    "date": "2026-10-23",
+    "slug": "uniswap",
+    "field": "dates",
+    "change": "Source added for the launch date 2026-09-16: Uniswap blog: Uniswap is Live on Arc",
+    "source": "https://blog.uniswap.org/uniswap-is-live-on-arc",
+    "from": "review"
+  },
+  {
+    "id": 58,
+    "date": "2026-10-23",
+    "slug": "binance",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 59,
+    "date": "2026-10-23",
+    "slug": "binance-wallet",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 60,
+    "date": "2026-10-23",
+    "slug": "bitget-wallet",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 61,
+    "date": "2026-10-23",
+    "slug": "bitrue",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 62,
+    "date": "2026-10-23",
+    "slug": "bitso",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 63,
+    "date": "2026-10-23",
+    "slug": "bitvavo",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 64,
+    "date": "2026-10-23",
+    "slug": "blockradar",
+    "field": "status",
+    "change": "Announced → Live on mainnet, per its documentation",
+    "source": "https://docs.blockradar.co/en/use-cases/integrations",
+    "from": "review"
+  },
+  {
+    "id": 65,
+    "date": "2026-10-23",
+    "slug": "dcent",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 66,
+    "date": "2026-10-23",
+    "slug": "dfns",
+    "field": "status",
+    "change": "Announced → Live on mainnet, per its documentation",
+    "source": "https://docs.dfns.co/networks",
+    "from": "review"
+  },
+  {
+    "id": 67,
+    "date": "2026-10-23",
+    "slug": "imtoken",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 68,
+    "date": "2026-10-23",
+    "slug": "lbank",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 69,
+    "date": "2026-10-23",
+    "slug": "ledger",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 70,
+    "date": "2026-10-23",
+    "slug": "mexc",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 71,
+    "date": "2026-10-23",
+    "slug": "osl",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 72,
+    "date": "2026-10-23",
+    "slug": "rainbow",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 73,
+    "date": "2026-10-23",
+    "slug": "trust-wallet",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 74,
+    "date": "2026-10-23",
+    "slug": "upbit",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 75,
+    "date": "2026-10-23",
+    "slug": "wenia",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+    "source": "https://www.arc.io/blog/arc-economic-os-internet",
+    "from": "review"
+  },
+  {
+    "id": 76,
+    "date": "2026-10-23",
+    "slug": "blackrock",
+    "field": "category",
+    "change": "Also listed under Validators: named in Circle’s founding validator cohort",
+    "source": "https://www.circle.com/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+    "from": "review"
+  },
+  {
+    "id": 77,
+    "date": "2026-10-23",
+    "slug": "sbi-holdings",
+    "field": "category",
+    "change": "Also listed under Validators: named in Circle’s founding validator cohort",
+    "source": "https://www.circle.com/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+    "from": "review"
+  }
+]

@@ -15,4 +15,9 @@ describe("the published directory file", () => {
     const r = validateCorrections(corrRaw, new Set(ECOSYSTEM.entities.map((e) => e.slug)));
     expect(r.ok ? [] : r.errors).toEqual([]);
   });
+  test("every launch date is backed by a source dated that day (spec 2026-10-23-ai-search-gaps §2)", () => {
+    const unbacked = ECOSYSTEM.entities.filter((e) => e.first_live && ![...e.status_evidence, ...e.sources].some((s) => s.date === e.first_live)).map((e) => `${e.slug} ${e.first_live}`);
+    expect(unbacked).toEqual([]);
+  });
 });
+

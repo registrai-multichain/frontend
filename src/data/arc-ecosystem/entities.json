@@ -8,13 +8,18 @@
       {
         "url": "https://github.com/0xProject/0x-settler/blob/master/chain_config.json",
         "title": "0x Settler chain config lists Arc (chain 5042)"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc Mainnet Is Live: The Economic OS for the Internet (arc.io blog)",
+        "date": "2026-09-16"
       }
     ],
     "summary": "DEX aggregator and swap API provider. Its Settler contracts, AllowanceHolder and multicall helper are deployed on Arc (chain 5042), per the 0x-settler repository.",
     "website": "https://0x.org",
     "docs": "https://0x.org/docs",
     "github": "https://github.com/0xProject",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-16",
     "contracts": [
       {
         "address": "0x0000000000001ff3684f28c67538d4d072c22734",
@@ -52,7 +57,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "1inch",
@@ -69,6 +74,11 @@
         "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
         "title": "Circle launches Arc mainnet",
         "date": "2026-09-16"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc Mainnet Is Live: The Economic OS for the Internet (arc.io blog)",
+        "date": "2026-09-16"
       }
     ],
     "summary": "DEX aggregator. Its Business APIs (swap, limit orders, data and RPC) support Arc with chain ID 5042, and a limit order protocol contract is published for Arc in its limit-order SDK.",
@@ -77,7 +87,7 @@
     "github": "https://github.com/1inch",
     "docs": "https://docs.1inch.io",
     "first_announced": "2026-09-16",
-    "first_live": "2026-10-11",
+    "first_live": "2026-09-16",
     "contracts": [
       {
         "address": "0xe08cab0828a67291ec4af1fb3e7f867e206a6bda",
@@ -105,7 +115,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "aave",
@@ -120,6 +130,11 @@
       {
         "url": "https://github.com/aave-dao/aave-address-book/blob/main/src/AaveV4Arc.sol",
         "title": "Aave address book: AaveV4Arc"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc Mainnet Is Live: The Economic OS for the Internet (arc.io blog)",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Onchain lending and borrowing protocol. Aave v4 is deployed on Arc with a Core Hub and spokes, including Main, Forex, Treasury and USDC Maple eSpokes, per the Aave address book.",
@@ -128,7 +143,7 @@
     "github": "https://github.com/aave",
     "docs": "https://aave.com/docs",
     "first_announced": "2025-10-28",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-16",
     "contracts": [
       {
         "address": "0x17288dfc86205301064577b98b02b81017e6f79c",
@@ -186,7 +201,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "absa",
@@ -239,7 +254,7 @@
       {
         "url": "https://across.to/blog/arc-on-across",
         "title": "Arc on Across",
-        "date": "2026-09-21",
+        "date": "2026-09-16",
         "type": "mainnet-support"
       },
       {
@@ -252,7 +267,7 @@
     "github": "https://github.com/across-protocol",
     "docs": "https://docs.across.to",
     "first_announced": "2025-10-28",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-16",
     "contracts": [
       {
         "address": "0x9b4a302a548c7e313c2b74c461db7b84d3074a84",
@@ -290,7 +305,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "aerodrome",
@@ -319,7 +334,7 @@
     "x": "aeroxyz",
     "github": "https://github.com/Dromos-Labs",
     "first_announced": "2025-10-28",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-16",
     "contracts": [
       {
         "address": "0x7275fa44c67bba8d921422e600b4ed396209c886",
@@ -362,7 +377,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "alchemy",
@@ -374,6 +389,11 @@
         "url": "https://www.alchemy.com/arc",
         "title": "Build on Arc with Alchemy",
         "type": "mainnet-support"
+      },
+      {
+        "url": "https://www.alchemy.com/blog/arc-mainnet-is-live-on-alchemy",
+        "title": "Alchemy blog: Arc mainnet is live on Alchemy",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Node, data and wallet API provider. Its Arc page states that Arc mainnet is live on Alchemy, and its docs are available for building on Arc.",
@@ -398,7 +418,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "alethieum",
@@ -642,11 +663,16 @@
         "url": "https://www.myarcade.fun/",
         "title": "Arcade",
         "type": "mainnet-support"
+      },
+      {
+        "url": "https://explorer.arc.io/tx/0x8fef06d497f86647eaa9c8344b32f3a374af7c143bd10fe780e4375660e2b5c4",
+        "title": "Arcade Prize Vault creation tx (block 22254988)",
+        "date": "2026-09-22"
       }
     ],
     "summary": "Onchain gacha app on Arc Mainnet. Users pay 2 to 5 USDC per spin on a machine and receive tokens from its published reward table, with outcomes chosen by commit-reveal.",
     "website": "https://www.myarcade.fun/",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-22",
     "index_ids": [
       "domain:www.myarcade.fun"
     ],
@@ -658,7 +684,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "archery",
@@ -670,13 +696,18 @@
         "url": "https://archery.wtf/docs",
         "title": "Archery docs: deployment status",
         "type": "mainnet-support"
+      },
+      {
+        "url": "https://explorer.arc.io/tx/0xc008eb2a8d6c1022418ab613cc282c2853703ead20a69db214e855c00afdb64e",
+        "title": "Archery token creation tx (block 22447642)",
+        "date": "2026-09-24"
       }
     ],
     "summary": "ve(3,3) exchange on Arc Mainnet with V2 and concentrated-liquidity (Slipstream) pools for USDC, EURC, cirBTC and WETH.",
     "website": "https://archery.wtf/",
     "x": "archerywtf",
     "docs": "https://archery.wtf/docs",
-    "first_live": "2026-10-11",
+    "first_live": "2026-09-24",
     "index_ids": [
       "domain:archery.wtf"
     ],
@@ -692,7 +723,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "arcland",
@@ -707,7 +738,6 @@
     ],
     "summary": "Digital land project for Arc with a 10,000-land supply and on-chain ownership. Its contracts are on Arc mainnet; its site shows a waitlist.",
     "website": "https://arcland.app/",
-    "first_live": "2026-10-10",
     "index_ids": [
       "domain:arcland.app"
     ],
@@ -719,7 +749,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "arclight",
@@ -730,13 +760,18 @@
       {
         "url": "https://arclight.finance/docs/how-it-works",
         "title": "Arclight docs: how it works"
+      },
+      {
+        "url": "https://explorer.arc.io/tx/0x388ab3c8d28bfab2a6d9eda95f0b5c1f2f1179558f3e3c5c6ae04f3d98f61cc9",
+        "title": "Arclight Builder V3 creation tx (block 21212015)",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Non-custodial tool on Arc Mainnet that mints ladders of up to 32 concentrated-liquidity positions on Uniswap V3 and V4 in one transaction. Also runs an x402 payment facilitator.",
     "website": "https://arclight.finance/",
     "x": "arclightfi",
     "docs": "https://arclight.finance/docs",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-16",
     "index_ids": [
       "domain:arclight.finance"
     ],
@@ -753,7 +788,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "arclotls",
@@ -764,6 +799,11 @@
       {
         "url": "https://explorer.arc.io/address/0xe3afd1f6ce33155ca26574c9a3fe14e59a337759",
         "title": "ArcLotls contract on Arc explorer"
+      },
+      {
+        "url": "https://explorer.arc.io/block/21330221",
+        "title": "Arc mainnet block 21330221: ArcLotls ProductionRenderer created",
+        "date": "2026-09-17"
       }
     ],
     "summary": "On-chain collectible protocol on Arc where users mine pixel axolotl NFTs with a proof-of-work search paid in USDC, and can evolve, fuse and regenerate them. Has a separate LOTL token with buybacks and burns.",
@@ -809,7 +849,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-17"
   },
   {
     "slug": "arcpad-meme",
@@ -851,12 +892,17 @@
       {
         "url": "https://astock.fi/",
         "title": "Astock: tokenized stocks, built on Arc"
+      },
+      {
+        "url": "https://explorer.arc.io/tx/0xb511f1a3461d08d6861b1b024ce3a12d0f1d28305f368f761c4b5faeb915f54b",
+        "title": "ASTOCK token creation tx (block 21237418)",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Tokenized stocks project built on Arc. Its page titles it \"tokenized stocks, built on Arc\".",
     "website": "https://astock.fi/",
     "x": "TryArcStocks",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-16",
     "index_ids": [
       "domain:arcstocks.app"
     ],
@@ -873,7 +919,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "arctide",
@@ -887,11 +933,16 @@
       {
         "url": "https://arctide.app/",
         "title": "Arctide website"
+      },
+      {
+        "url": "https://explorer.arc.io/tx/0x5ac4546f51b634bf999193036839d7fa651c34694b3f474a77e10f464e66f896",
+        "title": "Arctide AMM factory creation tx (block 21106786)",
+        "date": "2026-09-16"
       }
     ],
     "summary": "DEX and launchpad with programmable revenue distribution and social trading features, per its site description.",
     "website": "https://arctide.app/",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-16",
     "index_ids": [
       "domain:arctide.app"
     ],
@@ -920,7 +971,7 @@
         "title": "Arctide AMM factory on Arc"
       }
     ],
-    "last_reviewed": "2026-10-20",
+    "last_reviewed": "2026-10-23",
     "contracts": [
       {
         "address": "0x92395d0cd51bb504a39e53105cb6862948af1b8e",
@@ -976,7 +1027,6 @@
     "summary": "Trading terminal for Arc that routes swaps across launchpads and DEX liquidity, settling in USDC. Its README also lists a launchpad, token locker, pay links, perpetuals and Telegram bots.",
     "website": "https://arctools.fun/",
     "github": "https://github.com/ArcToolsRepo/arctools",
-    "first_live": "2026-10-10",
     "contracts": [
       {
         "address": "0x43cdbf8edb8fe41dde4ba519f49499d1ed78e74a",
@@ -1044,7 +1094,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20",
+    "last_reviewed": "2026-10-23",
     "facts_source": "domain:arctools.fun"
   },
   {
@@ -1352,6 +1402,11 @@
         "url": "https://api.backpack.exchange/api/v1/assets",
         "title": "Backpack assets API lists USDC on Arc with deposits and withdrawals enabled",
         "type": "mainnet-support"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc, the economic OS for the internet (mainnet launch)",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Self-custody wallet and centralized exchange offering crypto spot, perpetual futures and US stock trading. Its assets API lists USDC on Arc with deposits and withdrawals enabled.",
@@ -1380,7 +1435,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "bank-frick",
@@ -1593,6 +1649,11 @@
       {
         "url": "https://explorer.arc.io/address/0x104e6823bab0be3fe9b48c5fb0f0413301d935a4",
         "title": "Arc explorer: Beefy USDC-EURC vault"
+      },
+      {
+        "url": "https://explorer.arc.io/block/22167963",
+        "title": "Arc mainnet block 22167963: Beefy USDC-EURC vault created",
+        "date": "2026-09-22"
       }
     ],
     "summary": "Yield aggregator that auto-compounds deposited tokens across chains. On Arc it runs concentrated-liquidity vaults on Uniswap pools, including USDC-EURC, with matching reward pools.",
@@ -1645,18 +1706,25 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-22"
   },
   {
     "slug": "binance",
     "name": "Binance",
     "category": "exchanges",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
         "title": "Arc mainnet launch announcement",
         "date": "2026-09-16"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+        "date": "2026-09-16",
+        "type": "arc-official-live"
       }
     ],
     "summary": "Announced as an exchange giving users access to Arc at mainnet launch on 2026-09-16, per Circle's launch release. A third-party relay reports Binance opened USDC deposits on Arc the same day.",
@@ -1674,18 +1742,25 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "binance-wallet",
     "name": "Binance Wallet",
     "category": "wallets",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
         "title": "Circle: Arc founding validator cohort and integrations (2026-08-05)",
         "date": "2026-08-05"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+        "date": "2026-09-16",
+        "type": "arc-official-live"
       }
     ],
     "summary": "Binance's crypto wallet. Named among exchange and wallet providers enabling access to USDC on Arc in Circle's 2026-08-05 announcement, and among digital wallets in the 2026-09-16 mainnet announcement.",
@@ -1708,7 +1783,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "birdeye",
@@ -1737,12 +1813,18 @@
     "slug": "bitget-wallet",
     "name": "Bitget Wallet",
     "category": "wallets",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
         "title": "Circle: Arc mainnet launch (2026-09-16)",
         "date": "2026-09-16"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+        "date": "2026-09-16",
+        "type": "arc-official-live"
       }
     ],
     "summary": "Multichain crypto wallet from Bitget. Named among digital wallets in Circle's 2026-09-16 Arc mainnet announcement.",
@@ -1767,7 +1849,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "bitgo",
@@ -1811,11 +1894,17 @@
     "slug": "bitrue",
     "name": "Bitrue",
     "category": "exchanges",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/ecosystem/bitrue",
         "title": "Arc ecosystem directory: Bitrue"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+        "date": "2026-09-16",
+        "type": "arc-official-live"
       }
     ],
     "summary": "Centralized crypto exchange. Listed as an Arc ecosystem partner.",
@@ -1834,18 +1923,25 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "bitso",
     "name": "Bitso",
     "category": "exchanges",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
         "title": "Circle: Arc mainnet launch (2026-09-16)",
         "date": "2026-09-16"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+        "date": "2026-09-16",
+        "type": "arc-official-live"
       }
     ],
     "summary": "Latin American crypto exchange; its stablecoin arm Juno issues MXNB. Named among digital asset exchanges in Circle's 2026-09-16 Arc mainnet announcement.",
@@ -1875,18 +1971,25 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "bitvavo",
     "name": "Bitvavo",
     "category": "exchanges",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
         "title": "Circle: Arc public testnet launch (2025-10-28)",
         "date": "2025-10-28"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+        "date": "2026-09-16",
+        "type": "arc-official-live"
       }
     ],
     "summary": "Dutch crypto exchange. Named among centralized exchanges engaging with Arc in Circle's 2025-10-28 testnet announcement and among digital asset exchanges in the 2026-09-16 mainnet announcement.",
@@ -1909,7 +2012,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "bitwise",
@@ -1949,7 +2053,8 @@
     "name": "BlackRock",
     "category": "asset-managers",
     "tags": [
-      "rwa"
+      "rwa",
+      "validators"
     ],
     "status": "announced",
     "status_evidence": [
@@ -1985,7 +2090,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "blockdaemon",
@@ -1997,6 +2102,11 @@
         "url": "https://docs.blockdaemon.com/reference/arc-methods-rpc-api",
         "title": "Blockdaemon docs: Arc RPC API, mainnet and testnet supported",
         "type": "mainnet-support"
+      },
+      {
+        "url": "https://www.blockdaemon.com/blog/announcing-blockdaemon-as-a-day-1-launch-partner-for-arc",
+        "title": "Blockdaemon blog: Announcing Blockdaemon as a Day 1 Launch Partner for Arc",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Node and RPC infrastructure provider. Its docs publish an Arc RPC API reference and state that both Arc mainnet and testnet are supported.",
@@ -2022,17 +2132,23 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "blockradar",
     "name": "Blockradar",
     "category": "wallets",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/ecosystem/blockradar",
         "title": "Arc ecosystem directory: Blockradar"
+      },
+      {
+        "url": "https://docs.blockradar.co/en/use-cases/integrations",
+        "title": "Project documentation lists Arc mainnet",
+        "type": "mainnet-support"
       }
     ],
     "summary": "Wallet and settlement infrastructure with APIs that lets fintechs move stablecoins without building their own chain infrastructure. Listed as an Arc ecosystem partner.",
@@ -2056,7 +2172,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "blockrun",
@@ -2068,6 +2184,11 @@
         "url": "https://arc.blockrun.ai/",
         "title": "BlockRun on Arc",
         "type": "mainnet-support"
+      },
+      {
+        "url": "https://github.com/BlockRunAI/blockrun-llm/releases/tag/v1.17.0",
+        "title": "blockrun-llm v1.17.0: Arc",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Pay-per-call gateway to AI models and data APIs, paid in USDC on Arc through the x402 protocol. Callers need only a USDC wallet on Arc.",
@@ -2075,7 +2196,7 @@
     "x": "BlockRunAI",
     "github": "https://github.com/BlockRunAI",
     "first_announced": "2026-09-16",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-16",
     "index_ids": [
       "integration:blockrun"
     ],
@@ -2096,7 +2217,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "blockscout",
@@ -2111,7 +2232,7 @@
       {
         "url": "https://www.blog.blockscout.com/news-exploring-arc/",
         "title": "Blockscout blog: Exploring Arc",
-        "date": "2026-09-22",
+        "date": "2026-09-16",
         "type": "mainnet-support"
       }
     ],
@@ -2137,7 +2258,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "bny",
@@ -2204,6 +2326,11 @@
         "url": "https://bonker.wtf/docs/contracts",
         "title": "Bonker deployed contracts",
         "date": "2026-10-20"
+      },
+      {
+        "url": "https://explorer.arc.io/tx/0x3f220617dc0db19eaa717e47c284451ca1e70d7fd21ce76d45374651a464b112",
+        "title": "Arc mainnet tx: Bonker FeeLocker contract creation",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Token launchpad that deploys ERC-20 tokens with Uniswap v4 pools, locked liquidity and creator rewards. Runs on Base, Robinhood Chain and Arc, with its factory and lockers deployed on Arc.",
@@ -2279,7 +2406,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "brex",
@@ -2368,6 +2496,11 @@
         "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
         "title": "Circle launches Arc public testnet",
         "date": "2025-10-28"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc, the economic OS for the internet (mainnet launch)",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Non-custodial MPC wallet for crypto and tokenized assets, with business and AI-agent wallets. Lists Arc among its supported networks and was named among digital wallets in Circle's 2025-10-28 Arc announcement.",
@@ -2392,7 +2525,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "btg-pactual",
@@ -2493,7 +2627,6 @@
     "website": "https://bungee.exchange",
     "github": "https://github.com/SocketDotTech",
     "docs": "https://docs.socket.tech/",
-    "first_live": "2026-10-11",
     "contracts": [
       {
         "address": "0x50cfe7c1938db66a1a6d2e86d36f39fbef3d5c4a",
@@ -2536,7 +2669,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "bybit",
@@ -2823,7 +2956,6 @@
     "github": "https://github.com/smartcontractkit/chainlink",
     "docs": "https://docs.chain.link",
     "first_announced": "2025-10-28",
-    "first_live": "2026-10-10",
     "contracts": [
       {
         "address": "0xb79791184973589c38e114d43eb8e4588c283a18",
@@ -2876,7 +3008,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "chronicle-labs",
@@ -2916,6 +3048,11 @@
         "url": "https://developers.circle.com/gateway/references/supported-blockchains",
         "title": "Gateway supported blockchains (Arc mainnet)",
         "type": "mainnet-support"
+      },
+      {
+        "url": "https://developers.circle.com/release-notes/gateway-2026",
+        "title": "Circle Gateway release notes 2026",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Circle's unified USDC balance service for moving USDC across chains. Circle's docs list Arc mainnet as a supported chain (domain 26) with GatewayWallet and GatewayMinter contracts deployed.",
@@ -2956,7 +3093,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "clearbank",
@@ -3529,11 +3667,17 @@
       "D'CENT"
     ],
     "category": "wallets",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/ecosystem/dcent",
         "title": "DCent on arc.io ecosystem"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+        "date": "2026-09-16",
+        "type": "arc-official-live"
       }
     ],
     "summary": "Maker of a fingerprint-secured hardware wallet. Listed as an Arc ecosystem partner.",
@@ -3551,7 +3695,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "definitive",
@@ -3656,7 +3801,7 @@
       "custody",
       "developer-tools"
     ],
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/ecosystem/dfns",
@@ -3664,7 +3809,8 @@
       },
       {
         "url": "https://docs.dfns.co/networks",
-        "title": "DFNS supported networks, Arc testnet"
+        "title": "DFNS supported networks, Arc testnet",
+        "type": "mainnet-support"
       }
     ],
     "summary": "Wallet-as-a-service and key management platform for banks, fintechs and businesses. Listed as an Arc ecosystem partner; its documentation lists Arc testnet among supported networks.",
@@ -3689,7 +3835,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "dialectic",
@@ -3877,6 +4023,11 @@
         "url": "https://drpc.org/chainlist/arc-mainnet-rpc",
         "title": "dRPC Arc RPC endpoints",
         "type": "mainnet-support"
+      },
+      {
+        "url": "https://drpc.org/blog/arc-mainnet-announcement/",
+        "title": "dRPC blog: Arc Mainnet RPC Is Live: Supported By dRPC From Day One",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Provider of RPC endpoints and blockchain data infrastructure. Its site lists Arc Mainnet and Arc Testnet RPC endpoints on its chainlist.",
@@ -3899,7 +4050,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "dtcc",
@@ -4020,7 +4172,7 @@
       {
         "url": "https://pro.edgex.exchange/en-US/news/article/edgex-arc-genesis-campaign",
         "title": "edgeX x Arc Genesis is live",
-        "date": "2026-09-17",
+        "date": "2026-09-16",
         "type": "mainnet-support"
       }
     ],
@@ -4050,7 +4202,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "elliptic",
@@ -4367,7 +4520,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "fireblocks",
@@ -4557,12 +4711,17 @@
         "url": "https://docs.flipt.fun/",
         "title": "flipt.fun docs",
         "date": "2026-10-20"
+      },
+      {
+        "url": "https://explorer.arc.io/tx/0x0cbdcb9ee9e35a4283c9602cfab43da2f8790ce862ccf786f93aaa101880f177",
+        "title": "flipt feeConfig creation tx (block 21078750)",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Token launchpad on Arc built on bonding curves. Curve buyers hold a position that earns a share of pool fees after graduation, and leaving it (unbonding) takes 90 seconds and is public.",
     "website": "https://flipt.fun/",
     "docs": "https://docs.flipt.fun/",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-16",
     "index_ids": [
       "domain:flipt.fun"
     ],
@@ -4578,7 +4737,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "fluid",
@@ -4643,7 +4802,6 @@
     "summary": "Token launchpad on Arc using bonding curves; graduated tokens move into locked Uniswap V4 positions, per its DefiLlama listing (category Launchpad, chain Arc).",
     "website": "https://foci.family/",
     "x": "focidotfamily",
-    "first_live": "2026-10-10",
     "index_ids": [
       "domain:foci.family"
     ],
@@ -4659,7 +4817,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "fomo",
@@ -5092,12 +5250,17 @@
         "url": "https://hashfly.fun/",
         "title": "HashFly website",
         "date": "2026-10-20"
+      },
+      {
+        "url": "https://explorer.arc.io/tx/0xaa8106581a7ec7f498b23ba90860120a80cda569dc1513ac8a69ba17d8d112b8",
+        "title": "HashFly royalty vault creation tx (block 22424635)",
+        "date": "2026-09-23"
       }
     ],
     "summary": "NFT collection of 7,777 pixel flies created by browser proof-of-work mining on Arc, with traits derived by the contract from each mined hash. Its site also lists an OpenSea collection and a $FLY token.",
     "website": "https://hashfly.fun/",
     "x": "hashfly_arc",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-23",
     "index_ids": [
       "domain:hashfly.fun"
     ],
@@ -5108,7 +5271,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "hashkey",
@@ -5441,12 +5604,13 @@
     "slug": "imtoken",
     "name": "imToken",
     "category": "wallets",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/blog/arc-economic-os-internet",
         "title": "Arc blog lists imToken among digital wallets connecting to Arc",
-        "date": "2026-09-16"
+        "date": "2026-09-16",
+        "type": "arc-official-live"
       },
       {
         "url": "https://www.arc.io/ecosystem/imtoken",
@@ -5469,7 +5633,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "intercontinental-exchange",
@@ -5758,7 +5923,6 @@
     ],
     "summary": "Non-custodial app on Arc for token swaps, perpetuals, prediction markets, liquidity pools, lending and token creation. Its contracts are deployed on Arc mainnet.",
     "website": "https://kairo.market/",
-    "first_live": "2026-10-10",
     "contracts": [
       {
         "address": "0x9f7c7ba45877a5fbef7ff7756a4983b4fe30ffd3",
@@ -5802,7 +5966,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "kaleido",
@@ -5860,6 +6024,11 @@
       {
         "url": "https://defillama.com/protocol/kaleido-lending",
         "title": "DefiLlama: Kaleido Lending, Arc"
+      },
+      {
+        "url": "https://explorer.arc.io/tx/0x3c3c8b8282dfb2794c0dbaf750535be7071f28e588e951d5d2747d4b6bb72e40",
+        "title": "Kaleido swap pool factory creation tx on Arc",
+        "date": "2026-09-16"
       }
     ],
     "summary": "DeFi suite on Arc with concentrated-liquidity swap pools from its own factory and a peer-to-peer lending market where borrowers post collateral such as EURC and cirBTC against native USDC. DefiLlama tracks both on Arc.",
@@ -5925,13 +6094,14 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20",
+    "last_reviewed": "2026-10-23",
     "tags": [
       "lending"
     ],
     "aliases": [
       "Kaleido Finance"
-    ]
+    ],
+    "first_live": "2026-09-16"
   },
   {
     "slug": "keyrock",
@@ -6041,7 +6211,7 @@
       {
         "url": "https://docs.kpk.io/vaults/vaults/morpho/arc/wars-yield",
         "title": "KPK docs: wARS Yield vault on Arc",
-        "date": "2026-10-20"
+        "date": "2026-09-16"
       }
     ],
     "summary": "Noncustodial onchain asset manager that curates DeFi vaults and tokenised funds. It curates the KPK wARS Yield vault on Arc, a Morpho vault for Ripio's wARS.",
@@ -6078,7 +6248,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "kraken",
@@ -6173,6 +6343,11 @@
         "url": "https://blog.kyberswap.com/what-is-the-best-platform-for-arc-cross-chain-swaps/",
         "title": "KyberSwap blog: Arc cross-chain swaps",
         "date": "2026-09-20"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc: economic OS for the internet (mainnet launch post)",
+        "date": "2026-09-16"
       }
     ],
     "summary": "DEX aggregator with swap, limit order and cross-chain swap products. Its blog describes Arc as a destination chain, with 23 source networks listed in the cross-chain selector.",
@@ -6180,7 +6355,7 @@
     "x": "KyberNetwork",
     "github": "https://github.com/KyberNetwork",
     "docs": "https://docs.kyberswap.com",
-    "first_live": "2026-10-11",
+    "first_live": "2026-09-16",
     "contracts": [
       {
         "address": "0x6131b5fae19ea4f9d964eac0408e4408b66337b5",
@@ -6208,7 +6383,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "kyobo-life",
@@ -6323,7 +6498,6 @@
     "github": "https://github.com/LayerZero-Labs",
     "docs": "https://docs.layerzero.network/v2/deployments/chains/arc",
     "first_announced": "2025-10-28",
-    "first_live": "2026-10-10",
     "contracts": [
       {
         "address": "0x6f475642a6e85809b1c36fa62763669b1b48dd5b",
@@ -6391,18 +6565,24 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "lbank",
     "name": "LBank",
     "category": "exchanges",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/ecosystem/lbank",
         "title": "LBank on arc.io ecosystem directory",
         "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+        "date": "2026-09-16",
+        "type": "arc-official-live"
       }
     ],
     "summary": "Centralised cryptocurrency exchange offering spot and futures trading. Listed as an Arc ecosystem partner.",
@@ -6419,7 +6599,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "lead-bank",
@@ -6465,7 +6646,7 @@
     "slug": "ledger",
     "name": "Ledger",
     "category": "wallets",
-    "status": "announced",
+    "status": "live",
     "first_announced": "2025-10-28",
     "status_evidence": [
       {
@@ -6477,6 +6658,12 @@
         "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
         "title": "Circle launches Arc mainnet",
         "date": "2026-09-16"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+        "date": "2026-09-16",
+        "type": "arc-official-live"
       }
     ],
     "summary": "Hardware wallet maker for self-custody of crypto assets. Named as a digital wallet provider in Circle's Arc announcements of 2025-10-28 and 2026-09-16.",
@@ -6504,7 +6691,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "li-fi",
@@ -6531,7 +6719,7 @@
     "github": "https://github.com/lifinance",
     "docs": "https://docs.li.fi",
     "first_announced": "2026-09-16",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-16",
     "contracts": [
       {
         "address": "0xa4072583658fae592a3506a42431cb6316a8d40b",
@@ -6604,7 +6792,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "lianlian",
@@ -6649,12 +6837,13 @@
     "status_evidence": [
       {
         "url": "https://explorer.arc.io/address/0x1ca37b3c40e89aad48b5ad3352269c2293cfd3da",
-        "title": "Lift Factory V4 on Arc explorer"
+        "title": "Lift Factory V4 on Arc explorer",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Token launchpad that deploys tokens on Arc; the site describes fixed-supply tokens launched into a locked liquidity pool with no owner. Its factory and vault contracts are deployed on Arc mainnet.",
     "website": "https://lift.fun/",
-    "first_live": "2026-10-11",
+    "first_live": "2026-09-16",
     "contracts": [
       {
         "address": "0x1ca37b3c40e89aad48b5ad3352269c2293cfd3da",
@@ -6697,7 +6886,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "load",
@@ -7029,7 +7218,8 @@
       },
       {
         "url": "https://github.com/mercuri-finance/mercuri-launch-contracts",
-        "title": "Mercurifi Launch contracts (deployment record)"
+        "title": "Mercurifi Launch contracts (deployment record)",
+        "date": "2026-09-21"
       },
       {
         "url": "https://docs.mercuri.finance/trade",
@@ -7121,7 +7311,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20",
+    "last_reviewed": "2026-10-23",
     "tags": [
       "dexs"
     ]
@@ -7144,7 +7334,7 @@
     "github": "https://github.com/MetaMask",
     "docs": "https://docs.metamask.io",
     "first_announced": "2025-10-28",
-    "first_live": "2026-10-11",
+    "first_live": "2026-09-16",
     "index_ids": [
       "integration:metamask"
     ],
@@ -7165,18 +7355,24 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "mexc",
     "name": "MEXC",
     "category": "exchanges",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
         "title": "Circle: Arc mainnet launch announcement",
         "date": "2026-09-16"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+        "date": "2026-09-16",
+        "type": "arc-official-live"
       }
     ],
     "summary": "Crypto exchange. Listed among digital asset exchanges giving users access to Arc in Circle's 2026-09-16 mainnet launch announcement.",
@@ -7189,7 +7385,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "moneygram",
@@ -7252,7 +7449,6 @@
     "x": "moonpay",
     "docs": "https://docs.moonpay.com",
     "first_announced": "2026-09-16",
-    "first_live": "2026-10-10",
     "sources": [
       {
         "url": "https://api.moonpay.com/v3/currencies",
@@ -7275,7 +7471,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "morpho",
@@ -7289,7 +7485,8 @@
       },
       {
         "url": "https://morpho.org/blog/morpho-is-live-on-arc-as-its-credit-infrastructure",
-        "title": "Morpho blog: live on Arc"
+        "title": "Morpho blog: live on Arc",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Onchain lending network. On Arc it runs Morpho Blue markets for variable-rate lending and borrowing, and its Earn Kit API is used by apps such as Pulsar Money and SafePal for yield products.",
@@ -7298,7 +7495,7 @@
     "github": "https://github.com/morpho-org",
     "docs": "https://docs.morpho.org",
     "first_announced": "2025-10-28",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-16",
     "contracts": [
       {
         "address": "0x34cd04070dd72b14e241112f6d83812df5af7fcd",
@@ -7336,7 +7533,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "murmur",
@@ -7346,7 +7543,8 @@
     "status_evidence": [
       {
         "url": "https://explorer.arc.io/address/0x8faae5592b9acc27a79fca745c6b872adf514a5d",
-        "title": "MURMUR token contract on Arc explorer"
+        "title": "MURMUR token contract on Arc explorer",
+        "date": "2026-09-17"
       },
       {
         "url": "https://muros.live/",
@@ -7357,7 +7555,7 @@
     "website": "https://muros.live/",
     "x": "murmur_arc",
     "github": "https://github.com/EvolutionDeep/murmur",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-17",
     "contracts": [
       {
         "address": "0x8faae5592b9acc27a79fca745c6b872adf514a5d",
@@ -7375,7 +7573,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "new-york-life-investment-management",
@@ -7666,6 +7864,11 @@
       {
         "url": "https://web3.okx.com/onchainos/dev-docs/trade/dex-smart-contract.md",
         "title": "OKX OnchainOS smart contract addresses"
+      },
+      {
+        "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+        "title": "Circle launches Arc mainnet (press release)",
+        "date": "2026-09-16"
       }
     ],
     "summary": "OKX's web3 wallet and DEX aggregation product. OKX's OnchainOS docs list a DEX router and a token-approval contract for Arc.",
@@ -7673,7 +7876,7 @@
     "github": "https://github.com/okx",
     "docs": "https://web3.okx.com/onchainos/dev-docs/trade/dex-smart-contract.md",
     "first_announced": "2026-09-16",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-16",
     "contracts": [
       {
         "address": "0x4e3bcce28caf98a143fd8bd9e4875ccab3e7bbe0",
@@ -7701,7 +7904,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "opensea",
@@ -7716,12 +7919,17 @@
       {
         "url": "https://support.opensea.io/en/articles/8867082-which-blockchains-are-compatible-with-opensea",
         "title": "OpenSea support: compatible blockchains"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc: economic OS for the internet (mainnet launch post)",
+        "date": "2026-09-16"
       }
     ],
     "summary": "NFT marketplace. Its support page lists Arc among the compatible blockchains, and the Seaport contract is deployed on Arc.",
     "website": "https://opensea.io",
     "x": "opensea",
-    "first_live": "2026-10-11",
+    "first_live": "2026-09-16",
     "contracts": [
       {
         "address": "0x0000000000000068f116a894984e2db1123eb395",
@@ -7744,7 +7952,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "ornn",
@@ -7810,12 +8018,18 @@
     "slug": "osl",
     "name": "OSL",
     "category": "exchanges",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.kucoin.com/news/flash/osl-global-adds-support-for-usdc-deposits-and-withdrawals-on-arc-network",
         "title": "OSL adds USDC on Arc (news relay)",
         "date": "2026-09-17"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+        "date": "2026-09-16",
+        "type": "arc-official-live"
       }
     ],
     "summary": "Digital asset trading platform under OSL Group. Announced as adding USDC deposits and withdrawals on Arc on 2026-09-17, one of six supported USDC networks, per a news report.",
@@ -7834,7 +8048,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "owlpay",
@@ -8008,7 +8223,6 @@
     ],
     "summary": "Peach Protocol web app on Arc with Trade (token swap with a 0.5% fee shown), Terminal, Launchpad and Bridge sections.",
     "website": "https://peach.ag/",
-    "first_live": "2026-10-10",
     "index_ids": [
       "domain:peach.ag"
     ],
@@ -8019,7 +8233,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "peddles",
@@ -8138,6 +8352,11 @@
         "title": "Phantom docs: EVM networks, lists Arc mainnet (chain ID 5042)",
         "date": "2026-10-20",
         "type": "mainnet-support"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc mainnet, the economic OS for the internet",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Self-custodial wallet for trading across several chains. Its docs list Arc mainnet (chain ID 5042) among supported EVM networks, and Circle's 2026-09-16 announcement names it among wallets.",
@@ -8162,7 +8381,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "photonpay",
@@ -8417,6 +8637,11 @@
         "title": "Rabby API chain list includes Arc (community_id 5042)",
         "date": "2026-10-20",
         "type": "mainnet-support"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc mainnet, the economic OS for the internet",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Browser and mobile wallet for Ethereum and EVM chains. Arc (chain ID 5042) appears in the chain list served by Rabby's own API.",
@@ -8435,7 +8660,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "rain",
@@ -8476,12 +8702,18 @@
     "slug": "rainbow",
     "name": "Rainbow",
     "category": "wallets",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
         "title": "Circle: Arc mainnet launch announcement",
         "date": "2026-09-16"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+        "date": "2026-09-16",
+        "type": "arc-official-live"
       }
     ],
     "summary": "Crypto wallet app. Named among digital wallet providers joining Arc at testnet (2025-10-28) and among wallets listed for Arc mainnet in Circle's 2026-09-16 announcement.",
@@ -8506,7 +8738,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "ramp",
@@ -8588,7 +8821,6 @@
     "x": "RangoExchange",
     "github": "https://github.com/rango-exchange",
     "docs": "https://docs.rango.exchange",
-    "first_live": "2026-10-11",
     "contracts": [
       {
         "address": "0x69460570c93f9de5e2edbc3052bf10125f0ca22d",
@@ -8611,7 +8843,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "re7-labs",
@@ -8655,13 +8887,18 @@
       {
         "url": "https://api.relay.link/chains",
         "title": "Relay chains API lists Arc (5042)"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc: economic OS for the internet (mainnet launch post)",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Cross-chain payments and bridging protocol. Its chains API lists Arc (chain ID 5042) with deposits enabled, plus an ERC-20 router and approval proxy.",
     "website": "https://relay.link",
     "x": "RelayProtocol",
     "docs": "https://docs.relay.link",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-16",
     "contracts": [
       {
         "address": "0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f",
@@ -8689,7 +8926,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "rhino-fi",
@@ -8710,13 +8947,18 @@
         "title": "rhino.fi docs: supported chains and tokens",
         "date": "2026-10-20",
         "type": "mainnet-support"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc: economic OS for the internet (mainnet launch post)",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Stablecoin payments and cross-chain bridge provider with Smart Deposit Addresses. Its docs list Arc among supported chains, with USDC (ERC20 and native) sendable to the bridge and USDC (ERC20) received from it.",
     "website": "https://rhino.fi",
     "x": "rhinofi",
     "docs": "https://docs.rhino.fi",
-    "first_live": "2026-10-11",
+    "first_live": "2026-09-16",
     "contracts": [
       {
         "address": "0x5e023c31e1d3dcd08a1b3e8c96f6ef8aa8fcacd1",
@@ -8744,7 +8986,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "robinhood",
@@ -8855,7 +9097,10 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "tags": [
+      "validators"
+    ]
   },
   {
     "slug": "sbi-shinsei-trust",
@@ -9240,7 +9485,7 @@
       {
         "url": "https://kitchen.steakhouse.financial/p/defi-markets-update-2026-09-22",
         "title": "Steakhouse DeFi Markets Update 2026-09-22: Steakhouse Goes Live on Arc",
-        "date": "2026-10-20"
+        "date": "2026-09-22"
       },
       {
         "url": "https://app.steakhouse.financial/earn/5042/0xbeef0016cb2Fd5C352ea7CA08a9f54739DFa7298",
@@ -9252,7 +9497,7 @@
     "website": "https://www.steakhouse.financial/",
     "x": "SteakhouseFi",
     "first_announced": "2026-09-16",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-22",
     "contracts": [
       {
         "address": "0xbeef0016cb2fd5c352ea7ca08a9f54739dfa7298",
@@ -9285,7 +9530,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "sumitomo-corporation",
@@ -9498,7 +9743,6 @@
     "summary": "Trading interface offering swaps across supported chains, Hyperliquid perpetuals and concentrated liquidity. Its site metadata describes it as a DEX on Arc, and DefiLlama lists it in the DEX category.",
     "website": "https://app.synthra.org/",
     "x": "Synthra_finance",
-    "first_live": "2026-10-11",
     "index_ids": [
       "integration:synthra"
     ],
@@ -9514,7 +9758,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "taurus",
@@ -9709,7 +9953,6 @@
     ],
     "summary": "Token launchpad and DEX. A token launches in one transaction, its supply becomes locked liquidity, and every trade pays a 1% fee split between the creator, holder rewards, the protocol and token burns.",
     "website": "https://tollylabs.com/",
-    "first_live": "2026-10-10",
     "index_ids": [
       "domain:tollylabs.com"
     ],
@@ -9725,7 +9968,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "topaz-cl",
@@ -9746,6 +9989,11 @@
       {
         "url": "https://explorer.arc.io/address/0x18226f64a850163c0f0aba453653cc206eae99f3",
         "title": "Topaz Router on Arc explorer"
+      },
+      {
+        "url": "https://explorer.arc.io/tx/0xdd46b2815a91c5de3b56af97c7e2bf5188aa6d2cc8ab1adaf756dbf2eb00e452",
+        "title": "Topaz pool factory creation tx on Arc",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Omnichain ve(3,3) decentralized exchange with a BNB Chain hub and spokes on Ethereum, Base, Robinhood Chain and Arc. Its Arc deployment includes pools, routers, concentrated liquidity, voting and the Topaz Auto vault factory.",
@@ -9826,7 +10074,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "transak",
@@ -9901,12 +10150,18 @@
     "slug": "trust-wallet",
     "name": "Trust Wallet",
     "category": "wallets",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
         "title": "Circle launches Arc mainnet",
         "date": "2026-09-16"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+        "date": "2026-09-16",
+        "type": "arc-official-live"
       }
     ],
     "summary": "Named among digital wallets in Circle's 2026-09-16 Arc mainnet announcement. Self-custody multi-chain wallet app for crypto, NFTs and DeFi.",
@@ -9926,7 +10181,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "turnkey",
@@ -9975,7 +10231,6 @@
     ],
     "summary": "Memecoin launchpad on Arc. Its site says coins launch in one click and that a share of trading fees is paid to holders in USDC daily.",
     "website": "https://ubi.fun/",
-    "first_live": "2026-10-10",
     "index_ids": [
       "domain:ubi.fun"
     ],
@@ -9986,7 +10241,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "uniswap",
@@ -10000,7 +10255,7 @@
       {
         "url": "https://blog.uniswap.org/uniswap-is-live-on-arc",
         "title": "Uniswap blog: Uniswap is Live on Arc",
-        "date": "2026-10-20"
+        "date": "2026-09-16"
       },
       {
         "url": "https://explorer.arc.io/address/0x8366a39cc670b4001a1121b8f6a443a643e40951",
@@ -10062,7 +10317,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "unitflow-finance",
@@ -10077,6 +10332,11 @@
         "url": "https://docs.unitflow.finance/",
         "title": "UnitFlow docs: exchange on Arc Mainnet, chain ID 5042",
         "date": "2026-10-20"
+      },
+      {
+        "url": "https://explorer.arc.io/address/0x5bfbceb73d39f722b1cb83fd2f11736b28c1be6d",
+        "title": "UnitFlowV3Factory on Arc explorer (creation block 21068735)",
+        "date": "2026-09-16"
       }
     ],
     "summary": "Self-custodial exchange on Arc with V3 liquidity, farms, points, a Genesis Pass NFT and no-code token creation, according to its docs.",
@@ -10084,7 +10344,7 @@
     "x": "unitflowFinance",
     "github": "https://github.com/unitflow-Finance",
     "docs": "https://docs.unitflow.finance/",
-    "first_live": "2026-10-10",
+    "first_live": "2026-09-16",
     "index_ids": [
       "domain:unitflow.finance"
     ],
@@ -10100,18 +10360,24 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23"
   },
   {
     "slug": "upbit",
     "name": "Upbit",
     "category": "exchanges",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
         "title": "Circle founding validator cohort announcement",
         "date": "2026-08-05"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+        "date": "2026-09-16",
+        "type": "arc-official-live"
       }
     ],
     "summary": "Named among major exchanges and wallet providers in Circle's 2026-08-05 announcement and among digital asset exchanges in the 2026-09-16 mainnet announcement. Digital asset exchange serving the Korean market.",
@@ -10135,7 +10401,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "uqpay",
@@ -10314,7 +10581,7 @@
     "slug": "wenia",
     "name": "Wenia",
     "category": "exchanges",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
@@ -10324,6 +10591,12 @@
       {
         "url": "https://www.arc.io/ecosystem/wenia",
         "title": "Wenia on arc.io ecosystem"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc blog: Arc Mainnet Is Live: The Economic OS for the Internet",
+        "date": "2026-09-16",
+        "type": "arc-official-live"
       }
     ],
     "summary": "Crypto platform operated by Wenia Ltd, licensed in Bermuda, where users buy, convert, send and sell crypto through its app. Named as a digital asset exchange in Circle's 2026-09-16 Arc mainnet announcement.",
@@ -10347,7 +10620,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-23",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "wintermute",

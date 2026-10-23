@@ -85,3 +85,14 @@ test("stale: announced entries not reviewed for more than 90 days", () => {
   const l = [ok({ slug: "a", status: "announced", status_evidence: [{ url: "https://www.arc.io/x" }], last_reviewed: "2026-07-01" }), ok({ slug: "b", last_reviewed: "2026-07-01" }), ok({ slug: "c", status: "announced", status_evidence: [{ url: "https://www.arc.io/x" }], last_reviewed: "2026-10-01" })];
   expect(staleEntries(l, "2026-10-20").map((e) => e.slug)).toEqual(["a"]);
 });
+
+describe("official Arc evidence", () => {
+  test("an official Arc/Circle post stating a project is live counts as mainnet evidence, only from arc.io or circle.com", () => {
+    const base = { slug: "x", name: "X", category: "exchanges", status: "live", summary: "An exchange.", sources: [{ url: "https://x.io/" }], last_reviewed: "2026-10-23" };
+    expect(validateEntities([{ ...base, status_evidence: [{ url: "https://www.arc.io/blog/arc-economic-os-internet", date: "2026-09-16", type: "arc-official-live" }] }]).ok).toBe(true);
+    expect(validateEntities([{ ...base, status_evidence: [{ url: "https://www.circle.com/pressroom/p", type: "arc-official-live" }] }]).ok).toBe(true);
+    const r = validateEntities([{ ...base, status_evidence: [{ url: "https://news.example/arc", type: "arc-official-live" }] }]);
+    expect(r.ok).toBe(false);
+    expect((r as { errors: string[] }).errors.join()).toMatch(/arc-official-live must be an arc.io or circle.com page/);
+  });
+});

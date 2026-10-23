@@ -41,4 +41,15 @@ describe("applyReview", () => {
     expect(r.entities[0].tags).toEqual(["dexs"]);
     expect(r.corrections.map((c) => c.id)).toEqual([4, 5, 6]);
   });
+  test("evidence already on the entry gets the item's type, title and date", () => {
+    const e = E(); e[1].status_evidence = [{ url: "https://docs.b.io/networks" }];
+    const r = applyReview(e, C, [{ slug: "b", field: "status", set: { status: "live" }, evidence: { url: "https://docs.b.io/networks", title: "Docs list Arc mainnet", type: "mainnet-support" }, change: "Announced → Live on mainnet, per its docs", source: "https://docs.b.io/networks" }], "2026-10-23");
+    expect(r.entities[1].status_evidence).toEqual([{ url: "https://docs.b.io/networks", title: "Docs list Arc mainnet", type: "mainnet-support" }]);
+  });
+  test("a launch date from evidence already on the entry (read on another day) takes the stated launch date", () => {
+    const e = E(); e[0].status_evidence.push({ url: "https://www.arc.io/blog/launch", title: "Arc launch post", date: "2026-10-20" });
+    const r = applyReview(e, C, [dated], "2026-10-23");
+    expect(r.entities[0].status_evidence.filter((s) => s.url === "https://www.arc.io/blog/launch")).toEqual([{ url: "https://www.arc.io/blog/launch", title: "Arc launch post", date: "2026-09-16" }]);
+  });
 });
+
