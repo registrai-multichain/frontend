@@ -1,7 +1,7 @@
 /** The public corrections log of the Arc ecosystem directory (spec docs/superpowers/specs/2026-10-21-ecosystem-corrections-design.md). */
 export const CORRECTION_FIELDS = ["summary", "status", "links", "category", "contracts", "dates", "sources", "removal", "other"] as const;
 export type CorrectionField = (typeof CORRECTION_FIELDS)[number];
-export type CorrectionEntry = { id: number; date: string; slug: string; field: CorrectionField; change: string; source?: string; from: "project" | "reader" };
+export type CorrectionEntry = { id: number; date: string; slug: string; field: CorrectionField; change: string; source?: string; from: "project" | "reader" | "review" };
 export const FIELD_LABEL: Record<CorrectionField, string> = {
   summary: "Summary", status: "Status", links: "Website or links", category: "Category", contracts: "Contracts",
   dates: "Dates", sources: "Sources", removal: "Remove this listing", other: "Other",
@@ -27,7 +27,7 @@ export function validateCorrections(list: unknown, slugs: ReadonlySet<string>): 
     if (!isField(c.field)) err("field must be one of " + CORRECTION_FIELDS.join(", "));
     if (typeof c.change !== "string" || c.change.trim().length < 5 || c.change.length > 200) err("change must be 5-200 characters");
     if (c.source !== undefined && !httpsUrl(c.source)) err("source must be an https URL");
-    if (c.from !== "project" && c.from !== "reader") err("from must be project or reader");
+    if (c.from !== "project" && c.from !== "reader" && c.from !== "review") err("from must be project, reader or review");
     if (typeof c.slug !== "string" || !(slugs.has(c.slug) || removed.has(c.slug))) err("slug must be a published entity or a removed one with a removal entry");
   });
   return errors.length ? { ok: false, errors } : { ok: true, corrections: list as CorrectionEntry[] };

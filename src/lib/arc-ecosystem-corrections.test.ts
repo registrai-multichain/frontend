@@ -42,4 +42,9 @@ describe("corrections log", () => {
     const r = validateEntities([e]);
     expect(r.ok ? [] : r.errors.join()).toMatch(/reserved/);
   });
+  test("accepts Registrai's own review as a source of corrections", () => {
+    const r = validateCorrections([{ id: 1, date: "2026-10-23", slug: "a", field: "dates", change: "Live since 2026-09-16, from the launch post", source: "https://x.y/", from: "review" }], new Set(["a"]));
+    expect(r.ok).toBe(true);
+    expect(validateCorrections([{ id: 1, date: "2026-10-23", slug: "a", field: "dates", change: "Live since 2026-09-16", from: "bot" }], new Set(["a"])).ok).toBe(false);
+  });
 });

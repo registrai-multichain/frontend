@@ -72,7 +72,6 @@ export function mergeCandidates(input: { tracker: TrackerItem[]; members: Member
     if (!c.origins.includes("index")) c.origins.push("index");
     if (!c.index_ids.includes(m.id)) c.index_ids.push(m.id);
     raise(c, "live");
-    c.first_live ??= m.first_hour.slice(0, 10);
     if (!c.website && m.id.startsWith("domain:")) c.website = `https://${m.id.slice(7)}/`;
   }
   for (const l of input.llama) {

@@ -47,4 +47,9 @@ describe("corrections log", () => {
     expect(b.version).toBe(1);
     expect(b.corrections.map((c) => c.id)).toEqual([2, 1]);
   });
+  test("an entry from Registrai's own review is labelled 'Registrai review'", async () => {
+    const { renderCorrectionsLog } = await import("../lib/corrections-pages");
+    const h = renderCorrectionsLog([{ id: 3, date: "2026-10-23", slug: "aave", field: "dates", change: "Live since 2026-09-16, from the launch post", source: "https://aave.com/y", from: "review" }] as never, new Map([["aave", "Aave"]]));
+    expect(h).toContain("Registrai review");
+  });
 });

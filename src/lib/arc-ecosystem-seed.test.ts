@@ -28,7 +28,8 @@ describe("seed", () => {
     expect(aave.origins.sort()).toEqual(["defillama", "index", "tracker"]);
     expect(aave.contracts[0].address).toBe("0x17288dfc86205301064577b98b02b81017e6f79c");
     expect(JSON.stringify(aave)).not.toMatch(/revenue|wallets|private/);
-    expect(out[1]).toMatchObject({ slug: "archery", status: "live", origins: ["index"], index_ids: ["domain:archery.wtf"], first_live: "2026-10-10", website: "https://archery.wtf/" });
+    expect(out[1]).toMatchObject({ slug: "archery", status: "live", origins: ["index"], index_ids: ["domain:archery.wtf"], website: "https://archery.wtf/" });
+    expect(out[1].first_live).toBeUndefined();   // the index first-seen hour is not a launch date
   });
   test("DefiLlama-only Arc protocols become deployed candidates", () => {
     const [c] = mergeCandidates({ tracker: [], members: [], llama: [{ name: "Beefy", slug: "beefy", url: "https://beefy.com", category: "Yield", chains: ["Arc"] }] });
@@ -49,5 +50,10 @@ describe("arc.io partners", () => {
     expect(out.find((c) => c.slug === "aave")).toMatchObject({ status: "live", arcio_url: "https://www.arc.io/ecosystem/aave" });
     expect(out.find((c) => c.slug === "aave")!.origins).toContain("arcio");
     expect(out.find((c) => c.slug === "alcove")).toMatchObject({ status: "announced", origins: ["arcio"], announcements: [{ url: "https://www.arc.io/ecosystem/alcove" }] });
+  });
+  test("an index member makes a project live but never sets its launch date (spec 2026-10-23-ai-search-gaps §2)", () => {
+    const [c] = mergeCandidates({ tracker: [], members: [{ id: "domain:x.io", name: "X", kind: "app", first_hour: "2026-10-10T05:00:00Z" }], llama: [] });
+    expect(c.status).toBe("live");
+    expect(c.first_live).toBeUndefined();
   });
 });

@@ -5,7 +5,7 @@ import { esc, page } from "./apps-pages";
 import { ERROR_TEXT, type ErrorCode, type FormValues } from "./corrections-codes";
 
 const SITE = "https://builder.registrai.cc";
-const FROM = { project: "From the project", reader: "From a reader" } as const;
+const FROM = { project: "From the project", reader: "From a reader", review: "Registrai review" } as const;
 
 export function renderCorrectionsLog(all: CorrectionEntry[], names: Map<string, string>): string {
   const firstOf = new Set<number>(), seen = new Set<string>();
