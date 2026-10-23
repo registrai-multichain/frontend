@@ -13,7 +13,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 const lastReviewed = () => ECOSYSTEM.entities.map((e) => e.last_reviewed).sort().pop() ?? "";
 const DIR_SOURCE = () => `<p class="muted">Source: Registrai Arc ecosystem directory; each status links its evidence. Last reviewed ${esc(lastReviewed())}.</p>`;
 const NA = `<p class="muted">Not available right now (source: Registrai index database).</p>`;
-const METHOD = "Payments into each app's contracts in USDC and other registered stablecoins, converted to USD, as attributed by the Arc Ecosystem Index. New paying wallets: wallets paying the app for the first time.";
+const METHOD = "Payments into each app's contracts in USDC and other registered stablecoins, converted to USD, as attributed by the Arc Ecosystem Index. New paying wallets: wallets that have not paid the app in the last 30 days.";
 const catName = (id: string | null) => (id ? categoryOf(id)?.name ?? id : "–");
 const appLink = (a: WeekApp) => `<a href="${esc(a.href)}">${esc(a.name)}</a>`;
 const entLink = (e: ArcEntity) => `<a href="${entityHref(e.slug)}">${esc(e.name)}</a>`;

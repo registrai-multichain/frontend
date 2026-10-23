@@ -4,6 +4,21 @@ const P = { half_life_days: 21, decay_per_hour_pct: 0.137, cap_per_wallet_hour_u
   new_payer_min_usdc: 10, new_payer_max_per_hour: 25, base_window: 240, base_scale: 30 };
 const S = { window_days: 7, until: "2026-10-28T00:00:00Z", pct: 5.01, daily_min: 1, daily_max: 34, complete: true };
 
+describe("review fixes: definitions match the indexer", () => {
+  test("C1/C2/I1/I2/M2/M5/M6", async () => {
+    const { renderMethodology } = await import("../lib/methodology-page");
+    const h = renderMethodology({ params: P, share: S, until: null });
+    expect(h).not.toContain("verified builders");
+    expect(h).toContain("Arc Builders Index (apps that started on Arc, plus the Arc base layer)");
+    expect(h).toContain("log2(1 + c) + c / $100");                       // C2: the main term of the points formula
+    expect(h).toContain("USDC paid into the attributed contracts of Arc Ecosystem Index members (no per-wallet cap)");   // I1
+    expect(h).toContain("has not paid the app in the last 30 days");       // I2
+    expect(h).toContain("per wallet, per app, per hour");                  // M5
+    expect(h).not.toContain("See the attributed share section below.");     // M2
+    expect(h).toContain("Deployed: built on Arc but not yet open for use on mainnet");   // M6
+  });
+});
+
 describe("/methodology/", () => {
   test("sections, version, live parameters with as-of, the share, JSON-LD", async () => {
     const { renderMethodology } = await import("../lib/methodology-page");
@@ -31,7 +46,7 @@ describe("/methodology/", () => {
     const { renderMethodology } = await import("../lib/methodology-page");
     const h = renderMethodology({ params: null, share: null, until: null });
     expect(h).not.toMatch(/undefined|NaN|null/);
-    expect(h).toContain("up to a per-wallet hourly cap");
+    expect(h).toContain("up to a cap per wallet, per app, per hour");
     expect(h).toContain("Not available right now");
   });
   test("route: 200, slash 301, subpath 404, HEAD empty; links elsewhere point at real anchors", async () => {

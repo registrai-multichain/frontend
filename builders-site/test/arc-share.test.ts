@@ -4,6 +4,16 @@ import { share7d, shareLabel, shareText } from "../lib/arc-share";
 const snap = (day: string, app: number | null, moved: number | null) =>
   ({ generated_at: `${day}T00:02:00.000Z`, activity_24h: { data_until: `${day}T00:00:00Z`, app_usd: app, usdc_moved_usd_est: moved } }) as never;
 
+describe("share7d gaps (review I3)", () => {
+  test("only snapshots within 7×24 h of the newest count; a gap never makes '7 days' span more", () => {
+    const days = ["2026-10-28", "2026-10-27", "2026-10-26", "2026-10-25", "2026-10-24", "2026-10-23", "2026-10-18", "2026-10-17"].map((d) => snap(d, 5, 100));
+    const s = share7d(days)!;
+    expect(s.window_days).toBe(6);
+    expect(s.complete).toBe(false);
+    expect(shareLabel(s)).toBe("6 of the last 7 days");
+  });
+});
+
 describe("share7d", () => {
   test("seven usable days: sums, daily range, complete", () => {
     const days = [snap("2026-10-28", 10, 100), snap("2026-10-27", 1, 100), snap("2026-10-26", 34, 100), snap("2026-10-25", 5, 100),
@@ -20,9 +30,9 @@ describe("share7d", () => {
     const one = share7d([snap("2026-10-22", 5, 100)])!;
     const three = share7d([snap("2026-10-23", 1, 100), snap("2026-10-22", 3, 100), snap("2026-10-21", 5, 100)])!;
     expect(shareLabel(one)).toBe("24 h");
-    expect(shareLabel(three)).toBe("last 3 days");
+    expect(shareLabel(three)).toBe("3 of the last 7 days");
     expect(shareText(one)).toBe("5.00% over 24 h to 22 Oct 2026");
-    expect(shareText(three)).toBe("3.00% over last 3 days to 23 Oct 2026 (daily 1.00–5.00%)");
+    expect(shareText(three)).toBe("3.00% over 3 of the last 7 days to 23 Oct 2026 (daily 1.00–5.00%)");
     expect(shareText(null)).toBe("Not available right now");
   });
 });

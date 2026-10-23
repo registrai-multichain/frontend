@@ -14,25 +14,28 @@ const N = new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 });
 type Input = { params: Record<string, number> | null; share: Share7d | null; until: string | null };
 type Term = { id: string; name: string; text: (p: (k: string) => number | null) => string };
 const money = (x: number) => `$${N.format(x)}`;
+const SHARE_DEF = "The share of USDC moved on Arc that went into index apps: USDC paid into the attributed contracts of Arc Ecosystem Index members (no per-wallet cap) ÷ the estimated USD value of all USDC transfers on Arc (mints and burns excluded), over the same days.";
 
 const TERMS: Term[] = [
   { id: "payment", name: "Payment", text: () => "A transfer of USDC or another registered stablecoin into one of an app's attributed contracts on Arc mainnet, counted by the index method." },
   { id: "paying-wallet", name: "Paying wallet", text: () => "A distinct wallet that made at least one payment to the app within the period." },
   { id: "new-paying-wallet", name: "New paying wallet", text: (p) => {
     const min = p("new_payer_min_usdc"), max = p("new_payer_max_per_hour");
-    return `A wallet paying the app for the first time${min !== null ? `, with at least ${money(min)}` : ""}${max !== null ? `; at most ${N.format(max)} count per app per hour` : ""}.`; } },
+    // the indexer's NEW_WINDOW (30 days) is not in the published params yet; read it when it is (review I2)
+    const win = p("new_payer_window_days") ?? 30;
+    return `A wallet paying the app that has not paid the app in the last ${N.format(win)} days${min !== null ? `, with a payment of at least ${money(min)}` : ""}${max !== null ? `; at most ${N.format(max)} count per app per hour` : ""}.`; } },
   { id: "received-usd", name: "Received (USD)", text: (p) => {
     const cap = p("cap_per_wallet_hour_usdc");
-    return `The USD value of payments; other stablecoins are converted at the ECB reference rate for their currency. Each wallet counts ${cap !== null ? `up to ${money(cap)} per hour` : "up to a per-wallet hourly cap"}.`; } },
+    return `The USD value of payments; other stablecoins are converted at the ECB reference rate for their currency. Payments count ${cap !== null ? `up to ${money(cap)} per wallet, per app, per hour` : "up to a cap per wallet, per app, per hour"}.`; } },
   { id: "attributed-contract", name: "Attributed contract", text: () => "A contract Registrai assigns to an app: its own deployments, pools created by its factories, or a reviewed integration list." },
-  { id: "index-member", name: "Index member", text: () => "An app included in an index: the Arc Builders Index (verified builders), the Arc Integrations Index (integrations) or the Arc Ecosystem Index (all)." },
+  { id: "index-member", name: "Index member", text: () => "An app included in an index: the Arc Builders Index (apps that started on Arc, plus the Arc base layer), the Arc Integrations Index (products that integrated Arc) or the Arc Ecosystem Index (both, plus the base layer)." },
   { id: "index-points", name: "Index points", text: (p) => {
-    const hl = p("half_life_days"), dh = p("decay_per_hour_pct"), per = p("volume_usdc_per_point"), np = p("new_payer_points");
-    return `Activity points that decay${hl !== null ? ` with a half-life of ${N.format(hl)} days` : ""}${dh !== null ? ` (about ${N.format(dh)}% an hour)` : ""}: ${per !== null ? `one point per ${money(per)} received` : "points for USD received"}${np !== null ? `, plus ${N.format(np)} per new paying wallet` : ", plus points per new paying wallet"}.`; } },
+    const hl = p("half_life_days"), dh = p("decay_per_hour_pct"), per = p("volume_usdc_per_point"), np = p("new_payer_points"), cap = p("cap_per_wallet_hour_usdc");
+    return `Activity points that decay${hl !== null ? ` with a half-life of ${N.format(hl)} days` : ""}${dh !== null ? ` (about ${N.format(dh)}% an hour)` : ""}. Each payment earns log2(1 + c) + c / ${per !== null ? money(per) : "a fixed USD unit"}, where c is the USD it counts for${cap !== null ? ` (up to ${money(cap)} per wallet, per app, per hour)` : " under the per-wallet hourly cap"}, plus ${np !== null ? N.format(np) : "a bonus"} for a new paying wallet.`; } },
   { id: "data-until", name: "Closed hour, data until", text: () => "Figures cover hours that have ended; \"data until\" is the end of the last closed hour (UTC)." },
   { id: "window", name: "7-day window", text: () => "The 168 closed hours ending at \"data until\"." },
-  { id: "statuses", name: "Directory statuses", text: () => "Live: evidence of use on Arc mainnet (contracts, an index id, an explorer link or the project's own mainnet support page). Deployed: contracts on Arc without evidence of use. Announced: an announcement only." },
-  { id: "attributed-share-term", name: "Attributed share", text: () => "See the attributed share section below." },
+  { id: "statuses", name: "Directory statuses", text: () => "Live: running on Arc mainnet, shown by mainnet evidence (contracts on Arc mainnet, an index id, an explorer link or the project's own mainnet support page). Deployed: built on Arc but not yet open for use on mainnet, per its own docs or contracts. Announced: an announcement only, with no deployment we can show." },
+  { id: "attributed-share-term", name: "Attributed share", text: () => SHARE_DEF },
 ];
 export const GLOSSARY_IDS = TERMS.map((t) => t.id);
 
@@ -51,7 +54,7 @@ export function renderMethodology(m: Input): string {
 </tbody></table></div>`;
   const sample = bw !== null && bs !== null ? `the first ${N.format(bw)} blocks of each hour, scaled ×${N.format(bs)}` : "a sample of blocks in each hour, scaled up";
   const share = `<h2 id="attributed-share">The attributed share</h2>
-<p>The share of USDC moved on Arc that went into apps the index attributes contracts to: received (USD) by all index members ÷ the estimated USD value of all USDC transfers on Arc, over the same period.</p>
+<p>${esc(SHARE_DEF)}</p>
 <p>The all-USDC total is estimated from ${esc(sample)}, so one large transfer moves a one-day figure a lot; over 7 days it is steadier.</p>
 <p><b>Now:</b> ${esc(shareText(m.share))}.</p>`;
   const limits = `<h2 id="limits">Known limits</h2>

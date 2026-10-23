@@ -87,7 +87,7 @@ test("share row: labelled window from the snapshots; the 24 h history column is 
   const hist = ["2026-10-22", "2026-10-21", "2026-10-20"].map((d) => full({ generated_at: `${d}T00:02:00.000Z`, activity_24h: { ...full().activity_24h, data_until: `${d}T00:00:00Z` } }));
   const h = renderArc(full(), hist);
   expect(h).toContain("Share attributed to apps");
-  expect(h).toContain("2.97% over last 3 days to 22 Oct 2026 (daily 2.97–2.97%)");
+  expect(h).toContain("2.97% over 3 of the last 7 days to 22 Oct 2026 (daily 2.97–2.97%)");
   expect(h).toContain('href="/methodology/#attributed-share"');
   expect(h).toContain("<th class=\"n\">Attributed to apps, 24 h</th>");
   expect(renderArc(full(), [])).toMatch(/Share attributed to apps<\/th><td[^>]*>Not available right now/);

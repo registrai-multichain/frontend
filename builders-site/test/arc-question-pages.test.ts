@@ -29,6 +29,12 @@ describe("review fixes", () => {
       expect(renderAcceptsUsdc(w)).not.toContain('<a href="/ecosystem/payco/">PayCo</a></td><td>Announced');
     } finally { delete (payco as { index_ids?: string[] }).index_ids; }
   });
+  test("methodology I2: new paying wallet is new in 30 days, not ever", async () => {
+    const { renderMostUsed } = await import("../lib/arc-question-pages");
+    const h = renderMostUsed(W);
+    expect(h).not.toContain("paying the app for the first time");
+    expect(h).toContain("not paid the app in the last 30 days");
+  });
   test("#7: singular forms", async () => {
     const { renderMostUsed } = await import("../lib/arc-question-pages");
     expect(renderMostUsed({ ...W, apps: [W.apps[0]] })).toContain("of the 1 app with payments in Registrai&#39;s Arc index");
