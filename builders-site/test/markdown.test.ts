@@ -34,4 +34,15 @@ describe("htmlToMarkdown", () => {
     expect(md).not.toMatch(/\n{3,}/);
     expect(md.trimEnd().endsWith("Source: https://builder.registrai.cc/ecosystem/aave/ · Registrai, builder.registrai.cc, CC BY 4.0")).toBe(true);
   });
+  test("review I1: superseded facts keep their 'Earlier facts' label and strikethrough, and stay list items", async () => {
+    const { htmlToMarkdown } = await import("../lib/markdown");
+    const html = `<main><h2>Token</h2><ul><li><div>Token is FOO</div><div><a href="/x/">src</a> · observed 2026-10-20</div></li></ul>
+<details><summary>Earlier facts</summary><ul><li><div><s>Token is BAZ</s></div><div><a href="/y/">src</a> · observed 2026-10-01</div></li></ul></details>
+<p>After <details><summary>i</summary> a note.</details> text.</p></main>`;
+    const md = htmlToMarkdown(html, "https://builder.registrai.cc/ecosystem/x/");
+    expect(md).toContain("## Token\n\n- Token is FOO [src](https://builder.registrai.cc/x/) · observed 2026-10-20");
+    expect(md).toContain("**Earlier facts**\n\n- ~~Token is BAZ~~ [src](https://builder.registrai.cc/y/) · observed 2026-10-01");
+    expect(md).toContain("After (i: a note.) text.");
+    expect(md).not.toMatch(/^\)|\(i:\s*$/m);
+  });
 });

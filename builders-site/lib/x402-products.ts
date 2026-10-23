@@ -8,11 +8,28 @@ import { hourOf, isoHour, INDEX_IDS } from "./data-api-rows";
 import { formatUsd, PRODUCTS, readX402Config, type ProductId } from "./x402-config";
 import { paidHealth, payGate, type GateDeps } from "./x402-gate";
 import { salesStats } from "./x402-ledger";
+import { ATTRIBUTION } from "./attribution";
 import type { Env } from "./env";
 
 const DEEP_CAP_H = 24 * 366 * 3;
 const HEADERS = { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*", "cache-control": "no-store" };
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: HEADERS });
+/** A 200 object body gets the credit line after version, like v1Json; errors stay { error }. */
+const credited = (body: unknown) => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return body;
+  const { version, ...rest } = body as Record<string, unknown>;
+  return version === undefined ? { attribution: ATTRIBUTION, ...rest } : { version, attribution: ATTRIBUTION, ...rest };
+};
+export const paidJson = (body: unknown, status = 200) => new Response(JSON.stringify(status === 200 ? credited(body) : body), { status, headers: HEADERS });
+const json = paidJson;
+/** The watch feed's JSON object, credited; anything else passes through unchanged. */
+export function withAttribution(text: string): string {
+  try {
+    const v = JSON.parse(text) as unknown;
+    return v && typeof v === "object" && !Array.isArray(v) ? JSON.stringify(credited(v)) : text;
+  } catch {
+    return text;
+  }
+}
 const err = (status: number, error: string) => json({ error }, status);
 
 /** Build first, charge only if the product is deliverable (status 200). */
@@ -47,7 +64,8 @@ async function watchfeed(env: Env, path: string, search: string): Promise<Respon
   try {
     const r = await fetch(`${base}${path}${search}`, { headers: { "X-Registrai-Internal": env.WATCHFEED_SECRET }, signal: AbortSignal.timeout(8000) });
     if (r.status >= 500 || r.status === 401) return err(503, "The watch feed is not available right now.");
-    return new Response(await r.text(), { status: r.status, headers: HEADERS });
+    const text = await r.text();
+    return new Response(r.status === 200 ? withAttribution(text) : text, { status: r.status, headers: HEADERS });
   } catch {
     return err(503, "The watch feed is not available right now.");
   }

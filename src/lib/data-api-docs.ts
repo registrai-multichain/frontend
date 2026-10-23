@@ -1,4 +1,5 @@
 // Data API v1 docs content (builder.registrai.cc/data-api/). Spec: docs/superpowers/specs/2026-10-14-data-api-v1-design.md.
+import { ATTRIBUTION } from "./attribution";
 import { formatUsd, PRODUCTS, type ProductId } from "./x402-catalog";
 // The numbers here are the limits the API enforces (builders-site/lib/data-api.ts); keep them in step.
 export const DATA_API_BASE = "https://builder.registrai.cc/api/v1";
@@ -62,7 +63,7 @@ export const PRECISION_NOTE =
 
 export const CHANGELOG = [{ date: "2026-10-14", text: "v1 released: indices, members, member history, verified projects." }, { date: "2026-10-20", text: "Arc ecosystem directory: /ecosystem and /ecosystem/{slug}." }, { date: "2026-10-20", text: "Arc in numbers: /arc and /arc/daily." }, { date: "2026-10-21", text: "Directory corrections log: /ecosystem/corrections." }, { date: "2026-10-22", text: "Arc apps over 7 days: /arc/apps-week." }];
 
-export const LICENCE = 'Free to use under CC BY 4.0 with the attribution "Data: Registrai". No warranty; not financial advice.';
+export const LICENCE = `Free to use under CC BY 4.0. Credit: "${ATTRIBUTION}". No warranty; not financial advice.`;
 
 // Paid extras (x402). Prices come from the same catalogue the payment code charges.
 export type PaidDoc = { id: ProductId; path: string; params: string; mcp: string; circle: string; standard: string; returns: string };

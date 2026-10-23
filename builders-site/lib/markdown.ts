@@ -29,8 +29,11 @@ export function htmlToMarkdown(html: string, canonical: string): string {
   let rows: string[][] | null = null;
   const lists: { ordered: boolean; n: number }[] = [];
   const links: { href: string; at: number; buf: Buf }[] = [];
-  let heading = 0, skip = 0;
-  const target = () => cell ?? para;
+  let heading = 0;
+  // <details>: "i" notes stay inline as " (i: …)"; any other summary ("Earlier facts") becomes a bold line over its block
+  const details: ("i" | "block")[] = [];
+  let summary: Buf | null = null;
+  const target = () => summary ?? cell ?? para;
   const write = (s: string) => { const t = target(); t.s += s; };
   let lastLi = false;   // consecutive list items join with one newline
   const flush = () => { const t = para.s.replace(/[ \t]+/g, " ").trim(); if (t) { blocks.push(heading ? `${"#".repeat(heading)} ${t}` : t); lastLi = false; } para.s = ""; };
@@ -38,7 +41,6 @@ export function htmlToMarkdown(html: string, canonical: string): string {
   for (const m of src.matchAll(/<(\/?)([a-zA-Z0-9]+)([^>]*)>|([^<]+)/g)) {
     const [, close, rawTag, attrs, text] = m;
     if (text !== undefined) {
-      if (skip) continue;
       const t = decode(text).replace(/\s+/g, " ");
       if (t.trim() || target().s) write(escapeMd(t));
       continue;
@@ -49,7 +51,9 @@ export function htmlToMarkdown(html: string, canonical: string): string {
       case "h1": case "h2": case "h3":
         if (open) { flush(); heading = Number(tag[1]); } else { flush(); heading = 0; }
         break;
-      case "p": case "div": case "section": case "header": case "article": flush(); break;
+      case "div": if (lists.length) { write(" "); break; } flush(); break;   // a <div> inside a list item stays in the item
+      case "p": case "section": case "header": case "article": flush(); break;
+      case "s": case "del": write("~~"); break;
       case "br": write("\n"); break;
       case "a":
         if (open) links.push({ href: absolute(attr(attrs, "href")), at: target().s.length, buf: target() });
@@ -75,8 +79,16 @@ export function htmlToMarkdown(html: string, canonical: string): string {
       case "dl": flush(); break;
       case "dt": if (open) { flush(); write("**"); } else write("**: "); break;
       case "dd": if (!open) flush(); break;
-      case "details": if (open) write(" (i: "); else write(")"); break;
-      case "summary": skip = open ? skip + 1 : Math.max(0, skip - 1); break;
+      case "details": if (open) details.push("i"); else if (details.pop() === "i") write(")"); else flush(); break;
+      case "summary":
+        if (open) summary = { s: "" };
+        else if (summary) {
+          const label = summary.s.replace(/\s+/g, " ").trim();
+          summary = null;
+          if (label === "i" || !details.length) write(" (i: ");
+          else { details[details.length - 1] = "block"; flush(); if (label) blocks.push(`**${label}**`); lastLi = false; }
+        }
+        break;
       case "table": if (open) { flush(); rows = []; } else if (rows) {
         if (rows.length) {
           const w = Math.max(...rows.map((r) => r.length));

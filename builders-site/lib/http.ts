@@ -87,7 +87,7 @@ export interface EdgeCacheDeps {
  * Only a 200 or a 404 is kept, for PUBLIC_GET_CACHE_S; anything else (400, 5xx) goes
  * straight back. Never for /api/admin/*.
  */
-export async function edgeCachedGet(req: Request, deps: EdgeCacheDeps, produce: () => Promise<Response>, ttlSeconds: number = PUBLIC_GET_CACHE_S, variant?: string): Promise<Response> {
+export async function edgeCachedGet(req: Request, deps: EdgeCacheDeps, produce: () => Promise<Response>, ttlSeconds: number | ((res: Response) => number) = PUBLIC_GET_CACHE_S, variant?: string): Promise<Response> {
   const cache = deps.cache === undefined ? edgeCache() : deps.cache;
   const u = new URL(req.url);
   const key = new Request(`${u.origin}${u.pathname}${variant ? `?v=${encodeURIComponent(variant)}` : ""}`, { method: "GET" });
@@ -96,7 +96,7 @@ export async function edgeCachedGet(req: Request, deps: EdgeCacheDeps, produce: 
   const res = await produce();
   if (!cache || (res.status !== 200 && res.status !== 404)) return res;
   const headers = new Headers(res.headers);
-  headers.set("cache-control", `public, max-age=${ttlSeconds}`);
+  headers.set("cache-control", `public, max-age=${typeof ttlSeconds === "function" ? ttlSeconds(res) : ttlSeconds}`);
   const out = new Response(res.body, { status: res.status, headers });
   const put = cache.put(key, out.clone());
   if (deps.waitUntil) deps.waitUntil(put);

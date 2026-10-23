@@ -4,16 +4,18 @@
  * serves the same OpenAPI as /api/v1/openapi.json (x402scan and other crawlers look at the origin root).
  */
 import { OPENAPI } from "../../src/lib/data-api-openapi";
+import { ATTRIBUTION } from "./attribution";
 import { MCP_TOOLS } from "./mcp";
 
 const SITE = "https://builder.registrai.cc";
 const OPENAPI_URL = `${SITE}/api/v1/openapi.json`, DOCS_URL = `${SITE}/data-api/`, MCP_URL = `${SITE}/api/mcp`;
-const LICENCE = "CC BY 4.0, attribution \"Data: Registrai\"";
+const LICENCE = `CC BY 4.0, credit "${ATTRIBUTION}"`;
 
 type Op = { get?: { summary?: string } };
 export const API_INDEX = {
   name: "Registrai Data API",
   version: 1,
+  attribution: ATTRIBUTION,
   description: "Hourly Arc ecosystem data: per-app stablecoin payments, paying wallets and volume, the ABI, AII and AEI indices, and verified builders. No key.",
   docs: DOCS_URL, openapi: OPENAPI_URL, mcp: MCP_URL, paid: `${SITE}/api/v1/paid`, licence: LICENCE,
   endpoints: Object.entries(OPENAPI.paths as Record<string, Op>)

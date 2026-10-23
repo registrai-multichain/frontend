@@ -16,4 +16,4 @@
 - [Data API v1](https://builder.registrai.cc/data-api/): public JSON API, no key, CC BY 4.0
 - [Full agent guide](https://builder.registrai.cc/llms.txt): API, OpenAPI and MCP server
 
-Licence: CC BY 4.0, attribution "Data: Registrai".
+Licence: CC BY 4.0. Credit: "Registrai, builder.registrai.cc, CC BY 4.0".

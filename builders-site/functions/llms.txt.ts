@@ -25,7 +25,7 @@ export const LLMS_TXT = `# Registrai
 ## Method
 - [How we publish](https://builder.registrai.cc/how-we-publish/)
 
-Licence: CC BY 4.0, attribution "Data: Registrai".
+Licence: CC BY 4.0. Credit: "Registrai, builder.registrai.cc, CC BY 4.0".
 `;
 
 export const onRequest: PagesFunction = async () =>

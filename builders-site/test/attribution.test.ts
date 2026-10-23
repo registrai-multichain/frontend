@@ -24,4 +24,28 @@ describe("one credit line", () => {
     const src = (await import("node:fs")).readFileSync(new URL("../lib/mcp.ts", import.meta.url), "utf8");
     expect(src.match(/data: \{ version: 1, attribution: ATTRIBUTION/g)?.length).toBe(2);   // arc_apps and arc_app
   });
+  test("review I3: paid JSON and the /api/v1/ index carry it; errors do not", async () => {
+    const { ATTRIBUTION } = await import("../lib/attribution");
+    const { API_INDEX } = await import("../lib/discovery");
+    expect((API_INDEX as Record<string, unknown>).attribution).toBe(ATTRIBUTION);
+    const { paidJson } = await import("../lib/x402-products");
+    expect(await paidJson({ version: 1, date: "d" }).json()).toEqual({ version: 1, attribution: ATTRIBUTION, date: "d" });
+    expect(await paidJson({ error: "no" }, 400).json()).toEqual({ error: "no" });
+    const { withAttribution } = await import("../lib/x402-products");
+    expect(JSON.parse(withAttribution('{"version":1,"events":[]}'))).toEqual({ version: 1, attribution: ATTRIBUTION, events: [] });
+    expect(withAttribution("not json")).toBe("not json");
+    expect(withAttribution("[1]")).toBe("[1]");
+  });
+  test("review I4: every place that tells agents how to credit uses the exact line", async () => {
+    const { ATTRIBUTION } = await import("../lib/attribution");
+    const fs = await import("node:fs");
+    for (const f of ["../functions/llms.txt.ts", "../../public/llms.txt", "../lib/discovery.ts", "../../src/lib/data-api-docs.ts", "../../src/app/terms/page.tsx", "../../src/lib/data-api-openapi.ts"]) {
+      const s = fs.readFileSync(new URL(f, import.meta.url), "utf8");
+      expect(s, f).not.toContain("Data: Registrai");
+    }
+    const { LICENCE } = await import("../../src/lib/data-api-docs");
+    expect(LICENCE).toContain(ATTRIBUTION);
+    expect(fs.readFileSync(new URL("../../public/llms.txt", import.meta.url), "utf8")).toContain(ATTRIBUTION);
+  });
 });
+

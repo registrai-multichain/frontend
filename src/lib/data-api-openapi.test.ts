@@ -42,3 +42,23 @@ describe("paid paths", () => {
     }
   });
 });
+
+describe("attribution (machine-readable copies review I2/I4)", () => {
+  type S = { properties?: Record<string, S>; required?: string[]; items?: S };
+  const schemas = OPENAPI.components.schemas as unknown as Record<string, S>;
+  it("every free 200 schema requires attribution; ArcDaily day items do not", () => {
+    for (const p of Object.values(OPENAPI.paths) as { get: { responses: Record<string, { content?: Record<string, { schema: { $ref?: string } }> }> } }[]) {
+      const ref = p.get.responses["200"].content?.["application/json"].schema.$ref;
+      if (!ref) continue;
+      const name = ref.split("/").pop()!;
+      expect(schemas[name].required, name).toContain("attribution");
+    }
+    expect(schemas.ArcDaily.properties!.days.items!.required).not.toContain("attribution");
+    expect(schemas.ArcDaily.properties!.days.items!.properties!.attribution).toBeUndefined();
+  });
+  it("the description gives the exact credit line", async () => {
+    const { ATTRIBUTION } = await import("./attribution");
+    expect(OPENAPI.info.description).toContain(ATTRIBUTION);
+    expect(OPENAPI.info.description).not.toContain("Data: Registrai");
+  });
+});

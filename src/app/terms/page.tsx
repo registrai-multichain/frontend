@@ -3,6 +3,7 @@ import { builderUrl } from "@/lib/public-site";
 import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
 import { LEGAL } from "@/lib/legal";
+import { ATTRIBUTION } from "@/lib/attribution";
 
 export const metadata: Metadata = {
   title: "Terms of use · Registrai",
@@ -56,7 +57,7 @@ export default function TermsPage() {
           <li>Nothing on the site is investment, legal or tax advice, an offer, or a recommendation to buy, sell or hold any asset.</li>
           <li>The indices are not provided for use as a benchmark in financial instruments, financial contracts or investment funds. Don&apos;t use them that way.</li>
           <li>Project names, logos and trademarks belong to their owners. {LEGAL.independence}</li>
-          <li>The <Link href="/data-api/">Data API</Link> at {LEGAL.site}/api/v1 is free to use under the Creative Commons Attribution 4.0 licence (CC BY 4.0): credit &quot;Data: Registrai&quot; with a link to {LEGAL.site}. The points above still apply to data from the API. Rate limits apply, and we may block abusive use.</li>
+          <li>The <Link href="/data-api/">Data API</Link> at {LEGAL.site}/api/v1 is free to use under the Creative Commons Attribution 4.0 licence (CC BY 4.0): credit &quot;{ATTRIBUTION}&quot; with a link to {LEGAL.site}. The points above still apply to data from the API. Rate limits apply, and we may block abusive use.</li>
           <li>Paid extras on the Data API are sold per request through x402 in USDC on Arc. The payment buys delivery of that response; the data is under the same CC BY 4.0 licence. Payments are final once the response is delivered. A request whose payment fails is not charged; if a payment&apos;s outcome can&apos;t be confirmed at once, retrying the same request with the same payment returns the data once it is confirmed, or contact us at {LEGAL.contact}.</li>
         </ul>
 

@@ -34,7 +34,7 @@ describe("/llms-full.txt", () => {
     const r = await onRequest(ctx());
     expect(r.status).toBe(200);
     expect(r.headers.get("content-type")).toBe("text/plain; charset=utf-8");
-    expect(r.headers.get("cache-control")).toBe("public, max-age=3600");
+    expect(r.headers.get("cache-control")).toBe("public, max-age=600");   // review M7: a degraded build is kept 10 min, not an hour
     expect(await (await onRequest(ctx("HEAD"))).text()).toBe("");
     expect((await onRequest(ctx("POST"))).status).toBe(405);
     for (const f of [resolve(__dirname, "../../public/llms.txt"), resolve(__dirname, "../functions/llms.txt.ts")]) {
@@ -43,4 +43,29 @@ describe("/llms-full.txt", () => {
       expect(s, f).not.toContain("started receiving payments");
     }
   });
+  test("review I5: reuses the edge-cached /arc/ and question pages instead of recomputing them", async () => {
+    collect.mockReset();
+    const store = new Map<string, Response>([
+      ["https://builder.registrai.cc/arc/?v=arc", new Response("<main><h1>Arc in numbers</h1><p>CACHED ARC</p></main>", { headers: { "content-type": "text/html" } })],
+      ["https://builder.registrai.cc/arc/new/?v=arc-q%3Anew", new Response("<main><h1>New</h1><p>CACHED NEW</p></main>", { headers: { "content-type": "text/html" } })],
+    ]);
+    const cache = { match: async (k: Request) => store.get(k.url)?.clone(), put: async () => undefined } as unknown as Cache;
+    const { buildLlmsFullDoc } = await import("../lib/llms-full");
+    const d = await buildLlmsFullDoc({ INVITES: { get: async () => null } } as never, { cache }, Date.parse("2026-10-23T12:00:00Z"));
+    expect(collect).not.toHaveBeenCalled();
+    expect(d.text).toContain("CACHED ARC");
+    expect(d.text).toContain("CACHED NEW");
+    expect(d.text).not.toContain("## Arc in numbers\n\nNot available right now");
+    expect(d.degraded).toBe(false);
+  });
+  test("review I5: on an /arc/ miss the aei file already read is passed on, not parsed again", async () => {
+    collect.mockReset();
+    collect.mockRejectedValue(new Error("rpc down"));
+    const { buildLlmsFullDoc } = await import("../lib/llms-full");
+    const d = await buildLlmsFullDoc({ INVITES: { get: async () => null } } as never, { cache: null }, Date.parse("2026-10-23T12:00:00Z"));
+    expect(collect).toHaveBeenCalledTimes(1);
+    expect(collect.mock.calls[0][3]).toHaveProperty("aei");
+    expect(d.degraded).toBe(true);
+  });
 });
+

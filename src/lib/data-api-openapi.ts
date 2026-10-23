@@ -1,5 +1,6 @@
 // OpenAPI 3.1 description of Registrai Data API v1 (spec docs/superpowers/specs/2026-10-14-data-api-v1-design.md).
 // Response schemas are derived from the contract fixtures, so the description cannot drift from what consumers test against.
+import { ATTRIBUTION } from "./attribution";
 import { DATA_API_BASE, LIMITS, PAID_DOCS, PAID_NOTE } from "./data-api-docs";
 import indices from "../../docs/superpowers/specs/data-api-v1-fixtures/indices.json";
 import indexHourly from "../../docs/superpowers/specs/data-api-v1-fixtures/indices-abi-hourly.json";
@@ -52,7 +53,7 @@ function arcSchema(s: Schema): Schema {
   return nullable(nullable(nullable(out, ["ecosystem", "index_members", "*"]), ["ecosystem", "index_close", "*"]), ["ecosystem", "data_until"]);
 }
 
-const membersNew = { version: 1, index: "aii", since: "2026-10-14T19:00:00Z", data_until: "2026-10-14T21:00:00Z", members: members.members };
+const membersNew = { version: 1, attribution: ATTRIBUTION, index: "aii", since: "2026-10-14T19:00:00Z", data_until: "2026-10-14T21:00:00Z", members: members.members };
 const hourParam = (name: string, description: string) => ({ name, in: "query", required: false, description, schema: { type: "string", format: "date-time", example: "2026-10-14T19:00:00Z" } });
 const indexQuery = { name: "index", in: "query", required: true, schema: { type: "string", enum: ["abi", "aii", "aei"] } };
 const from = hourParam("from", "First hour close (inclusive), an ISO hour like 2026-10-14T19:00:00Z.");
@@ -82,7 +83,7 @@ export const OPENAPI = {
   info: {
     title: "Registrai Data API",
     version: "1",
-    description: `Hourly Arc index and per-app stablecoin data. Public, read-only, no key. Rate limit: ${LIMITS.requestsPerWindow} requests per ${LIMITS.windowSeconds} s per IP. Attribution "Data: Registrai".`,
+    description: `Hourly Arc index and per-app stablecoin data. Public, read-only, no key. Rate limit: ${LIMITS.requestsPerWindow} requests per ${LIMITS.windowSeconds} s per IP. Credit: "${ATTRIBUTION}".`,
     license: { name: "CC BY 4.0", url: "https://creativecommons.org/licenses/by/4.0/" },
   },
   servers: [{ url: DATA_API_BASE }],
@@ -120,7 +121,8 @@ export const OPENAPI = {
       EcosystemEntity: schemaOf(ecosystemEntity),
       ArcNumbers: arcSchema(schemaOf(arcNow)),
       ArcNow: nullable(arcSchema(schemaOf(arcNowFull)), ["attributed_share_7d"]),
-      ArcDaily: { type: "object", properties: { version: { type: "number" }, days: { type: "array", items: arcSchema(schemaOf(arcNow)) } }, required: ["version", "days"] },
+      // day items are the stored snapshots, which carry no attribution of their own
+      ArcDaily: { type: "object", properties: { version: { type: "number" }, attribution: { type: "string" }, days: { type: "array", items: arcSchema(schemaOf(Object.fromEntries(Object.entries(arcNow).filter(([k]) => k !== "attribution")))) } }, required: ["version", "attribution", "days"] },
       Error: { type: "object", properties: { error: { type: "string" } }, required: ["error"] },
       PaymentRequired: { type: "object", description: PAID_NOTE, properties: { x402Version: { type: "number" }, error: { type: "string" }, resource: { type: "object" }, accepts: { type: "array", items: { type: "object" } } }, required: ["x402Version", "accepts"] },
     },
