@@ -4,7 +4,9 @@ import raw from "../data/arc-chain-facts.json";
 export type ChainFact = { id: string; text: string; source: string; date: string };
 export type StableToken = { symbol: string; name: string; issuer: string; address: string | null; decimals: number; source: string };
 export type ChainFacts = { reviewed: string; facts: ChainFact[];
-  network: { rpc_url: string; rpc_source: string; explorer_url: string; explorer_source: string }; stablecoins: StableToken[] };
+  network: { rpc_url: string; rpc_source: string; explorer_url: string; explorer_source: string }; stablecoins: StableToken[];
+  /** Sourced sentences for the Arc vs Ethereum vs Solana page (spec 2026-10-23-replace-competitor-citations §3). */
+  comparison?: ChainFact[] };
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/, ADDR = /^0x[0-9a-f]{40}$/;
 const https = (u: unknown) => { if (typeof u !== "string") return false; try { const x = new URL(u); return x.protocol === "https:" && !x.username; } catch { return false; } };
@@ -16,7 +18,7 @@ export function validateChainFacts(x: unknown): { ok: true; facts: ChainFacts } 
   if (typeof f.reviewed !== "string" || !DAY.test(f.reviewed)) errors.push("reviewed must be YYYY-MM-DD");
   if (!Array.isArray(f.facts) || !f.facts.length) errors.push("facts are required");
   const ids = new Set<string>();
-  for (const [i, c] of (Array.isArray(f.facts) ? f.facts : []).entries()) {
+  for (const [i, c] of [...(Array.isArray(f.facts) ? f.facts : []), ...(Array.isArray(f.comparison) ? f.comparison : [])].entries()) {
     const e = (m: string) => errors.push(`fact #${i} ${c?.id ?? "?"}: ${m}`);
     if (!str(c?.id)) e("id is required"); else if (ids.has(c.id)) e("duplicate id"); else ids.add(c.id);
     if (!str(c?.text) || c.text.length > 200) e("text must be 1-200 characters");

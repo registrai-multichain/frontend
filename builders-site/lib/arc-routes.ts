@@ -5,7 +5,8 @@
 import { collectArcNumbers } from "./arc-numbers";
 import { readArcDaily } from "./arc-daily";
 import { renderArc } from "./arc-pages";
-import { renderAcceptsUsdc, renderGetUsdc, renderMostUsed, renderNew } from "./arc-question-pages";
+import { renderAcceptsUsdc, renderCompare, renderGetUsdc, renderMostUsed, renderNew } from "./arc-question-pages";
+import { collectCompare } from "./chain-compare";
 import { loadArcWeek } from "./arc-week";
 import type { Env } from "./env";
 import { edgeCachedGet, type EdgeCacheDeps } from "./http";
@@ -20,7 +21,10 @@ export const ARC_QUESTIONS: Record<string, (env: Env, deps: EdgeCacheDeps) => Pr
   "apps-that-accept-usdc": async (env, deps) => renderAcceptsUsdc(await loadArcWeek(env, deps)),
   "new": async (env, deps) => renderNew(await loadArcWeek(env, deps), new Date().toISOString().slice(0, 10)),
   "get-usdc": async () => renderGetUsdc(),
+  "arc-vs-ethereum-vs-solana": async (env) => renderCompare(await collectCompare(env).catch(() => null)),
 };
+/** Edge-cache seconds per question page (default 10 min); the chain comparison reads 3 RPCs and DefiLlama, so an hour. */
+export const ARC_QUESTION_TTL: Record<string, number> = { "arc-vs-ethereum-vs-solana": 3600 };
 
 /** /arc/ (Arc in numbers), edge-cached 10 min. */
 export const arcPage = (env: Env, deps: EdgeCacheDeps, origin: string, opts: CollectOpts = {}, fetcher: typeof fetch = fetch) =>
@@ -31,4 +35,4 @@ export const arcPage = (env: Env, deps: EdgeCacheDeps, origin: string, opts: Col
 
 /** One question page, edge-cached 10 min. */
 export const arcQuestionPage = (env: Env, deps: EdgeCacheDeps, origin: string, q: string) =>
-  edgeCachedGet(new Request(`${origin}/arc/${q}/`), deps, async () => arcHtml(await ARC_QUESTIONS[q](env, deps)), 600, `arc-q:${q}`);
+  edgeCachedGet(new Request(`${origin}/arc/${q}/`), deps, async () => arcHtml(await ARC_QUESTIONS[q](env, deps)), ARC_QUESTION_TTL[q] ?? 600, `arc-q:${q}`);

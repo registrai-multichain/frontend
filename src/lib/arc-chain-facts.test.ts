@@ -33,5 +33,10 @@ describe("chain facts", () => {
     expect(t).toContain("genesis mint");
     expect(t).not.toMatch(/at genesis/);
   });
+  test("the comparison facts are present and sourced", () => {
+    const r = validateChainFacts(raw);
+    const ids = ((r as { facts: { comparison?: { id: string }[] } }).facts.comparison ?? []).map((x) => x.id);
+    expect(ids).toEqual(expect.arrayContaining(["fee-currency-arc", "fee-currency-ethereum", "fee-currency-solana", "solana-base-fee", "finality-arc", "finality-ethereum", "finality-solana"]));
+  });
 });
 

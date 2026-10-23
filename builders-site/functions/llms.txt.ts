@@ -13,6 +13,7 @@ export const LLMS_TXT = `# Registrai
 - [Apps that accept USDC on Arc](https://builder.registrai.cc/arc/apps-that-accept-usdc/): apps measured receiving payments in the last 7 days, and payment apps listed but not measured
 - [New on Arc this week](https://builder.registrai.cc/arc/new/): projects that went live and apps added to Registrai's index in the last 7 days
 - [How to get USDC onto Arc](https://builder.registrai.cc/arc/get-usdc/): on-ramps, exchanges and bridges for Arc, each with its evidence
+- [Arc vs Ethereum vs Solana for stablecoin payments](https://builder.registrai.cc/arc/arc-vs-ethereum-vs-solana/): fee currency, measured block times, finality, estimated USDC transfer fees in USD and USDC in circulation per chain, each with its source
 - [Arc ecosystem directory](https://builder.registrai.cc/ecosystem/): every project on Arc with category, status and sources; JSON at https://builder.registrai.cc/api/v1/ecosystem
 - [Apps on Arc](https://builder.registrai.cc/apps/): every app with its last 24 h, sorted by payments
 - [Arc indices](https://builder.registrai.cc/builders-index/): ABI, AII, AEI, hourly

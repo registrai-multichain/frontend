@@ -179,5 +179,49 @@
       "decimals": 18,
       "source": "https://developers.circle.com/stablefx/references/supported-currencies"
     }
+  ],
+  "comparison": [
+    {
+      "id": "fee-currency-arc",
+      "text": "On Arc, USDC is the native gas token and every transaction fee is paid in USDC.",
+      "source": "https://www.arc.io/blog/how-gas-works-on-arc",
+      "date": "2025-09-10"
+    },
+    {
+      "id": "fee-currency-ethereum",
+      "text": "On Ethereum, gas fees are paid in ether (ETH), and gas prices are usually quoted in gwei, a denomination of ETH.",
+      "source": "https://ethereum.org/en/developers/docs/gas/",
+      "date": "2026-06-24"
+    },
+    {
+      "id": "fee-currency-solana",
+      "text": "On Solana, every transaction requires a fee paid in SOL, made up of a base fee and an optional prioritization fee.",
+      "source": "https://solana.com/docs/core/fees",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "solana-base-fee",
+      "text": "Solana's base fee is 5,000 lamports per signature, with 50% burned and 50% paid to the validator.",
+      "source": "https://solana.com/docs/core/fees",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "finality-arc",
+      "text": "Arc's docs say its Proof-of-Authority validator set delivers deterministic finality, where committed blocks cannot be reversed or reorganized, in under one second.",
+      "source": "https://docs.arc.io/arc/concepts/consensus-layer",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "finality-ethereum",
+      "text": "ethereum.org says it takes about 15 minutes for an Ethereum block to finalize, with finality currently reached across two epochs.",
+      "source": "https://ethereum.org/en/roadmap/single-slot-finality/",
+      "date": "2026-07-23"
+    },
+    {
+      "id": "finality-solana",
+      "text": "Solana RPC offers processed, confirmed and finalized commitment; finalized is a block the cluster recognizes as finalized with maximum lockout, the strongest confirmation state.",
+      "source": "https://solana.com/docs/rpc",
+      "date": "2026-10-23"
+    }
   ]
 }

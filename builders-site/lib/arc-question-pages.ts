@@ -3,6 +3,8 @@ import { STATUS_LABEL, categoryOf, entityHref, sortByName, type ArcEntity, type 
 import { ECOSYSTEM } from "../../src/lib/arc-ecosystem-data";
 import { esc, page } from "./apps-pages";
 import { WINDOW_H, type ArcWeek, type WeekApp } from "./arc-week";
+import { CHAIN_FACTS } from "../../src/lib/arc-chain-facts";
+import { ARC_TRANSFER_GAS, ETH_TRANSFER_GAS, SOL_BASE_FEE_LAMPORTS, type Compare } from "./chain-compare";
 
 const SITE = "https://builder.registrai.cc";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -32,6 +34,7 @@ export const QUESTION_PAGES = [
   { path: "/arc/apps-that-accept-usdc/", title: "Apps that accept USDC on Arc" },
   { path: "/arc/new/", title: "New on Arc this week" },
   { path: "/arc/get-usdc/", title: "How to get USDC onto Arc" },
+  { path: "/arc/arc-vs-ethereum-vs-solana/", title: "Arc vs Ethereum vs Solana for stablecoin payments" },
 ] as const;
 
 function shell(path: string, title: string, first: string, body: string, items: string[]): string {
@@ -92,3 +95,47 @@ export function renderGetUsdc(): string {
     `<p class="muted">Source: Registrai Arc ecosystem directory; each status links its evidence. Last reviewed ${esc(ECOSYSTEM.entities.map((e) => e.last_reviewed).sort().pop() ?? "")}.</p>`].join("\n");
   return shell(path, title, first, body, names);
 }
+
+/** Arc vs Ethereum vs Solana for stablecoin payments (spec 2026-10-23-replace-competitor-citations §3). Every figure is
+ *  measured or estimated with its formula behind an "i"; static facts come from arc-chain-facts.json with their sources. */
+export function renderCompare(c: Compare | null): string {
+  const [path, title] = [QUESTION_PAGES[4].path, QUESTION_PAGES[4].title];
+  const NA_CELL = "Not available right now";
+  const fact = (id: string) => CHAIN_FACTS.comparison?.find((f) => f.id === id);
+  const src = (id: string) => { const f = fact(id); return f ? `<a href="${esc(f.source)}" rel="noreferrer">source</a>` : ""; };
+  const note = (t: string) => ` <details><summary>i</summary> ${esc(t)}</details>`;
+  const secs = (x: number | null | undefined) => (x == null ? NA_CELL : x < 1 ? `${x.toFixed(2)} s` : `${x.toFixed(1)} s`);
+  const fee = (x: number | null | undefined) => (x == null ? NA_CELL : x < 0.01 ? `$${x.toPrecision(2)}` : `$${x.toFixed(3)}`);
+  const big = (x: number | null | undefined) => (x == null ? NA_CELL : `$${Math.round(x).toLocaleString("en-US")}`);
+  const g = c?.gas_price_gwei, p = c?.prices;
+  const rows: [string, string, string, string, string][] = [
+    ["Fee currency", `USDC ${src("fee-currency-arc")}`, `ETH ${src("fee-currency-ethereum")}`, `SOL ${src("fee-currency-solana")}`, "Chain documentation"],
+    ["Block time", esc(secs(c?.arc.block_time_s)), esc(secs(c?.ethereum.block_time_s)), esc(secs(c?.solana.block_time_s)),
+      `Measured: Arc and Ethereum over the last 10,000 blocks, Solana per slot from recent performance samples (RPC)`],
+    ["Finality", `${esc(fact("finality-arc")?.text ?? "")} ${src("finality-arc")}`, `${esc(fact("finality-ethereum")?.text ?? "")} ${src("finality-ethereum")}`,
+      `${esc(fact("finality-solana")?.text ?? "")} ${src("finality-solana")}`, "Chain documentation"],
+    ["Fee for a USDC transfer (estimate)",
+      esc(fee(c?.arc.fee_usd)) + note(`Gas price ${g?.arc == null ? "n/a" : `${g.arc.toFixed(2)} gwei`} × ${ARC_TRANSFER_GAS.toLocaleString("en-US")} gas for a native USDC transfer, paid in USDC.`),
+      esc(fee(c?.ethereum.fee_usd)) + note(`Gas price ${g?.ethereum == null ? "n/a" : `${g.ethereum.toFixed(2)} gwei`} × ${ETH_TRANSFER_GAS.toLocaleString("en-US")} gas for an ERC-20 USDC transfer × ETH price ${p?.eth == null ? "n/a" : `$${p.eth.toFixed(0)}`}.`),
+      esc(fee(c?.solana.fee_usd)) + note(`Base fee ${SOL_BASE_FEE_LAMPORTS.toLocaleString("en-US")} lamports per signature × SOL price ${p?.sol == null ? "n/a" : `$${p.sol.toFixed(2)}`}; priority fees not included.`),
+      "RPC gas prices; prices from DefiLlama"],
+    ["USDC in circulation", esc(big(c?.arc.usdc_supply)), esc(big(c?.ethereum.usdc_supply)), esc(big(c?.solana.usdc_supply)), `DefiLlama stablecoins by chain${c ? `, ${esc(c.usdc_date)}` : ""}`],
+    ["Apps measured receiving USDC, 24 h", c?.arc.apps_paying == null ? NA_CELL : String(c.arc.apps_paying), "Not measured by Registrai", "Not measured by Registrai", "Arc Ecosystem Index (Registrai)"],
+  ];
+  const parts = [
+    "Arc, Circle's layer-1, uses USDC as its gas token, so a USDC payment pays its fee in USDC",
+    c?.arc.block_time_s != null ? `; blocks come every ${secs(c.arc.block_time_s)}` : "",
+    c?.ethereum.block_time_s != null && c?.solana.block_time_s != null ? ` (Ethereum ${secs(c.ethereum.block_time_s)}, Solana ${secs(c.solana.block_time_s)} per slot)` : "",
+    ". Ethereum charges fees in ETH and Solana in SOL.",
+  ];
+  const first = parts.join("");
+  const body = `<div class="wrap"><table><thead><tr><th>Measure</th><th>Arc</th><th>Ethereum</th><th>Solana</th><th>Source</th></tr></thead><tbody>
+${rows.map((r) => `<tr><th>${esc(r[0])}</th><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td class="muted">${r[4]}</td></tr>`).join("\n")}
+</tbody></table></div>
+<p class="muted">${c ? `Measured ${esc(atHour(c.generated_at))}. ` : ""}Fees are estimates for one transfer at the current gas price; they exclude priority fees and the payment's own amount. <a href="/arc/">Arc in numbers</a></p>`;
+  return page({ markdown: true, title: `${title} · Registrai`, canonical: `${SITE}${path}`, description: first,
+    body: `<h1>${esc(title)}</h1>\n<p>${esc(first)}</p>\n${body}\n<p class="muted"><a href="/arc/">Arc in numbers</a> · <a href="/ecosystem/">Arc ecosystem</a></p>`,
+    ld: { "@context": "https://schema.org", "@type": "Dataset", name: title, url: `${SITE}${path}`, description: first, license: "https://creativecommons.org/licenses/by/4.0/",
+      creator: { "@type": "Organization", name: "Registrai", url: "https://registrai.cc/" }, ...(c ? { dateModified: c.generated_at } : {}) } });
+}
+

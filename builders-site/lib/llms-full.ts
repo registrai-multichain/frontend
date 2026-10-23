@@ -47,7 +47,7 @@ export async function buildLlmsFullDoc(env: Env, deps: EdgeCacheDeps, now = Date
     } catch { fallback(title); }
   };
   await page("Arc in numbers", "/arc/", () => arcPage(env, deps, SITE, { deadlineMs: 10_000, aei: f }, fetcher));
-  for (const [title, q] of [["Most used apps on Arc", "most-used-apps"], ["Apps on Arc that accept USDC", "apps-that-accept-usdc"], ["New apps on Arc", "new"], ["How to get USDC onto Arc", "get-usdc"]] as const)
+  for (const [title, q] of [["Most used apps on Arc", "most-used-apps"], ["Apps on Arc that accept USDC", "apps-that-accept-usdc"], ["New apps on Arc", "new"], ["How to get USDC onto Arc", "get-usdc"], ["Arc vs Ethereum vs Solana for stablecoin payments", "arc-vs-ethereum-vs-solana"]] as const)
     await page(title, `/arc/${q}/`, () => arcQuestionPage(env, deps, SITE, q));
   const lines = sortByName(ECOSYSTEM.entities).map((e) =>
     `- **${escapeMd(e.name)}** (${escapeMd(categoryOf(e.category)?.name ?? e.category)}, ${STATUS_LABEL[e.status]}): ${escapeMd(e.summary)}${e.website ? ` ${e.website}` : ""} — ${SITE}${entityHref(e.slug)}`);
