@@ -42,3 +42,13 @@ describe("API and MCP discovery documents", () => {
     for (const f of ["openapi.json.ts", "api/v1/index.ts", ".well-known/api-catalog.ts", ".well-known/mcp/server-card.json.ts"]) expect(existsSync(resolve(FN, f)), f).toBe(true);
   });
 });
+
+describe("Glama ownership claim", () => {
+  test("GET /.well-known/glama.json serves the claim as JSON with the connector schema", async () => {
+    const { onRequest } = await import("../functions/.well-known/glama.json");
+    const r = await onRequest({ request: new Request("https://builder.registrai.cc/.well-known/glama.json"), env: {}, params: {}, waitUntil: () => undefined } as never);
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toMatch(/application\/json/);
+    expect(await r.json()).toEqual({ $schema: "https://glama.ai/mcp/schemas/connector.json", claim: "glama_claim_5u7FdFNeDIOS2rcUCzTrcTc7YkNmnsJ7" });
+  });
+});
