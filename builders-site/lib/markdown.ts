@@ -19,7 +19,9 @@ const absolute = (href: string) => (href.startsWith("/") ? `${SITE}${href}` : hr
 const attr = (attrs: string, name: string) => decode(attrs.match(new RegExp(`${name}="([^"]*)"`, "i"))?.[1] ?? "");
 
 export function htmlToMarkdown(html: string, canonical: string): string {
-  const main = html.match(/<main[^>]*>([\s\S]*)<\/main>/i)?.[1] ?? html;
+  // a static page whose content loads in the browser carries a server-rendered summary for readers without scripts: convert that
+  const ssr = html.match(/<section id="ssr-summary"[^>]*>([\s\S]*?)<\/section>/i)?.[1];
+  const main = ssr ?? html.match(/<main[^>]*>([\s\S]*)<\/main>/i)?.[1] ?? html;
   const src = main.replace(/<(script|style|form|svg|nav|footer)\b[^>]*>[\s\S]*?<\/\1>/gi, "");
   const blocks: string[] = [];
   type Buf = { s: string };

@@ -45,4 +45,13 @@ describe("htmlToMarkdown", () => {
     expect(md).toContain("After (i: a note.) text.");
     expect(md).not.toMatch(/^\)|\(i:\s*$/m);
   });
+  test("a page with a server-rendered summary converts the summary, not the client shell's 'Loading…'", async () => {
+    const { htmlToMarkdown } = await import("../lib/markdown");
+    const html = `<html><head></head><body><section id="ssr-summary" style="x"><h1>Arc indices</h1><p>Registrai publishes three hourly indices.</p></section><main><h1>Arc Builders Index</h1><p>Loading…</p></main></body></html>`;
+    const md = htmlToMarkdown(html, "https://builder.registrai.cc/builders-index/");
+    expect(md).toContain("# Arc indices");
+    expect(md).toContain("Registrai publishes three hourly indices.");
+    expect(md).not.toContain("Loading");
+  });
 });
+

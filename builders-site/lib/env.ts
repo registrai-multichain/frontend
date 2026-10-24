@@ -119,7 +119,7 @@ export interface PagesContext<D extends Record<string, unknown> = Record<string,
   request: Request;
   env: Env;
   data: D;
-  next(): Promise<Response>;
+  next(input?: Request | string, init?: RequestInit): Promise<Response>;
   waitUntil(promise: Promise<unknown>): void;
   params: Record<string, string | string[]>;
 }

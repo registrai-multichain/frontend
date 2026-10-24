@@ -12,7 +12,7 @@ const DESCRIPTION = "Hourly indices of builder, integration and ecosystem activi
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
-  alternates: { canonical: builderUrl("builders-index") },
+  alternates: { canonical: builderUrl("builders-index"), types: { "text/markdown": "/builders-index/index.md" } },
   openGraph: { type: "website", siteName: "Registrai", title: TITLE, description: DESCRIPTION, url: "https://builder.registrai.cc/builders-index/" },
   twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
 };

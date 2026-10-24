@@ -120,3 +120,13 @@ describe("the terminal markup", () => {
     expect(h.indexOf('aria-label="Index"')).toBeLessThan(h.indexOf("abi-quote"));
   });
 });
+
+describe("before the data loads (the static HTML engines read)", () => {
+  test("the heading is followed by one sentence saying what the indices are", async () => {
+    const { IndexPage } = await import("./IndexPage");
+    const { INDICES_ANSWER } = await import("@/lib/builders-index-page");
+    const h = renderToStaticMarkup(createElement(IndexPage));
+    expect(h).toMatch(/<h1 class="pa-h1">[^<]+<\/h1><p class="pa-muted">Registrai publishes three hourly indices/);
+    expect(h).toContain(INDICES_ANSWER.replace(/'/g, "&#x27;"));
+  });
+});

@@ -10,7 +10,7 @@ import {
   status, tapeRows, freshKeys, rowKey, rowKeys, tickerItems, ts, usdFmt, why, type Bar, type ChartModel, type RangeKey, type SortKey,
   type IntegrationFilter,
 } from "@/lib/abi-terminal";
-import { ABI_COPY, abiState, baseTip, coinsTip, decayTip, forIndex, startGate, type AbiState } from "@/lib/builders-index-page";
+import { ABI_COPY, abiState, baseTip, coinsTip, decayTip, forIndex, startGate, type AbiState, INDICES_ANSWER } from "@/lib/builders-index-page";
 import { PilotPanel } from "./pilot/PilotPanel";
 import "./terminal.css";
 
@@ -581,7 +581,7 @@ export function IndexPage() {
   return (
     <>
       {tabs && <div className="abi-t">{tabs}</div>}
-      <header className="mb-6"><h1 className="pa-h1">{ix.name}</h1></header>
+      <header className="mb-6"><h1 className="pa-h1">{ix.name}</h1><p className="pa-muted">{INDICES_ANSWER}</p></header>
       {state.kind === "loading" && <p className="pa-muted">Loading…</p>}
       {state.kind === "empty" && <div className="pa-card"><p>{ABI_COPY.empty}</p></div>}
       {state.kind === "error" && <div className="pa-card"><p>{ABI_COPY.failed}</p></div>}

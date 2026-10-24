@@ -74,4 +74,23 @@ describe("server-rendered summaries for pages that load their numbers in the bro
     expect(html).toContain('id="ssr-summary"');
     expect(html).toContain("Arc Ecosystem Index");
   });
+
+  test("data products: the summary opens by saying what the indices are; /builders-index/index.md converts the summary", async () => {
+    const { onRequest } = await import("../functions/builders-index/index");
+    const kv = new MemoryKV();
+    const db = new MemoryD1(DATA_MIGRATIONS.map((f) => resolve(__dirname, "../migrations-data", f)));
+    const f = indexFixture() as unknown as AbiData;
+    for (const id of ["abi", "aii", "aei"] as const) await kv.put(ABI_INDICES[id].key, JSON.stringify({ ...f, data_until: "2026-10-14T21:00:00Z", candles: [[1792000000, 990, 996, 989, 995.976]] }));
+    const seen: string[] = [];
+    const ctx = { request: new Request("https://builder.registrai.cc/builders-index/index.md"), env: { INVITES: kv, DATA_DB: db }, params: {}, waitUntil: () => undefined,
+      next: async (input?: Request | string) => { seen.push(String(input instanceof Request ? input.url : input)); return new Response(STATIC, { headers: { "content-type": "text/html; charset=utf-8" } }); } } as never;
+    const r = await onRequest(ctx);
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+    const md = await r.text();
+    expect(md).toContain("Registrai publishes three hourly indices of activity on Arc, Circle's blockchain");
+    expect(md).toContain("Arc Ecosystem Index");
+    expect(seen).toEqual(["https://builder.registrai.cc/builders-index/"]);   // the static page, not a missing index.md asset
+  });
 });
+
