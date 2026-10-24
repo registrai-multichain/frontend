@@ -62,7 +62,8 @@ export const STATUS_RULES = {
 export function whatItDoes(e: Pick<ArcEntity, "summary">): string {
   const s = e.summary.trim();
   const split = (t: string) => { const m = /^(.+?(?<!\b(?:e\.g|i\.e|etc|vs|approx))\.)\s+(?=[A-Z])/.exec(t); return m ? [m[1], t.slice(m[0].length)] : [t, ""]; };
-  let [first, rest] = split(s);
+  const [lead, rest] = split(s);
+  let first = lead;
   // a lead like "Named among wallets in Circle's announcement." says where it was announced, not what it does: use the next sentence
   if (rest && /^(Named|Listed|Announced)\b/.test(first)) first = split(rest)[0];
   return first.length <= 140 ? first : `${first.slice(0, 140).replace(/\s+\S*$/, "")}…`;

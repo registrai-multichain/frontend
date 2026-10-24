@@ -1,6 +1,4 @@
 import { describe, expect, test } from "vitest";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 
 describe("/data-api/ says what it is (data products, item 1)", () => {
   test("opens with what the API serves; an MCP section lists the same free tools the server offers", async () => {
@@ -10,13 +8,7 @@ describe("/data-api/ says what it is (data products, item 1)", () => {
     expect(MCP_ANSWER).toContain("https://builder.registrai.cc/api/mcp");
     const free = MCP_TOOLS.filter((t) => !t.description.includes("x402"));
     expect(MCP_DOCS.map((t) => [t.name, t.title])).toEqual(free.map((t) => [t.name, t.title]));
-    const { default: DataApiPage } = await import("../../src/app/data-api/page");
-    const h = renderToStaticMarkup(createElement(DataApiPage));
-    const i = h.indexOf("<h1"), a = h.indexOf("The Registrai Data API serves hourly data");
-    expect(a).toBeGreaterThan(i);
-    expect(a - i).toBeLessThan(200);   // right under the heading
-    expect(h).toContain(">MCP server</h2>");
-    for (const t of MCP_DOCS) expect(h).toContain(t.name);
+    // the page render (heading → sentence, MCP section) is checked in src/app/data-api/page.test.tsx (JSX)
   });
   test("/data-api/index.md: the static page converted to Markdown; the page itself passes through", async () => {
     const { onRequest } = await import("../functions/data-api/[[path]]");
