@@ -90,3 +90,19 @@ test("sitemap: data pages carry lastmod = data_until; noindexed /verify/ is out;
   expect(xml).not.toContain("/verify/");
   for (const p of ["/guide/", "/terms/", "/privacy/"]) expect(xml).toContain(`<loc>https://builder.registrai.cc${p}</loc>`);
 });
+
+describe("/apps/ Markdown copy (data products, item 1)", () => {
+  test("/apps/index.md is the app list as Markdown, and the HTML page links to it", async () => {
+    const { onRequest } = await import("../functions/apps/[[path]]");
+    const { env } = await seeded();
+    const ctx = (path: string, params: string[]) => ({ request: new Request(`https://builder.registrai.cc${path}`), env, params: { path: params }, waitUntil: () => undefined }) as never;
+    const md = await onRequest(ctx("/apps/index.md", ["index.md"]));
+    expect(md.status).toBe(200);
+    expect(md.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+    const t = await md.text();
+    expect(t).toContain("# Apps on Arc");
+    expect(t).toContain("Uniswap");
+    expect(await (await onRequest(ctx("/apps/", []))).text()).toContain('<link rel="alternate" type="text/markdown" href="/apps/index.md">');
+  });
+});
+

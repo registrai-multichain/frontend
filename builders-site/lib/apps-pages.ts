@@ -75,7 +75,7 @@ ${rows.map((r) => `<tr><td><a href="${esc(appHref(r.id))}">${esc(r.name)}</a></t
     license: LICENSE, creator: CREATOR, keywords: KEYWORDS,
     mainEntity: { "@type": "ItemList", numberOfItems: rows.length,
       itemListElement: rows.map((r, k) => ({ "@type": "ListItem", position: k + 1, name: r.name, url: `${SITE}${appHref(r.id)}` })) } };
-  return page({ title: "Apps on Arc · Registrai", canonical: `${SITE}/apps/`, description: `Every app in the Arc indices with its last 24 h of stablecoin payments and volume on Arc mainnet, updated hourly. Data until ${when(l.data_until)}.`, body, ld });
+  return page({ markdown: true, title: "Apps on Arc · Registrai", canonical: `${SITE}/apps/`, description: `Every app in the Arc indices with its last 24 h of stablecoin payments and volume on Arc mainnet, updated hourly. Data until ${when(l.data_until)}.`, body, ld });
 }
 
 function spark(a: AppDetail): string {

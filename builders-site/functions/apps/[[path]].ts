@@ -1,4 +1,5 @@
 import type { PagesFunction } from "../../lib/env";
+import { withMarkdown } from "../../lib/markdown-route";
 import { loadApp, loadAppList, pathToId } from "../../lib/apps-data";
 import { parseSort, renderApp, renderAppList, renderNotFound, renderUnavailable } from "../../lib/apps-pages";
 import { edgeCachedGet } from "../../lib/http";
@@ -11,7 +12,7 @@ import { entityHref } from "../../../src/lib/arc-ecosystem";
 const html = (body: string, status = 200) =>
   new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8", "x-content-type-options": "nosniff", "cache-control": status === 200 ? "public, max-age=300" : "no-store" } });
 
-export const onRequest: PagesFunction = async (ctx) => {
+const htmlPages: PagesFunction = async (ctx) => {
   const req = ctx.request, url = new URL(req.url);
   if (req.method.toUpperCase() !== "GET" && req.method.toUpperCase() !== "HEAD") return new Response("Only GET is supported.", { status: 405, headers: { allow: "GET" } });
   if (!url.pathname.endsWith("/")) return Response.redirect(`${url.origin}${url.pathname}/${url.search}`, 301);
@@ -34,3 +35,6 @@ export const onRequest: PagesFunction = async (ctx) => {
     return a === "unknown" ? html(renderNotFound(), 404) : html(renderApp(a));
   }, 300, `app:${id}`);
 };
+
+/** /apps/index.md: the Markdown copy of the app list (spec 2026-10-23-machine-readable-copies-design.md). */
+export const onRequest: PagesFunction = withMarkdown(htmlPages);

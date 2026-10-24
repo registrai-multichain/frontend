@@ -3,7 +3,7 @@ import { builderUrl } from "@/lib/public-site";
 import Link from "next/link";
 import { BuildersShell } from "@/components/BuildersShell";
 import { InfoBubble } from "@/components/InfoBubble";
-import { CHANGELOG, DATA_API_BASE, ENDPOINTS, ERRORS, FIELDS, HISTORY_START, LICENCE, LIMITS, PAID_DOCS, PAID_NOTE, PRECISION_NOTE } from "@/lib/data-api-docs";
+import { CHANGELOG, DATA_API_ANSWER, DATA_API_BASE, ENDPOINTS, ERRORS, FIELDS, HISTORY_START, LICENCE, LIMITS, MCP_ANSWER, MCP_DOCS, PAID_DOCS, PAID_NOTE, PRECISION_NOTE } from "@/lib/data-api-docs";
 
 const TITLE = "Data API · Registrai";
 const DESCRIPTION = "Public, read-only API for the Arc indices and per-app hourly activity on Arc mainnet.";
@@ -11,7 +11,7 @@ const DESCRIPTION = "Public, read-only API for the Arc indices and per-app hourl
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
-  alternates: { canonical: builderUrl("data-api") },
+  alternates: { canonical: builderUrl("data-api"), types: { "text/markdown": "/data-api/index.md" } },
   // own share tags: the root layout's carry the landing page's line and image (audit L12)
   openGraph: { type: "website", siteName: "Registrai", title: TITLE, description: DESCRIPTION, url: "https://builder.registrai.cc/data-api/" },
   twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
@@ -27,6 +27,7 @@ export default function DataApiPage() {
       <article className="perennial-app-page pa-legal">
         <header className="mb-6">
           <h1 className="pa-h1">Data API</h1>
+          <p>{DATA_API_ANSWER}</p>
           <p className="pa-muted">Version 1. Public, read-only, no key. JSON over HTTPS with CORS for any origin.</p>
           <p>{LICENCE} See the <Link href="/terms/">Terms of use</Link>.</p>
         </header>
@@ -34,6 +35,12 @@ export default function DataApiPage() {
         <H>Base URL</H>
         <pre className="pa-code"><code>{DATA_API_BASE}</code></pre>
         <p className="pa-muted">For tools and agents: <a href="/api/v1/openapi.json">OpenAPI 3.1</a> · <a href="/llms.txt">llms.txt</a> · MCP server (read-only, Streamable HTTP) at <code>https://builder.registrai.cc/api/mcp</code> · <Link href="/apps/">Apps on Arc</Link></p>
+
+        <H>MCP server</H>
+        <p>{MCP_ANSWER}</p>
+        <ul className="pa-list">
+          {MCP_DOCS.map((t) => <li key={t.name}><code>{t.name}</code> ({t.title}): {t.what}</li>)}
+        </ul>
 
         <H>Endpoints</H>
         {ENDPOINTS.map((e) => (
