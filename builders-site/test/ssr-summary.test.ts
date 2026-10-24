@@ -49,7 +49,7 @@ describe("server-rendered summaries for pages that load their numbers in the bro
   });
 
   test("HEAD: the static page, no data reads", async () => {
-    const { onRequest } = await import("../functions/builders-index/index");
+    const { onRequest } = await import("../functions/builders-index/[[path]]");
     let reads = 0;
     const env = { INVITES: { get: async () => { reads++; return null; } } };
     const r = await onRequest({ request: new Request("https://builder.registrai.cc/builders-index/", { method: "HEAD" }), env, params: {}, waitUntil: () => undefined,
@@ -59,7 +59,7 @@ describe("server-rendered summaries for pages that load their numbers in the bro
   });
 
   test("route: GET /builders-index/ returns the static page with the summary; data down → static page unchanged", async () => {
-    const { onRequest } = await import("../functions/builders-index/index");
+    const { onRequest } = await import("../functions/builders-index/[[path]]");
     const kv = new MemoryKV();
     const db = new MemoryD1(DATA_MIGRATIONS.map((f) => resolve(__dirname, "../migrations-data", f)));
     const ctx = (env: unknown) => ({ request: new Request("https://builder.registrai.cc/builders-index/"), env, params: {}, waitUntil: () => undefined,
@@ -76,7 +76,7 @@ describe("server-rendered summaries for pages that load their numbers in the bro
   });
 
   test("data products: the summary opens by saying what the indices are; /builders-index/index.md converts the summary", async () => {
-    const { onRequest } = await import("../functions/builders-index/index");
+    const { onRequest } = await import("../functions/builders-index/[[path]]");
     const kv = new MemoryKV();
     const db = new MemoryD1(DATA_MIGRATIONS.map((f) => resolve(__dirname, "../migrations-data", f)));
     const f = indexFixture() as unknown as AbiData;
@@ -91,6 +91,16 @@ describe("server-rendered summaries for pages that load their numbers in the bro
     expect(md).toContain("Registrai publishes three hourly indices of activity on Arc, Circle's blockchain");
     expect(md).toContain("Arc Ecosystem Index");
     expect(seen).toEqual(["https://builder.registrai.cc/builders-index/"]);   // the static page, not a missing index.md asset
+  });
+
+  test("the catch-all route passes every other /builders-index/ path (Next data files) straight through", async () => {
+    const { onRequest } = await import("../functions/builders-index/[[path]]");
+    const seen: unknown[] = [];
+    const asset = new Response("rsc-payload", { headers: { "content-type": "text/plain" } });
+    const r = await onRequest({ request: new Request("https://builder.registrai.cc/builders-index/__next._tree.txt"), env: {}, params: { path: ["__next._tree.txt"] }, waitUntil: () => undefined,
+      next: async (input?: unknown) => { seen.push(input); return asset; } } as never);
+    expect(r).toBe(asset);
+    expect(seen).toEqual([undefined]);
   });
 });
 

@@ -6,7 +6,8 @@ import { renderIndexSummary, withSummary } from "../../lib/ssr-summary";
 
 /** GET /builders-index/: the static page plus a server-rendered summary of the closes and the most used apps (lib/ssr-summary.ts). */
 const htmlPage: PagesFunction = async (ctx) => {
-  if (!["GET", "HEAD"].includes(ctx.request.method.toUpperCase())) return ctx.next();
+  // a catch-all (for …/index.md): only the page itself gets the summary; Next's data files and anything else pass through
+  if (!["GET", "HEAD"].includes(ctx.request.method.toUpperCase()) || new URL(ctx.request.url).pathname !== "/builders-index/") return ctx.next();
   const deps = { waitUntil: (p: Promise<unknown>) => ctx.waitUntil(p) };
   // ctx.next(ctx.request): the static page at the request's own URL (for …/index.md the wrapper has rewritten it to the page)
   return withSummary(ctx.request, () => ctx.next(ctx.request), async () => {
