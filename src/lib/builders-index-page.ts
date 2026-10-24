@@ -78,4 +78,4 @@ export function startGate() {
 
 /** What the indices are, in one sentence: the opening line of /builders-index/ (page and server-rendered summary) and its
  *  Markdown copy. Same definitions as /methodology/ ("Index member"). */
-export const INDICES_ANSWER = "Registrai publishes three hourly indices of activity on Arc, Circle's blockchain: the Arc Builders Index (ABI) for apps that started on Arc plus the Arc base layer, the Arc Integrations Index (AII) for products that integrated Arc, and the Arc Ecosystem Index (AEI) for both, plus the base layer. Each is computed from public Arc mainnet data, base 1,000.";
+export const INDICES_ANSWER = "Registrai publishes three hourly indices of activity on Arc, Circle's blockchain: the Arc Builders Index (ABI) for apps that started on Arc plus the Arc base layer, the Arc Integrations Index (AII) for products that integrated Arc, and the Arc Ecosystem Index (AEI) for both, plus the base layer. Each starts at 1,000 and moves with stablecoin payments to its apps on Arc mainnet.";

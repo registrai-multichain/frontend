@@ -16,7 +16,7 @@ export function withMarkdown(handler: PagesFunction): PagesFunction {
     const res = await handler({ ...ctx, request: new Request(pageUrl, { method: "GET", headers: ctx.request.headers }), params: { ...ctx.params, path: parts } } as never);
     if (![200, 404, 410].includes(res.status)) return res;
     const html = await res.text();
-    const canonical = html.match(/<link rel="canonical" href="([^"]+)">/)?.[1] ?? pageUrl;
+    const canonical = html.match(/<link rel="canonical" href="([^"]+)"\s*\/?>/)?.[1] ?? pageUrl;   // ours end ">", Next's "/>"
     const body = htmlToMarkdown(html, canonical);
     return new Response(m === "HEAD" ? null : body, { status: res.status, headers: {
       "content-type": "text/markdown; charset=utf-8", "x-content-type-options": "nosniff", "cache-control": res.headers.get("cache-control") ?? "no-store" } });

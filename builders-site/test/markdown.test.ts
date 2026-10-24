@@ -53,5 +53,12 @@ describe("htmlToMarkdown", () => {
     expect(md).toContain("Registrai publishes three hourly indices.");
     expect(md).not.toContain("Loading");
   });
+  test("review I1/I2: React comment separators vanish; code spans keep underscores unescaped", async () => {
+    const { htmlToMarkdown } = await import("../lib/markdown");
+    const md = htmlToMarkdown(`<main><p>No warranty.<!-- --> See the terms.</p><p><code>arc_indices</code> (<!-- -->Arc indices<!-- -->): a_b</p></main>`, "https://x.y/");
+    expect(md).not.toContain("!--");
+    expect(md).toContain("No warranty. See the terms.");
+    expect(md).toContain("`arc_indices` (Arc indices): a\\_b");
+  });
 });
 

@@ -11,7 +11,7 @@ const DESCRIPTION = "Public, read-only API for the Arc indices and per-app hourl
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
-  alternates: { canonical: builderUrl("data-api"), types: { "text/markdown": "/data-api/index.md" } },
+  alternates: { canonical: builderUrl("data-api"), types: { "text/markdown": `${builderUrl("data-api")}index.md` } },
   // own share tags: the root layout's carry the landing page's line and image (audit L12)
   openGraph: { type: "website", siteName: "Registrai", title: TITLE, description: DESCRIPTION, url: "https://builder.registrai.cc/data-api/" },
   twitter: { card: "summary", title: TITLE, description: DESCRIPTION },

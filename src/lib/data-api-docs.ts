@@ -79,7 +79,7 @@ export const PAID_DOCS: PaidDoc[] = (Object.keys(PRODUCTS) as ProductId[]).map((
 export const PAID_NOTE = "Paid extras are sold per request through x402 on Arc mainnet. A request without payment answers 402 with two options: Circle Gateway Nanopayments (batched, gasless; the lower price) or a standard EIP-3009 USDC authorization (any x402 wallet). The response is built first and charged only if it can be delivered. The free tier above is unchanged.";
 
 /** What the API is, in one sentence: the opening line of /data-api/ (data products, item 1). */
-export const DATA_API_ANSWER = "The Registrai Data API serves hourly data on apps on Arc, Circle's blockchain, as JSON: each app's stablecoin payments, paying wallets and volume, the Arc indices, the Arc ecosystem directory and Arc chain figures. It does not serve raw blocks or transactions; read those from an Arc RPC.";
+export const DATA_API_ANSWER = "The Registrai Data API serves data on Arc, Circle's blockchain, as JSON: hourly stablecoin payments, paying wallets and volume for each app, the hourly Arc indices, the Arc ecosystem directory, verified builders and Arc chain figures. It does not serve raw blocks or transactions; read those from an Arc RPC.";
 
 /** The MCP server in one sentence, then its tools (the free ones the server lists; a test keeps them in step). */
 export const MCP_ANSWER = "Registrai runs a read-only MCP server for the same Arc data at https://builder.registrai.cc/api/mcp (Streamable HTTP, no sign-in or key), listed in the MCP registry as cc.registrai/arc-data.";
@@ -93,6 +93,6 @@ export const MCP_DOCS: { name: string; title: string; what: string }[] = [
   { name: "arc_verified", title: "Arc builders: verified", what: "projects with a valid builder proof on Arc" },
   { name: "arc_ecosystem", title: "Arc ecosystem: directory", what: "every project on Arc with category and status" },
   { name: "arc_entity", title: "Arc project: detail", what: "one project's status, evidence, contracts and sources" },
-  { name: "arc_numbers", title: "Arc in numbers", what: "USDC and stablecoin supply, TVL, transactions and volume" },
+  { name: "arc_numbers", title: "Arc in numbers", what: "USDC and stablecoin supply, TVL, estimated transactions and volume" },
   { name: "arc_apps_week", title: "Arc apps, last 7 days", what: "apps ranked by stablecoin payments received over 7 days" },
 ];

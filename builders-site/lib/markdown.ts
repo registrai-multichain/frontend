@@ -22,7 +22,8 @@ export function htmlToMarkdown(html: string, canonical: string): string {
   // a static page whose content loads in the browser carries a server-rendered summary for readers without scripts: convert that
   const ssr = html.match(/<section id="ssr-summary"[^>]*>([\s\S]*?)<\/section>/i)?.[1];
   const main = ssr ?? html.match(/<main[^>]*>([\s\S]*)<\/main>/i)?.[1] ?? html;
-  const src = main.replace(/<(script|style|form|svg|nav|footer)\b[^>]*>[\s\S]*?<\/\1>/gi, "");
+  // HTML comments go first: React puts <!-- --> between adjacent text nodes in Next's static export
+  const src = main.replace(/<!--[\s\S]*?-->/g, "").replace(/<(script|style|form|svg|nav|footer)\b[^>]*>[\s\S]*?<\/\1>/gi, "");
   const blocks: string[] = [];
   type Buf = { s: string };
   const para: Buf = { s: "" };
@@ -37,14 +38,15 @@ export function htmlToMarkdown(html: string, canonical: string): string {
   let summary: Buf | null = null;
   const target = () => summary ?? cell ?? para;
   const write = (s: string) => { const t = target(); t.s += s; };
-  let lastLi = false;   // consecutive list items join with one newline
+  let lastLi = false, inCode = false;   // consecutive list items join with one newline
   const flush = () => { const t = para.s.replace(/[ \t]+/g, " ").trim(); if (t) { blocks.push(heading ? `${"#".repeat(heading)} ${t}` : t); lastLi = false; } para.s = ""; };
 
   for (const m of src.matchAll(/<(\/?)([a-zA-Z0-9]+)([^>]*)>|([^<]+)/g)) {
     const [, close, rawTag, attrs, text] = m;
     if (text !== undefined) {
       const t = decode(text).replace(/\s+/g, " ");
-      if (t.trim() || target().s) write(escapeMd(t));
+      // inside a code span Markdown takes text literally: no backslash escapes (they would show as written)
+      if (t.trim() || target().s) write(inCode ? t : escapeMd(t));
       continue;
     }
     const tag = rawTag.toLowerCase();
@@ -61,7 +63,7 @@ export function htmlToMarkdown(html: string, canonical: string): string {
         if (open) links.push({ href: absolute(attr(attrs, "href")), at: target().s.length, buf: target() });
         else { const l = links.pop(); if (l) { const inner = l.buf.s.slice(l.at).trim(); l.buf.s = `${l.buf.s.slice(0, l.at)}${l.href ? `[${inner}](${l.href})` : inner}`; } }
         break;
-      case "code": write("`"); break;
+      case "code": inCode = open; write("`"); break;
       case "b": case "strong": write("**"); break;
       case "ul": case "ol":
         if (open) { flush(); lastLi = false; lists.push({ ordered: tag === "ol", n: 0 }); } else { flush(); lists.pop(); lastLi = false; }
