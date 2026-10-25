@@ -32,7 +32,7 @@ const inCat = (e: ArcEntity, id: string) => e.category === id || (e.tags ?? []).
 export const QUESTION_PAGES = [
   { path: "/arc/most-used-apps/", title: "Most-used apps on Arc, last 7 days" },
   { path: "/arc/apps-that-accept-usdc/", title: "Apps that accept USDC on Arc" },
-  { path: "/arc/new/", title: "New on Arc this week" },
+  { path: "/arc/new/", title: "New on Arc, last 30 days" },
   { path: "/arc/get-usdc/", title: "How to get USDC onto Arc" },
   { path: "/arc/arc-vs-ethereum-vs-solana/", title: "Arc vs Ethereum vs Solana for stablecoin payments" },
 ] as const;
@@ -69,15 +69,25 @@ export function renderAcceptsUsdc(w: ArcWeek | null): string {
 
 const minusDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) - n * 86400e3).toISOString().slice(0, 10);
 
+/** New on Arc (e09 "what launched this month"): launches with a sourced date in the last 30 days, and when there are none the
+ *  latest ones, so the page is never empty; apps added to the index over the 7 days the app data covers. */
+const LAUNCH_DAYS = 30, LATEST = 5;
+const dayLabel = (d: string) => atHour(`${d}T00:00:00Z`).replace(/, 00:00 UTC$/, "");
 export function renderNew(w: ArcWeek | null, today: string): string {
   const [path, title] = [QUESTION_PAGES[2].path, QUESTION_PAGES[2].title];
-  const end = w ? w.until.slice(0, 10) : today, start = minusDays(end, 7);
-  const live = sortByName(ECOSYSTEM.entities.filter((e) => e.first_live && e.first_live > start && e.first_live <= end));
-  const liveHtml = `<h2>Went live</h2>\n${live.length ? table(["Project", "Category", "Live since"], live.map((e) => [entLink(e), esc(catName(e.category)), esc(e.first_live!)])) : "<p>None this week.</p>"}\n${DIR_SOURCE()}`;
-  if (!w) return shell(path, title, "Data not available right now.", `${liveHtml}\n<h2>${esc("Added to Registrai's index")}</h2>\n${NA}`, live.map((e) => e.name));
+  const end = w ? w.until.slice(0, 10) : today, start = minusDays(end, LAUNCH_DAYS);
+  const dated = ECOSYSTEM.entities.filter((e) => e.first_live && e.first_live <= end);
+  const live = sortByName(dated.filter((e) => e.first_live! > start));
+  const latest = [...dated].sort((a, b) => (a.first_live! < b.first_live! ? 1 : a.first_live! > b.first_live! ? -1 : a.name.localeCompare(b.name))).slice(0, LATEST);
+  const rows = (l: ArcEntity[]) => table(["Project", "Category", "Live since"], l.map((e) => [entLink(e), esc(catName(e.category)), esc(e.first_live!)]));
+  const liveHtml = `<h2>Went live</h2>\n${live.length ? rows(live)
+    : `<p>${esc(`No project in the directory has a sourced launch date in the ${LAUNCH_DAYS} days to ${dayLabel(end)}.`)}</p>${latest.length ? `\n<h3>Most recent launches</h3>\n${rows(latest)}` : ""}`}\n${DIR_SOURCE()}`;
+  const liveSentence = `In the ${LAUNCH_DAYS} days to ${dayLabel(end)}, ${plural(live.length, "project", "projects")} in the directory went live on Arc`;
+  const addedHead = `<h2>${esc("Added to Registrai's index, last 7 days")}</h2>`;
+  if (!w) return shell(path, title, `${liveSentence}. App data is not available right now.`, `${liveHtml}\n${addedHead}\n${NA}`, live.map((e) => e.name));
   const fresh = w.apps.filter((a) => a.first_hour !== null && a.first_hour > w.until_hour - WINDOW_H && a.first_hour <= w.until_hour);
-  const first = `In the 7 days to ${atHour(w.until)}, ${plural(live.length, "project", "projects")} in the directory went live on Arc and ${plural(fresh.length, "app was", "apps were")} added to Registrai's index.`;
-  const freshHtml = `<h2>${esc("Added to Registrai's index")}</h2>\n${fresh.length ? table(["App", "First seen", "Payments (7 d)"], fresh.map((a) => [appLink(a), esc(atHour(new Date(a.first_hour! * 3600e3).toISOString())), int(a.payments)])) : "<p>None this week.</p>"}\n${source(w)}`;
+  const first = `${liveSentence}; in the 7 days to ${atHour(w.until)}, ${plural(fresh.length, "app was", "apps were")} added to Registrai's index.`;
+  const freshHtml = `${addedHead}\n${fresh.length ? table(["App", "First seen", "Payments (7 d)"], fresh.map((a) => [appLink(a), esc(atHour(new Date(a.first_hour! * 3600e3).toISOString())), int(a.payments)])) : "<p>None in the last 7 days.</p>"}\n${source(w)}`;
   return shell(path, title, first, `${liveHtml}\n${freshHtml}`, [...live.map((e) => e.name), ...fresh.map((a) => a.name)]);
 }
 

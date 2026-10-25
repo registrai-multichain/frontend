@@ -72,7 +72,7 @@ describe("question pages", () => {
     const none = renderMostUsed(null);
     expect(none).toContain("Data not available right now.");
     expect(none).toContain("Not available right now (source: Registrai index database)");
-    expect(renderNew({ ...W, apps: [W.apps[1]] }, "2026-10-22")).toContain("None this week");
+    expect(renderNew({ ...W, apps: [W.apps[1]] }, "2026-10-22")).toContain("None in the last 7 days.");
   });
   test("accepts USDC: measured table, then listed-not-measured payment apps", async () => {
     const { renderAcceptsUsdc } = await import("../lib/arc-question-pages");
@@ -89,8 +89,9 @@ describe("question pages", () => {
   test("new: went live within 7 days, started receiving payments within the window (edge hour excluded)", async () => {
     const { renderNew } = await import("../lib/arc-question-pages");
     const h = renderNew(W, "2026-10-22");
-    expect(h).toContain("In the 7 days to 22 Oct 2026, 16:00 UTC, 1 project in the directory went live on Arc and 1 app was added to Registrai&#39;s index.");
-    expect(h).toContain("<h2>Added to Registrai&#39;s index</h2>");
+    expect(h).toContain("In the 30 days to 22 Oct 2026, 1 project in the directory went live on Arc; in the 7 days to 22 Oct 2026, 16:00 UTC, 1 app was added to Registrai&#39;s index.");
+    expect(h).toContain("<title>New on Arc, last 30 days · Registrai</title>");
+    expect(h).toContain("<h2>Added to Registrai&#39;s index, last 7 days</h2>");
     expect(h).toContain("<th>First seen</th>");
     expect(h).not.toContain("started receiving payments");
     expect(h).toMatch(/<h2>Went live<\/h2>[^]*Source: Registrai Arc ecosystem directory/);
@@ -128,3 +129,22 @@ describe("question page routes", () => {
     expect(await (await call("/arc/new/", {}, "HEAD")).text()).toBe("");
   });
 });
+
+describe("/arc/new/ never empty (30-day window, then the latest launches)", () => {
+  test("launches within 30 days count; with none, the five most recent launches are listed with their dates", async () => {
+    const { renderNew } = await import("../lib/arc-question-pages");
+    const ix = await import("../../src/lib/arc-ecosystem-data");
+    const rampx = ix.ECOSYSTEM.bySlug.get("rampx")! as { first_live?: string };
+    rampx.first_live = "2026-09-25";   // 27 days before 22 Oct
+    try {
+      const h = renderNew(W, "2026-10-22");
+      expect(h).toContain("2 projects in the directory went live on Arc");
+      const later = renderNew({ ...W, until: "2026-12-30T16:00:00Z", until_hour: Date.parse("2026-12-30T16:00:00Z") / 3600e3 }, "2026-12-30");
+      expect(later).toContain("No project in the directory has a sourced launch date in the 30 days to 30 Dec 2026.");
+      expect(later).toContain("<h3>Most recent launches</h3>");
+      expect(later.indexOf(">Archery<")).toBeLessThan(later.indexOf(">RampX<"));   // newest first
+      expect(later).toContain("2026-09-25");
+    } finally { delete rampx.first_live; }
+  });
+});
+
