@@ -654,6 +654,37 @@
     "last_reviewed": "2026-10-20"
   },
   {
+    "slug": "arc-spend",
+    "name": "Arc Spend",
+    "category": "consumer",
+    "status": "live",
+    "status_evidence": [
+      {
+        "url": "https://arcspend.vercel.app/",
+        "title": "Arc Spend: spend USDC on Arc on real gift cards",
+        "type": "mainnet-support"
+      }
+    ],
+    "summary": "Independent web app that sells Bitrefill gift cards for USDC on Arc. Its live config points at Arc mainnet (chain ID 5042, rpc.mainnet.arc.io) with payments switched on. Not listed on arc.io/ecosystem; no Circle or Arc announcement found.",
+    "website": "https://arcspend.vercel.app",
+    "x": "arcspend",
+    "sources": [
+      {
+        "url": "https://arcspend.vercel.app/",
+        "title": "Arc Spend (site and app bundle)"
+      },
+      {
+        "url": "https://arcspend.vercel.app/api/config",
+        "title": "Arc Spend live config (chain 5042, canTakePayments true, 514 brands)",
+        "date": "2026-10-25"
+      }
+    ],
+    "last_reviewed": "2026-10-25",
+    "tags": [
+      "payments"
+    ]
+  },
+  {
     "slug": "arcade",
     "name": "Arcade",
     "category": "consumer",
@@ -2779,7 +2810,7 @@
     "tags": [
       "payments"
     ],
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
@@ -2795,6 +2826,12 @@
         "url": "https://www.arc.io/ecosystem/catena-labs",
         "title": "Catena Labs on arc.io ecosystem",
         "date": "2026-10-20"
+      },
+      {
+        "url": "https://catena.com/blog/catena-and-arc-financial-infrastructure-for-the-agentic-economy",
+        "title": "Catena and Arc: Financial Infrastructure for the Agentic Economy",
+        "date": "2026-09-16",
+        "type": "mainnet-support"
       }
     ],
     "summary": "Banking and governance platform for AI agents, covering payments and treasury. Named among payments firms in Circle's 2025-10-28 and 2026-09-16 Arc announcements.",
@@ -2824,7 +2861,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-25",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "ceffu",
@@ -3643,14 +3681,18 @@
     "slug": "cycles",
     "name": "Cycles",
     "category": "payments",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/ecosystem/cycles",
         "title": "Cycles on arc.io ecosystem"
+      },
+      {
+        "url": "https://explorer.arc.io/address/0xa9d7bc831b4c0e2f17d01036d9ca6e523e17d212",
+        "title": "Cycles Pay contract on Arc mainnet"
       }
     ],
-    "summary": "Open clearing protocol that lets users clear debts with each other using any currency or credit. Listed as an Arc ecosystem partner.",
+    "summary": "Open clearing protocol that lets users clear debts with each other using any currency or credit. Its Cycles Pay app lets businesses hold USDC, invoice and pay on Arc; the app is in beta and needs an invite code.",
     "website": "https://cycles.money/",
     "x": "cyclesmoney",
     "sources": [
@@ -3665,7 +3707,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-25"
   },
   {
     "slug": "dcent",
@@ -5107,6 +5149,42 @@
     "last_reviewed": "2026-10-20"
   },
   {
+    "slug": "glidepay",
+    "name": "Glidepay",
+    "category": "consumer",
+    "status": "live",
+    "status_evidence": [
+      {
+        "url": "https://glidepay.cash/mainnet",
+        "title": "Launch note: glidepay is live on Arc mainnet",
+        "date": "2026-09-24",
+        "type": "mainnet-support"
+      }
+    ],
+    "summary": "Cash App-style stablecoin app on Arc with email or Google sign-in and Circle developer-controlled smart accounts (Circle holds the keys). Its launch note says it went live on Arc mainnet on 2026-09-24. Universal Receive is not live yet.",
+    "website": "https://glidepay.cash",
+    "first_live": "2026-09-24",
+    "sources": [
+      {
+        "url": "https://glidepay.cash/mainnet",
+        "title": "Launch note: glidepay is live on Arc mainnet",
+        "date": "2026-09-24"
+      },
+      {
+        "url": "https://glidepay.cash",
+        "title": "glidepay: A Cash App for stablecoins, now on Arc mainnet"
+      },
+      {
+        "url": "https://github.com/0xdopewilly/glide",
+        "title": "glidepay app repo (GitHub)"
+      }
+    ],
+    "last_reviewed": "2026-10-25",
+    "tags": [
+      "payments"
+    ]
+  },
+  {
     "slug": "global-payments",
     "name": "Global Payments",
     "aliases": [
@@ -5430,12 +5508,18 @@
     "tags": [
       "developer-tools"
     ],
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/ecosystem/hifi",
         "title": "Arc ecosystem listing: HIFI",
         "date": "2026-10-20"
+      },
+      {
+        "url": "https://docs.hifi.com/v3/changelog/changelog.md",
+        "title": "HIFI changelog: September 18, 2026",
+        "date": "2026-09-18",
+        "type": "mainnet-support"
       }
     ],
     "summary": "API platform for moving money across fiat rails and stablecoins, covering cross-border payments, payouts and stablecoin minting. Listed as an Arc ecosystem partner.",
@@ -5459,7 +5543,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-25",
+    "first_live": "2026-09-18"
   },
   {
     "slug": "hinkal",
@@ -8541,12 +8626,13 @@
     "slug": "pulsar",
     "name": "Pulsar",
     "category": "payments",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/blog/how-pulsar-is-building-a-cross-border-money-experience-with-arc",
-        "title": "Arc blog: Pulsar live on Arc mainnet",
-        "date": "2026-10-06"
+        "title": "Arc blog: How Pulsar is building a cross-border money experience with Arc",
+        "date": "2026-10-06",
+        "type": "arc-official-live"
       }
     ],
     "summary": "Non-custodial consumer money app covering dollar, euro and pound balances, bank and stablecoin transfers, swaps and card spending. Announced on Arc 2026-09-16; Arc's blog of 2026-10-06 says it is live on mainnet, onboarding from a waitlist.",
@@ -8571,7 +8657,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-25"
   },
   {
     "slug": "pump-fun",
@@ -10423,12 +10509,18 @@
       "UQPAY"
     ],
     "category": "payments",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.uqpay.com/en",
         "title": "UQPay news: Day 1 Support for Arc (2026-09-16)",
         "date": "2026-10-20"
+      },
+      {
+        "url": "https://www.uqpay.com/en/resources/news/article-88",
+        "title": "UQPay Announces Day 1 Support for Arc to Advance Global USDC Settlement",
+        "date": "2026-09-16",
+        "type": "mainnet-support"
       }
     ],
     "summary": "Payments platform offering global acquiring, multi-currency accounts, card issuance and stablecoin services. Its news page lists a 2026-09-16 item announcing support for Arc.",
@@ -10442,7 +10534,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-25",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "vfat-io",
@@ -10590,6 +10683,42 @@
     "last_reviewed": "2026-10-20"
   },
   {
+    "slug": "walletconnect-pay",
+    "name": "WalletConnect Pay",
+    "category": "payments",
+    "status": "live",
+    "status_evidence": [
+      {
+        "url": "https://walletconnect.com/blog/the-walletconnect-network-supports-arc-connecting-apps-from-day-one",
+        "title": "The WalletConnect Network supports Arc, connecting apps from day one",
+        "date": "2026-09-16",
+        "type": "mainnet-support"
+      }
+    ],
+    "summary": "WalletConnect's crypto payment product for merchants and PSPs. WalletConnect's Arc launch post (2026-09-16) says consumers can pay with WalletConnect Pay on Arc in USDC. Its docs' chain list (General Availability) does not list Arc yet.",
+    "website": "https://walletconnect.com/payments",
+    "x": "WalletConnect",
+    "first_live": "2026-09-16",
+    "sources": [
+      {
+        "url": "https://walletconnect.com/blog/the-walletconnect-network-supports-arc-connecting-apps-from-day-one",
+        "title": "The WalletConnect Network supports Arc, connecting apps from day one",
+        "date": "2026-09-16"
+      },
+      {
+        "url": "https://docs.walletconnect.com/payments/token-and-chain-coverage",
+        "title": "WalletConnect Pay docs: Token and Chain Coverage (Arc not listed; last modified 2026-09-07)",
+        "date": "2026-09-07"
+      },
+      {
+        "url": "https://www.arc.io/blog/arc-economic-os-internet",
+        "title": "Arc Mainnet Is Live (names 'WalletConnect' among wallets and consumer apps)",
+        "date": "2026-09-16"
+      }
+    ],
+    "last_reviewed": "2026-10-25"
+  },
+  {
     "slug": "wenia",
     "name": "Wenia",
     "category": "exchanges",
@@ -10669,7 +10798,7 @@
     "slug": "wirex",
     "name": "Wirex",
     "category": "payments",
-    "status": "announced",
+    "status": "live",
     "status_evidence": [
       {
         "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
@@ -10684,6 +10813,12 @@
       {
         "url": "https://www.arc.io/ecosystem/wirex",
         "title": "Wirex on arc.io ecosystem"
+      },
+      {
+        "url": "https://www.wirexapp.com/post/wirex-one-launches-publicly-on-arc-bringing-stablecoin-private-banking-to-the-mass-affluent-market",
+        "title": "Wirex One launches publicly on Arc",
+        "date": "2026-09-16",
+        "type": "mainnet-support"
       }
     ],
     "summary": "Crypto wallet and payment platform with cards, exchange and global transfers, plus a business offering for stablecoin accounts and cards. Named as a stablecoin payments provider in Circle's 2026-08-05 Arc announcement.",
@@ -10712,7 +10847,8 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-20"
+    "last_reviewed": "2026-10-25",
+    "first_live": "2026-09-16"
   },
   {
     "slug": "wisdomtree",

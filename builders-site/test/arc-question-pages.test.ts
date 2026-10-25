@@ -74,14 +74,23 @@ describe("question pages", () => {
     expect(none).toContain("Not available right now (source: Registrai index database)");
     expect(renderNew({ ...W, apps: [W.apps[1]] }, "2026-10-22")).toContain("None in the last 7 days.");
   });
-  test("accepts USDC: measured table, then listed-not-measured payment apps", async () => {
+  test("accepts USDC: payment apps live on Arc first, then announced ones, then measured payments labelled as including swaps", async () => {
     const { renderAcceptsUsdc } = await import("../lib/arc-question-pages");
-    const h = renderAcceptsUsdc(W);
-    expect(h).toContain("2 apps on Arc received stablecoin payments in the 7 days to 22 Oct 2026, 16:00 UTC. 1 more payment project is listed in Registrai&#39;s Arc directory (0 live, 0 deployed, 1 announced) but not measured by Registrai.");
-    expect(h).toMatch(/<h2>Listed, not measured<\/h2>[^]*Source: Registrai Arc ecosystem directory/);
-    expect(h.indexOf("<h2>Measured</h2>")).toBeLessThan(h.indexOf("<h2>Listed, not measured</h2>"));
-    expect(h).toContain('href="/ecosystem/payco/"');
-    expect(h).toContain('href="https://payco.example/arc"');
+    const ix = await import("../../src/lib/arc-ecosystem-data");
+    const payco = ix.ECOSYSTEM.bySlug.get("payco")! as { status: string; first_live?: string; summary: string };
+    const saved = { ...payco };
+    Object.assign(payco, { status: "live", first_live: "2026-09-16", summary: "Merchant checkout that takes USDC on Arc. Second sentence." });
+    try {
+      const h = renderAcceptsUsdc(W);
+      expect(h).toContain("<title>Apps that accept USDC on Arc · Registrai</title>");
+      expect(h).toContain("1 payment app in Registrai&#39;s directory takes USDC on Arc mainnet: PayCo. Separately, 2 apps on Arc received stablecoin payments in the 7 days to 22 Oct 2026, 16:00 UTC, led by Big &lt;b&gt;App&lt;/b&gt;.");
+      expect(h.indexOf("<h2>Payment apps live on Arc</h2>")).toBeLessThan(h.indexOf("<h2>Receiving stablecoin payments, last 7 days</h2>"));
+      expect(h).toContain('<a href="/ecosystem/payco/">PayCo</a></td><td>Merchant checkout that takes USDC on Arc.</td><td>2026-09-16</td>');
+      expect(h).toMatch(/<h2>Receiving stablecoin payments, last 7 days<\/h2>\n<p>[^<]*swaps into DEXs and bridges/);
+    } finally { Object.assign(payco, saved); delete (payco as { first_live?: string }).first_live; }
+    const h2 = renderAcceptsUsdc(W);
+    expect(h2).toContain("No payment app in Registrai&#39;s directory has evidence of taking USDC on Arc mainnet yet; 1 is announced.");
+    expect(h2).toMatch(/<h2>Announced<\/h2>[^]*href="\/ecosystem\/payco\/"/);
     const down = renderAcceptsUsdc(null);
     expect(down).toContain("Not available right now (source: Registrai index database)");
     expect(down).toContain('href="/ecosystem/payco/"');   // the directory part still renders

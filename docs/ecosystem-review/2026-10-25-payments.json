@@ -1,0 +1,102 @@
+[
+  {
+    "slug": "catena-labs",
+    "field": "status",
+    "set": {
+      "status": "live",
+      "first_live": "2026-09-16"
+    },
+    "evidence": {
+      "url": "https://catena.com/blog/catena-and-arc-financial-infrastructure-for-the-agentic-economy",
+      "title": "Catena and Arc: Financial Infrastructure for the Agentic Economy",
+      "date": "2026-09-16",
+      "type": "mainnet-support"
+    },
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Catena and Arc: Financial Infrastructure for the Agentic Economy",
+    "source": "https://catena.com/blog/catena-and-arc-financial-infrastructure-for-the-agentic-economy"
+  },
+  {
+    "slug": "hifi",
+    "field": "status",
+    "set": {
+      "status": "live",
+      "first_live": "2026-09-18"
+    },
+    "evidence": {
+      "url": "https://docs.hifi.com/v3/changelog/changelog.md",
+      "title": "HIFI changelog: September 18, 2026",
+      "date": "2026-09-18",
+      "type": "mainnet-support"
+    },
+    "change": "Announced → Live on mainnet, since 2026-09-18, per HIFI changelog: September 18, 2026",
+    "source": "https://docs.hifi.com/v3/changelog/changelog.md"
+  },
+  {
+    "slug": "uqpay",
+    "field": "status",
+    "set": {
+      "status": "live",
+      "first_live": "2026-09-16"
+    },
+    "evidence": {
+      "url": "https://www.uqpay.com/en/resources/news/article-88",
+      "title": "UQPay Announces Day 1 Support for Arc to Advance Global USDC Settlement",
+      "date": "2026-09-16",
+      "type": "mainnet-support"
+    },
+    "change": "Announced → Live on mainnet, since 2026-09-16, per UQPay Announces Day 1 Support for Arc to Advance Global USDC Settleme…",
+    "source": "https://www.uqpay.com/en/resources/news/article-88"
+  },
+  {
+    "slug": "wirex",
+    "field": "status",
+    "set": {
+      "status": "live",
+      "first_live": "2026-09-16"
+    },
+    "evidence": {
+      "url": "https://www.wirexapp.com/post/wirex-one-launches-publicly-on-arc-bringing-stablecoin-private-banking-to-the-mass-affluent-market",
+      "title": "Wirex One launches publicly on Arc",
+      "date": "2026-09-16",
+      "type": "mainnet-support"
+    },
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Wirex One launches publicly on Arc",
+    "source": "https://www.wirexapp.com/post/wirex-one-launches-publicly-on-arc-bringing-stablecoin-private-banking-to-the-mass-affluent-market"
+  },
+  {
+    "slug": "pulsar",
+    "field": "status",
+    "set": {
+      "status": "live"
+    },
+    "evidence": {
+      "url": "https://www.arc.io/blog/how-pulsar-is-building-a-cross-border-money-experience-with-arc",
+      "title": "Arc blog: How Pulsar is building a cross-border money experience with Arc",
+      "type": "arc-official-live"
+    },
+    "change": "Announced → Live on mainnet, per Arc blog: How Pulsar is building a cross-border money experience with…",
+    "source": "https://www.arc.io/blog/how-pulsar-is-building-a-cross-border-money-experience-with-arc"
+  },
+  {
+    "slug": "cycles",
+    "field": "status",
+    "set": {
+      "status": "live"
+    },
+    "evidence": {
+      "url": "https://explorer.arc.io/address/0xa9d7bc831b4c0e2f17d01036d9ca6e523e17d212",
+      "title": "Cycles Pay contract on Arc mainnet"
+    },
+    "change": "Announced → Live on mainnet: Cycles Pay runs on Arc (its contract has code on mainnet; its app is set to chain 5042)",
+    "source": "https://cycles.money/blog/cycles-pay-points-program"
+  },
+  {
+    "slug": "cycles",
+    "field": "summary",
+    "set": {
+      "summary": "Open clearing protocol that lets users clear debts with each other using any currency or credit. Its Cycles Pay app lets businesses hold USDC, invoice and pay on Arc; the app is in beta and needs an invite code."
+    },
+    "change": "Summary updated: Cycles Pay runs on Arc",
+    "source": "https://cycles.money/blog/cycles-pay-points-program"
+  }
+]

@@ -1,0 +1,93 @@
+{
+  "results": [
+    {
+      "slug": "arc-spend",
+      "name": "Arc Spend",
+      "category": "consumer",
+      "status": "live",
+      "status_quote": "USDC on Arc in, working gift cards out. Cards are issued by Bitrefill; Arc Spend settles the payment on chain. | live /api/config: {\"canTakePayments\":true,\"chain\":{\"id\":5042,\"name\":\"Arc\",\"rpc\":\"https://rpc.mainnet.arc.io\",...,\"usdc\":\"0x3600000000000000000000000000000000000000\"}}",
+      "evidence": {"url": "https://arcspend.vercel.app/", "title": "Arc Spend: spend USDC on Arc on real gift cards", "date": null},
+      "first_live": null,
+      "what": "Gift card shop: pay USDC on Arc mainnet and get Bitrefill gift card codes from 514 brands, no signup or KYC on its side.",
+      "summary": "Independent web app that sells Bitrefill gift cards for USDC on Arc. Its live config points at Arc mainnet (chain ID 5042, rpc.mainnet.arc.io) with payments switched on. Not listed on arc.io/ecosystem; no Circle or Arc announcement found.",
+      "website": "https://arcspend.vercel.app",
+      "x": "arcspend",
+      "sources": [
+        {"url": "https://arcspend.vercel.app/", "title": "Arc Spend (site and app bundle)", "date": null},
+        {"url": "https://arcspend.vercel.app/api/config", "title": "Arc Spend live config (chain 5042, canTakePayments true, 514 brands)", "date": "2026-10-25"}
+      ],
+      "notes": "No custom domain, no team named, no launch date found; the X handle comes from a link in the site's code. The treasury in its config, 0xAC643d7337119800964dE272ae20bD2280e7f64D, is an EOA on Arc mainnet with nonce 25 and about 0.25 USDC gas balance per rpc.mainnet.arc.io on 2026-10-25, so it has been used, but I did not trace its transfers (explorer.arc.io API is behind Cloudflare). Unrelated site with a similar name: arc-spend.vercel.app is an internal expenses tool for 'ARC Design', so don't confuse them. Small, unaudited third-party app: worth a light check before listing."
+    },
+    {
+      "slug": "bidali",
+      "name": "Bidali",
+      "category": "consumer",
+      "status": "live",
+      "status_quote": "Arc is now supported at checkout | Buy gift cards with Arc ... Shop gift cards from 4,700+ brands in 100+ countries and pay on Arc. ... You can pay with USDC and EURC on Arc.",
+      "evidence": {"url": "https://giftcards.bidali.com/networks/arc", "title": "Buy gift cards with Arc - Bidali", "date": null},
+      "first_live": null,
+      "what": "Gift card store: buy gift cards from 4,700+ brands in 100+ countries and pay with USDC or EURC on Arc at checkout.",
+      "summary": "Bidali (Calgary, Bidali Inc.) resells gift cards for crypto across 20 networks and lists Arc as a checkout network for USDC and EURC. As of 2026-10-25 all ordering is paused after a security incident (Oct 16 to 22).",
+      "website": "https://giftcards.bidali.com/networks/arc",
+      "x": "bidalihq",
+      "sources": [
+        {"url": "https://giftcards.bidali.com/networks/arc", "title": "Buy gift cards with Arc - Bidali", "date": null},
+        {"url": "https://giftcards.bidali.com/networks", "title": "Payment networks for gift cards - Bidali", "date": null},
+        {"url": "https://www.bidali.com/blog/security-update-october-2026", "title": "Bidali security update, October 2026 (ordering paused)", "date": "2026-10-23"}
+      ],
+      "notes": "Bidali's page doesn't say 'mainnet' outright, but it is a real-money store and Arc is listed beside mainnet networks (Base, Solana and others); no testnet mention. No date found for when Arc was added. Important: every page shows 'Ordering is paused while we upgrade our systems.' The 2026-10-23 blog post says orders are paused after an attack on Oct 16 to 22, partly because of an industry-wide incident at gift card issuers, with no date to reopen. Arc is supported, but nobody can buy right now. Consider showing it as paused or holding it back. Not listed on arc.io/ecosystem; Arc and Circle sources don't mention it."
+    },
+    {
+      "slug": "walletconnect-pay",
+      "name": "WalletConnect Pay",
+      "category": "payments",
+      "status": "live",
+      "status_quote": "Additionally, consumers can pay with WalletConnect Pay on Arc using USDC, with sanctions and IP screening built into the flow so merchants and apps don't need to stand up new compliance tooling to accept it.",
+      "evidence": {"url": "https://walletconnect.com/blog/the-walletconnect-network-supports-arc-connecting-apps-from-day-one", "title": "The WalletConnect Network supports Arc, connecting apps from day one", "date": "2026-09-16"},
+      "first_live": null,
+      "what": "Merchant and PSP checkout: lets shoppers pay merchants with USDC on Arc from WalletConnect wallets, with sanctions and IP screening built in.",
+      "summary": "WalletConnect's crypto payment product for merchants and PSPs. WalletConnect's Arc launch post (2026-09-16) says consumers can pay with WalletConnect Pay on Arc in USDC. Its docs' chain list (General Availability) does not list Arc yet.",
+      "website": "https://walletconnect.com/payments",
+      "x": "WalletConnect",
+      "sources": [
+        {"url": "https://walletconnect.com/blog/the-walletconnect-network-supports-arc-connecting-apps-from-day-one", "title": "The WalletConnect Network supports Arc, connecting apps from day one", "date": "2026-09-16"},
+        {"url": "https://docs.walletconnect.com/payments/token-and-chain-coverage", "title": "WalletConnect Pay docs: Token and Chain Coverage (Arc not listed; last modified 2026-09-07)", "date": "2026-09-07"},
+        {"url": "https://www.arc.io/blog/arc-economic-os-internet", "title": "Arc Mainnet Is Live (names 'WalletConnect' among wallets and consumer apps)", "date": "2026-09-16"}
+      ],
+      "notes": "Sources conflict. Under the brief's rule, the project's own blog stating support counts as live. But the official 'Token and Chain Coverage' page (General Availability) lists Ethereum, Arbitrum, Base, Polygon, Optimism, BSC, Solana, Celo and Monad, not Arc. That page was last modified 2026-09-07, before the blog post, and says it updates 'as assets move from beta into General Availability', so Arc may be in beta. The blog dates the WalletConnect Network's 'day one' support to Arc's 2026-09-16 launch but gives no date for Pay itself, so first_live is null. arc.io's post names 'WalletConnect' (the network), not 'WalletConnect Pay'. If you want strict GA, downgrade to 'announced'."
+    },
+    {
+      "slug": "glidepay",
+      "name": "Glidepay",
+      "category": "consumer",
+      "status": "live",
+      "status_quote": "Arc mainnet launched on 16 September 2026. On 24 September, glidepay went live on it. Your balance is now real USDC, EURC and cirBTC: paid by @paytag, confirmed with your PIN, settled on Arc.",
+      "evidence": {"url": "https://glidepay.cash/mainnet", "title": "Launch note: glidepay is live on Arc mainnet", "date": "2026-09-24"},
+      "first_live": "2026-09-24",
+      "what": "P2P payment app: pay and request USDC or EURC on Arc by @paytag, link or QR, split bills and schedule recurring sends.",
+      "summary": "Cash App-style stablecoin app on Arc with email or Google sign-in and Circle developer-controlled smart accounts (Circle holds the keys). Its launch note says it went live on Arc mainnet on 2026-09-24. Universal Receive is not live yet.",
+      "website": "https://glidepay.cash",
+      "x": null,
+      "sources": [
+        {"url": "https://glidepay.cash/mainnet", "title": "Launch note: glidepay is live on Arc mainnet", "date": "2026-09-24"},
+        {"url": "https://glidepay.cash", "title": "glidepay: A Cash App for stablecoins, now on Arc mainnet", "date": null},
+        {"url": "https://github.com/0xdopewilly/glide", "title": "glidepay app repo (GitHub)", "date": null}
+      ],
+      "notes": "Not the 'Glide' company that MoonPay bought; they are unrelated. Appears to be a solo developer project: GitHub 0xdopewilly ('Dappest Dev', whose X is sentinel_dapper, a personal handle, so I left x null). The product's site names no X handle. The app is app.glidepay.cash. Custodial in practice: transactions are signed server-side through Circle developer-controlled wallets. Glidepay charges no fee today. Universal Receive (auto-bridging from Base, Arbitrum, Polygon and Ethereum) is 'not live on any chain today'. Not listed on arc.io/ecosystem; no Arc or Circle source mentions it. I did not verify contracts or transactions on chain."
+    }
+  ],
+  "other_named": [
+    {"name": "Circle Payments Network", "named_as": "live (Circle first-party)", "quote": "And now Circle Payments Network is integrated natively into Arc, moving money across borders for a fraction of a cent and settling in near real time.", "source": "https://www.circle.com/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet", "note": "B2B payment network, not a consumer app. arc.io also says it 'connects payment operators to Arc's settlement layer and StableFX for cross-border treasury, remittance, merchant payouts, and B2B payments.'"},
+    {"name": "Arc Portal", "named_as": "live (Circle first-party)", "quote": "Arc Portal gives users a unified entry point into the Arc ecosystem, making it easy to set up and fund wallets for users and agents; swap assets; discover a wide range of apps; track balances and activity from a single place", "source": "https://www.arc.io/blog/arc-economic-os-internet", "note": "Consumer entry point and wallet hub, not a merchant app."},
+    {"name": "ether.fi", "named_as": "live (day one, wallets and consumer apps list)", "quote": "For digital wallets and consumer apps such as Alcove, Backpack, Binance Wallet, Bitget Wallet, Bron, DCent, ether.fi, Gate Web3, imToken, KuCoin Web3, Ledger, MetaMask, OKX Wallet, Para, Phantom, Rabby, Rainbow, SafePal, Superfluid, Tangem, Trust Wallet, WalletConnect, and Zerion connect Arc's markets to hundred of millions of existing users from day one.", "source": "https://www.arc.io/blog/arc-economic-os-internet", "note": "arc.io/ecosystem describes it as 'one account for your money. Hold, earn, borrow, spend...'. The post doesn't say its card or spend feature works with Arc USDC."},
+    {"name": "Superfluid", "named_as": "live (day one, wallets and consumer apps list)", "quote": "... Rainbow, SafePal, Superfluid, Tangem, Trust Wallet, WalletConnect, and Zerion connect Arc's markets to hundred of millions of existing users from day one.", "source": "https://www.arc.io/blog/arc-economic-os-internet", "note": "Payment-streaming protocol (salaries, subscriptions). Fits payments if its Arc deployment is confirmed."},
+    {"name": "Coins.ph", "named_as": "live (exchanges list)", "quote": "The world's leading digital asset exchanges are live on Arc, including Binance, Bitrue, Bitso, Bitvavo, Bybit, Coins.ph, Gate, Kraken, ...", "source": "https://www.arc.io/blog/arc-economic-os-internet", "note": "Named as an exchange, but arc.io/ecosystem calls it a 'BSP-regulated wallet for Filipinos. Pay bills, Use QRPH at 600k+ stores, send money home'. Arc may only cover deposits and withdrawals."},
+    {"name": "Bitso", "named_as": "live (exchanges list)", "quote": "The world's leading digital asset exchanges are live on Arc, including Binance, Bitrue, Bitso, ...", "source": "https://www.arc.io/blog/arc-economic-os-internet", "note": "Exchange with send and receive money features (arc.io/ecosystem: 'send, and receive money securely'); borderline for a payments page."},
+    {"name": "Other wallets named as live from day one (Backpack, Binance Wallet, Bitget Wallet, Bron, DCent, Gate Web3, imToken, KuCoin Web3, Ledger, MetaMask, OKX Wallet, Para, Phantom, Rabby, Rainbow, SafePal, Tangem, Trust Wallet, WalletConnect, Zerion, Alcove)", "named_as": "live (day one)", "quote": "For digital wallets and consumer apps such as ... connect Arc's markets to hundred of millions of existing users from day one.", "source": "https://www.arc.io/blog/arc-economic-os-internet", "note": "Wallets, which belong in a wallets category, not merchant apps. Alcove is in the list but arc.io/ecosystem describes it as infrastructure for environmental asset markets."},
+    {"name": "Pulsar", "named_as": "future tense ('will be enabling'), not stated live", "quote": "Alfred Pay, BVNK, Catena, Cycles, Digital Garage, Global Payments, HIFI, JCB, Mastercard, MoneyGram, MoonPay, Noah, OwlPay, Pulsar, Rain, Tazapay, Thunes, Transak, UQPay, Visa, and Wirex will be enabling internet-scale settlement with stablecoins and building always-on and AI-powered global payments.", "source": "https://www.arc.io/blog/arc-economic-os-internet", "note": "Consumer cross-border money app with a card. Separate arc.io blog: /blog/how-pulsar-is-building-a-cross-border-money-experience-with-arc. Press coverage mentions a waitlist; live status unverified."},
+    {"name": "Wirex", "named_as": "future tense ('will be enabling'), not stated live", "quote": "(same sentence as Pulsar)", "source": "https://www.arc.io/blog/arc-economic-os-internet", "note": "Consumer card and payments app."},
+    {"name": "Rain", "named_as": "future tense ('will be enabling'), not stated live", "quote": "(same sentence as Pulsar)", "source": "https://www.arc.io/blog/arc-economic-os-internet", "note": "Card-issuing infrastructure."},
+    {"name": "Cycles", "named_as": "future tense ('will be enabling'), not stated live", "quote": "(same sentence as Pulsar)", "source": "https://www.arc.io/blog/arc-economic-os-internet", "note": "Debt-clearing payments app (arc.io/ecosystem)."},
+    {"name": "MoonPay, Transak, Noah, Alfred Pay, BVNK, Tazapay, OwlPay, UQPay, HIFI, Catena, Thunes, MoneyGram", "named_as": "future tense ('will be enabling'), not stated live", "quote": "(same sentence as Pulsar)", "source": "https://www.arc.io/blog/arc-economic-os-internet", "note": "Ramps, PSPs and payout networks (ramps or payments categories). Circle's press release repeats the future tense for Digital Garage, Global Payments, JCB, Mastercard, MoneyGram, Thunes and Visa."}
+  ]
+}

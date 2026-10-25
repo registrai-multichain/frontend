@@ -10,7 +10,7 @@ export const LLMS_TXT = `# Registrai
 - [Arc in numbers](https://builder.registrai.cc/arc/): USDC and EURC supply on Arc, stablecoins and TVL, estimated 24 h volume, projects and a dated timeline; JSON at https://builder.registrai.cc/api/v1/arc
 - [Methodology](https://builder.registrai.cc/methodology/): definitions of every figure (payments, paying wallets, received USD, index points, the 7-day window, directory statuses), sources, the attributed share and known limits
 - [Most-used apps on Arc, last 7 days](https://builder.registrai.cc/arc/most-used-apps/): apps ranked by stablecoin payments received (USD), payments and new paying wallets; JSON at https://builder.registrai.cc/api/v1/arc/apps-week
-- [Apps that accept USDC on Arc](https://builder.registrai.cc/arc/apps-that-accept-usdc/): apps measured receiving payments in the last 7 days, and payment apps listed but not measured
+- [Apps that accept USDC on Arc](https://builder.registrai.cc/arc/apps-that-accept-usdc/): payment apps with evidence of taking USDC on Arc mainnet, announced ones, and apps measured receiving stablecoin payments over 7 days (including swaps into DEXs and bridges)
 - [New on Arc, last 30 days](https://builder.registrai.cc/arc/new/): projects that went live in the last 30 days (the latest launches when there are none) and apps added to Registrai's index in the last 7 days
 - [How to get USDC onto Arc](https://builder.registrai.cc/arc/get-usdc/): on-ramps, exchanges and bridges for Arc, each with its evidence
 - [Arc vs Ethereum vs Solana for stablecoin payments](https://builder.registrai.cc/arc/arc-vs-ethereum-vs-solana/): fee currency, measured block times, finality, estimated USDC transfer fees in USD and USDC in circulation per chain, each with its source

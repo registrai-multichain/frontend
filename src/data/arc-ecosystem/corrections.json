@@ -736,5 +736,95 @@
     "change": "Summary updated: its docs now list Arc mainnet, not only testnet",
     "source": "https://docs.dfns.co/networks",
     "from": "review"
+  },
+  {
+    "id": 83,
+    "date": "2026-10-25",
+    "slug": "arc-spend",
+    "field": "other",
+    "change": "Added to the directory: Arc Spend, live on Arc mainnet per its own site",
+    "source": "https://arcspend.vercel.app/",
+    "from": "review"
+  },
+  {
+    "id": 84,
+    "date": "2026-10-25",
+    "slug": "walletconnect-pay",
+    "field": "other",
+    "change": "Added to the directory: WalletConnect Pay, live on Arc mainnet per its own Arc post",
+    "source": "https://walletconnect.com/blog/the-walletconnect-network-supports-arc-connecting-apps-from-day-one",
+    "from": "review"
+  },
+  {
+    "id": 85,
+    "date": "2026-10-25",
+    "slug": "glidepay",
+    "field": "other",
+    "change": "Added to the directory: Glidepay, live on Arc mainnet per its own launch note",
+    "source": "https://glidepay.cash/mainnet",
+    "from": "review"
+  },
+  {
+    "id": 86,
+    "date": "2026-10-25",
+    "slug": "catena-labs",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Catena and Arc: Financial Infrastructure for the Agentic Economy",
+    "source": "https://catena.com/blog/catena-and-arc-financial-infrastructure-for-the-agentic-economy",
+    "from": "review"
+  },
+  {
+    "id": 87,
+    "date": "2026-10-25",
+    "slug": "hifi",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-18, per HIFI changelog: September 18, 2026",
+    "source": "https://docs.hifi.com/v3/changelog/changelog.md",
+    "from": "review"
+  },
+  {
+    "id": 88,
+    "date": "2026-10-25",
+    "slug": "uqpay",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per UQPay Announces Day 1 Support for Arc to Advance Global USDC Settleme…",
+    "source": "https://www.uqpay.com/en/resources/news/article-88",
+    "from": "review"
+  },
+  {
+    "id": 89,
+    "date": "2026-10-25",
+    "slug": "wirex",
+    "field": "status",
+    "change": "Announced → Live on mainnet, since 2026-09-16, per Wirex One launches publicly on Arc",
+    "source": "https://www.wirexapp.com/post/wirex-one-launches-publicly-on-arc-bringing-stablecoin-private-banking-to-the-mass-affluent-market",
+    "from": "review"
+  },
+  {
+    "id": 90,
+    "date": "2026-10-25",
+    "slug": "pulsar",
+    "field": "status",
+    "change": "Announced → Live on mainnet, per Arc blog: How Pulsar is building a cross-border money experience with…",
+    "source": "https://www.arc.io/blog/how-pulsar-is-building-a-cross-border-money-experience-with-arc",
+    "from": "review"
+  },
+  {
+    "id": 91,
+    "date": "2026-10-25",
+    "slug": "cycles",
+    "field": "status",
+    "change": "Announced → Live on mainnet: Cycles Pay runs on Arc (its contract has code on mainnet; its app is set to chain 5042)",
+    "source": "https://cycles.money/blog/cycles-pay-points-program",
+    "from": "review"
+  },
+  {
+    "id": 92,
+    "date": "2026-10-25",
+    "slug": "cycles",
+    "field": "summary",
+    "change": "Summary updated: Cycles Pay runs on Arc",
+    "source": "https://cycles.money/blog/cycles-pay-points-program",
+    "from": "review"
   }
 ]

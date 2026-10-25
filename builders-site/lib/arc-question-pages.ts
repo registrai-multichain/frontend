@@ -1,5 +1,5 @@
 /** The Arc question pages (spec docs/superpowers/specs/2026-10-22-arc-question-pages-design.md). Pure: data in, HTML out. */
-import { STATUS_LABEL, categoryOf, entityHref, sortByName, type ArcEntity, type EntityStatus } from "../../src/lib/arc-ecosystem";
+import { STATUS_LABEL, categoryOf, entityHref, sortByName, whatItDoes, type ArcEntity, type EntityStatus } from "../../src/lib/arc-ecosystem";
 import { ECOSYSTEM } from "../../src/lib/arc-ecosystem-data";
 import { esc, page } from "./apps-pages";
 import { WINDOW_H, type ArcWeek, type WeekApp } from "./arc-week";
@@ -53,18 +53,30 @@ export function renderMostUsed(w: ArcWeek | null): string {
   return shell(path, title, first, `${paid.length ? table(["#", "App", "Category", "Received (USD)", "Payments", "New paying wallets"], rows) : ""}\n${source(w)}`, paid.map((a) => a.name));
 }
 
+/** Apps that accept USDC on Arc (e12): payment apps with evidence of taking USDC on Arc mainnet first, then the announced
+ *  ones, then measured stablecoin payments over 7 days, which include swaps into DEXs and bridges (audit item 7). */
 export function renderAcceptsUsdc(w: ArcWeek | null): string {
   const [path, title] = [QUESTION_PAGES[1].path, QUESTION_PAGES[1].title];
   const measuredIds = new Set((w?.apps ?? []).map((a) => a.id));   // every index member in the window, paid or not (review #3)
-  const listed = ECOSYSTEM.entities.filter((e) => inCat(e, "payments") && !(e.index_ids ?? []).some((id) => measuredIds.has(id)))
+  const pay = ECOSYSTEM.entities.filter((e) => inCat(e, "payments"));
+  const live = sortByName(pay.filter((e) => e.status === "live"));
+  const later = pay.filter((e) => e.status !== "live" && !(e.index_ids ?? []).some((id) => measuredIds.has(id)))
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || (a.name < b.name ? -1 : 1));
-  const listedHtml = `<h2>Listed, not measured</h2>\n${listed.length ? table(["Project", "Status", "Evidence"], listed.map((e) => [entLink(e), esc(STATUS_LABEL[e.status]), evidence(e)])) : "<p>None.</p>"}\n${DIR_SOURCE()}`;
-  const by = (st: EntityStatus) => listed.filter((e) => e.status === st).length;
-  if (!w) return shell(path, title, "Data not available right now.", `<h2>Measured</h2>\n${NA}\n${listedHtml}`, listed.map((e) => e.name));
+  const names = live.slice(0, 3).map((e) => e.name);
+  const listed = names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  const payFirst = live.length
+    ? `${plural(live.length, "payment app", "payment apps")} in Registrai's directory ${live.length === 1 ? "takes" : "take"} USDC on Arc mainnet${live.length > 3 ? `, including ${listed}` : `: ${listed}`}.`
+    : `No payment app in Registrai's directory has evidence of taking USDC on Arc mainnet yet; ${later.length} ${later.length === 1 ? "is" : "are"} announced.`;
+  const liveHtml = `<h2>Payment apps live on Arc</h2>\n${live.length ? table(["Project", "What it does on Arc", "Live since", "Evidence"],
+    live.map((e) => [entLink(e), esc(whatItDoes(e)), esc(e.first_live ?? "–"), evidence(e)])) : "<p>None yet.</p>"}`;
+  const laterHtml = `<h2>Announced</h2>\n${later.length ? table(["Project", "Status", "Evidence"], later.map((e) => [entLink(e), esc(STATUS_LABEL[e.status]), evidence(e)])) : "<p>None.</p>"}\n${DIR_SOURCE()}`;
+  const head = `<h2>Receiving stablecoin payments, last 7 days</h2>\n<p>${esc("Measured payments into apps' contracts on Arc. These include swaps into DEXs and bridges, which receive USDC as part of a trade, not only purchases.")}</p>`;
+  if (!w) return shell(path, title, payFirst, `${liveHtml}\n${laterHtml}\n${head}\n${NA}`, [...live, ...later].map((e) => e.name));
   const paid = w.apps.filter((a) => a.payments > 0);
-  const first = `${plural(paid.length, "app", "apps")} on Arc received stablecoin payments in the 7 days to ${atHour(w.until)}. ${listed.length} more payment ${listed.length === 1 ? "project is" : "projects are"} listed in Registrai's Arc directory (${by("live")} live, ${by("deployed")} deployed, ${by("announced")} announced) but not measured by Registrai.`;
+  const top = [...paid].sort((a, b) => b.usd - a.usd)[0];
+  const first = `${payFirst} Separately, ${plural(paid.length, "app", "apps")} on Arc received stablecoin payments in the 7 days to ${atHour(w.until)}${top ? `, led by ${top.name}` : ""}.`;
   const measured = paid.length ? table(["App", "Category", "Payments (7 d)", "Received (USD, 7 d)"], paid.map((a) => [appLink(a), esc(catName(a.category)), int(a.payments), usd(a.usd)])) : "<p>None this week.</p>";
-  return shell(path, title, first, `<h2>Measured</h2>\n${measured}\n${source(w)}\n${listedHtml}`, [...paid.map((a) => a.name), ...listed.map((e) => e.name)]);
+  return shell(path, title, first, `${liveHtml}\n${laterHtml}\n${head}\n${measured}\n${source(w)}`, [...live.map((e) => e.name), ...paid.map((a) => a.name), ...later.map((e) => e.name)]);
 }
 
 const minusDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) - n * 86400e3).toISOString().slice(0, 10);

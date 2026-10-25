@@ -1,0 +1,302 @@
+[
+ {
+  "slug": "jcb",
+  "name": "JCB",
+  "status": "announced",
+  "status_quote": "Global payments firms: Digital Garage, Global Payments, JCB, Mastercard, MoneyGram, Thunes, and Visa will be enabling internet-scale settlement with stablecoins and building always-on and AI-powered global payments.",
+  "evidence": {
+   "url": "https://www.arc.io/pressroom/circle-launches-arc-mainnet-an-economic-operating-system-for-the-internet",
+   "title": "Circle launches Arc mainnet",
+   "date": "2026-09-16"
+  },
+  "first_live": null,
+  "what": "Card brand named as a payments firm that will enable stablecoin settlement on Arc; no live Arc product found.",
+  "website": "https://www.global.jcb",
+  "notes": "No source found saying a product is live on Arc mainnet. Web search surfaced secondhand reports of a JCB–Circle MOU (July 2026) for USDC cross-border transfers and in-store payments in Japan, framed as a proof of concept; not verified on a JCB/Circle page."
+ },
+ {
+  "slug": "lianlian",
+  "name": "LianLian",
+  "status": "announced",
+  "status_quote": "A broad array of technology and payment-focused firms ... are engaging with Arc, including: Amazon Web Services (AWS) (AMZN:NASDAQ), Brex, Careem, Catena Labs, Cloudflare (NET:NYSE), Corpay (CPAY:NYSE), dLocal (DLO: NASDAQ), Dmall, Ebanx, FIS (FIS:NYSE), Hecto Financial, LianLian, Mastercard (MA:NYSE), Mercoin, Noah, Nuvei (NVEI:NYSE), Pairpoint by Vodafone (VOD:LSE), Paysafe (PSFE:NYSE), PhotonPay, Ramp, Sasai Fintech – a business of Cassava Technologies, Sumitomo Corporation (8053:TSE), Visa (V:NYSE), Yellow Card.",
+  "evidence": {
+   "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+   "title": "Circle launches Arc public testnet",
+   "date": "2025-10-28"
+  },
+  "first_live": null,
+  "what": "Cross-border payments firm named as engaging with Arc at testnet; no live Arc product found.",
+  "website": "https://global.lianlian.com",
+  "notes": "No source found saying a product is live on Arc mainnet. Only source is the 2025-10-28 testnet press release."
+ },
+ {
+  "slug": "mastercard",
+  "name": "Mastercard",
+  "status": "announced",
+  "status_quote": "Alongside Circle, Arc's founding validator cohort – which includes BlackRock, The Depository Trust & Clearing Corporation (DTCC), Galaxy, Global Payments, ICE, Mastercard, MoneyGram, SBI, Standard Chartered, Sumitomo Corporation ... Visa",
+  "evidence": {
+   "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+   "title": "Circle: founding validator cohort and major integrations",
+   "date": "2026-08-05"
+  },
+  "first_live": null,
+  "what": "Card network and Arc founding validator; no Mastercard USDC payment product on Arc mainnet found.",
+  "website": "https://www.mastercard.com",
+  "notes": "No source found saying a product is live on Arc mainnet. Validator role is network operation, not a payment product. Mainnet release (2026-09-16) also lists Mastercard among global payments firms that 'will be enabling' stablecoin settlement, and says validators join via a 'phased rollout'. Search results cite a June 2026 Mastercard stablecoin-settlement release whose network list (Arbitrum, Base, Canton, Ethereum, Polygon, Solana, Tempo, XRPL) omits Arc; that page returned 403, not verified."
+ },
+ {
+  "slug": "mercoin",
+  "name": "Mercoin",
+  "status": "announced",
+  "status_quote": "A broad array of technology and payment-focused firms ... are engaging with Arc, including: Amazon Web Services (AWS) (AMZN:NASDAQ), Brex, Careem, Catena Labs, Cloudflare (NET:NYSE), Corpay (CPAY:NYSE), dLocal (DLO: NASDAQ), Dmall, Ebanx, FIS (FIS:NYSE), Hecto Financial, LianLian, Mastercard (MA:NYSE), Mercoin, Noah, Nuvei (NVEI:NYSE), Pairpoint by Vodafone (VOD:LSE), Paysafe (PSFE:NYSE), PhotonPay, Ramp, Sasai Fintech – a business of Cassava Technologies, Sumitomo Corporation (8053:TSE), Visa (V:NYSE), Yellow Card.",
+  "evidence": {
+   "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+   "title": "Circle launches Arc public testnet",
+   "date": "2025-10-28"
+  },
+  "first_live": null,
+  "what": "Mercari group crypto company named as engaging with Arc at testnet; no live Arc product found.",
+  "website": "https://about.mercoin.com/",
+  "notes": "No source found saying a product is live on Arc mainnet. Not named in the validator or mainnet releases; no Arc item in its sitemap."
+ },
+ {
+  "slug": "moneygram",
+  "name": "MoneyGram",
+  "status": "announced",
+  "status_quote": "Alongside Circle, Arc's founding validator cohort – which includes BlackRock, The Depository Trust & Clearing Corporation (DTCC), Galaxy, Global Payments, ICE, Mastercard, MoneyGram, SBI, Standard Chartered, Sumitomo Corporation ... Visa",
+  "evidence": {
+   "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+   "title": "Circle: founding validator cohort and major integrations",
+   "date": "2026-08-05"
+  },
+  "first_live": null,
+  "what": "Money transfer company and Arc founding validator; no MoneyGram USDC transfer product on Arc mainnet found.",
+  "website": "https://www.moneygram.com",
+  "notes": "No source found saying a product is live on Arc mainnet. Also listed in the 2026-09-16 mainnet release among payments firms that 'will be enabling' stablecoin settlement. MoneyGram newsroom returned 403; sitemap has no Arc page."
+ },
+ {
+  "slug": "noah",
+  "name": "Noah",
+  "status": "announced",
+  "status_quote": "A broad array of technology and payment-focused firms ... are engaging with Arc, including: Amazon Web Services (AWS) (AMZN:NASDAQ), Brex, Careem, Catena Labs, Cloudflare (NET:NYSE), Corpay (CPAY:NYSE), dLocal (DLO: NASDAQ), Dmall, Ebanx, FIS (FIS:NYSE), Hecto Financial, LianLian, Mastercard (MA:NYSE), Mercoin, Noah, Nuvei (NVEI:NYSE), Pairpoint by Vodafone (VOD:LSE), Paysafe (PSFE:NYSE), PhotonPay, Ramp, Sasai Fintech – a business of Cassava Technologies, Sumitomo Corporation (8053:TSE), Visa (V:NYSE), Yellow Card.",
+  "evidence": {
+   "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+   "title": "Circle launches Arc public testnet",
+   "date": "2025-10-28"
+  },
+  "first_live": null,
+  "what": "Stablecoin payments API and hosted checkout named as engaging with Arc at testnet; Arc not listed in its docs.",
+  "website": "https://noah.com/",
+  "notes": "No source found saying a product is live on Arc mainnet. Correction to batch: Noah is NOT named in the 2026-09-16 mainnet press release text (only in the 2025-10-28 testnet release). docs.noah.com llms.txt and changelog RSS (latest 2026-09-09) have no Arc mention; Noah's Circle blog post is about CPN, not Arc. Has an arc.io/ecosystem/noah page (empty body)."
+ },
+ {
+  "slug": "nuvei",
+  "name": "Nuvei",
+  "status": "announced",
+  "status_quote": "A broad array of technology and payment-focused firms ... are engaging with Arc, including: Amazon Web Services (AWS) (AMZN:NASDAQ), Brex, Careem, Catena Labs, Cloudflare (NET:NYSE), Corpay (CPAY:NYSE), dLocal (DLO: NASDAQ), Dmall, Ebanx, FIS (FIS:NYSE), Hecto Financial, LianLian, Mastercard (MA:NYSE), Mercoin, Noah, Nuvei (NVEI:NYSE), Pairpoint by Vodafone (VOD:LSE), Paysafe (PSFE:NYSE), PhotonPay, Ramp, Sasai Fintech – a business of Cassava Technologies, Sumitomo Corporation (8053:TSE), Visa (V:NYSE), Yellow Card.",
+  "evidence": {
+   "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+   "title": "Circle launches Arc public testnet",
+   "date": "2025-10-28"
+  },
+  "first_live": null,
+  "what": "Payments company evaluating Arc for faster merchant funding and multi-currency onchain payouts; no live Arc product found.",
+  "website": "https://www.nuvei.com/",
+  "notes": "No source found saying a product is live on Arc mainnet. Testnet release quotes CEO: 'We're evaluating Arc's capabilities ... to see how they might support faster merchant funding and multi-currency onchain payouts'."
+ },
+ {
+  "slug": "owlpay",
+  "name": "OwlPay",
+  "status": "announced",
+  "status_quote": "OwlPay | Arc Ecosystem (arc.io ecosystem item page; no further text rendered)",
+  "evidence": {
+   "url": "https://www.arc.io/ecosystem/owlpay",
+   "title": "arc.io ecosystem page: OwlPay",
+   "date": null
+  },
+  "first_live": null,
+  "what": "OwlTing payment platform for USDC payouts and checkout; listed in Arc's ecosystem directory, no Arc mainnet support found.",
+  "website": "https://www.owlting.com/owlpay/",
+  "notes": "No source found saying a product is live on Arc mainnet. Weakest evidence in batch: the arc.io item page renders only the title; OwlPay is not in any Circle Arc press release I checked. OwlTing investor news (client-rendered) and web search show no Arc announcement; OwlPay Harbor is on Stellar per its own releases."
+ },
+ {
+  "slug": "pairpoint-by-vodafone",
+  "name": "Pairpoint by Vodafone",
+  "status": "announced",
+  "status_quote": "A broad array of technology and payment-focused firms ... are engaging with Arc, including: Amazon Web Services (AWS) (AMZN:NASDAQ), Brex, Careem, Catena Labs, Cloudflare (NET:NYSE), Corpay (CPAY:NYSE), dLocal (DLO: NASDAQ), Dmall, Ebanx, FIS (FIS:NYSE), Hecto Financial, LianLian, Mastercard (MA:NYSE), Mercoin, Noah, Nuvei (NVEI:NYSE), Pairpoint by Vodafone (VOD:LSE), Paysafe (PSFE:NYSE), PhotonPay, Ramp, Sasai Fintech – a business of Cassava Technologies, Sumitomo Corporation (8053:TSE), Visa (V:NYSE), Yellow Card.",
+  "evidence": {
+   "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+   "title": "Circle launches Arc public testnet",
+   "date": "2025-10-28"
+  },
+  "first_live": null,
+  "what": "Vodafone/Sumitomo machine-payments venture named as engaging with Arc at testnet; no live Arc product found.",
+  "website": null,
+  "notes": "No source found saying a product is live on Arc mainnet. Website not verified."
+ },
+ {
+  "slug": "paysafe",
+  "name": "Paysafe",
+  "status": "announced",
+  "status_quote": "A broad array of technology and payment-focused firms ... are engaging with Arc, including: Amazon Web Services (AWS) (AMZN:NASDAQ), Brex, Careem, Catena Labs, Cloudflare (NET:NYSE), Corpay (CPAY:NYSE), dLocal (DLO: NASDAQ), Dmall, Ebanx, FIS (FIS:NYSE), Hecto Financial, LianLian, Mastercard (MA:NYSE), Mercoin, Noah, Nuvei (NVEI:NYSE), Pairpoint by Vodafone (VOD:LSE), Paysafe (PSFE:NYSE), PhotonPay, Ramp, Sasai Fintech – a business of Cassava Technologies, Sumitomo Corporation (8053:TSE), Visa (V:NYSE), Yellow Card.",
+  "evidence": {
+   "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+   "title": "Circle launches Arc public testnet",
+   "date": "2025-10-28"
+  },
+  "first_live": null,
+  "what": "Payments company (Skrill, Neteller) named as engaging with Arc at testnet; no live Arc product found.",
+  "website": "https://www.paysafe.com",
+  "notes": "No source found saying a product is live on Arc mainnet."
+ },
+ {
+  "slug": "photonpay",
+  "name": "PhotonPay",
+  "status": "announced",
+  "status_quote": "A broad array of technology and payment-focused firms ... are engaging with Arc, including: Amazon Web Services (AWS) (AMZN:NASDAQ), Brex, Careem, Catena Labs, Cloudflare (NET:NYSE), Corpay (CPAY:NYSE), dLocal (DLO: NASDAQ), Dmall, Ebanx, FIS (FIS:NYSE), Hecto Financial, LianLian, Mastercard (MA:NYSE), Mercoin, Noah, Nuvei (NVEI:NYSE), Pairpoint by Vodafone (VOD:LSE), Paysafe (PSFE:NYSE), PhotonPay, Ramp, Sasai Fintech – a business of Cassava Technologies, Sumitomo Corporation (8053:TSE), Visa (V:NYSE), Yellow Card.",
+  "evidence": {
+   "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+   "title": "Circle launches Arc public testnet",
+   "date": "2025-10-28"
+  },
+  "first_live": null,
+  "what": "Business payments platform that joined the Arc public testnet; no Arc mainnet product found.",
+  "website": "https://www.photonpay.com",
+  "notes": "No source found saying a product is live on Arc mainnet. PhotonPay's own news (photonpay.com/hk/news/article/photonpay-circle-arc-blockchain-finance, dated 2025-12-03; PR Newswire 2025-11-14) says it 'has officially joined Circle's Arc public testnet' — testnet only. Its sitemap has no later Arc article."
+ },
+ {
+  "slug": "pulsar",
+  "name": "Pulsar",
+  "status": "live",
+  "status_quote": "Pulsar is currently live on Arc mainnet and onboarding users from their waitlist.",
+  "evidence": {
+   "url": "https://www.arc.io/blog/how-pulsar-is-building-a-cross-border-money-experience-with-arc",
+   "title": "Arc blog: How Pulsar is building a cross-border money experience with Arc",
+   "date": "2026-10-06"
+  },
+  "first_live": null,
+  "what": "Non-custodial money app: fund USD/EUR balances 1:1 with USDC or EURC, swap, send and spend with a virtual card; live on Arc mainnet via waitlist.",
+  "website": "https://pulsar.money/",
+  "notes": "Status changed announced -> live on the arc.io blog claim. Uncertain: access is waitlist-only; pulsar.money still shows 'Get Early Access', its FAQ says 'We're targeting Q2–Q3 2026', and its supported-chains FAQ says 'supported EVM networks, Solana and TRON' without naming Arc. No launch date stated, so first_live null."
+ },
+ {
+  "slug": "rain",
+  "name": "Rain",
+  "status": "announced",
+  "status_quote": "Stablecoin payments providers, including Rain, Thunes, and Wirex for routing real-world stablecoin payment and settlement flows through Arc, spanning card-based settlement, regulated consumer platforms, and global cross-border payment networks.",
+  "evidence": {
+   "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+   "title": "Circle: founding validator cohort and major integrations",
+   "date": "2026-08-05"
+  },
+  "first_live": null,
+  "what": "Stablecoin card-issuing infrastructure named as routing stablecoin payment flows through Arc; no Rain source confirms Arc support.",
+  "website": "https://www.rain.xyz",
+  "notes": "No source found saying a product is live on Arc mainnet. The validator release lists Rain among 'day-one apps and services expected to be live'. Rain's site, blog and sitemap have no Arc page; docs.rain.xyz is access-gated; Circle partner directory (per search) lists Rain chains without Arc. Not named in the mainnet release."
+ },
+ {
+  "slug": "ramp",
+  "name": "Ramp",
+  "status": "announced",
+  "status_quote": "A broad array of technology and payment-focused firms ... are engaging with Arc, including: Amazon Web Services (AWS) (AMZN:NASDAQ), Brex, Careem, Catena Labs, Cloudflare (NET:NYSE), Corpay (CPAY:NYSE), dLocal (DLO: NASDAQ), Dmall, Ebanx, FIS (FIS:NYSE), Hecto Financial, LianLian, Mastercard (MA:NYSE), Mercoin, Noah, Nuvei (NVEI:NYSE), Pairpoint by Vodafone (VOD:LSE), Paysafe (PSFE:NYSE), PhotonPay, Ramp, Sasai Fintech – a business of Cassava Technologies, Sumitomo Corporation (8053:TSE), Visa (V:NYSE), Yellow Card.",
+  "evidence": {
+   "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+   "title": "Circle launches Arc public testnet",
+   "date": "2025-10-28"
+  },
+  "first_live": null,
+  "what": "Corporate card and spend platform with USDC stablecoin accounts; Arc is not among its supported networks.",
+  "website": "https://ramp.com",
+  "notes": "No source found saying a product is live on Arc mainnet. Ramp support page: 'You can deposit stablecoins on Base, Ethereum, Polygon, Arbitrum, Optimism, Solana, and Tempo.' and 'Only the networks listed above are supported.' — Arc absent."
+ },
+ {
+  "slug": "sasai-fintech",
+  "name": "Sasai Fintech",
+  "status": "announced",
+  "status_quote": "A broad array of technology and payment-focused firms ... are engaging with Arc, including: Amazon Web Services (AWS) (AMZN:NASDAQ), Brex, Careem, Catena Labs, Cloudflare (NET:NYSE), Corpay (CPAY:NYSE), dLocal (DLO: NASDAQ), Dmall, Ebanx, FIS (FIS:NYSE), Hecto Financial, LianLian, Mastercard (MA:NYSE), Mercoin, Noah, Nuvei (NVEI:NYSE), Pairpoint by Vodafone (VOD:LSE), Paysafe (PSFE:NYSE), PhotonPay, Ramp, Sasai Fintech – a business of Cassava Technologies, Sumitomo Corporation (8053:TSE), Visa (V:NYSE), Yellow Card.",
+  "evidence": {
+   "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+   "title": "Circle launches Arc public testnet",
+   "date": "2025-10-28"
+  },
+  "first_live": null,
+  "what": "Pan-African payments business of Cassava named as engaging with Arc at testnet; no live Arc product found.",
+  "website": null,
+  "notes": "No source found saying a product is live on Arc mainnet. Search shows a March 2026 Circle–Sasai USDC partnership, not Arc-specific. Website not verified."
+ },
+ {
+  "slug": "thunes",
+  "name": "Thunes",
+  "status": "announced",
+  "status_quote": "Stablecoin payments providers, including Rain, Thunes, and Wirex for routing real-world stablecoin payment and settlement flows through Arc, spanning card-based settlement, regulated consumer platforms, and global cross-border payment networks.",
+  "evidence": {
+   "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+   "title": "Circle: founding validator cohort and major integrations",
+   "date": "2026-08-05"
+  },
+  "first_live": null,
+  "what": "Cross-border B2B payments network named as routing stablecoin settlement through Arc; no Thunes source confirms it is live.",
+  "website": "https://www.thunes.com",
+  "notes": "No source found saying a product is live on Arc mainnet. Also in the 2026-09-16 mainnet release list ('will be enabling'). Thunes newsroom has no Arc item; its 2026 Circle news is about joining CPN Managed Payments, not Arc."
+ },
+ {
+  "slug": "uqpay",
+  "name": "UQPay",
+  "status": "live",
+  "status_quote": "UQPay has officially gone live on Arc as a Day-1 Launch Partner. By integrating Arc into our in-house MPC (Multi-Party Computation) infrastructure, we are strengthening the connection between traditional global payments and programmable money, expanding stablecoin settlement capabilities for businesses.",
+  "evidence": {
+   "url": "https://www.uqpay.com/en/resources/news/article-88",
+   "title": "UQPay Announces Day 1 Support for Arc to Advance Global USDC Settlement",
+   "date": "2026-09-16"
+  },
+  "first_live": "2026-09-16",
+  "what": "Payments platform settling USDC on Arc for its global merchant network, supporting USDC and Visa settlement flows for businesses.",
+  "website": "https://www.uqpay.com",
+  "notes": "Status changed announced -> live. B2B/merchant settlement via UQPay's MPC infrastructure, not a consumer pay-in-USDC checkout; no contract addresses given. Date from the news listing ('2026-9-16') on uqpay.com/en/resources/news."
+ },
+ {
+  "slug": "visa",
+  "name": "Visa",
+  "status": "announced",
+  "status_quote": "Alongside Circle, Arc's founding validator cohort – which includes BlackRock, The Depository Trust & Clearing Corporation (DTCC), Galaxy, Global Payments, ICE, Mastercard, MoneyGram, SBI, Standard Chartered, Sumitomo Corporation ... Visa",
+  "evidence": {
+   "url": "https://www.arc.io/pressroom/circle-announces-founding-validator-cohort-and-major-integrations-for-arc-ahead-of-september-16-mainnet-launch",
+   "title": "Circle: founding validator cohort and major integrations",
+   "date": "2026-08-05"
+  },
+  "first_live": null,
+  "what": "Card network and Arc founding validator; no Visa USDC settlement on Arc mainnet found.",
+  "website": "https://www.visa.com",
+  "notes": "No source found saying a product is live on Arc mainnet. Also in the 2026-09-16 mainnet release list ('will be enabling'). Visa's Dec 2025 US USDC settlement launch runs on Solana and said Visa 'plans to utilize Arc for USDC settlement'; no later confirmation found."
+ },
+ {
+  "slug": "wirex",
+  "name": "Wirex",
+  "status": "live",
+  "status_quote": "Wirex, the global stablecoin infrastructure provider, has today launched Wirex One, the first stablecoin neobank built for the growing segment of mass affluent consumers, to the public. The platform is a day one launch partner on Arc's mainnet, delivering a private banking experience with true asset ownership.",
+  "evidence": {
+   "url": "https://www.wirexapp.com/post/wirex-one-launches-publicly-on-arc-bringing-stablecoin-private-banking-to-the-mass-affluent-market",
+   "title": "Wirex One launches publicly on Arc",
+   "date": "2026-09-16"
+  },
+  "first_live": "2026-09-16",
+  "what": "Stablecoin neobank app (Wirex One) with a stablecoin-funded card; uses Arc to settle non-U.S. USDC and EURC card flows.",
+  "website": "https://wirexapp.com",
+  "notes": "Status changed announced -> live. Date from the post's datePublished 2026-09-16 ('has today launched'); FinancialIT reprint dated 2026-09-17. Text says 'available globally*' (asterisk terms not retrieved). The USDC/EURC card-settlement detail comes from the arc.io community spotlight of 2026-07-22 ('WirexOne is planned to use Arc as a settlement chain for in-scope non-U.S. card flows in USDC and EURC'); the launch post excerpt does not itself mention USDC."
+ },
+ {
+  "slug": "yellow-card",
+  "name": "Yellow Card",
+  "status": "announced",
+  "status_quote": "A broad array of technology and payment-focused firms ... are engaging with Arc, including: Amazon Web Services (AWS) (AMZN:NASDAQ), Brex, Careem, Catena Labs, Cloudflare (NET:NYSE), Corpay (CPAY:NYSE), dLocal (DLO: NASDAQ), Dmall, Ebanx, FIS (FIS:NYSE), Hecto Financial, LianLian, Mastercard (MA:NYSE), Mercoin, Noah, Nuvei (NVEI:NYSE), Pairpoint by Vodafone (VOD:LSE), Paysafe (PSFE:NYSE), PhotonPay, Ramp, Sasai Fintech – a business of Cassava Technologies, Sumitomo Corporation (8053:TSE), Visa (V:NYSE), Yellow Card.",
+  "evidence": {
+   "url": "https://www.arc.io/pressroom/circle-launches-arc-public-testnet",
+   "title": "Circle launches Arc public testnet",
+   "date": "2025-10-28"
+  },
+  "first_live": null,
+  "what": "Emerging-markets stablecoin payments provider named as engaging with Arc at testnet; no live Arc product found.",
+  "website": "https://yellowcard.io",
+  "notes": "No source found saying a product is live on Arc mainnet. Yellow Card blog (posts to 2026-10-23) has no Arc item; arc.io/ecosystem/yellow-card renders title only."
+ }
+]
