@@ -82,11 +82,15 @@ export function renderNew(w: ArcWeek | null, today: string): string {
   const rows = (l: ArcEntity[]) => table(["Project", "Category", "Live since"], l.map((e) => [entLink(e), esc(catName(e.category)), esc(e.first_live!)]));
   const liveHtml = `<h2>Went live</h2>\n${live.length ? rows(live)
     : `<p>${esc(`No project in the directory has a sourced launch date in the ${LAUNCH_DAYS} days to ${dayLabel(end)}.`)}</p>${latest.length ? `\n<h3>Most recent launches</h3>\n${rows(latest)}` : ""}`}\n${DIR_SOURCE()}`;
-  const liveSentence = `In the ${LAUNCH_DAYS} days to ${dayLabel(end)}, ${plural(live.length, "project", "projects")} in the directory went live on Arc`;
+  const named = latest.slice(0, 3).map((e) => `${e.name} (${dayLabel(e.first_live!)})`);
+  const listed = named.length < 2 ? named.join("") : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
+  // the opening sentence is what engines quote: with nothing new it names the latest launches rather than "0 projects"
+  const liveSentence = live.length ? `In the ${LAUNCH_DAYS} days to ${dayLabel(end)}, ${plural(live.length, "project", "projects")} in the directory went live on Arc`
+    : `No project in the directory went live on Arc in the ${LAUNCH_DAYS} days to ${dayLabel(end)}${named.length ? `; the most recent ${named.length === 1 ? "launch was" : "launches were"} ${listed}` : ""}`;
   const addedHead = `<h2>${esc("Added to Registrai's index, last 7 days")}</h2>`;
   if (!w) return shell(path, title, `${liveSentence}. App data is not available right now.`, `${liveHtml}\n${addedHead}\n${NA}`, live.map((e) => e.name));
   const fresh = w.apps.filter((a) => a.first_hour !== null && a.first_hour > w.until_hour - WINDOW_H && a.first_hour <= w.until_hour);
-  const first = `${liveSentence}; in the 7 days to ${atHour(w.until)}, ${plural(fresh.length, "app was", "apps were")} added to Registrai's index.`;
+  const first = `${liveSentence}. In the 7 days to ${atHour(w.until)}, ${fresh.length ? plural(fresh.length, "app was", "apps were") : "no app was"} added to Registrai's index.`;
   const freshHtml = `${addedHead}\n${fresh.length ? table(["App", "First seen", "Payments (7 d)"], fresh.map((a) => [appLink(a), esc(atHour(new Date(a.first_hour! * 3600e3).toISOString())), int(a.payments)])) : "<p>None in the last 7 days.</p>"}\n${source(w)}`;
   return shell(path, title, first, `${liveHtml}\n${freshHtml}`, [...live.map((e) => e.name), ...fresh.map((a) => a.name)]);
 }

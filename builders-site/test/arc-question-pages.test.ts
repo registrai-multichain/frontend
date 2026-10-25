@@ -89,7 +89,7 @@ describe("question pages", () => {
   test("new: went live within 7 days, started receiving payments within the window (edge hour excluded)", async () => {
     const { renderNew } = await import("../lib/arc-question-pages");
     const h = renderNew(W, "2026-10-22");
-    expect(h).toContain("In the 30 days to 22 Oct 2026, 1 project in the directory went live on Arc; in the 7 days to 22 Oct 2026, 16:00 UTC, 1 app was added to Registrai&#39;s index.");
+    expect(h).toContain("In the 30 days to 22 Oct 2026, 1 project in the directory went live on Arc. In the 7 days to 22 Oct 2026, 16:00 UTC, 1 app was added to Registrai&#39;s index.");
     expect(h).toContain("<title>New on Arc, last 30 days · Registrai</title>");
     expect(h).toContain("<h2>Added to Registrai&#39;s index, last 7 days</h2>");
     expect(h).toContain("<th>First seen</th>");
@@ -141,6 +141,9 @@ describe("/arc/new/ never empty (30-day window, then the latest launches)", () =
       expect(h).toContain("2 projects in the directory went live on Arc");
       const later = renderNew({ ...W, until: "2026-12-30T16:00:00Z", until_hour: Date.parse("2026-12-30T16:00:00Z") / 3600e3 }, "2026-12-30");
       expect(later).toContain("No project in the directory has a sourced launch date in the 30 days to 30 Dec 2026.");
+      // the opening sentence (what engines quote) names the latest launches instead of "0 projects"
+      expect(later).toContain("<p>No project in the directory went live on Arc in the 30 days to 30 Dec 2026; the most recent launches were Archery (20 Oct 2026) and RampX (25 Sep 2026).");
+      expect(later).not.toContain("0 projects");
       expect(later).toContain("<h3>Most recent launches</h3>");
       expect(later.indexOf(">Archery<")).toBeLessThan(later.indexOf(">RampX<"));   // newest first
       expect(later).toContain("2026-09-25");
