@@ -47,6 +47,8 @@ export type ArcEntity = {
   first_announced?: string; first_live?: string;
   contracts?: { address: string; role: string; source: string }[];
   index_ids?: string[]; facts_source?: string; sources: Source[]; last_reviewed: string;
+  /** Who controls the project's contracts, read from Arc mainnet at one block: one observable sentence per fact. */
+  control?: { date: string; block: number; source: string; facts: string[] };
 };
 export const SUMMARY_MAX = 280;
 
@@ -70,7 +72,7 @@ export function whatItDoes(e: Pick<ArcEntity, "summary">): string {
 }
 
 const FIELDS = new Set(["slug", "name", "aliases", "category", "tags", "status", "status_evidence", "summary", "website", "x", "github", "docs",
-  "first_announced", "first_live", "contracts", "index_ids", "facts_source", "sources", "last_reviewed"]);
+  "first_announced", "first_live", "contracts", "index_ids", "facts_source", "sources", "last_reviewed", "control"]);
 /** Path words a slug may not take (they would read as routes or files under /ecosystem/). */
 const RESERVED = new Set(["api", "category", "categories", "entities", "status", "search", "index", "all", "corrections"]);
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/, DAY = /^\d{4}-\d{2}-\d{2}$/, ADDR = /^0x[0-9a-f]{40}$/, ID = /^[a-z]+:\S+$/, HANDLE = /^[A-Za-z0-9_]{1,15}$/;
@@ -115,6 +117,17 @@ export function validateEntities(list: unknown): { ok: true; entities: ArcEntity
       if (!ADDR.test(String(c?.address))) err(`contract address must be lowercase 0x + 40 hex: ${String(c?.address)}`);
       if (!c?.role) err("contract role is required");
       if (!https(c?.source)) err("contract source must be an https URL");
+    }
+    if (e.control !== undefined) {
+      const c = e.control;
+      if (!DAY.test(String(c?.date))) err("control date must be YYYY-MM-DD");
+      if (!Number.isInteger(c?.block) || c.block <= 0) err("control block must be a positive integer");
+      if (!https(c?.source)) err("control source must be an https URL");
+      if (!Array.isArray(c?.facts) || !c.facts.length || c.facts.some((f) => typeof f !== "string" || !f.trim())) err("control facts must be non-empty sentences");
+      else for (const f of c.facts) {
+        if ((f.match(/0x[0-9a-fA-F]{40}/g) ?? []).some((x) => !ADDR.test(x))) err(`control fact addresses must be lowercase: ${f.slice(0, 60)}`);
+        if (hasVerdict(f)) err(`control fact has a verdict word: ${f.slice(0, 60)}`);
+      }
     }
     for (const id of e.index_ids ?? []) {
       if (!ID.test(id)) err(`bad index id ${id}`);

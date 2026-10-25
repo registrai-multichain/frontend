@@ -826,5 +826,41 @@
     "change": "Summary updated: Cycles Pay runs on Arc",
     "source": "https://cycles.money/blog/cycles-pay-points-program",
     "from": "review"
+  },
+  {
+    "id": 93,
+    "date": "2026-10-25",
+    "slug": "peach",
+    "field": "summary",
+    "change": "Summary updated: aggregator and launchpad, the 8 Oct CCTP bridge, contracts deployed 7 Sep 2026 (creation blocks 19588860-19794786)",
+    "source": "https://cryptobriefing.com/peach-usdc-bridging-arc-liquidity/",
+    "from": "review"
+  },
+  {
+    "id": 94,
+    "date": "2026-10-25",
+    "slug": "arcland",
+    "field": "status",
+    "change": "Live on mainnet → Deployed: contracts on Arc mainnet, but minting has not opened (waitlist only)",
+    "source": "https://arcland.app/proof",
+    "from": "review"
+  },
+  {
+    "id": 95,
+    "date": "2026-10-25",
+    "slug": "arclight",
+    "field": "other",
+    "change": "Added the name Arclight Finance (its domain, arclight.finance)",
+    "source": "https://arclight.finance/",
+    "from": "review"
+  },
+  {
+    "id": 96,
+    "date": "2026-10-25",
+    "slug": "tolly",
+    "field": "contracts",
+    "change": "Named 11 contracts from the Tolly app config; added contract control read at block 27,860,760 (one EOA owns Pad and Treasury, sets HolderVault)",
+    "source": "https://explorer.arc.io/block/27860760",
+    "from": "review"
   }
 ]

@@ -42,6 +42,14 @@ function contractsHtml(e: ArcEntity, app: AppDetail | null): string {
   return `<h2>Contracts on Arc</h2>${ownHtml}${extra ? `${own.length ? "<p class=\"muted\">Also attributed by the Arc indices:</p>" : ""}${contractList(extra)}` : ""}`;
 }
 
+/** Contract control read from the chain: every address links to the explorer; the caveat says what a selector does not show. */
+function controlHtml(e: ArcEntity): string {
+  const c = e.control;
+  if (!c) return "";
+  const linked = (f: string) => esc(f).replace(/0x[0-9a-f]{40}/g, (x) => `<a href="${esc(evidenceHref(x))}" rel="noreferrer"><code>${x}</code></a>`);
+  return `<h2>Contract control</h2><p class="muted">Read from Arc mainnet at ${a(c.source, `block ${c.block.toLocaleString("en-US")}`)} on ${esc(c.date)}. A function in a contract's code shows that it exists, not who may call it. Not an audit.</p><ul>${c.facts.map((f) => `<li>${linked(f)}</li>`).join("")}</ul>`;
+}
+
 /** Index members: the index's own evidence (a contract on the explorer, the hourly data), so a "live" badge never rests on a homepage alone. */
 function indexEvidence(e: ArcEntity, app: AppDetail | null): string[] {
   const id = e.index_ids?.[0];
@@ -62,10 +70,12 @@ export function renderEntity(v: EntityView): string {
   const body = `<h1>${esc(e.name)}</h1>
 <p class="muted">${esc(STATUS_LABEL[e.status])} · <a href="${categoryHref(e.category)}">${esc(catName(e.category))}</a>${tags ? ` · also ${tags}` : ""} · Last reviewed ${esc(e.last_reviewed)}</p>
 <p>${esc(e.summary)}</p>
+${e.aliases?.length ? `<p>Also known as ${esc(e.aliases.join(", "))}.</p>` : ""}
 ${links(e)}
 <h2>Status</h2>
 ${dates ? `<ul>${dates}</ul>` : ""}<p>Evidence: ${[...e.status_evidence.map((s) => a(s.url, s.title ?? s.url)), ...indexEvidence(e, v.app)].join(" · ")}</p>
 ${contractsHtml(e, v.app)}
+${controlHtml(e)}
 ${v.app ? `<h2>Activity</h2><p class="muted">Data until ${esc(when(v.app.data_until))} · ${v.app.verified ? "verified builder (registry)" : "not verified"} · indices: ${v.app.indices.map((i) => i.toUpperCase()).join(", ")}</p>${activityHtml(v.app)}<p class="muted">Hourly data: <a href="/api/v1/members/${esc(encodeURIComponent(v.app.id))}/hourly?index=aei">JSON</a></p>` : ""}
 ${v.facts ? `<h2>Project facts</h2>${factsHtml(v.facts)}` : ""}
 <h2>Sources</h2>

@@ -39,6 +39,20 @@ describe("entity page", () => {
     expect(h).toContain("<h2>Last 24 h</h2>");
     expect(h).toContain("158");
   });
+  test("aliases: an also-known-as line", () => {
+    expect(renderEntity({ entity: ent({ aliases: ["Archery Finance"] }), app: null, facts: null })).toContain("<p>Also known as Archery Finance.</p>");
+    expect(renderEntity({ entity: ent(), app: null, facts: null })).not.toContain("Also known as");
+  });
+  test("contract control: the block and date it was read, each fact with its addresses linked to the explorer", () => {
+    const control = { date: "2026-10-25", block: 27860760, source: "https://explorer.arc.io/block/27860760",
+      facts: ["owner() of 0x0000000000000000000000000000000000000001 returns 0x0000000000000000000000000000000000000003, an EOA <b>."] };
+    const h = renderEntity({ entity: ent({ control }), app: null, facts: null });
+    expect(h).toContain("<h2>Contract control</h2>");
+    expect(h).toContain('<a href="https://explorer.arc.io/block/27860760" rel="noreferrer">block 27,860,760</a> on 2026-10-25');
+    expect(h).toContain('<a href="https://explorer.arc.io/address/0x0000000000000000000000000000000000000003" rel="noreferrer"><code>0x0000000000000000000000000000000000000003</code></a>, an EOA &lt;b&gt;.');
+    expect(h).toContain("not who may call it");
+    expect(renderEntity({ entity: ent(), app: null, facts: null })).not.toContain("Contract control");
+  });
   test("JSON-LD: Organization, plus a Dataset for index members", () => {
     expect(ld(renderEntity({ entity: ent(), app: null, facts: null }))["@graph"].map((x: { "@type": string }) => x["@type"])).toEqual(["Organization"]);
     const g = ld(renderEntity({ entity: ent(), app, facts: null }))["@graph"];

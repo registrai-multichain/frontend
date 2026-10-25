@@ -760,14 +760,19 @@
     "slug": "arcland",
     "name": "ArcLand",
     "category": "consumer",
-    "status": "live",
+    "status": "deployed",
     "status_evidence": [
       {
         "url": "https://arcland.app/",
         "title": "ArcLand"
+      },
+      {
+        "url": "https://arcland.app/proof",
+        "title": "ArcLand Proof of Mint: reserve a place before mint opens",
+        "date": "2026-10-25"
       }
     ],
-    "summary": "Digital land project for Arc with a 10,000-land supply and on-chain ownership. Its contracts are on Arc mainnet; its site shows a waitlist.",
+    "summary": "Digital land project for Arc with a supply of 10,000 lands. Contracts the Arc indices attribute to it are on Arc mainnet, but its site says minting has not opened and takes waitlist sign-ups only (checked 2026-10-25).",
     "website": "https://arcland.app/",
     "index_ids": [
       "domain:arcland.app"
@@ -780,7 +785,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-23"
+    "last_reviewed": "2026-10-25"
   },
   {
     "slug": "arclight",
@@ -819,7 +824,10 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-23"
+    "last_reviewed": "2026-10-25",
+    "aliases": [
+      "Arclight Finance"
+    ]
   },
   {
     "slug": "arclotls",
@@ -8328,9 +8336,14 @@
       {
         "url": "https://peach.ag/",
         "title": "Peach Protocol app"
+      },
+      {
+        "url": "https://cryptobriefing.com/peach-usdc-bridging-arc-liquidity/",
+        "title": "Crypto Briefing: Peach adds native USDC bridging for Arc",
+        "date": "2026-10-13"
       }
     ],
-    "summary": "Peach Protocol web app on Arc with Trade (token swap with a 0.5% fee shown), Terminal, Launchpad and Bridge sections.",
+    "summary": "Swap aggregator and token launchpad on Arc, with Trade (0.5% fee shown), Terminal, Launchpad and Bridge sections. The Bridge, added 8 Oct 2026, moves native USDC to Arc with Circle's CCTP and the Arc App Kit. Its contracts were deployed on Arc mainnet on 7 Sep 2026.",
     "website": "https://peach.ag/",
     "index_ids": [
       "domain:peach.ag"
@@ -8342,7 +8355,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-23"
+    "last_reviewed": "2026-10-25"
   },
   {
     "slug": "peddles",
@@ -10070,9 +10083,86 @@
         "url": "https://tollylabs.com/guide",
         "title": "Tolly guide",
         "date": "2026-10-20"
+      },
+      {
+        "url": "https://tollylabs.com/assets/forge-live-dyrbHT9R.js",
+        "title": "Tolly app config: contract names and addresses",
+        "date": "2026-10-25"
       }
     ],
-    "last_reviewed": "2026-10-23"
+    "last_reviewed": "2026-10-25",
+    "contracts": [
+      {
+        "address": "0x04b8a7aeafce846acd3838ad5961787810339db1",
+        "role": "Deployer",
+        "source": "https://tollylabs.com/assets/forge-live-dyrbHT9R.js"
+      },
+      {
+        "address": "0x150bf8f4087d50da1081365e4a28d7912045a8f4",
+        "role": "HolderVault",
+        "source": "https://tollylabs.com/assets/forge-live-dyrbHT9R.js"
+      },
+      {
+        "address": "0x6619d00e448664ac900f1f512a5b65e8ac358a7b",
+        "role": "UniversalForge",
+        "source": "https://tollylabs.com/assets/forge-live-dyrbHT9R.js"
+      },
+      {
+        "address": "0xa00c3a33bcb68856f9fd86003e17f76a733fc355",
+        "role": "Treasury",
+        "source": "https://tollylabs.com/assets/forge-live-dyrbHT9R.js"
+      },
+      {
+        "address": "0xb808e78846205905607a425b329f0bcf8e036fab",
+        "role": "RouterForge",
+        "source": "https://tollylabs.com/assets/forge-live-dyrbHT9R.js"
+      },
+      {
+        "address": "0xbc43ce8dec648ea298c4275559b81d6261c90b67",
+        "role": "TOLLY token",
+        "source": "https://tollylabs.com/assets/forge-live-dyrbHT9R.js"
+      },
+      {
+        "address": "0xcad7ee36ac193bf2eddb7b3e2736c5bdb8269c8b",
+        "role": "Pad (token launches)",
+        "source": "https://tollylabs.com/assets/forge-live-dyrbHT9R.js"
+      },
+      {
+        "address": "0xcb249e9613123ad57dc438d5393e471c00020959",
+        "role": "Lens",
+        "source": "https://tollylabs.com/assets/forge-live-dyrbHT9R.js"
+      },
+      {
+        "address": "0xd988b525960bf069cd2ef869642b8c2a26065cc0",
+        "role": "LiquidityForge",
+        "source": "https://tollylabs.com/assets/forge-live-dyrbHT9R.js"
+      },
+      {
+        "address": "0xe20e4297759597da75c8998ee76ec900600ad920",
+        "role": "Locker",
+        "source": "https://tollylabs.com/assets/forge-live-dyrbHT9R.js"
+      },
+      {
+        "address": "0xe60483df8bb33dbe7c50c47b440e957eb65614c3",
+        "role": "Furnace",
+        "source": "https://tollylabs.com/assets/forge-live-dyrbHT9R.js"
+      }
+    ],
+    "control": {
+      "date": "2026-10-25",
+      "block": 27860760,
+      "source": "https://explorer.arc.io/block/27860760",
+      "facts": [
+        "One address, 0xe740d161461d48722bccc761c6f4e26778c87683, is owner() of Pad (0xcad7ee36ac193bf2eddb7b3e2736c5bdb8269c8b) and of Treasury (0xa00c3a33bcb68856f9fd86003e17f76a733fc355), setter() of HolderVault (0x150bf8f4087d50da1081365e4a28d7912045a8f4), initializer() of Deployer (0x04b8a7aeafce846acd3838ad5961787810339db1) and AUTHORIZED_DEPLOYER() of 0xf77830fffb0601e42bb4fe88f8ae29fd6ddea2b5.",
+        "0xe740d161461d48722bccc761c6f4e26778c87683 is an externally owned account with an EIP-7702 delegation to 0x63c0c19a282a1b52b07dd5a65b58948a07dae32b: its private key always controls it, and the delegated code may let other signers act for it. It had sent 14,350 transactions.",
+        "Pad's code has setBanned(string,bool), setPool(address) and transferOwnership(address).",
+        "Treasury's code has withdraw(address,address,uint256) and withdrawNative(address,uint256); its pendingOwner() is the zero address, so no ownership transfer is pending.",
+        "HolderVault's code has setLocker(address) and setDistributor(address). Its distributor() is 0xc18a98abadb4d633bc41804b960897a35394677a, a contract whose governance() is an EOA (0x8598be9cf659a52219ed74085a017e016e9db56b) and whose guardian() is a Safe requiring 2 of 3 owner signatures (0x5857d6b666a02d4cb454f117ac4bed3a5025f690).",
+        "The TOLLY token (0xbc43ce8dec648ea298c4275559b81d6261c90b67) has no owner. Its verified source (Sourcify) lets only Pad call setPool(address), once; pool() is already set to 0x162df51c504e7b8321e07387932f333d9be16a72.",
+        "Locker's (0xe20e4297759597da75c8998ee76ec900600ad920) initializer() is the zero address; its CREATOR_BPS(), HOLDER_BPS() and PROTOCOL_BPS() return 6,400, 1,200 and 1,000.",
+        "owner() reverts on Deployer, UniversalForge, RouterForge and LiquidityForge. Apart from the TOLLY token, none of these contracts has verified source on Sourcify."
+      ]
+    }
   },
   {
     "slug": "topaz-cl",

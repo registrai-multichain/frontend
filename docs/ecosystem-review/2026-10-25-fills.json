@@ -1,0 +1,18 @@
+[
+  {
+    "slug": "peach",
+    "field": "summary",
+    "set": { "summary": "Swap aggregator and token launchpad on Arc, with Trade (0.5% fee shown), Terminal, Launchpad and Bridge sections. The Bridge, added 8 Oct 2026, moves native USDC to Arc with Circle's CCTP and the Arc App Kit. Its contracts were deployed on Arc mainnet on 7 Sep 2026." },
+    "evidence": { "url": "https://cryptobriefing.com/peach-usdc-bridging-arc-liquidity/", "title": "Crypto Briefing: Peach adds native USDC bridging for Arc", "date": "2026-10-13" },
+    "change": "Summary updated: aggregator and launchpad, the 8 Oct CCTP bridge, contracts deployed 7 Sep 2026 (creation blocks 19588860-19794786)",
+    "source": "https://cryptobriefing.com/peach-usdc-bridging-arc-liquidity/"
+  },
+  {
+    "slug": "arcland",
+    "field": "status",
+    "set": { "status": "deployed", "summary": "Digital land project for Arc with a supply of 10,000 lands. Contracts the Arc indices attribute to it are on Arc mainnet, but its site says minting has not opened and takes waitlist sign-ups only (checked 2026-10-25)." },
+    "evidence": { "url": "https://arcland.app/proof", "title": "ArcLand Proof of Mint: reserve a place before mint opens", "date": "2026-10-25" },
+    "change": "Live on mainnet → Deployed: contracts on Arc mainnet, but minting has not opened (waitlist only)",
+    "source": "https://arcland.app/proof"
+  }
+]

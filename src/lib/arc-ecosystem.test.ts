@@ -63,6 +63,17 @@ describe("validateEntities", () => {
     expect(errs([ok({ index_ids: ["archery"] })]).join()).toMatch(/index id/);
     expect(errs([ok({ index_ids: ["domain:a.b"] }), ok({ slug: "b", index_ids: ["domain:a.b"] })]).join()).toMatch(/also on archery/);
   });
+  test("control: read at a dated block, sourced, plain sentences with lowercase addresses and no verdicts", () => {
+    const control = { date: "2026-10-25", block: 27860760, source: "https://explorer.arc.io/block/27860760",
+      facts: ["owner() of 0x0000000000000000000000000000000000000001 returns 0x0000000000000000000000000000000000000002, an EOA."] };
+    expect(errs([ok({ control })])).toEqual([]);
+    expect(errs([ok({ control: { ...control, date: "25 Oct" } })]).join()).toMatch(/control date/);
+    expect(errs([ok({ control: { ...control, block: -1 } })]).join()).toMatch(/control block/);
+    expect(errs([ok({ control: { ...control, source: "http://x.y/" } })]).join()).toMatch(/control source/);
+    expect(errs([ok({ control: { ...control, facts: [] } })]).join()).toMatch(/control facts/);
+    expect(errs([ok({ control: { ...control, facts: ["owner() returns 0xABCdef0000000000000000000000000000000001."] } })]).join()).toMatch(/lowercase/);
+    expect(errs([ok({ control: { ...control, facts: ["The contracts are safe."] } })]).join()).toMatch(/verdict/);
+  });
   test("unknown fields are rejected (tracker revenue, wallets, notes never publish)", () => {
     expect(errs([{ ...ok(), revenue_usd: 5 }]).join()).toMatch(/unknown field revenue_usd/);
     expect(errs([{ ...ok(), wallets: [] }]).join()).toMatch(/unknown field wallets/);
