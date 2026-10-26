@@ -10,7 +10,7 @@ const now = (o: Partial<ArcNumbers> = {}): ArcNumbers => ({
   stablecoins: { usdc_supply: 819428662.4, eurc_supply: 9032853, as_of: "2026-10-23T13:03:00.000Z", all_stablecoins_usd: 830347636, tvl_usd: 634731218, defillama_date: "2026-10-23",
     tokens: [{ symbol: "USDC", issuer: "Circle", address: "0x3600000000000000000000000000000000000000", supply: 819428662.4 }, { symbol: "JPYC", issuer: "JPYC", address: "0xe7c3d8c9a439fede00d2600032d5db0be71c3c29", supply: null }, { symbol: "XYZ", issuer: "X", address: null, supply: null }] },
   activity_24h: { data_until: "2026-10-23T13:00:00Z", usdc_moved_usd_est: 682898520, eurc_moved_usd_est: 1, usdc_transfers_est: 400000, app_payments: 80000, app_usd: 28499285, attributed_share_pct: 4.17,
-    transactions_est: 342000, tx_sample: { blocks: 240, from_block: 27283657, to_block: 27452377 } },
+    transactions_est: 342000, tx_sample: { blocks: 240, from_block: 27283657, to_block: 27452377 }, active_accounts: { date: "2026-10-22", count: 15976 } },
   ecosystem: { projects: 258, live: 83, deployed: 20, announced: 155, top_categories: [], index_members: { abi: 1, aii: 1, aei: 1 }, index_close: { abi: 1, aii: 1, aei: 1 }, data_until: "2026-10-23T13:00:00Z" },
   timeline: ARC_TIMELINE, errors: [], ...o,
 });
@@ -25,12 +25,16 @@ describe("/arc/ answers in sentences (spec 2026-10-23-ai-search-gaps §1)", () =
     expect(h).toContain("TVL on Arc was $634,731,218 on 23 Oct 2026.");
     expect(h).toContain("About 342,000 transactions in the last 24 h, estimated from 240 sampled blocks.");
     expect(h).toContain("Apps tracked by Registrai received $28,499,285 in USDC payments in the last 24 h.");
+    expect(h).toContain("15,976 accounts sent at least one transaction on Arc on 22 Oct 2026 (UTC). (Arc explorer, Blockscout)");
+    expect(h).toMatch(/<th>Active accounts, 22 Oct 2026<\/th><td class="n">15,976<\/td>/);
   });
   test("a missing figure drops its sentence; its table row says Not available", async () => {
     const { renderArc } = await import("../lib/arc-pages");
     const n = now();
-    n.activity_24h.transactions_est = null; n.activity_24h.tx_sample = null;
+    n.activity_24h.transactions_est = null; n.activity_24h.tx_sample = null; n.activity_24h.active_accounts = null;
     const h = renderArc(n, []);
+    expect(h).not.toContain("accounts sent at least one transaction");
+    expect(h).toMatch(/<th>Active accounts, one UTC day<\/th><td class="n">Not available right now/);
     expect(h).not.toContain("transactions in the last 24 h, estimated");
     expect(h).toMatch(/<th>Transactions \(estimate\)<\/th><td class="n">Not available right now/);
   });
@@ -47,7 +51,7 @@ describe("/arc/ answers in sentences (spec 2026-10-23-ai-search-gaps §1)", () =
   test("an old snapshot without the new fields still renders, with – for transactions", async () => {
     const { renderArc } = await import("../lib/arc-pages");
     const old = now();
-    delete old.activity_24h.transactions_est; delete old.activity_24h.tx_sample; delete old.stablecoins.tokens; delete old.network.rpc_url; delete old.network.explorer_url;
+    delete old.activity_24h.transactions_est; delete old.activity_24h.tx_sample; delete old.activity_24h.active_accounts; delete old.stablecoins.tokens; delete old.network.rpc_url; delete old.network.explorer_url;
     const h = renderArc(old, [old]);
     expect(h).toContain("<th class=\"n\">Transactions, 24 h (est.)</th>");
     expect(h).toMatch(/<td class="n">–<\/td><\/tr>/);

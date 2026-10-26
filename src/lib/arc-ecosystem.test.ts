@@ -10,9 +10,9 @@ const ok = (o: Partial<ArcEntity> = {}): ArcEntity => ({
 const errs = (list: unknown) => { const r = validateEntities(list); return r.ok ? [] : r.errors; };
 
 describe("taxonomy", () => {
-  test("20 categories, kebab ids, unique, plain labels", () => {
-    expect(CATEGORIES).toHaveLength(20);
-    expect(new Set(CATEGORIES.map((c) => c.id)).size).toBe(20);
+  test("21 categories, kebab ids, unique, plain labels", () => {
+    expect(CATEGORIES).toHaveLength(21);
+    expect(new Set(CATEGORIES.map((c) => c.id)).size).toBe(21);
     for (const c of CATEGORIES) { expect(c.id).toMatch(/^[a-z]+(-[a-z]+)*$/); expect(c.label).toMatch(/Arc/); }
     expect(categoryOf("dexs")?.label).toBe("DEXs on Arc");
     expect(categoryOf("wallets")?.label).toBe("Wallets that support Arc");
@@ -53,7 +53,7 @@ describe("validateEntities", () => {
     expect(errs([ok({ summary: "Archery is a scam on Arc." })]).join()).toMatch(/verdict/);
   });
   test("category, tags, dates, links, contracts, ids", () => {
-    expect(errs([ok({ category: "games" as never })]).join()).toMatch(/unknown category/);
+    expect(errs([ok({ category: "gaming" as never })]).join()).toMatch(/unknown category/);
     expect(errs([ok({ tags: ["nope" as never] })]).join()).toMatch(/unknown tag/);
     expect(errs([ok({ first_live: "16 Sep 2026" })]).join()).toMatch(/YYYY-MM-DD/);
     expect(errs([ok({ website: "http://archery.wtf" })]).join()).toMatch(/website/);

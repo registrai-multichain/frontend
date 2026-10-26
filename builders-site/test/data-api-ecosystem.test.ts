@@ -35,7 +35,7 @@ describe("/api/v1/ecosystem", () => {
     const r = await get("?status=evil");
     expect(r.status).toBe(400);
     expect((await r.json()).error).toMatch(/status must be/);
-    expect((await get("?category=games")).status).toBe(400);
+    expect((await get("?category=gaming")).status).toBe(400);
     expect((await get("/nobody")).status).toBe(404);
     expect((await get("/aave/x")).status).toBe(404);
   });

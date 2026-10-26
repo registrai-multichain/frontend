@@ -687,7 +687,7 @@
   {
     "slug": "arcade",
     "name": "Arcade",
-    "category": "consumer",
+    "category": "games",
     "status": "live",
     "status_evidence": [
       {
@@ -715,7 +715,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-23"
+    "last_reviewed": "2026-10-26"
   },
   {
     "slug": "archery",
@@ -759,7 +759,7 @@
   {
     "slug": "arcland",
     "name": "ArcLand",
-    "category": "consumer",
+    "category": "games",
     "status": "deployed",
     "status_evidence": [
       {
@@ -785,7 +785,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-25"
+    "last_reviewed": "2026-10-26"
   },
   {
     "slug": "arclight",
@@ -832,7 +832,7 @@
   {
     "slug": "arclotls",
     "name": "ArcLotls",
-    "category": "consumer",
+    "category": "games",
     "status": "live",
     "status_evidence": [
       {
@@ -888,7 +888,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-23",
+    "last_reviewed": "2026-10-26",
     "first_live": "2026-09-17"
   },
   {
@@ -5343,7 +5343,7 @@
   {
     "slug": "hashfly",
     "name": "HashFly",
-    "category": "consumer",
+    "category": "games",
     "status": "live",
     "status_evidence": [
       {
@@ -5371,7 +5371,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-23"
+    "last_reviewed": "2026-10-26"
   },
   {
     "slug": "hashkey",
@@ -7649,7 +7649,7 @@
   {
     "slug": "murmur",
     "name": "MurMur",
-    "category": "consumer",
+    "category": "games",
     "status": "live",
     "status_evidence": [
       {
@@ -7684,7 +7684,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-23"
+    "last_reviewed": "2026-10-26"
   },
   {
     "slug": "new-york-life-investment-management",
@@ -8026,7 +8026,7 @@
   {
     "slug": "opensea",
     "name": "OpenSea",
-    "category": "consumer",
+    "category": "games",
     "status": "live",
     "status_evidence": [
       {
@@ -8069,7 +8069,7 @@
         "date": "2026-10-20"
       }
     ],
-    "last_reviewed": "2026-10-23"
+    "last_reviewed": "2026-10-26"
   },
   {
     "slug": "ornn",

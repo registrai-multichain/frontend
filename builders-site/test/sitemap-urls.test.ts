@@ -76,6 +76,15 @@ vi.mock("../../src/lib/arc-ecosystem-data", () => ({ ECOSYSTEM: ix([{ slug: "arc
   status_evidence: [{ url: "https://explorer.arc.io/address/0x0000000000000000000000000000000000000001" }], sources: [{ url: "https://archery.wtf/" }],
   index_ids: ["domain:archery.wtf"], facts_source: "domain:archery.wtf", last_reviewed: "2026-10-20" }]), CORRECTIONS: { all: [], bySlug: new Map(), removed: new Map() } }));
 
+describe("entity lastmod", () => {
+  test("an index member's page follows the hourly data; any other page its review date", async () => {
+    const { entityLastmod } = await import("../lib/sitemap-urls");
+    expect(entityLastmod({ last_reviewed: "2026-10-20", index_ids: ["domain:a.b"] }, "2026-10-26T12:00:00Z")).toBe("2026-10-26T12:00:00Z");
+    expect(entityLastmod({ last_reviewed: "2026-10-20" }, "2026-10-26T12:00:00Z")).toBe("2026-10-20");
+    expect(entityLastmod({ last_reviewed: "2026-10-20", index_ids: ["domain:a.b"] }, undefined)).toBe("2026-10-20");
+  });
+});
+
 describe("ecosystem in the sitemap", () => {
   test("directory, non-empty categories and entity pages; claimed /apps pages are left out", async () => {
     const { sitemapUrls } = await import("../lib/sitemap-urls");

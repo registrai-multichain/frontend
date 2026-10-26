@@ -1,0 +1,8 @@
+[
+  { "slug": "arcade", "field": "category", "set": { "category": "games" }, "change": "Games and consumer → Games and NFTs (games split out)", "source": "https://builder.registrai.cc/ecosystem/arcade/" },
+  { "slug": "murmur", "field": "category", "set": { "category": "games" }, "change": "Games and consumer → Games and NFTs (games split out)", "source": "https://builder.registrai.cc/ecosystem/murmur/" },
+  { "slug": "arcland", "field": "category", "set": { "category": "games" }, "change": "Games and consumer → Games and NFTs (games split out)", "source": "https://builder.registrai.cc/ecosystem/arcland/" },
+  { "slug": "arclotls", "field": "category", "set": { "category": "games" }, "change": "Games and consumer → Games and NFTs (games split out)", "source": "https://builder.registrai.cc/ecosystem/arclotls/" },
+  { "slug": "hashfly", "field": "category", "set": { "category": "games" }, "change": "Games and consumer → Games and NFTs (games split out)", "source": "https://builder.registrai.cc/ecosystem/hashfly/" },
+  { "slug": "opensea", "field": "category", "set": { "category": "games" }, "change": "Games and consumer → Games and NFTs (games split out)", "source": "https://builder.registrai.cc/ecosystem/opensea/" }
+]

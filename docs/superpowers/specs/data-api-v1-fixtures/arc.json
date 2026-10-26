@@ -33,7 +33,8 @@
   "app_usd": 12810996.76,
   "attributed_share_pct": 2.97,
   "transactions_est": 342000,
-  "tx_sample": { "blocks": 240, "from_block": 26807800, "to_block": 26976520 }
+  "tx_sample": { "blocks": 240, "from_block": 26807800, "to_block": 26976520 },
+    "active_accounts": { "date": "2026-10-19", "count": 22361 }
  },
  "ecosystem": {
   "projects": 258,

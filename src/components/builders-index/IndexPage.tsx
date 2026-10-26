@@ -582,7 +582,7 @@ export function IndexPage() {
     <>
       {tabs && <div className="abi-t">{tabs}</div>}
       <header className="mb-6"><h1 className="pa-h1">{ix.name}</h1><p className="pa-muted">{INDICES_ANSWER}</p></header>
-      {state.kind === "loading" && <p className="pa-muted">Loading…</p>}
+      {state.kind === "loading" && <p className="pa-muted">Loading the hourly data. The same data as JSON: <a href="/api/v1/indices">/api/v1/indices</a>.</p>}
       {state.kind === "empty" && <div className="pa-card"><p>{ABI_COPY.empty}</p></div>}
       {state.kind === "error" && <div className="pa-card"><p>{ABI_COPY.failed}</p></div>}
     </>

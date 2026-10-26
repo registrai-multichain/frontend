@@ -862,5 +862,59 @@
     "change": "Named 11 contracts from the Tolly app config; added contract control read at block 27,860,760 (one EOA owns Pad and Treasury, sets HolderVault)",
     "source": "https://explorer.arc.io/block/27860760",
     "from": "review"
+  },
+  {
+    "id": 97,
+    "date": "2026-10-26",
+    "slug": "arcade",
+    "field": "category",
+    "change": "Games and consumer → Games and NFTs (games split out)",
+    "source": "https://builder.registrai.cc/ecosystem/arcade/",
+    "from": "review"
+  },
+  {
+    "id": 98,
+    "date": "2026-10-26",
+    "slug": "murmur",
+    "field": "category",
+    "change": "Games and consumer → Games and NFTs (games split out)",
+    "source": "https://builder.registrai.cc/ecosystem/murmur/",
+    "from": "review"
+  },
+  {
+    "id": 99,
+    "date": "2026-10-26",
+    "slug": "arcland",
+    "field": "category",
+    "change": "Games and consumer → Games and NFTs (games split out)",
+    "source": "https://builder.registrai.cc/ecosystem/arcland/",
+    "from": "review"
+  },
+  {
+    "id": 100,
+    "date": "2026-10-26",
+    "slug": "arclotls",
+    "field": "category",
+    "change": "Games and consumer → Games and NFTs (games split out)",
+    "source": "https://builder.registrai.cc/ecosystem/arclotls/",
+    "from": "review"
+  },
+  {
+    "id": 101,
+    "date": "2026-10-26",
+    "slug": "hashfly",
+    "field": "category",
+    "change": "Games and consumer → Games and NFTs (games split out)",
+    "source": "https://builder.registrai.cc/ecosystem/hashfly/",
+    "from": "review"
+  },
+  {
+    "id": 102,
+    "date": "2026-10-26",
+    "slug": "opensea",
+    "field": "category",
+    "change": "Games and consumer → Games and NFTs (games split out)",
+    "source": "https://builder.registrai.cc/ecosystem/opensea/",
+    "from": "review"
   }
 ]

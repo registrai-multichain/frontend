@@ -60,6 +60,7 @@ export function renderMethodology(m: Input): string {
 <p><b>Now:</b> ${esc(shareText(m.share))}.</p>`;
   const limits = `<h2 id="limits">Known limits</h2>
 <ul><li>The all-USDC total is an estimate from sampled blocks.</li>
+<li>Active accounts on <a href="/arc/">/arc/</a> are not ours: they are the explorer's daily count of accounts that sent a transaction (Arc's Blockscout stats), for the last complete UTC day.</li>
 <li>Payments to contracts we have not attributed are not counted for any app.</li>
 <li>An hour the keeper misses is filled from the chain at the next close; if it cannot be, totals for that window are lower.</li>
 <li>Directory facts are as current as their review date; corrections are public at <a href="/ecosystem/corrections/">/ecosystem/corrections/</a>.</li>

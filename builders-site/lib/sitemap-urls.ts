@@ -59,6 +59,10 @@ export async function factPages(env: Env, now = Date.now()): Promise<FactPage[]>
   return pages;
 }
 
+/** An index member's page shows hourly activity, so it changes with the data; any other entity page with its review. */
+export const entityLastmod = (e: { last_reviewed: string; index_ids?: string[] }, dataUntil: string | undefined): string =>
+  e.index_ids?.length && dataUntil && dataUntil > e.last_reviewed ? dataUntil : e.last_reviewed;
+
 export async function sitemapUrls(env: Env, deps: EdgeCacheDeps, now = Date.now()): Promise<{ loc: string; lastmod?: string }[]> {
   const [l, facts] = await Promise.all([loadAppList(env, deps), factPages(env, now).catch(() => [])]);
   const mod = l?.data_until;
@@ -70,7 +74,7 @@ export async function sitemapUrls(env: Env, deps: EdgeCacheDeps, now = Date.now(
   const ecoMod = eco.map((e) => e.last_reviewed).sort().pop();
   const claimed = new Set(eco.flatMap((e) => (e.index_ids ?? []).map((id) => idToPath(id))));
   const cats = CATEGORIES.filter((c) => eco.some((e) => e.category === c.id || (e.tags ?? []).includes(c.id)));
-  const ecoUrls = eco.length ? [at("/arc/", mod ?? ecoMod), ...QUESTION_PAGES.map((q) => at(q.path, q.path === "/arc/get-usdc/" ? ecoMod : mod ?? ecoMod)), at("/ecosystem/", ecoMod), at("/ecosystem/corrections/", CORRECTIONS.all[0]?.date ?? ecoMod), ...cats.map((c) => at(categoryHref(c.id), ecoMod)), ...eco.map((e) => at(entityHref(e.slug), e.last_reviewed))] : [];
+  const ecoUrls = eco.length ? [at("/arc/", mod ?? ecoMod), ...QUESTION_PAGES.map((q) => at(q.path, q.path === "/arc/get-usdc/" ? ecoMod : mod ?? ecoMod)), at("/ecosystem/", ecoMod), at("/ecosystem/corrections/", CORRECTIONS.all[0]?.date ?? ecoMod), ...cats.map((c) => at(categoryHref(c.id), ecoMod)), ...eco.map((e) => at(entityHref(e.slug), entityLastmod(e, mod)))] : [];
   return [...DATA.map((p) => at(p, mod)), ...STATIC.map((p) => at(p)), ...ecoUrls, ...apps.filter((p) => !claimed.has(p)).map((p) => at(p, mod)), ...facts.filter((f) => !claimedProject(f.path)).map((f) => at(f.path, f.lastmod))];
 }
 

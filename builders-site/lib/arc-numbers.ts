@@ -16,6 +16,8 @@ export const EURC_ARC = "0xbef5f6d51cb62b58e6a8f77868681825c6fe21c1";
 const RPCS = ["https://rpc.blockdaemon.mainnet.arc.io", "https://rpc.mainnet.arc.io"];
 const LLAMA_TVL = "https://api.llama.fi/v2/historicalChainTvl/Arc";
 const LLAMA_STABLES = "https://stablecoins.llama.fi/stablecoincharts/Arc";
+/** Arc's official Blockscout explorer: its public stats service (the explorer's own API sits behind a bot check). */
+const BLOCKSCOUT_ACTIVE = "https://explorer.arc.io/stats-service/api/v1/lines/activeAccounts";
 const TIMEOUT_MS = 8000;
 const BLOCK_SPAN = 10_000;
 export const RPC_BLOCKDAEMON = RPCS[0];
@@ -36,7 +38,8 @@ export type ArcNumbers = {
     tokens?: { symbol: string; issuer: string; address: string | null; supply: number | null }[] };
   activity_24h: { data_until: string | null; usdc_moved_usd_est: number | null; eurc_moved_usd_est: number | null; usdc_transfers_est: number | null;
     app_payments: number | null; app_usd: number | null; attributed_share_pct: number | null;
-    transactions_est?: number | null; tx_sample?: { blocks: number; from_block: number; to_block: number } | null };
+    transactions_est?: number | null; tx_sample?: { blocks: number; from_block: number; to_block: number } | null;
+    active_accounts?: { date: string; count: number } | null };
   ecosystem: { projects: number; live: number; deployed: number; announced: number; top_categories: { id: string; label: string; count: number }[];
     index_members: ByIndex; index_close: ByIndex; data_until: string | null };
   timeline: typeof ARC_TIMELINE;
@@ -86,6 +89,17 @@ async function llamaStables(fetcher: Fetcher) {
 }
 
 /** One JSON-RPC batch to one endpoint: each call's result, or null for an error item or a missing answer. */
+/** Accounts that sent at least one transaction on the last complete UTC day (Blockscout marks today's point approximate). */
+async function activeAccounts(fetcher: Fetcher, now: number): Promise<{ date: string; count: number }> {
+  const d = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  const r = await fetcher(`${BLOCKSCOUT_ACTIVE}?resolution=DAY&from=${d(now - 7 * 86_400_000)}&to=${d(now)}`, { headers: { "user-agent": "registrai-arc-numbers" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const chart = ((await r.json()) as { chart?: { date: string; value: string; is_approximate?: boolean }[] }).chart ?? [];
+  const last = chart.filter((p) => !p.is_approximate && /^\d{4}-\d{2}-\d{2}$/.test(p.date) && Number.isFinite(Number(p.value))).at(-1);
+  if (!last) throw new Error("no complete day");
+  return { date: last.date, count: Number(last.value) };
+}
+
 export async function rpcBatch(fetcher: Fetcher, url: string, calls: { method: string; params: unknown[] }[]): Promise<(unknown | null)[]> {
   const r = await fetcher(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(calls.map((c, id) => ({ jsonrpc: "2.0", id, ...c }))), signal: AbortSignal.timeout(TIMEOUT_MS) });
   const j = (await r.json()) as unknown;
@@ -149,7 +163,7 @@ export async function collectArcNumbers(env: Env, fetcher: Fetcher = fetch, now 
     try { return await Promise.race([p, deadline]); } catch (e) { errors.push(`${label}: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200)); return null; }
     finally { clearTimeout(timer); }
   };
-  const [head, back, usdcSupply, eurcSupply, tvl, stables, files] = await Promise.all([
+  const [head, back, usdcSupply, eurcSupply, tvl, stables, files, active] = await Promise.all([
     caught("rpc head", blockAt(fetcher, "latest")),
     caught("rpc block time", blockAt(fetcher, "latest").then((h) => Promise.all([h, blockAt(fetcher, `0x${(h.number - BLOCK_SPAN).toString(16)}`)]))),
     caught("rpc USDC supply", supplyOf(fetcher, USDC_ARC)),
@@ -157,6 +171,7 @@ export async function collectArcNumbers(env: Env, fetcher: Fetcher = fetch, now 
     caught("defillama tvl", llamaTvl(fetcher)),
     caught("defillama stablecoins", llamaStables(fetcher)),
     Promise.all(INDEX_IDS.map((id) => (id === "aei" && opts.aei ? Promise.resolve(opts.aei) : indexFile(env, id).catch(() => null)))),
+    caught("blockscout active accounts", activeAccounts(fetcher, now)),
   ]);
   const blockTime = back ? Math.round(((back[0].ts - back[1].ts) / BLOCK_SPAN) * 10000) / 10000 : null;
   const [supplies, sample] = await Promise.all([
@@ -184,7 +199,8 @@ export async function collectArcNumbers(env: Env, fetcher: Fetcher = fetch, now 
     activity_24h: { data_until: byId.aei?.data_until ?? null, usdc_moved_usd_est: usdc?.base_usd_est ?? null, eurc_moved_usd_est: eurc?.base_usd_est ?? null,
       usdc_transfers_est: usdc?.base_transfers_est ?? null, app_payments: usdc?.members_payments ?? null, app_usd: usdc?.members_usd ?? null,
       attributed_share_pct: usdc && usdc.base_usd_est > 0 ? round2((100 * usdc.members_usd) / usdc.base_usd_est) : null,
-      transactions_est: sample?.estimate ?? null, tx_sample: sample ? { blocks: sample.blocks, from_block: sample.from_block, to_block: sample.to_block } : null },
+      transactions_est: sample?.estimate ?? null, tx_sample: sample ? { blocks: sample.blocks, from_block: sample.from_block, to_block: sample.to_block } : null,
+      active_accounts: active },
     ecosystem: {
       projects: e.length, live: e.filter((x) => x.status === "live").length, deployed: e.filter((x) => x.status === "deployed").length, announced: e.filter((x) => x.status === "announced").length,
       top_categories: CATEGORIES.map((cat) => ({ id: cat.id, label: cat.label, count: count(cat.id) })).filter((x) => x.count > 0)

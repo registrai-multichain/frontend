@@ -22,7 +22,7 @@ describe("entity page", () => {
     expect(h).toContain('<link rel="canonical" href="https://builder.registrai.cc/ecosystem/archery/">');
     expect(h).toContain("<h1>Archery</h1>");
     expect(h).toContain("Live on mainnet");
-    expect(h).toContain('<a href="/ecosystem/consumer/">Games and consumer</a>');
+    expect(h).toContain('<a href="/ecosystem/consumer/">Consumer apps</a>');
     expect(h).toContain("Archery is a game on Arc with USDC entry fees.");
     expect(h).toContain('href="https://x.com/archerywtf"');
     expect(h).toContain("Live on Arc mainnet since 2026-10-10");

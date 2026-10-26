@@ -58,7 +58,7 @@ function arcSchema(s: Schema): Schema {
 function dailyItem(): Schema {
   const s = arcSchema(schemaOf(Object.fromEntries(Object.entries(arcNow).filter(([k]) => k !== "attribution"))));
   const drop = (sec: string, keys: string[]) => { const x = s.properties?.[sec]; if (x?.required) x.required = x.required.filter((k) => !keys.includes(k)); };
-  drop("network", ["rpc_url", "explorer_url"]); drop("stablecoins", ["tokens"]); drop("activity_24h", ["transactions_est", "tx_sample"]);
+  drop("network", ["rpc_url", "explorer_url"]); drop("stablecoins", ["tokens"]); drop("activity_24h", ["transactions_est", "tx_sample", "active_accounts"]);
   return s;
 }
 

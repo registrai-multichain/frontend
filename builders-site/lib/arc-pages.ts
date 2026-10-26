@@ -34,6 +34,7 @@ function factsHtml(n: ArcNumbers): string {
     s.usdc_supply !== null && s.as_of ? `Arc held ${esc(N0.format(s.usdc_supply))} USDC on ${esc(at(s.as_of))}. (Arc RPC)` : "",
     s.tvl_usd !== null && s.defillama_date ? `TVL on Arc was ${esc(usd(s.tvl_usd))} on ${esc(dayOf(s.defillama_date))}. (DefiLlama)` : "",
     a.transactions_est != null && a.tx_sample ? `About ${esc(N0.format(a.transactions_est))} transactions in the last 24 h, estimated from ${a.tx_sample.blocks} sampled blocks. (Arc RPC) <details><summary>i</summary> Blocks ${N0.format(a.tx_sample.from_block)} to ${N0.format(a.tx_sample.to_block)}, evenly spaced; the mean count per sampled block times the blocks in 24 h, rounded to the nearest 1,000.</details>` : "",
+    a.active_accounts ? `${esc(N0.format(a.active_accounts.count))} accounts sent at least one transaction on Arc on ${esc(dayOf(a.active_accounts.date))} (UTC). (Arc explorer, Blockscout)` : "",
     a.app_usd !== null ? `Apps tracked by Registrai received ${esc(usd(a.app_usd))} in USDC payments in the last 24 h. (Arc Ecosystem Index)` : "",
   ].filter(Boolean);
   return `<h2>Facts</h2>
@@ -92,6 +93,7 @@ ${row("USDC moved on Arc (estimate)", usd(a.usdc_moved_usd_est))}
 ${row("EURC moved on Arc, in USD (estimate)", usd(a.eurc_moved_usd_est))}
 ${row("USDC transfers (estimate)", int(a.usdc_transfers_est))}
 ${row("Transactions (estimate)", int(a.transactions_est ?? null), "Arc RPC, sampled blocks")}
+${row(a.active_accounts ? `Active accounts, ${dayOf(a.active_accounts.date)}` : "Active accounts, one UTC day", int(a.active_accounts?.count ?? null), "Arc explorer (Blockscout): accounts that sent a transaction")}
 ${row("Payments to tracked apps", int(a.app_payments))}
 ${row("USDC to tracked apps", usd(a.app_usd))}
 ${rowHtml("Share attributed to apps", `${esc(shareText(share))} <a href="/methodology/#attributed-share">Method</a>`)}

@@ -14,9 +14,13 @@ const NOW = Date.parse("2026-10-20T17:30:00Z");
 const hex = (n: bigint | number) => `0x${BigInt(n).toString(16)}`;
 
 /** A fetcher standing in for the Arc RPC and DefiLlama. */
-function fakeFetch(opts: { llamaDown?: boolean; rpcDown?: boolean } = {}) {
+function fakeFetch(opts: { llamaDown?: boolean; rpcDown?: boolean; statsDown?: boolean } = {}) {
   return vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
     const u = String(url);
+    if (u.includes("/stats-service/")) {   // Blockscout daily active accounts: the last point of today is approximate
+      if (opts.statsDown) return new Response("<html>Just a moment...</html>", { status: 403 });
+      return new Response(JSON.stringify({ chart: [{ date: "2026-10-18", value: "22361" }, { date: "2026-10-19", value: "15186" }, { date: "2026-10-20", value: "6423", is_approximate: true }] }));
+    }
     if (u.includes("llama.fi")) {
       if (opts.llamaDown) throw new Error("timeout");
       if (u.includes("historicalChainTvl")) return new Response(JSON.stringify([{ date: 1792368000, tvl: 1 }, { date: 1792454400, tvl: 528831654 }]));
@@ -121,6 +125,16 @@ describe("review fixes", () => {
     expect(n.network.block_time_s).toBeNull();
     expect(n.network.block_height).toBe(26976520);
     expect(n.stablecoins.usdc_supply).toBe(758938840.361892);
+  });
+  test("active accounts: the last complete UTC day from Arc's Blockscout stats; a failure leaves null and an error", async () => {
+    const { collectArcNumbers } = await import("../lib/arc-numbers");
+    const f = fakeFetch();
+    const n = await collectArcNumbers({ INVITES: await kvWithIndices() } as never, f as never, NOW);
+    expect(n.activity_24h.active_accounts).toEqual({ date: "2026-10-19", count: 15186 });
+    expect(f.mock.calls.map((c) => String(c[0])).find((u) => u.includes("activeAccounts"))).toBe("https://explorer.arc.io/stats-service/api/v1/lines/activeAccounts?resolution=DAY&from=2026-10-13&to=2026-10-20");
+    const r = await collectArcNumbers({ INVITES: await kvWithIndices() } as never, fakeFetch({ statsDown: true }) as never, NOW);
+    expect(r.activity_24h.active_accounts).toBeNull();
+    expect(r.errors.join()).toMatch(/blockscout active accounts: HTTP 403/);
   });
   test("ai-search gaps: RPC/explorer, every listed stablecoin's supply, sampled transactions; RPC down → nulls with errors", async () => {
     const { collectArcNumbers } = await import("../lib/arc-numbers");
