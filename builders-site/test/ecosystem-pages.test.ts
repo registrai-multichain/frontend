@@ -111,6 +111,10 @@ describe("review fixes", () => {
   });
 });
 
+test("every category has its own plural noun in the one-line answer", () => {
+  expect(renderCategory(categoryOf("games")!, [ent({ category: "games" }), ent({ slug: "b", name: "B", category: "games" })])).toContain("2 games and NFT projects listed on Arc, Circle&#39;s blockchain");
+  expect(renderCategory(categoryOf("consumer")!, [ent(), ent({ slug: "b", name: "B" })])).toContain("2 consumer apps listed on Arc");
+});
 test("an empty category page is noindex; a non-empty one is not", () => {
   expect(renderCategory(categoryOf("banks")!, [ent()])).toContain('<meta name="robots" content="noindex">');
   expect(renderCategory(categoryOf("consumer")!, [ent()])).not.toContain('name="robots"');

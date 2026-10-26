@@ -2,7 +2,7 @@
  * Server-rendered Arc ecosystem pages (spec 2026-10-19-arc-ecosystem-directory-design.md): one page per project, the
  * directory and the category pages. Pure: data in, HTML out; every value goes through esc(); JSON-LD escapes "<" (page()).
  */
-import { CATEGORIES, STATUS_LABEL, STATUS_RULES, categoryHref, categoryOf, entityHref, sortByName, whatItDoes, type ArcEntity, type Category, type EntityStatus } from "../../src/lib/arc-ecosystem";
+import { CATEGORIES, STATUS_LABEL, STATUS_RULES, categoryHref, categoryOf, entityHref, sortByName, whatItDoes, type ArcEntity, type Category, type CategoryId, type EntityStatus } from "../../src/lib/arc-ecosystem";
 import { CORRECTIONS } from "../../src/lib/arc-ecosystem-data";
 import { evidenceHref } from "../../src/lib/facts";
 import { activityHtml, contractList, esc, page, when } from "./apps-pages";
@@ -93,11 +93,11 @@ ${correctionsLine(e.slug)}
 const inCategory = (c: Category, e: ArcEntity) => e.category === c.id || (e.tags ?? []).includes(c.id);
 
 /** The plural noun of each category for the one-line answer ("25 DEXs listed on Arc …"). */
-const NOUN: Record<string, string> = {
+const NOUN: Record<CategoryId, string> = {
   payments: "payment apps", wallets: "wallets", exchanges: "exchanges", banks: "banks", "stablecoin-issuers": "stablecoin issuers",
   infrastructure: "infrastructure providers", "developer-tools": "developer tools", dexs: "DEXs", lending: "lending protocols", trading: "trading platforms",
   "market-makers": "market makers", custody: "custodians", rwa: "tokenization and RWA projects", bridges: "bridges and cross-chain protocols",
-  "ai-agents": "AI agent projects", ramps: "on/off-ramps", consumer: "games and consumer apps", launchpads: "launchpads", validators: "validators", "asset-managers": "asset managers",
+  "ai-agents": "AI agent projects", ramps: "on/off-ramps", games: "games and NFT projects", consumer: "consumer apps", launchpads: "launchpads", validators: "validators", "asset-managers": "asset managers",
 };
 const ON_ARC = "on Arc, Circle's blockchain";
 const counts = (l: ArcEntity[]) => ({ live: l.filter((e) => e.status === "live").length, deployed: l.filter((e) => e.status === "deployed").length, announced: l.filter((e) => e.status === "announced").length });
